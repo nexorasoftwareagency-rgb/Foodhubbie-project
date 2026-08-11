@@ -23,11 +23,11 @@
 [VERIFIED] 3.5 - Redis install (PONG, active)
 [VERIFIED] 3.6 - Git install (2.43.0)
 [VERIFIED] 3.7 - Full section verification (all 6 tools confirmed together)
-[PENDING] 4.1 - Cloudflare signup (HUMAN REQUIRED)
-[PENDING] 4.2 - Install cloudflared
-[PENDING] 4.3 - Authenticate cloudflared (HUMAN REQUIRED - browser auth)
-[PENDING] 4.4 - Quick Tunnel systemd service
-[PENDING] 4.5 - Auto-update webhook script (placeholders filled after Section 5)
+[PENDING] 4.1 - Cloudflare signup (HUMAN REQUIRED; optional for Quick Tunnel - can defer)
+[VERIFIED] 4.2 - Install cloudflared (2026.7.3)
+[PENDING] 4.3 - Authenticate cloudflared (HUMAN REQUIRED - browser auth; optional for Quick Tunnel - can defer)
+[VERIFIED] 4.4 - Quick Tunnel systemd service (URL photos-whenever-specifics-internationally.trycloudflare.com; logfile adapted to /home/ubuntu/ due to /var/log perms)
+[VERIFIED] 4.5 - Auto-update webhook script (deployed + cron every 5min; 3 placeholders to fill after Section 5; cron log at /home/ubuntu/ due to /var/log perms)
 [PENDING] 5.1 - Meta Developer account (HUMAN REQUIRED)
 [PENDING] 5.2 - Create Meta App (HUMAN REQUIRED)
 [PENDING] 5.3 - Add WhatsApp product, record IDs (HUMAN REQUIRED)
