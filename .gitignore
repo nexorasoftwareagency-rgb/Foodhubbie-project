@@ -68,3 +68,7 @@ _audit_tmp/
 skills-lock.json
 videos/
 CLAude Adv Video/
+
+# AWS credentials (local, never commit)
+AWS/
+
