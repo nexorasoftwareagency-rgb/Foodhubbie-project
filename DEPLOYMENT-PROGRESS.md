@@ -10,12 +10,12 @@
 [VERIFIED] P.6 - Initialize new git repo (pushed to origin Foodhubbie-project, main)
 [VERIFIED] P.7 - Final structure verification
 [VERIFIED] P.7a - Contamination scan (doc-only matches in guide/tracker + Roshani's own brand comments; no Food-Hubbie code copied)
-[BLOCKED_ON_HUMAN] 1.1 - AWS account creation (HUMAN REQUIRED; existing CLI cred has no EC2 perms)
-[PENDING] 1.2 - Confirm credit + budget alert (HUMAN REQUIRED)
-[PENDING] 1.3 - Secure root account MFA (HUMAN REQUIRED)
-[PENDING] 1.4 - Create IAM user + access key
+[VERIFIED] 1.1 - AWS account creation (account 772603145096 ready)
+[PENDING] 1.2 - Confirm credit + budget alert (budgets exist $1/$20; guide's $100 budget not created - human to confirm/align)
+[PENDING] 1.3 - Secure root account MFA (human to confirm root MFA enabled)
+[VERIFIED] 1.4 - Create IAM user + access key (nilesh-admin, keys configured)
 [PENDING] 1.5 - Install AWS CLI + configure
-[PENDING] 2.1 - Create key pair, security group, launch EC2
+[VERIFIED] 2.1 - Create key pair, security group, launch EC2 (i-0c7f49065b1581542 @ 3.111.39.210, t3.small, sg-0a5a73df4b5d37b38, key foodhubbie-key, AMI ami-07e5ce642bbc48c0d)
 [PENDING] 3.1 - SSH connect
 [PENDING] 3.2 - System update
 [PENDING] 3.3 - Node.js install
