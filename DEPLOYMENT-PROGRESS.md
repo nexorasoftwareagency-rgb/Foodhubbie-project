@@ -10,7 +10,7 @@
 [VERIFIED] P.6 - Initialize new git repo (pushed to origin Foodhubbie-project, main)
 [VERIFIED] P.7 - Final structure verification
 [VERIFIED] P.7a - Contamination scan (doc-only matches in guide/tracker + Roshani's own brand comments; no Food-Hubbie code copied)
-[PENDING] 1.1 - AWS account creation (HUMAN REQUIRED)
+[BLOCKED_ON_HUMAN] 1.1 - AWS account creation (HUMAN REQUIRED; existing CLI cred has no EC2 perms)
 [PENDING] 1.2 - Confirm credit + budget alert (HUMAN REQUIRED)
 [PENDING] 1.3 - Secure root account MFA (HUMAN REQUIRED)
 [PENDING] 1.4 - Create IAM user + access key
