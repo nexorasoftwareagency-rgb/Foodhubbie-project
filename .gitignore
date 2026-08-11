@@ -72,3 +72,7 @@ CLAude Adv Video/
 # AWS credentials (local, never commit)
 AWS/
 
+
+# Local credentials (never commit)
+Credentials/
+
