@@ -60,6 +60,22 @@ export function onConnectionChange(fn) {
     };
 }
 
+export const BUSINESS_ID = () => (window.currentBusinessId || 'roshani').toLowerCase().trim() || 'roshani';
+
+// Tenant-scoped ref: businesses/{bid}/outlets/{outlet}/{path}
+export function tenantRef(outlet, path) {
+    const oid = (outlet || 'pizza').toLowerCase().trim() || 'pizza';
+    const cleanPath = (path || '').replace(/^\/+/, '');
+    return ref(db, `businesses/${BUSINESS_ID()}/outlets/${oid}${cleanPath ? `/${cleanPath}` : ''}`);
+}
+
+// Tenant-scoped path string (for multi-path update objects).
+export function tenantPath(outlet, path) {
+    const oid = (outlet || 'pizza').toLowerCase().trim() || 'pizza';
+    const cleanPath = (path || '').replace(/^\/+/, '');
+    return `businesses/${BUSINESS_ID()}/outlets/${oid}${cleanPath ? `/${cleanPath}` : ''}`;
+}
+
 export const Outlet = {
     get current() {
         let outlet = window.currentOutlet || sessionStorage.getItem('adminSelectedOutlet') || 'pizza';
@@ -69,19 +85,17 @@ export const Outlet = {
     },
     ref(path) {
         if (!path) return ref(db);
-        const globalPaths = ['admins', 'riders', 'logs', 'bot', 'migrationStatus', 'admins_list'];
+        // Platform-level nodes that remain at root (NOT tenant-scoped)
+        const globalPaths = ['admins', 'riders', 'logs', 'migrationStatus', 'settlements'];
         const cleanPath = path.startsWith('/') ? path.slice(1) : path;
         const firstSegment = cleanPath.split('/')[0];
-        let finalPath;
         if (globalPaths.includes(firstSegment)) {
-            finalPath = cleanPath;
-        } else {
-            finalPath = `${this.current}/${cleanPath}`;
+            return ref(db, cleanPath);
         }
-        return ref(db, finalPath);
+        return tenantRef(this.current, cleanPath);
     },
     multiUpdate(updates) {
-        return update(ref(db, this.current), updates);
+        return update(tenantRef(this.current), updates);
     }
 };
 

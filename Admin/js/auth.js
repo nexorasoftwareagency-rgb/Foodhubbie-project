@@ -1,4 +1,4 @@
-import { auth, db, Outlet, EmailAuthProvider, ref, get, onAuthStateChanged, signInWithEmailAndPassword, signOut, onChildAdded, reauthenticateWithCredential, serverTimestamp, set, push } from './firebase.js';
+import { auth, db, Outlet, tenantRef, EmailAuthProvider, ref, get, onAuthStateChanged, signInWithEmailAndPassword, signOut, onChildAdded, reauthenticateWithCredential, serverTimestamp, set, push } from './firebase.js';
 import { state } from './state.js';
 import { showToast, logAudit } from './utils.js';
 import * as ui from './ui.js';
@@ -339,7 +339,7 @@ function initNewOrderNotifications() {
     // Cleanup previous listener if any
     if (_newOrderUnsub) { _newOrderUnsub(); _newOrderUnsub = null; }
     const outlet = window.currentOutlet || 'pizza';
-    const r = ref(db, `${outlet}/orders`);
+    const r = tenantRef(outlet, 'orders');
     let initial = true;
     _newOrderUnsub = onChildAdded(r, (snap) => {
         if (initial) { initial = false; return; }

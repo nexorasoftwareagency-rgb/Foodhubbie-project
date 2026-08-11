@@ -4,7 +4,7 @@
  */
 
 import { state } from '../state.js';
-import { db, auth, Outlet, serverTimestamp, get, set, runTransaction, ref, isConnected, onConnectionChange } from '../firebase.js';
+import { db, auth, Outlet, tenantRef, serverTimestamp, get, set, runTransaction, ref, isConnected, onConnectionChange } from '../firebase.js';
 import { standardizeOrderData, haptic, escapeHtml, playSuccessSound, logAudit } from '../utils.js';
 import { autoDeductStock } from './inventory.js';
 import { ui, loadLucide } from '../ui.js';
@@ -821,7 +821,7 @@ export async function submitWalkinSale() {
         const dateStr = `${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
 
         // Get sequence from database
-        const seqSnap = await runTransaction(ref(db, `${Outlet.current}/metadata/orderSequence/${dateStr}`), (current) => (current || 0) + 1);
+        const seqSnap = await runTransaction(tenantRef(Outlet.current, `metadata/orderSequence/${dateStr}`), (current) => (current || 0) + 1);
         const seqNum = seqSnap.snapshot.val() || 1;
         const orderId = `${dateStr}-${seqNum.toString().padStart(4, '0')}`;
         logger.firebase('POS', `Generated order ID: ${orderId}`);

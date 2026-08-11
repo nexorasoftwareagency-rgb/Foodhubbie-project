@@ -18,7 +18,7 @@ async function sendDailyReport(sock, ctx, targetDate = null) {
         let totalRevenue = 0;
         let reportDetails = "";
 
-        const orders = await getData(`${OUTLET}/orders`);
+        const orders = await getData('orders', OUTLET);
         if (orders) {
             let outletOrders = 0;
             let outletRevenue = 0;
@@ -80,7 +80,7 @@ async function sendMonthlyReport(sock, ctx) {
         let totalRevenue = 0;
         let reportDetails = "";
 
-        const orders = await getData(`${OUTLET}/orders`);
+        const orders = await getData('orders', OUTLET);
         if (orders) {
             let outletOrders = 0;
             let outletRevenue = 0;
@@ -133,7 +133,7 @@ async function sendWeeklyReport(sock, ctx) {
         let totalRevenue = 0;
         let reportDetails = "";
 
-        const orders = await getData(`${OUTLET}/orders`);
+        const orders = await getData('orders', OUTLET);
         if (orders) {
             let outletOrders = 0;
             let outletRevenue = 0;

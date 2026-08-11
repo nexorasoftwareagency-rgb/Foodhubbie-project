@@ -1,4 +1,4 @@
-import { Outlet, db, ref, get, query, orderByChild, startAt, endAt } from '../firebase.js';
+import { Outlet, tenantRef, db, ref, get, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { ui } from '../ui.js';
 import { showToast, formatDate, getISTDateString } from '../utils.js';
 import { loadJSPDF } from './printing.js';
@@ -95,7 +95,7 @@ export async function generateCustomReport() {
 
         salesData = [];
         for (const outlet of outletsToFetch) {
-            const ordersRef = outletFilter === 'current' ? Outlet.ref('orders') : ref(db, `${outlet}/orders`);
+            const ordersRef = outletFilter === 'current' ? Outlet.ref('orders') : tenantRef(outlet, 'orders');
             const ordersSnap = await get(
                 query(ordersRef, orderByChild('createdAt'), startAt(qStart), endAt(qEnd))
             );
@@ -133,7 +133,7 @@ export async function generateCustomReport() {
 
             prevPeriodData = [];
             for (const outlet of outletsToFetch) {
-                const ordersRef = outletFilter === 'current' ? Outlet.ref('orders') : ref(db, `${outlet}/orders`);
+                const ordersRef = outletFilter === 'current' ? Outlet.ref('orders') : tenantRef(outlet, 'orders');
                 const snap = await get(query(ordersRef, orderByChild('createdAt'), startAt(pqStart), endAt(pqEnd)));
                 snap.forEach(child => {
                     const o = child.val();

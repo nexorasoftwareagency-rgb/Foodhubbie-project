@@ -7,6 +7,7 @@
 const {
     formatJid, getISTDateInfo, randomBetween, isSocketDead, generateCouponCode
 } = require('./utils');
+const { resolvePath } = require('./firebase');
 
 const PROMO_LOG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PROMO_HEARTBEAT_EVERY = 10;
@@ -79,7 +80,7 @@ async function isKillSwitchOn(OUTLET, db) {
     const now = Date.now();
     if (now - _killSwitchCache.ts < 2000) return _killSwitchCache.value;
     try {
-        const snap = await db.ref(`bot/${OUTLET}/promotions/killSwitch`).once('value');
+        const snap = await db.ref(resolvePath(`bot/promotions/killSwitch`, OUTLET)).once('value');
         _killSwitchCache = { value: snap.val() === true, ts: now };
         return _killSwitchCache.value;
     } catch (_) {
@@ -91,7 +92,7 @@ async function isPromoEnabled(OUTLET, db) {
     const now = Date.now();
     if (now - _promoEnabledCache.ts < 2000) return _promoEnabledCache.value;
     try {
-        const snap = await db.ref(`bot/${OUTLET}/promotions/enabled`).once('value');
+        const snap = await db.ref(resolvePath(`bot/promotions/enabled`, OUTLET)).once('value');
         _promoEnabledCache = { value: snap.val() !== false, ts: now };
         return _promoEnabledCache.value;
     } catch (_) {
@@ -102,7 +103,7 @@ async function isPromoEnabled(OUTLET, db) {
 async function isOptedOut(phone, OUTLET, db) {
     try {
         const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
-        const snap = await db.ref(`bot/${OUTLET}/promotions/optout/${cleanPhone}`).once('value');
+        const snap = await db.ref(resolvePath(`bot/promotions/optout/${cleanPhone}`, OUTLET)).once('value');
         return snap.exists();
     } catch (_) {
         return false;
@@ -112,7 +113,7 @@ async function isOptedOut(phone, OUTLET, db) {
 async function hasPromoConsent(phone, OUTLET, db) {
     try {
         const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
-        const snap = await db.ref(`${OUTLET}/customers/${cleanPhone}/promotionalConsent`).once('value');
+        const snap = await db.ref(resolvePath(`customers/${cleanPhone}/promotionalConsent`, OUTLET)).once('value');
         return snap.val() === true;
     } catch (_) {
         return false;
@@ -164,7 +165,7 @@ async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, closingMessa
 
 async function acquirePromoLock(campaignId, OUTLET, db) {
     try {
-        const ref = db.ref(`bot/${OUTLET}/promotions/lock`);
+        const ref = db.ref(resolvePath(`bot/promotions/lock`, OUTLET));
         const tx = await ref.transaction(c => {
             if (c && c.campaignId && c.campaignId !== campaignId) return c;
             return { campaignId, acquiredAt: Date.now() };
@@ -176,12 +177,12 @@ async function acquirePromoLock(campaignId, OUTLET, db) {
 }
 
 async function releasePromoLock(OUTLET, db) {
-    try { await db.ref(`bot/${OUTLET}/promotions/lock`).remove(); } catch (_) {}
+    try { await db.ref(resolvePath(`bot/promotions/lock`, OUTLET)).remove(); } catch (_) {}
 }
 
 async function logPromoResult(campaignId, phone, jid, result, couponCode, OUTLET, db) {
     try {
-        await db.ref(`bot/${OUTLET}/promotions/logs/${campaignId}/${phone}`).set({
+        await db.ref(resolvePath(`bot/promotions/logs/${campaignId}/${phone}`, OUTLET)).set({
             jid, status: result.ok ? 'sent' : 'failed', sentAt: Date.now(), error: result.error || null, couponCode: couponCode || null
         });
     } catch (e) {
@@ -191,7 +192,7 @@ async function logPromoResult(campaignId, phone, jid, result, couponCode, OUTLET
 
 async function logPromoSkip(campaignId, phone, reason, OUTLET, db) {
     try {
-        await db.ref(`bot/${OUTLET}/promotions/logs/${campaignId}/${phone}`).set({
+        await db.ref(resolvePath(`bot/promotions/logs/${campaignId}/${phone}`, OUTLET)).set({
             status: 'skipped', sentAt: Date.now(), reason
         });
     } catch (_) {}
@@ -214,19 +215,19 @@ async function runPromotionCampaign(sock, cmd, ctx) {
         });
     } catch (_) {}
 
-    await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({
+    await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({
         status: 'running', startedAt: Date.now(), totalSent: 0, totalFailed: 0
     });
 
     if (!await acquirePromoLock(campaignId, OUTLET, db)) {
         console.warn(`[Promo] Lock not acquired — another campaign is running. Aborting ${campaignId}.`);
-        await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({ status: 'aborted', reason: 'lock-conflict' });
+        await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'aborted', reason: 'lock-conflict' });
         return;
     }
 
     let startIndex = 0;
     try {
-        const snap = await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}/currentIndex`).once('value');
+        const snap = await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}/currentIndex`, OUTLET)).once('value');
         startIndex = Number(snap.val() || 0);
     } catch (_) {}
     if (startIndex >= list.length) {
@@ -238,7 +239,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
     const todayStr = getISTDateInfo().dateStr;
     let dailySentToday = 0;
     try {
-        const dailySnap = await db.ref(`bot/${OUTLET}/promotions/dailyCount/${todayStr}`).once('value');
+        const dailySnap = await db.ref(resolvePath(`bot/promotions/dailyCount/${todayStr}`, OUTLET)).once('value');
         dailySentToday = Number(dailySnap.val() || 0);
         console.log(`[Promo] Daily promo count today: ${dailySentToday}/${PROMO_DAILY_LIMIT}`);
     } catch (_) {}
@@ -249,13 +250,13 @@ async function runPromotionCampaign(sock, cmd, ctx) {
         for (let i = startIndex; i < list.length; i++) {
             if (!await isPromoEnabled(OUTLET, db)) {
                 console.warn(`[Promo] Promotional sending is OFF (dashboard toggle). Pausing ${campaignId}.`);
-                await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({ status: 'paused', pauseReason: 'promo-disabled' });
+                await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'promo-disabled' });
                 return;
             }
 
             if (await isKillSwitchOn(OUTLET, db)) {
                 console.warn(`[Promo] Kill-switch engaged. Pausing ${campaignId}.`);
-                await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({ status: 'paused', pauseReason: 'kill-switch' });
+                await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'kill-switch' });
                 return;
             }
 
@@ -263,19 +264,19 @@ async function runPromotionCampaign(sock, cmd, ctx) {
 
             if (isSocketDead(sock) || cryptoErrorCount > 100) {
                 console.warn(`[Promo] Socket/session degraded. Pausing ${campaignId} (will resume on reconnect).`);
-                await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({ status: 'paused', pauseReason: 'session-degraded', currentIndex: i });
+                await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'session-degraded', currentIndex: i });
                 return;
             }
 
             if (i % 25 === 0 && !await acquirePromoLock(campaignId, OUTLET, db)) {
                 console.warn(`[Promo] Lock lost mid-campaign. Pausing.`);
-                await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({ status: 'paused', pauseReason: 'lock-lost', currentIndex: i });
+                await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'lock-lost', currentIndex: i });
                 return;
             }
 
             if (!isTest && dailySentToday >= PROMO_DAILY_LIMIT) {
                 console.log(`[Promo] Daily limit (${PROMO_DAILY_LIMIT}) reached. Pausing ${campaignId}.`);
-                await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({ status: 'paused', pauseReason: 'daily-limit', currentIndex: i });
+                await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'daily-limit', currentIndex: i });
                 return;
             }
 
@@ -320,11 +321,11 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 sent++;
                 if (!isTest) {
                     dailySentToday++;
-                    try { await db.ref(`bot/${OUTLET}/promotions/dailyCount/${todayStr}`).set(dailySentToday); } catch (_) {}
+                    try { await db.ref(resolvePath(`bot/promotions/dailyCount/${todayStr}`, OUTLET)).set(dailySentToday); } catch (_) {}
                 }
                 if (couponCode) {
                     try {
-                        await db.ref(`bot/${OUTLET}/promotions/coupons/${couponCode}`).set({
+                        await db.ref(resolvePath(`bot/promotions/coupons/${couponCode}`, OUTLET)).set({
                             campaignId, recipientPhone: phone, generatedAt: Date.now()
                         });
                     } catch (_) {}
@@ -351,11 +352,11 @@ async function runPromotionCampaign(sock, cmd, ctx) {
             if ((i + 1) % PROMO_HEARTBEAT_EVERY === 0) {
                 if (!isTest) {
                     try {
-                        const fresh = await db.ref(`bot/${OUTLET}/promotions/dailyCount/${todayStr}`).once('value');
+                        const fresh = await db.ref(resolvePath(`bot/promotions/dailyCount/${todayStr}`, OUTLET)).once('value');
                         dailySentToday = Number(fresh.val() || dailySentToday);
                     } catch (_) {}
                 }
-                await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({
+                await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({
                     currentIndex: i + 1, totalSent: sent, totalFailed: failed, lastHeartbeat: Date.now()
                 });
             }
@@ -372,7 +373,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
             }
         }
 
-        await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({
+        await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({
             status: 'done', completedAt: Date.now(), currentIndex: list.length, totalSent: sent, totalFailed: failed
         });
         await db.ref('logs/audit').push({
@@ -381,7 +382,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
         console.log(`[Promo] ✅ Campaign ${campaignId} done. sent=${sent} failed=${failed}`);
     } catch (err) {
         console.error(`[Promo] Campaign ${campaignId} crashed:`, err);
-        await db.ref(`bot/${OUTLET}/promotions/campaigns/${campaignId}`).update({ status: 'stopped', error: err.message });
+        await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'stopped', error: err.message });
     } finally {
         await releasePromoLock(OUTLET, db);
     }
@@ -390,7 +391,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
 async function resumeStuckPromotions(sock, ctx) {
     const { OUTLET, db } = ctx;
     try {
-        const snap = await db.ref(`bot/${OUTLET}/promotions/campaigns`).orderByChild('status').equalTo('running').once('value');
+        const snap = await db.ref(resolvePath(`bot/promotions/campaigns`, OUTLET)).orderByChild('status').equalTo('running').once('value');
         if (!snap.exists()) return;
         const stuck = snap.val();
         for (const id of Object.keys(stuck)) {
@@ -412,7 +413,7 @@ async function resumeStuckPromotions(sock, ctx) {
             };
             if (!Array.isArray(cmd.recipients) || cmd.recipients.length === 0) {
                 console.warn(`[Promo] Cannot resume ${id}: no recipients in campaign doc`);
-                await db.ref(`bot/${OUTLET}/promotions/campaigns/${id}`).update({ status: 'stopped', reason: 'no-recipients-on-resume' });
+                await db.ref(resolvePath(`bot/promotions/campaigns/${id}`, OUTLET)).update({ status: 'stopped', reason: 'no-recipients-on-resume' });
                 continue;
             }
             console.log(`[Promo] 🔄 Resuming campaign ${id} from index ${c.currentIndex || 0}`);
@@ -426,7 +427,7 @@ async function resumeStuckPromotions(sock, ctx) {
 async function pickupScheduledPromotions(sock, ctx) {
     const { OUTLET, db } = ctx;
     try {
-        const snap = await db.ref(`bot/${OUTLET}/promotions/campaigns`).orderByChild('runAt').endAt(Date.now()).once('value');
+        const snap = await db.ref(resolvePath(`bot/promotions/campaigns`, OUTLET)).orderByChild('runAt').endAt(Date.now()).once('value');
         if (!snap.exists()) return;
         const due = snap.val();
         for (const id of Object.keys(due)) {
@@ -434,11 +435,11 @@ async function pickupScheduledPromotions(sock, ctx) {
             if (c.status !== 'scheduled') continue;
             const late = Date.now() - (c.runAt || 0);
             if (late > PROMO_SCHEDULE_MISSED_GRACE_MS) {
-                await db.ref(`bot/${OUTLET}/promotions/campaigns/${id}`).update({ status: 'expired', reason: 'missed-window', lateBy: late });
+                await db.ref(resolvePath(`bot/promotions/campaigns/${id}`, OUTLET)).update({ status: 'expired', reason: 'missed-window', lateBy: late });
                 continue;
             }
-            await db.ref(`bot/${OUTLET}/promotions/campaigns/${id}`).update({ status: 'running', startedAt: Date.now() });
-            const cmdRef = db.ref(`bot/${OUTLET}/commands`).push();
+            await db.ref(resolvePath(`bot/promotions/campaigns/${id}`, OUTLET)).update({ status: 'running', startedAt: Date.now() });
+            const cmdRef = db.ref(resolvePath(`bot/commands`, OUTLET)).push();
             await cmdRef.set({
                 action: 'SEND_PROMOTION',
                 campaignId: id,
@@ -463,7 +464,7 @@ async function pickupScheduledPromotions(sock, ctx) {
 
 async function expireOldPromoLogs(OUTLET, db) {
     try {
-        const snap = await db.ref(`bot/${OUTLET}/promotions/logs`).once('value');
+        const snap = await db.ref(resolvePath(`bot/promotions/logs`, OUTLET)).once('value');
         if (!snap.exists()) return;
         const campaigns = snap.val();
         const cutoff = Date.now() - PROMO_LOG_TTL_MS;
@@ -471,7 +472,7 @@ async function expireOldPromoLogs(OUTLET, db) {
             const camp = campaigns[cid];
             const allOld = Object.values(camp).every(r => (r.sentAt || 0) < cutoff);
             if (allOld && Object.keys(camp).length > 0) {
-                await db.ref(`bot/${OUTLET}/promotions/logs/${cid}`).remove();
+                await db.ref(resolvePath(`bot/promotions/logs/${cid}`, OUTLET)).remove();
             }
         }
     } catch (e) {

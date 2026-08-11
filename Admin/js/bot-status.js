@@ -3,7 +3,7 @@
  * Monitors bot/{outlet}/status from Firebase and dispatches a
  * `botStatusChange` custom event so any component can react.
  */
-import { Outlet, onValue } from './firebase.js';
+import { tenantRef, onValue } from './firebase.js';
 import { logger } from './utils/logger.js';
 
 if (!window.__botStatusInit) {
@@ -26,7 +26,7 @@ if (!window.__botStatusInit) {
     if (typeof _statusListener === 'function') { try { _statusListener(); } catch (e) {} _statusListener = null; }
     const outlet = Outlet.current;
     try {
-      const statusRef = Outlet.ref(`bot/${outlet}/status`);
+      const statusRef = tenantRef(outlet, 'bot/status');
       if (!statusRef || typeof statusRef.toString !== 'function') {
         throw new Error('Outlet.ref returned invalid reference: ' + typeof statusRef);
       }

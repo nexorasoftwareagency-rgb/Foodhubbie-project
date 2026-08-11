@@ -5,7 +5,7 @@
  */
 
 const db = require('./firebase.js').db; // firebase-admin instance
-const { getData } = require('./firebase.js');
+const { getData, resolvePath } = require('./firebase.js');
 
 const CACHE_TTL_MS = 30_000;
 const _cache = { data: null, fetchedAt: 0, outlet: null };
@@ -16,7 +16,7 @@ async function getAllDiscounts(OUTLET) {
     const now = Date.now();
     if (_cache.outlet === OUTLET && _cache.data && (now - _cache.fetchedAt) < CACHE_TTL_MS) return _cache.data;
     try {
-        const snap = await db.ref(`${OUTLET}/discounts`).once('value');
+        const snap = await db.ref(resolvePath(`discounts`, OUTLET)).once('value');
         _cache.data = snap.val() || {};
     } catch (_) {
         _cache.data = _cache.data || {};
@@ -145,7 +145,7 @@ async function validateCouponCode(OUTLET, code) {
 async function recordDiscountUsage({ OUTLET, discountId, orderId, customerPhone, amountGiven, globalLimit, channel, discountLabel, discountSource }) {
     try {
         let reserved = true;
-        const txResult = await db.ref(`${OUTLET}/discounts/${discountId}/stats`).transaction((cur) => {
+        const txResult = await db.ref(resolvePath(`discounts/${discountId}/stats`, OUTLET)).transaction((cur) => {
             cur = cur || {};
             const nextCount = (cur.usedCount || 0) + 1;
             if (globalLimit && nextCount > globalLimit) {
@@ -164,8 +164,8 @@ async function recordDiscountUsage({ OUTLET, discountId, orderId, customerPhone,
             return false;
         }
 
-        const usageId = db.ref(`${OUTLET}/discountsUsage`).push().key;
-        await db.ref(`${OUTLET}/discountsUsage/${usageId}`).set({
+        const usageId = db.ref(resolvePath(`discountsUsage`, OUTLET)).push().key;
+        await db.ref(resolvePath(`discountsUsage/${usageId}`, OUTLET)).set({
             discountId, discountLabel: discountLabel || '',
             orderId: orderId || '', customerPhone: customerPhone || '',
             amountGiven: Math.round(Number(amountGiven) || 0),

@@ -11,17 +11,25 @@ export const OUTLETS = [
 
 export type OutletId = "pizza" | "cake";
 
+/** Multi-tenant business id (matches bot/Admin default). */
+export const BUSINESS_ID = "roshani";
+
+/** Prefix outlet-scoped paths under businesses/{bid}/outlets/{oid}/. */
+export function tenantPath(outlet: OutletId, path: string) {
+  return `businesses/${BUSINESS_ID}/outlets/${outlet}/${path}`;
+}
+
 export const dbPaths = {
   rider: (rId: string) => `riders/${rId}`,
   riderNotifs: (rId: string) => `riders/${rId}/notifications`,
   riderLocation: (rId: string) => `riders/${rId}/location`,
   /** Per-outlet, matching the real schema exactly (NOT the unused top-level riderStats node). */
-  riderStats: (outlet: OutletId, rId: string) => `${outlet}/riderStats/${rId}`,
-  orders: (outlet: OutletId) => `${outlet}/orders`,
-  singleOrder: (outlet: OutletId, orderId: string) => `${outlet}/orders/${orderId}`,
-  outletSettings: (outlet: OutletId) => `${outlet}/settings`,
-  botCommands: (outlet: OutletId) => `bot/${outlet}/commands`,
-  otpAttempts: (outlet: OutletId, orderId: string) => `${outlet}/otpAttempts/${orderId}`,
+  riderStats: (outlet: OutletId, rId: string) => tenantPath(outlet, `riderStats/${rId}`),
+  orders: (outlet: OutletId) => tenantPath(outlet, "orders"),
+  singleOrder: (outlet: OutletId, orderId: string) => tenantPath(outlet, `orders/${orderId}`),
+  outletSettings: (outlet: OutletId) => tenantPath(outlet, "settings"),
+  botCommands: (outlet: OutletId) => tenantPath(outlet, "bot/commands"),
+  otpAttempts: (outlet: OutletId, orderId: string) => tenantPath(outlet, `otpAttempts/${orderId}`),
   settlements: (rId: string) => `settlements/${rId}`,
   riderErrors: (rId: string) => `logs/riderErrors/${rId}`,
 };

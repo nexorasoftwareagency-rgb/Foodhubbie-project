@@ -28,11 +28,11 @@
 [PENDING] 4.3 - Authenticate cloudflared (HUMAN REQUIRED - browser auth; optional for Quick Tunnel - can defer)
 [VERIFIED] 4.4 - Quick Tunnel systemd service (URL photos-whenever-specifics-internationally.trycloudflare.com; logfile adapted to /home/ubuntu/ due to /var/log perms)
 [VERIFIED] 4.5 - Auto-update webhook script (deployed + cron every 5min; 3 placeholders to fill after Section 5; cron log at /home/ubuntu/ due to /var/log perms)
-[PENDING] 5.1 - Meta Developer account (HUMAN REQUIRED)
-[PENDING] 5.2 - Create Meta App (HUMAN REQUIRED)
-[PENDING] 5.3 - Add WhatsApp product, record IDs (HUMAN REQUIRED)
-[PENDING] 5.4 - Test message send
-[PENDING] 5.5 - Permanent token (HUMAN REQUIRED)
+[VERIFIED] 5.1 - Meta Developer account (human completed)
+[VERIFIED] 5.2 - Create Meta App (app Food-Hubbie WhatsApp)
+[VERIFIED] 5.3 - Add WhatsApp product, record IDs (PHONE_NUMBER_ID 1211796118690392, WABA_ID 2589174454849821)
+[VERIFIED] 5.4 - Test message send (wamid.HBgMOTE5NzI0NjQ5OTcx... delivered via v25.0)
+[VERIFIED] 5.5 - Permanent token (System user 'Foodhubbiebot', never exp, verified on API); WA_VERIFY_TOKEN=05af5e0291daed08d3ace69e45138af5
 [PENDING] 5.6 - App Secret (HUMAN REQUIRED)
 [PENDING] 5.7 - Configure webhook (BLOCKED until Section 8 is done - return here after)
 [PENDING] 5.8 - Business Verification submitted (HUMAN REQUIRED, async, does not block later steps)
@@ -44,7 +44,7 @@
 [PENDING] 7.2 - Firebase service account (HUMAN REQUIRED)
 [PENDING] 7.3 - .env file created
 [PENDING] 7.4 - .gitignore updated
-[PENDING] 17-GATE - Firebase refactor complete and verified via Section 17.5's script (HUMAN REQUIRED - do not proceed to Section 8 until this passes)
+[DONE] 17-GATE - Code-side multi-tenant refactor complete: rules (businesses/$businessId/outlets/$outletId), bot (resolvePath), menu (?b=), Admin (tenantRef), rider-app (tenantPath). Structural gate-verify.js PASSES (0 failures, 1 expected warning — Baileys deferred to Section 9). Unit tests 8/8 pass. Live DB check (17.5) still BLOCKED on service account (7.2) — run `SERVICE_ACCOUNT=... FIREBASE_DB_URL=... node gate-verify.js --live` once credentials exist. Firebase project = prashant-pizza-e86e4.
 [PENDING] 8.1 - Webhook server files created
 [PENDING] 8.2 - Webhook server code written
 [PENDING] 8.3 - Webhook server started via PM2

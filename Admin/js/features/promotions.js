@@ -6,7 +6,7 @@
  */
 
 import {
-    db, Outlet, ref, get, onValue, set, update, remove, push, runTransaction,
+    db, Outlet, tenantRef, ref, get, onValue, set, update, remove, push, runTransaction,
     query, orderByChild, equalTo, limitToLast, serverTimestamp,
     isConnected, onConnectionChange
 } from '../firebase.js';
@@ -39,7 +39,7 @@ let _connUnsub = null;
 
 function _outlet() { return state.currentOutlet || 'pizza'; }
 function _ref(path) { return Outlet.ref(path); }
-function _promoRef(sub) { return ref(db, `bot/${_outlet()}/promotions/${sub}`); }
+function _promoRef(sub) { return tenantRef(_outlet(), `bot/promotions/${sub}`); }
 function _cleanPhone(p) { return String(p || '').replace(/\D/g, '').slice(-10); }
 
 /* ============ SPREADSHEET PARSING (CSV + XLSX) ============ */
@@ -531,7 +531,7 @@ async function _launchCampaign() {
     if (mode === 'schedule') {
         showToast(`Scheduled ${campaignId} for ${formatDate(runAt)}`, 'success');
     } else {
-        const cmdRef = push(_ref(`bot/${_outlet()}/commands`));
+        const cmdRef = push(tenantRef(_outlet(), 'bot/commands'));
         await set(cmdRef, {
             action: 'SEND_PROMOTION',
             campaignId,
@@ -564,7 +564,7 @@ export async function _sendTest() {
     const closingMsg = (document.getElementById('promoClosingMsg')?.value || '').trim();
     const sendStop = !!document.getElementById('promoSendStopMsg')?.checked;
     const campaignId = 'test_' + Date.now().toString(36);
-    const cmdRef = push(_ref(`bot/${_outlet()}/commands`));
+    const cmdRef = push(tenantRef(_outlet(), 'bot/commands'));
     await set(cmdRef, {
         action: 'SEND_PROMOTION',
         campaignId,
@@ -583,7 +583,7 @@ export async function _sendTest() {
     const toastId = Date.now() + Math.random();
     showToast(`⏳ Test message queued — waiting for bot reply...`, 'info', 10000, toastId);
     // Watch the log entry for this test campaign + phone for up to 10 seconds
-    const logRef = Outlet.ref(`bot/${_outlet()}/promotions/logs/${campaignId}/${phone}`);
+    const logRef = tenantRef(_outlet(), `bot/promotions/logs/${campaignId}/${phone}`);
     let listener = null;
     let settled = false;
     const cleanup = () => {

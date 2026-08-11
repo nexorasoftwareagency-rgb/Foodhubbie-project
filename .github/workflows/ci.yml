@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  gate-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: bot/package-lock.json
+
+      - name: Install bot dependencies
+        working-directory: bot
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: bot
+        run: node --test tests/unit.test.js
+
+      - name: Run 17-GATE structural verification
+        run: node gate-verify.js

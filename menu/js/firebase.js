@@ -49,16 +49,18 @@ export function isConnected() {
 }
 
 // ---------------------------------------------------------------
-// Outlet resolution — parsed once from the URL path, e.g.
-//   https://menu.roshani.com/pizza/?t=7YH8K2P4X9F6M2A
-// If your deployment serves a single outlet from a fixed subdomain,
-// hardcode OUTLET instead of parsing it.
+// Tenant resolution — parsed once from the URL:
+//   https://menu.roshani.com/pizza/?t=7YH8K2P4X9F6M2A&b=roshani
+// OUTLET = first path segment; BUSINESS_ID = `b` query param
+// (defaults to 'roshani'). If your deployment serves a single
+// outlet from a fixed subdomain, hardcode OUTLET instead.
 // ---------------------------------------------------------------
 const pathParts = window.location.pathname.split('/').filter(Boolean);
 export const OUTLET = pathParts[0] || 'pizza';
+export const BUSINESS_ID = new URLSearchParams(window.location.search).get('b') || 'roshani';
 
 export function outletRef(path) {
-    return ref(db, `${OUTLET}/${path}`);
+    return ref(db, `businesses/${BUSINESS_ID}/outlets/${OUTLET}/${path}`);
 }
 
 export { ref, get, onValue, set, push, update, runTransaction };

@@ -3,7 +3,7 @@
  * Analytics and performance monitoring for delivery personnel.
  */
 
-import { Outlet, db, ref, get, query, orderByChild, equalTo, startAt, endAt, push, set, serverTimestamp } from '../firebase.js';
+import { Outlet, tenantRef, db, ref, get, query, orderByChild, equalTo, startAt, endAt, push, set, serverTimestamp } from '../firebase.js';
 import { state } from '../state.js';
 import { escapeHtml, showToast, formatDate, getISTDateString, getSkeletonDivs } from '../utils.js';
 import { settleRiderWallet } from './riders.js';
@@ -53,7 +53,7 @@ export async function generateRiderPerformanceReport() {
         const orders = [];
         const outlets = ['pizza', 'cake'];
         for (const outlet of outlets) {
-            const snap = await get(query(ref(db, `${outlet}/orders`), orderByChild('createdAt'), startAt(qStart), endAt(qEnd)));
+            const snap = await get(query(tenantRef(outlet, 'orders'), orderByChild('createdAt'), startAt(qStart), endAt(qEnd)));
             if (snap.exists()) {
                 snap.forEach(child => {
                     const o = child.val();
@@ -318,7 +318,7 @@ async function _sendWhatsApp() {
         if (!phone) { showToast('No admin phone in store settings.', 'error'); return; }
 
         const outlet = Outlet.current;
-        const cmdRef = push(ref(db, `bot/${outlet}/commands`));
+        const cmdRef = push(tenantRef(outlet, 'bot/commands'));
         await set(cmdRef, { action: "SEND_GENERIC_MESSAGE", phone, message: lines.join('\n'), timestamp: serverTimestamp() });
         showToast('Report sent to admin via bot.', 'success');
     } catch (e) {

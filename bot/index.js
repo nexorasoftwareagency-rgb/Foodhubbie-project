@@ -30,7 +30,7 @@ const {
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const admin = require('firebase-admin');
-const { getData, setData, updateData, db, getUserProfile, saveUserProfile } = require('./firebase');
+const { getData, setData, updateData, db, resolvePath, getUserProfile, saveUserProfile } = require('./firebase');
 const discountEngine = require('./discount-engine');
 
 // ── Extracted modules ──────────────────────────────────────────────────────
@@ -265,8 +265,8 @@ async function getCachedAdminJids() {
  * Monitors the 'bot/commands' node for real-time triggers from the Admin Dashboard.
  */
 function initCommandListener(sock) {
-    console.log(`[Bot] Command Listener Started: Listening on 'bot/${OUTLET}/commands'...`);
-    const cmdRef = db.ref(`bot/${OUTLET}/commands`);
+    console.log(`[Bot] Command Listener Started: Listening on 'bot/commands'...`);
+    const cmdRef = db.ref(resolvePath('bot/commands', OUTLET));
     cmdRef.off("child_added"); // Clear previous listeners to avoid duplicates on reconnection
     cmdRef.on("child_added", async (snap) => {
         const cmd = snap.val();
@@ -318,7 +318,7 @@ async function generateOrderId(outlet = 'pizza') {
     const d = today.getDate().toString().padStart(2, '0');
     const dateStr = `${y}${m}${d}`;
 
-    const seqRef = db.ref(`${outlet}/metadata/orderSequence/${dateStr}`);
+    const seqRef = db.ref(resolvePath(`metadata/orderSequence/${dateStr}`, outlet));
     const result = await seqRef.transaction((current) => (current || 0) + 1);
 
     const seqNum = result.snapshot.val() || 1;
@@ -367,7 +367,7 @@ async function sendImage(sock, to, image, text, outlet = 'pizza') {
 async function deductInventoryStock(sock, items, outlet = 'pizza') {
     if (!items || !Array.isArray(items) || items.length === 0) return;
     try {
-        const inventoryRef = db.ref(`outlets/${outlet}/inventory`);
+        const inventoryRef = db.ref(resolvePath('inventory', outlet));
         const snapshot = await inventoryRef.once('value');
         const inventory = snapshot.val() || {};
         const deliverySettings = await getData("settings/Delivery", outlet) || {};
@@ -407,7 +407,7 @@ async function deductInventoryStock(sock, items, outlet = 'pizza') {
 
 async function cleanupStaleOrders(sock) {
     try {
-        const ordersRef = db.ref(`${OUTLET}/orders`);
+        const ordersRef = db.ref(resolvePath('orders', OUTLET));
         const snap = await ordersRef.once('value');
         if (!snap.exists()) return;
 
@@ -642,7 +642,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             const type = (order.type || order.orderType || "Walk-in");
             if (order.phone !== "Walk-in") {
                 console.warn(`[BOT] ⚠️ Skipping Notification for #${id.slice(-5)} (${type}): No valid phone. Value: "${order.phone}"`);
-                updateData(`bot/logs/${id}`, { error: "No valid JID", phone: order.phone && order.phone !== 'undefined' ? order.phone : null, type, timestamp: Date.now() }).catch(() => { });
+                updateData(`bot/logs/${id}`, { error: "No valid JID", phone: order.phone && order.phone !== 'undefined' ? order.phone : null, type, timestamp: Date.now() }, order.outlet || OUTLET).catch(() => { });
             }
             return;
         }
@@ -731,7 +731,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 let otp = storedOTP;
                 if (!otp) {
                     otp = Math.floor(1000 + Math.random() * 9000).toString();
-                    await updateData(`${order.outlet}/orders/${id}`, { otp: otp, deliveryOTP: otp });
+                    await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
 
                 let riderInfoText = "";
@@ -753,7 +753,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 let otp = storedOTP;
                 if (!otp) {
                     otp = Math.floor(1000 + Math.random() * 9000).toString();
-                    await updateData(`${order.outlet}/orders/${id}`, { otp: otp, deliveryOTP: otp });
+                    await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
                 msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${id.slice(-5)}.\n\n🔑 *OTP:* ${otp} (Please share with rider)\n\nPlease be ready to receive your order. Thank you! 🙏`;
                 img = botSettings.imgOut;
@@ -784,7 +784,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     jid: maskJid(jid),
                     success: true,
                     timestamp: Date.now()
-                }).catch(() => { });
+                }, order.outlet || OUTLET).catch(() => { });
             } else {
                 // If no message defined for this status, still mark as processed
                 await saveProcessedStatus(id, {
@@ -804,7 +804,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
         }
     } catch (err) {
         console.error("Status Update Error:", err);
-        updateData(`bot/logs/${id}`, { error: err.message, timestamp: Date.now() }).catch(() => { });
+        updateData(`bot/logs/${id}`, { error: err.message, timestamp: Date.now() }, order.outlet || OUTLET).catch(() => { });
     }
 }
 
@@ -875,7 +875,7 @@ async function startBot() {
         if (cryptoErrorCount > 0) {
             console.log(`[CRYPTO] 📊 ${cryptoErrorCount} undecryptable messages since last connect (session ${cryptoErrorCount > 10 ? 'may need attention' : 'healthy'})`);
         }
-        updateData(`bot/${OUTLET}/status`, { lastSeen: Date.now(), status: 'Online', outlet: OUTLET }).catch(() => { });
+        updateData(`bot/status`, { lastSeen: Date.now(), status: 'Online', outlet: OUTLET }, OUTLET).catch(() => { });
 
         // Refresh admin JID cache every heartbeat cycle
         cachedAdminJids = await getReportRecipients();
@@ -933,7 +933,7 @@ async function sendDailyReportSafely(dateOverride = null) {
 
     // Firebase Listeners — Only initialize once, reuse across reconnects
     if (!firebaseListenersInitialized) {
-        const orderRef = db.ref(`${OUTLET}/orders`);
+        const orderRef = db.ref(resolvePath('orders', OUTLET));
 
         orderRef.on("child_changed", (snap) => {
             const order = snap.val();
@@ -1061,18 +1061,18 @@ async function sendDailyReportSafely(dateOverride = null) {
                 if (!isAuthorized && text) {
                     const optOutKey = sender.replace(/[^0-9]/g, '').slice(-10);
                     if (/^(stop|unsubscribe|opt[\s-]?out)$/i.test(text)) {
-                        await updateData(`bot/${OUTLET}/promotions/optout/${optOutKey}`, {
+                        await updateData(`bot/promotions/optout/${optOutKey}`, {
                             jid: sender, optedOutAt: Date.now()
-                        });
+                        }, OUTLET);
                         await sock.sendMessage(sender, {
                             text: "✅ You've been unsubscribed from promotional messages. Reply START to opt back in anytime."
                         });
                         return;
                     }
                     if (/^start$/i.test(text)) {
-                        const optoutSnap = await db.ref(`bot/${OUTLET}/promotions/optout/${optOutKey}`).once('value');
+                        const optoutSnap = await db.ref(resolvePath(`bot/promotions/optout/${optOutKey}`, OUTLET)).once('value');
                         if (optoutSnap.exists()) {
-                            await db.ref(`bot/${OUTLET}/promotions/optout/${optOutKey}`).update({ reOptInAt: Date.now() });
+                            await db.ref(resolvePath(`bot/promotions/optout/${optOutKey}`, OUTLET)).update({ reOptInAt: Date.now() });
                             await sock.sendMessage(sender, { text: "🎉 Welcome back! You're re-subscribed to promotional messages." });
                             return;
                         }
@@ -1087,7 +1087,7 @@ async function sendDailyReportSafely(dateOverride = null) {
 
             let user = await getSession(sender);
             if (!user) {
-                const profile = await getUserProfile(sender);
+                const profile = await getUserProfile(sender, OUTLET);
                 user = {
                     step: "START",
                     current: {},
@@ -1418,7 +1418,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         user.name = user.profile.name;
                         user.phone = user.profile.phone;
                         user.address = user.profile.address;
-                        saveUserProfile(sender, { name: user.name, phone: user.phone, address: user.address }).catch(() => {});
+                        saveUserProfile(sender, { name: user.name, phone: user.phone, address: user.address }, user.outlet || OUTLET).catch(() => {});
                         // Note: We intentionally DO NOT reuse user.location here as per request
 
                         user.step = "LOCATION";
@@ -1453,7 +1453,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     user.name = text;
                     user.step = "PHONE";
                     if (user.name) {
-                        saveUserProfile(sender, { name: user.name, phone: user.phone || "", address: user.address || "" }).catch(() => {});
+                        saveUserProfile(sender, { name: user.name, phone: user.phone || "", address: user.address || "" }, user.outlet || OUTLET).catch(() => {});
                     }
                     return sock.sendMessage(sender, { text: await appendContactInfo("📞 *STEP 2: ENTER YOUR 10 DIGIT MOBILE NUMBER*\n\n_Example: 9876543210. We will use this to contact you regarding your order._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
                 }
@@ -1468,7 +1468,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
                     }
                     user.phone = text;
-                    saveUserProfile(sender, { name: user.name || "", phone: user.phone }).catch(() => {});
+                    saveUserProfile(sender, { name: user.name || "", phone: user.phone }, user.outlet || OUTLET).catch(() => {});
                     user.step = "ADDRESS";
                     return sock.sendMessage(sender, { text: await appendContactInfo("🏠 *STEP 3: ENTER YOUR DELIVERY ADDRESS*\n\n_Please provide your complete address including landmark, house number, etc._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
                 }
@@ -1479,7 +1479,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         return sock.sendMessage(sender, { text: await appendContactInfo("📞 *STEP 2: ENTER YOUR 10 DIGIT MOBILE NUMBER*\n\n_Example: 9876543210. We will use this to contact you regarding your order._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
                     }
                     user.address = text;
-                    saveUserProfile(sender, { name: user.name || "", phone: user.phone || "", address: user.address }).catch(() => {});
+                    saveUserProfile(sender, { name: user.name || "", phone: user.phone || "", address: user.address }, user.outlet || OUTLET).catch(() => {});
                     user.step = "LOCATION";
                     let locMsg = `📍 *SHARE YOUR LOCATION* 🌍\n\n`;
                     locMsg += `Please share your *Live* or *Current* Location so we can calculate the delivery fee.\n\n`;
@@ -1501,7 +1501,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     if (!loc) return sendInvalidInputHelp(sock, sender, user);
 
                     user.location = { lat: loc.degreesLatitude, lng: loc.degreesLongitude };
-                    saveUserProfile(sender, { name: user.name || "", phone: user.phone || "", address: user.address || "", location: user.location }).catch(() => {});
+                    saveUserProfile(sender, { name: user.name || "", phone: user.phone || "", address: user.address || "", location: user.location }, user.outlet || OUTLET).catch(() => {});
                     return handleCheckoutFinal(sock, sender, user);
                 }
 
@@ -1539,7 +1539,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         // Save lost-sale customer to customer database for follow-up
                         if (user.phone) {
                             const cleanPhone = String(user.phone).replace(/\D/g, '').slice(-10);
-                            const custRef = db.ref(`${user.outlet}/customers/${cleanPhone}`);
+                            const custRef = db.ref(resolvePath(`customers/${cleanPhone}`, user.outlet));
                             custRef.transaction((existing) => {
                                 const base = existing || {};
                                 return {
@@ -1626,14 +1626,14 @@ async function sendDailyReportSafely(dateOverride = null) {
                             name: user.name, phone: user.phone,
                             address: user.address, location: user.location,
                             lastOutlet: user.outlet
-                        }).catch(() => {});
+                        }, user.outlet || OUTLET).catch(() => {});
 
                         // Save complete profile to outlet's customers node
                         if (user.phone) {
                             const cleanPhone = String(user.phone).replace(/\D/g, '').slice(-10);
                             const mapsLink = user.location ? `https://maps.google.com/?q=${user.location.lat},${user.location.lng}` : "";
                             const isFirstOrderDiscount = user.discountSource === 'firstOrder' && user.discountId;
-                            const custRef = db.ref(`${user.outlet}/customers/${cleanPhone}`);
+                            const custRef = db.ref(resolvePath(`customers/${cleanPhone}`, user.outlet));
                             custRef.transaction((existing) => {
                                 const base = existing || {};
                                 const merged = {
@@ -1777,7 +1777,7 @@ async function handleCheckoutFinal(sock, sender, user) {
 function initFCMWatcher() {
   const ONE_MIN_MS = 60000;
   for (const outlet of ['pizza', 'cake']) {
-    db.ref(`${outlet}/orders`).on('child_added', (snap) => {
+    db.ref(resolvePath('orders', outlet)).on('child_added', (snap) => {
       const order = snap.val() || {};
       if (order._fcmSent) return;
       const createdAt = new Date(order.createdAt).getTime();

@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { db, Outlet, ref, get, update, set } from '../firebase.js';
+import { db, Outlet, tenantPath, ref, get, update, set } from '../firebase.js';
 import { logAudit, showToast, getSkeletonRows } from '../utils.js';
 import { loadLucide } from '../ui.js';
 
@@ -306,12 +306,12 @@ export async function saveStoreSettings() {
 
         // 3. Atomic multi-path update
         const updates = {};
-        updates[`${Outlet.current}/settings/Store`] = storeData;
-        updates[`${Outlet.current}/settings/Delivery`] = deliveryData;
-        updates[`${Outlet.current}/settings/Bot`] = botData;
-        updates[`${Outlet.current}/settings/Display`] = displayData;
+        updates[tenantPath(Outlet.current, 'settings/Store')] = storeData;
+        updates[tenantPath(Outlet.current, 'settings/Delivery')] = deliveryData;
+        updates[tenantPath(Outlet.current, 'settings/Bot')] = botData;
+        updates[tenantPath(Outlet.current, 'settings/Display')] = displayData;
         const taxRates = _readTaxRates();
-        updates[`${Outlet.current}/dineinSettings`] = {
+        updates[tenantPath(Outlet.current, 'dineinSettings')] = {
             qrBaseUrl: val('settingQrBaseUrl'),
             taxEnabled: isChecked('dineinTaxEnabled'),
             taxName: taxRates.length > 0 ? taxRates.map(t => t.name).join(' + ') : 'GST',

@@ -37,7 +37,7 @@
  *                      already treats as canonical.
  * ============================================================================
  */
-import { Outlet, get, ref, db, push, set, serverTimestamp } from '../firebase.js';
+import { Outlet, tenantRef, get, ref, db, push, set, serverTimestamp } from '../firebase.js';
 import { escapeHtml, showToast } from '../utils.js';
 
 let sparkRevenue = null, sparkOrders = null, sparkAvg = null, sparkNewCust = null;
@@ -586,7 +586,7 @@ async function _sendReportToAdmin() {
         if (!phone) { showToast('No admin phone in store settings.', 'error'); return; }
 
         const outlet = window.currentOutlet || 'pizza';
-        const cmdRef = push(ref(db, `bot/${outlet}/commands`));
+        const cmdRef = push(tenantRef(outlet, 'bot/commands'));
         await set(cmdRef, { action: "SEND_GENERIC_MESSAGE", phone, message: lines.join('\n'), timestamp: serverTimestamp() });
         showToast('Report sent to admin via bot.', 'success');
     } catch (e) {

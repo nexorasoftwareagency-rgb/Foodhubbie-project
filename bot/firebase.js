@@ -38,22 +38,23 @@ try {
 const db = admin.database();
 
 /**
- * Resolves a database path based on the selected outlet.
- * @param {string} path - The relative path.
+ * Resolves a database path under the multi-tenant hierarchy.
+ * @param {string} path - The relative tenant path (e.g. 'orders', 'bot/commands').
  * @param {string} [outlet='pizza'] - The outlet ID.
  */
 function resolvePath(path, outlet = 'pizza') {
     if (!path) return '';
 
-    // Shared nodes that remain at root level
-    const shared = ['admins', 'riders', 'riderStats', 'botStatus', 'migrationStatus', 'bot', 'logs', 'botUsers', 'pizza', 'cake'];
+    // Platform-level nodes that remain at root (NOT tenant-scoped)
+    const shared = ['admins', 'riders', 'riderStats', 'migrationStatus', 'logs', 'settlements', 'phoneNumberIndex'];
     const rootNode = path.split('/')[0];
 
-    // If already absolute or shared, return as is
-    if (shared.includes(rootNode)) return path;
+    // Already multi-tenant absolute or platform node — return as is
+    if (rootNode === 'businesses' || shared.includes(rootNode)) return path;
 
-    // Default to outlet-prefixed path
-    return `${outlet}/${path}`;
+    // Tenant-scoped: businesses/{bid}/outlets/{oid}/{path}
+    const { outletPath, resolveBusinessId } = require('./helpers/outlet-resolution');
+    return outletPath(resolveBusinessId(), outlet, path);
 }
 
 // =============================
@@ -146,17 +147,17 @@ async function deleteData(path, outlet = 'pizza') {
     }
 }
 
-async function getUserProfile(jid) {
+async function getUserProfile(jid, outlet = 'pizza') {
     const cleanJid = jid.replace(/[^0-9]/g, '');
-    const path = `botUsers/${cleanJid}`;
-    return getData(path);
+    const path = `profiles/${cleanJid}`;
+    return getData(path, outlet);
 }
 
-async function saveUserProfile(jid, data) {
+async function saveUserProfile(jid, data, outlet = 'pizza') {
     const cleanJid = jid.replace(/[^0-9]/g, '');
-    const path = `botUsers/${cleanJid}`;
-    _cache.delete(resolvePath(path));
-    return updateData(path, data);
+    const path = `profiles/${cleanJid}`;
+    _cache.delete(resolvePath(path, outlet));
+    return updateData(path, data, outlet);
 }
 
 // =============================

@@ -3,7 +3,7 @@
  * Handles real-time order synchronization, rendering, and status updates.
  */
 
-import { db, Outlet, serverTimestamp, ref, get, set, update, query, orderByChild, orderByKey, equalTo, limitToLast, startAt, endAt, endBefore, onValue, onChildAdded, onChildChanged } from '../firebase.js';
+import { db, Outlet, tenantRef, serverTimestamp, ref, get, set, update, query, orderByChild, orderByKey, equalTo, limitToLast, startAt, endAt, endBefore, onValue, onChildAdded, onChildChanged } from '../firebase.js';
 import { state } from '../state.js';
 import { escapeHtml, showToast, playNotificationSound, startContinuousSound, stopContinuousSound, logAudit, calculateDistance, getFeeFromSlabs, addRiderNotification, getISTDateString, getSkeletonRows } from '../utils.js';
 import { showAlert, addNotification, highlightOrder } from './notifications.js';
@@ -1060,8 +1060,8 @@ export async function updateStatus(id, status) {
         if (lat && lng) {
             try {
                 const outletKey = (order.outlet || 'pizza').toLowerCase();
-                const delSnap = await get(ref(db, `${outletKey}/settings/Delivery`));
-                const storeSnap = await get(ref(db, `${outletKey}/settings/Store`));
+                const delSnap = await get(tenantRef(outletKey, 'settings/Delivery'));
+                const storeSnap = await get(tenantRef(outletKey, 'settings/Store'));
                 const delSettings = delSnap.val() || {};
                 const storeSettings = storeSnap.val() || {};
 
