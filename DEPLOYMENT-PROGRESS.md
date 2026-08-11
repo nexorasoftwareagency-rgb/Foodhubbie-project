@@ -16,13 +16,13 @@
 [VERIFIED] 1.4 - Create IAM user + access key (nilesh-admin, keys configured)
 [PENDING] 1.5 - Install AWS CLI + configure
 [VERIFIED] 2.1 - Create key pair, security group, launch EC2 (i-0c7f49065b1581542 @ 3.111.39.210, t3.small, sg-0a5a73df4b5d37b38, key foodhubbie-key, AMI ami-07e5ce642bbc48c0d)
-[PENDING] 3.1 - SSH connect
-[PENDING] 3.2 - System update
-[PENDING] 3.3 - Node.js install
-[PENDING] 3.4 - PM2 install
-[PENDING] 3.5 - Redis install
-[PENDING] 3.6 - Git install
-[PENDING] 3.7 - Full section verification (all 6 tools confirmed together)
+[VERIFIED] 3.1 - SSH connect
+[VERIFIED] 3.2 - System update
+[VERIFIED] 3.3 - Node.js install (v20.20.2)
+[VERIFIED] 3.4 - PM2 install (7.0.3)
+[VERIFIED] 3.5 - Redis install (PONG, active)
+[VERIFIED] 3.6 - Git install (2.43.0)
+[VERIFIED] 3.7 - Full section verification (all 6 tools confirmed together)
 [PENDING] 4.1 - Cloudflare signup (HUMAN REQUIRED)
 [PENDING] 4.2 - Install cloudflared
 [PENDING] 4.3 - Authenticate cloudflared (HUMAN REQUIRED - browser auth)
