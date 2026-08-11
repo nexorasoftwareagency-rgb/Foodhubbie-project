@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base href="/">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roshani Pizza — Order</title>
+<meta name="theme-color" content="#E84908">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<a href="#screenMenu" class="skip-link">Skip to main content</a>
+<h1 class="sr-only">Roshani Pizza Menu</h1>
+
+<div id="app">
+
+    <!-- ============== LOADING / TOKEN VALIDATION OVERLAY ============== -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p style="font-size:13px;color:var(--text-sub);">Loading menu…</p>
+    </div>
+    <div id="offlineBanner" class="offline-banner">
+        Connection trouble —
+        <button id="btnRetryConnection" type="button" style="background:none;border:none;color:#fff;text-decoration:underline;font:inherit;font-weight:800;cursor:pointer;padding:0;margin-left:4px;">Tap to retry</button>
+    </div>
+
+    <!-- ============== SCREEN 1: WELCOME ============== -->
+    <div id="screenWelcome" class="screen welcome-screen">
+        <div class="welcome-overlay">
+            <div class="welcome-table-pill">TABLE</div>
+            <div class="welcome-table-num" id="welcomeTableNum">07</div>
+            <div class="welcome-title">Welcome to</div>
+            <div class="welcome-brand" id="welcomeBrandName">Roshani Pizza</div>
+            <div class="welcome-sub">Dine In Ordering</div>
+            <div id="welcomeOffers" class="welcome-offers hidden"></div>
+            <button class="btn-start" id="btnStartOrdering">START ORDERING</button>
+        </div>
+    </div>
+
+    <!-- ============== SCREEN 2: GROUP CHOICE (Multi-Bill) ============== -->
+    <div id="screenChooseGroup" class="screen">
+        <div class="group-choice-body">
+            <svg class="icon" style="width:48px;height:48px;color:var(--accent);margin-bottom:8px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <h3 style="margin:0 0 4px;">Split or Share?</h3>
+            <p style="font-size:13px;color:var(--text-sub);margin-bottom:20px;">Another guest is already ordering. Do you want to share the bill or start your own?</p>
+            <button class="btn-start" id="btnStartOwnGroup" style="margin-bottom:10px;">Start My Own Bill</button>
+            <div id="joinGroupSection" class="hidden">
+                <p style="font-size:12px;color:var(--text-sub);margin:12px 0 8px;">Or join an existing bill:</p>
+                <div id="existingGroupsList"></div>
+            </div>
+            <button id="btnCancelGroupChoice" style="margin-top:16px;background:none;border:none;color:var(--text-sub);font-size:13px;cursor:pointer;text-decoration:underline;padding:8px;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- ============== SCREEN 3: MENU CATEGORIES ============== -->
+    <div id="screenMenu" class="screen">
+        <div class="topbar">
+            <div class="topbar-brand">
+                <span class="topbar-logo">Roshani</span>
+                <span class="topbar-greeting hidden" id="menuGreeting"></span>
+            </div>
+            <span class="topbar-table-chip" id="menuTableChip">TABLE 07</span>
+            <button class="topbar-cart-btn" id="btnOpenCartFromMenu" aria-label="View cart">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                <span class="topbar-cart-count hidden" id="menuCartCount">0</span>
+            </button>
+        </div>
+
+        <!-- Running bill strip — only shown when the session already has prior orders (Decision #4) -->
+        <div id="runningBillStrip" class="running-bill-strip hidden">
+            <div>
+                <span class="running-bill-label">Running Bill</span>
+                <span class="running-bill-sub" id="runningBillOrderCount">0 orders this session</span>
+            </div>
+            <div class="running-bill-amount" id="runningBillAmount">₹0</div>
+        </div>
+
+        <div class="search-row">
+            <div class="search-input-wrap">
+                <svg class="icon" style="width:16px;height:16px;color:var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="text" id="dishSearchInput" placeholder="Search for dishes…">
+            </div>
+        </div>
+
+        <div class="category-pills" id="categoryPillsRow"></div>
+
+        <div class="menu-section-title" id="menuSectionTitle">Popular Items</div>
+        <div class="dish-list" id="dishListContainer"></div>
+
+        <!-- Sticky bottom bar appears once cart has items -->
+        <div id="menuCartBar" class="menu-cart-bar hidden">
+            <button id="btnViewCartBar">
+                <span id="menuCartBarCount">0 items</span>
+                <span id="menuCartBarTotal">₹0</span>
+                <span>View Cart →</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ============== SCREEN 3: ITEM CUSTOMIZATION ============== -->
+    <div id="screenCustomize" class="screen">
+        <div class="topbar">
+            <button class="topbar-back" id="btnBackFromCustomize" aria-label="Back to menu">
+                <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <button class="topbar-cart-btn" id="btnOpenCartFromCustomize" aria-label="View cart">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                <span class="topbar-cart-count hidden" id="customizeCartCount">0</span>
+            </button>
+        </div>
+        <div style="flex:1; overflow-y:auto;">
+            <img id="customHeroImg" class="custom-hero" alt="Dish photo"
+                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='250'%3E%3Crect fill='%23f1f5f9' width='400' height='250' rx='12'/%3E%3Ctext x='200' y='130' text-anchor='middle' fill='%2394a3b8' font-size='14' font-family='sans-serif'%3EDish Photo%3C/text%3E%3C/svg%3E">
+            <div class="custom-body">
+                <div class="custom-title-row">
+                    <div class="custom-title" id="customDishName">Dish Name</div>
+                    <div class="custom-base-price" id="customBasePrice">₹0</div>
+                </div>
+
+                <div id="sizeSection">
+                    <div class="custom-section-label">Size</div>
+                    <div class="size-options" id="sizeOptionsRow"></div>
+                </div>
+
+                <div id="addonSection">
+                    <div class="custom-section-label">Add-ons</div>
+                    <div id="addonRows"></div>
+                </div>
+
+                <div class="custom-section-label">Special Instructions (Optional)</div>
+                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicy…"></textarea>
+            </div>
+        </div>
+        <div class="custom-footer">
+            <div class="qty-stepper qty-stepper-lg">
+                <button class="qty-btn" id="btnDraftQtyMinus">−</button>
+                <span class="qty-val" id="draftQtyVal">1</span>
+                <button class="qty-btn" id="btnDraftQtyPlus">+</button>
+            </div>
+            <button class="btn-add-to-order" id="btnAddToOrder">
+                <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                <span id="addToOrderLabel">ADD TO ORDER</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ============== SCREEN 4: CART / CHECKOUT ============== -->
+    <div id="screenCart" class="screen">
+        <div class="topbar">
+            <button class="topbar-back" id="btnBackFromCart" aria-label="Back to menu">
+                <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span style="width:38px;"></span>
+        </div>
+        <div style="padding:14px 16px 0; font-size:15px; font-weight:800;" id="cartHeaderTitle">Your Cart (Table 07)</div>
+        <div class="cart-list" id="cartListContainer"></div>
+
+        <!-- Checkout detail fields — ONLY shown once cart has items, collected
+             at checkout (not before browsing), per the spec's UX decision -->
+        <div id="checkoutFieldsWrap" class="checkout-fields-wrap hidden">
+            <div class="form-group-mini">
+                <label>Your Name <span style="color:var(--error)">*</span></label>
+                <input type="text" id="checkoutName" placeholder="e.g. Rohan" required>
+            </div>
+            <div class="form-group-mini">
+                <label>Mobile Number <span style="color:var(--error)">*</span></label>
+                <input type="tel" id="checkoutPhone" placeholder="e.g. 98765 43210" maxlength="10" inputmode="numeric" required>
+            </div>
+            <div class="form-group-mini">
+                <label>Guests</label>
+                <div class="guest-stepper">
+                    <button class="qty-btn" id="btnGuestMinus">−</button>
+                    <span class="qty-val" id="guestCountVal">1</span>
+                    <button class="qty-btn" id="btnGuestPlus">+</button>
+                </div>
+            </div>
+            <div class="form-group-mini">
+                <label>Special Note (Optional)</label>
+                <textarea id="checkoutNote" placeholder="e.g. Birthday celebration, allergens…" rows="2" maxlength="200"></textarea>
+            </div>
+            <div class="form-group-mini discount-input-wrap" id="discountInputWrap">
+                <label>Discount Code (Optional)</label>
+                <div class="discount-input-row">
+                    <input type="text" id="discountCodeInput" placeholder="e.g. WELCOME20" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    <button type="button" class="btn-apply-discount" id="btnApplyDiscount">Apply</button>
+                </div>
+                <div class="discount-msg hidden" id="discountMsg"></div>
+            </div>
+        </div>
+
+        <div class="cart-summary" id="cartSummaryWrap">
+            <div class="cart-summary-row"><span>This Order</span><span id="cartSubtotal">₹0</span></div>
+            <div id="cartTaxRows"></div>
+            <div class="cart-summary-row hidden" id="cartServiceChargeRow"><span><span id="cartServiceChargeName">Service Charge</span> (<span id="cartServiceChargePct">10</span>%)</span><span id="cartServiceCharge">₹0</span></div>
+            <div class="cart-summary-row cart-summary-discount hidden" id="cartDiscountRow"><span id="cartDiscountLabel">Discount</span><span id="cartDiscount">-₹0</span></div>
+            <div class="cart-summary-row cart-summary-total"><span>Total</span><span id="cartTotal">₹0</span></div>
+            <div id="cartSessionNote" class="cart-session-note hidden"></div>
+            <button class="btn-place-order" id="btnPlaceOrder">PLACE ORDER</button>
+        </div>
+    </div>
+
+    <!-- ============== SCREEN 5: ORDER TRACKING / RUNNING BILL ============== -->
+    <div id="screenTracking" class="screen">
+        <div class="topbar">
+            <button class="topbar-back" id="btnMenuFromTracking" aria-label="Order more" title="Order more">
+                <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span style="width:38px;"></span>
+        </div>
+        <div class="tracking-body">
+
+            <!-- Billing status banner — shown when bill has been requested -->
+            <div id="billingStatusBanner" class="billing-status-banner hidden"></div>
+
+            <!-- Hero status card — current status highlighted in the
+                 complementary blue (--status-active), not the brand orange,
+                 so "what's happening right now" always stands out on its own. -->
+            <div class="tracking-hero" id="trackingHeroCard">
+                <div class="tracking-hero-top-row">
+                    <span class="tracking-order-id" id="trackingOrderId">#RP-T07-001</span>
+                    <span class="tracking-table" id="trackingTableLabel">Table 07</span>
+                </div>
+
+                <div class="tracking-status-icon-wrap pulsing" id="trackingStatusIconWrap">
+                    <svg id="trackingStatusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                </div>
+                <div class="tracking-status-label" id="trackingStatusLabel">Order Received</div>
+                <div class="tracking-status-sub" id="trackingStatusSub">We've got it — sending it to the kitchen now.</div>
+
+                <div class="tracking-elapsed-row" id="trackingElapsedRow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    <span>Elapsed <strong id="trackingElapsedTime">00:00</strong></span>
+                </div>
+
+                <div class="tracking-progress-track" id="trackingProgressTrack"></div>
+                <div class="tracking-progress-labels">
+                    <span>Received</span><span>Preparing</span><span>Ready</span><span>Served</span>
+                </div>
+            </div>
+
+            <!-- Detailed timeline (unchanged data contract — DINE_IN_STEPS / dineInStepIndex()) -->
+            <div class="tracking-step-card">
+                <div class="tracking-step-card-title">Order Timeline</div>
+                <div id="trackerStepsContainer"></div>
+
+                <div class="tracking-estimate hidden" id="trackingEstimate">
+                    <svg class="icon" style="width:14px;height:14px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    <span>Estimated: <strong id="trackingEstimateTime">15–25 min</strong></span>
+                </div>
+            </div>
+
+            <!-- "Your Order" — NEW: always visible (previously items were
+                 only shown once a session had 2+ orders via sessionBillCard) -->
+            <div class="tracking-items-card">
+                <div class="oi-head">
+                    <span class="oi-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.3 4.6A1 1 0 0 0 5.6 19H19"/><circle cx="9" cy="21" r="1"/><circle cx="19" cy="21" r="1"/></svg>
+                        Your Order
+                    </span>
+                    <span class="oi-count-pill" id="trackingOrderItemsCount">0 items</span>
+                </div>
+                <div id="trackingOrderItemsList"></div>
+                <div class="tracking-items-total-row"><span>This order</span><span id="trackingOrderItemsTotal">₹0</span></div>
+            </div>
+
+            <div class="tracking-thanks-card hidden" id="trackingThanksCard">
+                <strong>Thank you!</strong>
+                <p style="font-size:12px;color:var(--text-sub);margin-top:4px;">We will serve your order shortly.</p>
+            </div>
+
+            <!-- Session running bill summary (Decision #4) — unchanged, shown for 2+ orders -->
+            <div id="sessionBillCard" class="session-bill-card hidden">
+                <div class="session-bill-head">
+                    <span>Running Bill — This Table</span>
+                    <span id="sessionBillOrderCount">0 orders</span>
+                </div>
+                <div id="sessionBillLines"></div>
+                <div id="sessionBillItems" class="session-bill-items"></div>
+                <div class="session-bill-divider"></div>
+                <div class="session-bill-summary">
+                    <div class="session-bill-summary-row"><span>Subtotal</span><span id="sessionBillSubtotal">₹0</span></div>
+                    <div id="sessionBillTaxRows"></div>
+                    <div class="session-bill-summary-row hidden" id="sessionBillSCRow"><span id="sessionBillSCLabel">Service Charge (10%)</span><span id="sessionBillSC">₹0</span></div>
+                </div>
+                <div class="session-bill-total-row">
+                    <span>Total So Far</span><span id="sessionBillTotal">₹0</span>
+                </div>
+            </div>
+
+            <div class="tracking-actions">
+                <button class="btn-order-more" id="btnOrderMore">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                    Order More Items
+                </button>
+                <button class="btn-request-bill" id="btnRequestBillFromTracking">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-1 1Z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+                    Request Bill
+                </button>
+                <button class="btn-call-waiter" id="btnGotoCallWaiter">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    Need help? Call Waiter
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============== SCREEN 6: CALL WAITER ============== -->
+    <div id="screenWaiter" class="screen">
+        <div class="topbar">
+            <button class="topbar-back" id="btnBackFromWaiter" aria-label="Back">
+                <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span style="width:38px;"></span>
+        </div>
+        <div class="waiter-body">
+            <div class="waiter-header">
+                <div class="waiter-icon-circle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <div class="waiter-title">Need Assistance?</div>
+                <div class="waiter-sub">Tap a request below — it goes straight to our staff.</div>
+            </div>
+
+            <!-- Each card IS the clickable element and keeps its original
+                 data-request value, so app.js's existing
+                 document.querySelectorAll('[data-request]') binder needs
+                 no selector changes — only the handler body was patched
+                 (see app-js.PATCH.txt) to add the Sending/Sent states below. -->
+            <div class="waiter-actions">
+                <button class="request-card request-card--urgent" data-request="waiter">
+                    <span class="request-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    </span>
+                    <span class="request-card-body">
+                        <span class="request-card-title">Call Waiter</span>
+                        <span class="request-card-sub">Need something? We'll come right over.</span>
+                    </span>
+                    <span class="request-card-state">
+                        <svg class="request-state-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                        <svg class="request-state-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+                        <svg class="request-state-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    </span>
+                </button>
+
+                <button class="request-card request-card--info" data-request="water">
+                    <span class="request-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2.69s-5 5.6-5 9.31a5 5 0 0 0 10 0c0-3.71-5-9.31-5-9.31Z"/></svg>
+                    </span>
+                    <span class="request-card-body">
+                        <span class="request-card-title">Request Water</span>
+                        <span class="request-card-sub">Get a water refill at the table.</span>
+                    </span>
+                    <span class="request-card-state">
+                        <svg class="request-state-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                        <svg class="request-state-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+                        <svg class="request-state-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    </span>
+                </button>
+
+                <button class="request-card request-card--brand" data-request="bill" id="btnRequestBillFromWaiter">
+                    <span class="request-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-1 1Z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+                    </span>
+                    <span class="request-card-body">
+                        <span class="request-card-title">Request Bill</span>
+                        <span class="request-card-sub">Ready to pay? Get your final bill.</span>
+                    </span>
+                    <span class="request-card-state">
+                        <svg class="request-state-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                        <svg class="request-state-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+                        <svg class="request-state-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    </span>
+                </button>
+
+                <button class="request-card request-card--neutral" data-request="clean">
+                    <span class="request-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m3 3 18 18M11 11a2 2 0 1 0-2-2"/></svg>
+                    </span>
+                    <span class="request-card-body">
+                        <span class="request-card-title">Clean Table</span>
+                        <span class="request-card-sub">Ask staff to tidy up the table.</span>
+                    </span>
+                    <span class="request-card-state">
+                        <svg class="request-state-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                        <svg class="request-state-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+                        <svg class="request-state-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    </span>
+                </button>
+            </div>
+            <div class="waiter-thanks">A request stays marked "Sent" for about 30 seconds to prevent accidental double-taps.</div>
+        </div>
+    </div>
+
+    <!-- ============== INVALID TOKEN STATE ============== -->
+    <div id="screenInvalid" class="screen">
+        <div class="invalid-token-body">
+            <svg class="icon" style="width:48px;height:48px;color:var(--error);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <h3>This QR code is invalid</h3>
+            <p>The table link could not be verified, or this table is no longer available. Please ask a staff member for assistance.</p>
+            <button class="btn-start" onclick="location.reload()">Try Again</button>
+        </div>
+    </div>
+
+    <!-- ============== SESSION EXPIRED ============== -->
+    <div id="screenSessionExpired" class="screen">
+        <div class="invalid-token-body">
+            <svg class="icon" style="width:48px;height:48px;color:var(--text-sub);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <h3>Session Expired</h3>
+            <p>Your dining session has ended due to inactivity. Please scan the QR code on your table again to continue ordering.</p>
+            <button class="btn-start" onclick="location.href='/home'">Scan Again</button>
+        </div>
+    </div>
+
+    <!-- ============== SCREEN 7: BILL GENERATED CONFIRMATION ============== -->
+    <div id="screenBillGenerated" class="screen">
+        <div class="bill-generated-body">
+            <div class="bill-generated-icon">✓</div>
+            <div class="bill-generated-title">Bill Generated</div>
+            <div class="bill-generated-sub" id="billGenTable">Table 07</div>
+            <div class="bill-generated-amount" id="billGenAmount">₹0</div>
+            <div class="bill-generated-note">Our team will bring your bill shortly.<br>Thank you for dining with us!</div>
+            <button class="btn-start" id="btnBackToMenuFromBill">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <!-- ============== SCREEN: ORDER HISTORY (this visit) ============== -->
+    <div id="screenHistory" class="screen">
+        <div class="topbar">
+            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+        </div>
+        <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Your Orders This Visit</div>
+        <div id="historyListContainer" class="history-list"></div>
+    </div>
+
+    <!-- ============== SCREEN: PROMOTIONS ============== -->
+    <div id="screenPromotions" class="screen">
+        <div class="topbar">
+            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+        </div>
+        <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Stay Connected</div>
+        <div style="padding:2px 16px 12px; font-size:12px; color:var(--text-sub);">Loved the food? Let others know, and stay in touch with us.</div>
+        <div id="promotionsLinksContainer" class="promotions-links"></div>
+    </div>
+
+    <!-- ============== BOTTOM NAVIGATION ============== -->
+    <nav id="bottomNav" class="bottom-nav hidden">
+        <button class="bottom-nav-item" data-bottom-tab="screenMenu">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+            <span>Menu</span>
+        </button>
+        <button class="bottom-nav-item" data-bottom-tab="screenCart">
+            <span class="bottom-nav-icon-wrap">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                <span class="bottom-nav-badge hidden" id="bottomNavCartCount">0</span>
+            </span>
+            <span>Cart</span>
+        </button>
+        <button class="bottom-nav-item" data-bottom-tab="screenTracking">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <span>Status</span>
+        </button>
+        <button class="bottom-nav-item" data-bottom-tab="screenHistory">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+            <span>History</span>
+        </button>
+        <button class="bottom-nav-item" data-bottom-tab="screenPromotions">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+            <span>Promos</span>
+        </button>
+    </nav>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module" src="js/app.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(function(err) {
+    console.warn('[PWA] SW registration failed:', err);
+  });
+}
+</script>
+</body>
+</html>

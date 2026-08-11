@@ -1,0 +1,92 @@
+diff --git a/bot/index.js b/bot/index.js
+index bd37ffb..5e6ec5e 100644
+--- a/bot/index.js
++++ b/bot/index.js
+@@ -702,7 +702,15 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
+             let img = null;
+ 
+             if (statusLower === "placed") {
+-                msg = `🎉 *ORDER PLACED!* 🍕\n━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n\nThank you for your order! 🙏\nWe have received it and our team is reviewing it now. ⏳\n\nYou will receive an update as soon as it's confirmed! ❤️\n${getFoodFunnyProgress("Placed")}`;
++                // Webview-originated orders skip the chat back-and-forth, so this
++                // is the customer's FIRST message about this order — include the
++                // full itemized invoice (same formatOrderInvoice used below for
++                // the "Confirmed" message) so nothing is lost by skipping chat.
++                if (order.source === "webview_delivery") {
++                    msg = `🎉 *ORDER PLACED!* 🍕\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}\nWe've received your order and our team is reviewing it now. ⏳\nYou'll get an update as soon as it's confirmed! ❤️`;
++                } else {
++                    msg = `🎉 *ORDER PLACED!* 🍕\n━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n\nThank you for your order! 🙏\nWe have received it and our team is reviewing it now. ⏳\n\nYou will receive an update as soon as it's confirmed! ❤️\n${getFoodFunnyProgress("Placed")}`;
++                }
+                 img = botSettings.imgPlaced || botSettings.imgConfirmed;
+             } else if (statusLower === "confirmed") {
+                 if (isDineIn && isNew) {
+@@ -953,6 +961,70 @@ async function sendDailyReportSafely(dateOverride = null) {
+ 
+         const currentProcessedStatus = await getProcessedStatus(snap.key);
+         if (!currentProcessedStatus && orderTime > startupTime - timeBuffer) {
++            // --- WEBVIEW DELIVERY ORDER: server-side finalization ---
++            // The delivery webview (menu/delivery.html) writes the order
++            // straight to Firebase (no chat round-trip). The bot never ran
++            // processOrderPlacement() for this order, so the side effects
++            // that function normally handles — stock deduction and saving
++            // the customer's profile/record — haven't happened yet. Do them
++            // here, reusing the SAME functions processOrderPlacement uses,
++            // before the "Order Placed" message goes out below.
++            if (order.source === "webview_delivery" && !order.stockDeducted) {
++                try {
++                    deductInventoryStock(currentSock, order.items, order.outlet).catch(e =>
++                        console.error("[WebOrder] Stock deduction failed:", e));
++                    await updateData(`orders/${snap.key}`, { stockDeducted: true }, order.outlet);
++
++                    notifyAdmin(currentSock, snap.key, order, "NEW").catch(() => {});
++
++                    if (order.phone) {
++                        const cleanPhone = String(order.phone).replace(/\D/g, "").slice(-10);
++                        const jid = formatJid(order.phone);
++                        saveUserProfile(jid, {
++                            name: order.customerName || "",
++                            phone: order.phone,
++                            address: order.address || "",
++                            location: (order.lat && order.lng) ? { lat: order.lat, lng: order.lng } : null,
++                            lastOutlet: order.outlet
++                        }).catch(() => {});
++
++                        const mapsLink = (order.lat && order.lng) ? `https://maps.google.com/?q=${order.lat},${order.lng}` : "";
++                        db.ref(`${order.outlet}/customers/${cleanPhone}`).transaction((existing) => {
++                            const base = existing || {};
++                            return {
++                                ...base,
++                                name: order.customerName || base.name,
++                                phone: cleanPhone,
++                                address: order.address || base.address || "",
++                                location: (order.lat && order.lng) ? { lat: order.lat, lng: order.lng } : (base.location || null),
++                                mapsLink: mapsLink || base.mapsLink || "",
++                                lastOrderDate: order.createdAt || new Date().toISOString(),
++                                promotionalConsent: true,
++                                orderCount: (base.orderCount || 0) + 1,
++                                totalSpent: (base.totalSpent || 0) + (order.total || 0),
++                                lastSeen: Date.now()
++                            };
++                        }).catch(() => {});
++                    }
++
++                    if (order.discount > 0 && order.discountId) {
++                        discountEngine.recordDiscountUsage({
++                            OUTLET: order.outlet,
++                            discountId: order.discountId,
++                            orderId: snap.key,
++                            customerPhone: order.phone,
++                            amountGiven: order.discount,
++                            channel: "webview",
++                            globalLimit: order.discountGlobalLimit,
++                            discountLabel: order.discountLabel,
++                            discountSource: order.discountSource
++                        }).catch(() => {});
++                    }
++                } catch (webOrderErr) {
++                    console.error("[WebOrder] Finalization error:", webOrderErr);
++                }
++            }
++
+             handleOrderStatusUpdate(currentSock, snap.key, order, true);
+         } else {
+             // Just mark as processed without sending message

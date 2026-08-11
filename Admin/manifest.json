@@ -1,0 +1,49 @@
+{
+  "name": "Roshani ERP Admin",
+  "short_name": "Roshani ERP",
+  "id": "/Admin/index.html",
+  "description": "Enterprise Management System for Roshani Pizza & Cakes",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#E84908",
+  "scope": "./",
+  "dir": "ltr",
+  "lang": "en-US",
+  "categories": [
+    "business",
+    "food",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "icon-erp-logo.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "./index.html#dashboard",
+      "icons": [
+        {
+          "src": "icon-erp-logo.jpeg",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "url": "./index.html#orders",
+      "icons": [
+        {
+          "src": "icon-erp-logo.jpeg",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

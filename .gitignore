@@ -1,0 +1,70 @@
+node_modules/
+service-account.json
+bot/service-account.json
+session_data/
+bot/session_data_*/
+*.log
+.env
+
+users.json
+inst_user_settings.tmp
+
+firebase database.json
+
+# Capacitor native projects (auto-generated)
+capacitor-admin/android/
+capacitor-admin/node_modules/
+capacitor-rider/node_modules/
+
+# Generated directories
+graphify-out/
+.kilo/
+rider_old/
+rider-old/
+Cake-bot/
+verify_*.mjs
+screenshot_*.png
+screenshots-*/
+CLAUDE/
+Skill Set/
+
+# Firebase hosting cache
+.firebase/
+
+# Build output
+Admin/dist/
+
+# OpenCode config
+.opencode/
+
+# Audit report
+roshani_pizza_admin_ui_audit.html
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Playwright MCP snapshots
+.playwright-mcp/
+
+# Root screenshots
+*.png
+
+# Stray root-level copies (actual code lives in Admin/, menu/, etc.)
+catalog.js
+catalog.srv.js
+page-guide.js
+riders.js
+
+# Test artifacts
+test-results/
+
+# Audit temp files
+_audit_tmp/
+
+# Infrastructure artifacts
+.agents/
+skills-lock.json
+videos/
+CLAude Adv Video/

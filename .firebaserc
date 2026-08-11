@@ -1,0 +1,21 @@
+{
+  "projects": {
+    "default": "prashant-pizza-e86e4"
+  },
+  "targets": {
+    "prashant-pizza-e86e4": {
+      "hosting": {
+        "admin": [
+          "roshani-sudha-admin"
+        ],
+        "rider": [
+          "roshani-sudha-rider"
+        ],
+        "menu": [
+          "roshani-sudha-menu"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

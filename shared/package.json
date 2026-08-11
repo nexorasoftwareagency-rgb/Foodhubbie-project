@@ -1,0 +1,12 @@
+{
+  "name": "prasant-shared",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Shared utilities for Prasant Pizza ERP (Admin, Rider, Bot)",
+  "exports": {
+    "./dom/escape.js": "./dom/escape.js",
+    "./dom/modal.js": "./dom/modal.js",
+    "./format/date.js": "./format/date.js",
+    "./geo/geo.js": "./geo/geo.js"
+  }
+}
