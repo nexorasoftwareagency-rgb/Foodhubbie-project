@@ -7,9 +7,9 @@
 [VERIFIED] P.3 - Fetch Roshani repo (code source)
 [VERIFIED] P.4 - Fetch Food-Hubbie repo (reference only, /tmp)
 [VERIFIED] P.5 - Add new infrastructure folders (SupremeAdmin, orchestrator, webhook-server, bot-control-api)
-[PENDING] P.6 - Initialize new git repo (HUMAN REQUIRED - provide new GitHub repo URL)
-[PENDING] P.7 - Final structure verification
-[PENDING] P.7a - Contamination scan (confirms no Food-Hubbie code was copied)
+[BLOCKED_ON_HUMAN] P.6 - Initialize new git repo (HUMAN REQUIRED - provide new GitHub repo URL; commit done, awaiting remote)
+[VERIFIED] P.7 - Final structure verification
+[VERIFIED] P.7a - Contamination scan (doc-only matches in guide/tracker + Roshani's own brand comments; no Food-Hubbie code copied)
 [PENDING] 1.1 - AWS account creation (HUMAN REQUIRED)
 [PENDING] 1.2 - Confirm credit + budget alert (HUMAN REQUIRED)
 [PENDING] 1.3 - Secure root account MFA (HUMAN REQUIRED)
