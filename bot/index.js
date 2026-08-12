@@ -901,6 +901,9 @@ async function startBot() {
         markOnlineOnConnect: false,
         emitOwnEvents: true
     });
+        sock.ev.on('creds.update', saveCreds);
+    }
+
     // Patch sendMessage to log every send attempt with delivery diagnostics
     const _origSendMessage = sock.sendMessage.bind(sock);
     sock.sendMessage = async function(jid, content, opts) {
@@ -918,7 +921,6 @@ async function startBot() {
     };
     currentSock = sock;
 
-    sock.ev.on('creds.update', isMetaTransport ? () => {} : saveCreds);
     initCommandListener(sock);
 
     // Heartbeat & Cleanup & Report Scheduling
@@ -1846,7 +1848,6 @@ async function sendDailyReportSafely(dateOverride = null) {
 
         } catch (err) { console.error("Message Handler Error:", err); }
     });
-    }
 
     if (isMetaTransport) {
         await sock.start();
