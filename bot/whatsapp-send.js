@@ -48,7 +48,7 @@ async function sendWhatsAppImage(phoneNumberId, accessToken, to, imageUrl, capti
   return data;
 }
 
-async function sendWhatsAppUrlButton(phoneNumberId, accessToken, to, { body, url, title, headerImageUrl }) {
+async function sendWhatsAppUrlButton(phoneNumberId, accessToken, to, { body, url, title, headerImageUrl, footer }) {
   const interactive = {
     type: 'cta_url',
     body: { text: body },
@@ -60,6 +60,7 @@ async function sendWhatsAppUrlButton(phoneNumberId, accessToken, to, { body, url
   if (headerImageUrl && headerImageUrl.startsWith('http')) {
     interactive.header = { type: 'image', image: { link: headerImageUrl } };
   }
+  if (footer) interactive.footer = { text: footer };
   const res = await fetch(
     `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
     {

@@ -363,7 +363,8 @@ async function sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl) {
             body: ctaText,
             url: menuUrl,
             title: 'Order Now',
-            headerImageUrl: typeof menuImg === 'string' && menuImg.startsWith('http') ? menuImg : undefined
+            headerImageUrl: typeof menuImg === 'string' && menuImg.startsWith('http') ? menuImg : undefined,
+            footer: `Freshly made • ${OUTLET_NAME}`
         });
     }
     return sendImage(sock, sender, menuImg, `${ctaText}\n--------------------------\n${menuUrl}`, OUTLET, true);

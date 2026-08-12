@@ -316,7 +316,7 @@ document.getElementById('btnApplyDiscount')?.addEventListener('click', async () 
 // ---------------------------------------------------------------
 function requestLocationPermission() {
     if (!navigator.geolocation) {
-        showLocationBanner("Location isn't supported on this device — you can still type your address, but delivery fee can't be calculated automatically.");
+        showLocationBanner("Location isn't supported on this device — the delivery fee can't be calculated automatically.");
         return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -330,9 +330,10 @@ function requestLocationPermission() {
         (err) => {
             console.warn('[Location] Permission denied or error:', err.message);
             const statusEl = document.getElementById('locDialogStatus');
-            if (statusEl) statusEl.textContent = 'Location access denied. You can still order by entering your address manually.';
+            if (statusEl) statusEl.textContent = 'Location access is required to place an order. Please allow and try again.';
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        // ponytail: network fix (fast) over GPS (slow) — was enableHighAccuracy:true, timeout:10000
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
     );
 }
 
@@ -375,14 +376,6 @@ document.getElementById('btnLocGrant')?.addEventListener('click', () => {
     const statusEl = document.getElementById('locDialogStatus');
     if (statusEl) statusEl.textContent = 'Requesting location...';
     requestLocationPermission();
-});
-
-document.getElementById('btnLocSkip')?.addEventListener('click', () => {
-    closeLocDialog();
-    // Focus on address field so user can type manually
-    const addressField = document.getElementById('checkoutAddress');
-    if (addressField) addressField.focus();
-    UI.showToast('Enter your delivery address manually', 'info');
 });
 
 // Close dialog on overlay click
