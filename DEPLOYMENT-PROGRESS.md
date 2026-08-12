@@ -45,13 +45,14 @@
 [VERIFIED] 7.3 - .env created (0 placeholders; FIREBASE_DATABASE_URL=foodhubbie-10-default-rtdb, WA tokens + app secret filled)
 [VERIFIED] 7.4 - .gitignore updated
 [VERIFIED] 17-GATE - Code-side multi-tenant refactor complete + LIVE VERIFIED: gate-verify.js --live PASSES against foodhubbie-10 (found businesses/roshani-cake/outlets/cake + roshani-pizza/outlets/pizza). DB seeded with businesses/{bid}/outlets/{oid} for both restaurants; migrationStatus.multiOutlet = {migrated:true, outlets:[pizza,cake]}. All apps (menu/Admin/rider) repointed to foodhubbie-10 web config. Admin + rider apps built and deployed to hosting:admin + hosting:rider; menu + database deployed. DELIVERY WEBVIEW fixes verified: OUTLET resolution (?o=/?b=), webviewTokens rules, settings/Delivery/slabs public read, webview_delivery order gate, geolocation=(self) policy, sw v8. E2E order placed live. BOT deploy to EC2 remains PENDING (instance unreachable from this machine).
-[PENDING] 8.1 - Webhook server files created
-[PENDING] 8.2 - Webhook server code written
-[PENDING] 8.3 - Webhook server started via PM2
-[PENDING] 8.4 - Test health endpoint locally
-[PENDING] 8.5 - Test health endpoint through the tunnel
-[PENDING] 8.6 - Meta webhook verified (return to 5.7, mark it VERIFIED too once this passes)
-[PENDING] 9.1 - whatsapp-send.js helper created
+[VERIFIED] 8.1 - Webhook server files created (webhook-server/ in repo, pushed 5173c44)
+[VERIFIED] 8.2 - Webhook server code written (routes via phoneNumberIndex -> bot-inbox Redis channels)
+[VERIFIED] 8.3 - Webhook server started via PM2 (online, /var/www/foodhubbie/webhook-server)
+[VERIFIED] 8.4 - Test health endpoint locally (localhost:5000/health -> {"status":"ok"})
+[VERIFIED] 8.5 - Test health endpoint through the tunnel (photos-whenever-specifics-internationally.trycloudflare.com/health OK)
+[VERIFIED] 8.6 - Webhook verify-token check PASSES via tunnel (good token echoes challenge, bad token 403; log shows "Webhook verified successfully by Meta."). Synthetic inbound POST -> HTTP 200 + log "Routed message to bot-inbox:roshani-pizza:pizza". phoneNumberIndex/1211796118690392 seeded -> {roshani-pizza, pizza}. META DASHBOARD "Verify and Save" (5.7) now ready for human to click.
+[VERIFIED] 9.1 - whatsapp-send.js helper created (bot/whatsapp-send.js, pushed 5706e5a). REAL send SUCCESS: wamid.HBgMOTE5NzI0NjQ5OTcx... delivered to 919724649971 via Meta Cloud API.
+[PENDING] 9.2 - bot/index.js Baileys migration (grep-checklist method, see Section 9.2)
 [PENDING] 9.2 - bot/index.js Baileys migration (grep-checklist method, see Section 9.2)
 [PENDING] 9.3 - Baileys package removed
 [PENDING] 9.4 - End-to-end message test
