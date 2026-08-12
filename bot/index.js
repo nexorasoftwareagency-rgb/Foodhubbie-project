@@ -36,6 +36,7 @@ const pino = require('pino');
 const admin = require('firebase-admin');
 const { getData, setData, updateData, db, resolvePath, getUserProfile, saveUserProfile } = require('./firebase');
 const { resolveBusinessIdFor } = require('./helpers/outlet-resolution');
+const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
 const discountEngine = require('./discount-engine');
 
 // ── Extracted modules ──────────────────────────────────────────────────────
@@ -850,6 +851,10 @@ process.on('unhandledRejection', (err) => {
 async function startBot() {
     console.log(`🚀 Starting ${OUTLET_NAME} WhatsApp Bot (${OUTLET})...`);
 
+    // Determine active transport (meta | baileys) — controlled from Supreme Admin
+    const transportMode = await getTransportMode(OUTLET);
+    console.log(`🚀 Starting ${OUTLET_NAME} WhatsApp Bot (${OUTLET}) — transport=${transportMode}`);
+
     // Clean up previous socket on reconnect
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     if (currentSock) {
@@ -857,11 +862,34 @@ async function startBot() {
         currentSock = null;
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState('session_data_' + OUTLET);
-    const { version } = await fetchLatestBaileysVersion();
+    let sock;
+    let isMetaTransport = false;
+    if (transportMode === 'meta') {
+        isMetaTransport = true;
+        const phoneNumberId = await getPhoneNumberId(OUTLET);
+        const accessToken = process.env.WA_PERMANENT_TOKEN;
+        sock = createMetaTransport({ outlet: OUTLET, phoneNumberId, accessToken, redisUrl });
+        sock.ev.on('connection.update', (update) => {
+            if (sock !== currentSock) return;
+            const { connection } = update;
+            if (connection === 'open') {
+                initFCMWatcher();
+                console.log(`✅ ${OUTLET_NAME.toUpperCase()} BOT IS ONLINE (Meta API)`);
+                reconnectAttempts = 0;
+                cryptoErrorCount = 0;
+            } else if (connection === 'close') {
+                reconnectAttempts++;
+                const delay = Math.min(5000 * Math.pow(3, Math.min(reconnectAttempts - 1, 3)), 120000);
+                console.log(`🔌 Meta transport closed (attempt ${reconnectAttempts}). Reconnecting in ${(delay / 1000).toFixed(0)}s...`);
+                if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; startBot(); }, delay);
+            }
+        });
+    } else {
+        const { state, saveCreds } = await useMultiFileAuthState('session_data_' + OUTLET);
+        const { version } = await fetchLatestBaileysVersion();
 
-    const baileysLogger = pino({ level: process.env.BAILEYS_LOG_LEVEL || 'warn' });
-    const sock = makeWASocket({
+        const baileysLogger = pino({ level: process.env.BAILEYS_LOG_LEVEL || 'warn' });
+        sock = makeWASocket({
         version,
         auth: state,
         printQRInTerminal: true,
@@ -890,7 +918,7 @@ async function startBot() {
     };
     currentSock = sock;
 
-    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', isMetaTransport ? () => {} : saveCreds);
     initCommandListener(sock);
 
     // Heartbeat & Cleanup & Report Scheduling
@@ -1052,6 +1080,7 @@ async function sendDailyReportSafely(dateOverride = null) {
     }
 
     sock.ev.on('connection.update', (update) => {
+        if (isMetaTransport) return; // Meta transport registers its own connection.update handler
         if (sock !== currentSock) return;
         const { connection, lastDisconnect, qr } = update;
         if (qr) qrcode.generate(qr, { small: true });
@@ -1817,6 +1846,11 @@ async function sendDailyReportSafely(dateOverride = null) {
 
         } catch (err) { console.error("Message Handler Error:", err); }
     });
+    }
+
+    if (isMetaTransport) {
+        await sock.start();
+    }
 }
 
 async function handleCheckoutFinal(sock, sender, user) {
