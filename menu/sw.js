@@ -1,6 +1,7 @@
-const CACHE_NAME = 'roshani-menu-shell-v7';
+const CACHE_NAME = 'roshani-menu-shell-v8';
 const ASSETS = [
   './index.html',
+  './delivery.html',
   './css/app.css',
   './js/app.js',
   './js/ui.js',
@@ -9,6 +10,9 @@ const ASSETS = [
   './js/firebase.js',
   './js/discount.js',
   './js/cart.js',
+  './js/delivery.js',
+  './js/delivery-order.js',
+  './js/geo.js',
   './manifest.json',
   './sw.js'
 ];

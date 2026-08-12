@@ -40,7 +40,7 @@ function round2(n) { return Math.round(n * 100) / 100; }
  * @param {string} [opts.botPhone] - Bot phone number for wa.me return link
  * @returns {Promise<{orderId:string, total:number, deliveryFee:number}>}
  */
-export async function placeDeliveryOrder({ cartLines, customerName, customerPhone, address, location, note = '', discount = null, sessionId = '', source = 'webview_delivery', botPhone = '' }) {
+export async function placeDeliveryOrder({ cartLines, customerName, customerPhone, address, location, note = '', discount = null, sessionId = '', source = 'webview_delivery', botPhone = '', webviewToken = '' }) {
     if (!cartLines || cartLines.length === 0) throw new Error('Cart is empty');
     if (!customerName) throw new Error('Name is required');
     if (!customerPhone || customerPhone.length !== 10) throw new Error('A valid 10-digit phone number is required');
@@ -53,17 +53,17 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
     //     handleCheckoutFinal(), using menu/js/geo.js (identical logic to
     //     shared/geo/geo.js). ---
     const [delSnap, storeSnap] = await Promise.all([
-        get(outletRef('settings/Delivery')),
+        get(outletRef('settings/Delivery/slabs')),
         get(outletRef('settings/Store')),
     ]);
-    const delSettings = delSnap.val() || {};
+    const delSettings = delSnap.val() || [];
     const storeSettings = storeSnap.val() || {};
     const outletCoords = {
         lat: parseFloat(storeSettings.lat ?? (OUTLET === 'cake' ? 25.887472 : 25.887944)),
         lng: parseFloat(storeSettings.lng ?? (OUTLET === 'cake' ? 85.026861 : 85.026194)),
     };
     const dist = calculateDistance(location.lat, location.lng, outletCoords.lat, outletCoords.lng);
-    const deliveryFee = getFeeFromSlabs(dist, delSettings.slabs || []);
+    const deliveryFee = getFeeFromSlabs(dist, delSettings);
 
     // --- Items: same shape bot/index.js's user.cart already uses, so
     //     formatOrderInvoice() / formatCartSummary() read it unchanged. ---
@@ -88,6 +88,7 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         outlet: OUTLET,
         type: 'Online',
         source: 'webview_delivery',   // bot finalization hook keys on this; src=wa/qr is UI-only
+        webviewToken: webviewToken || null,
         sessionId: sessionId || null,
         botPhone: botPhone || null,
         customerName,

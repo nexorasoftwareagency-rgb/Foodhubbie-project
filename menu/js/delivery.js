@@ -235,17 +235,17 @@ async function ensureDeliveryFee() {
             _deliveryFee = _deliveryFeeCache;
         } else {
             const [delSnap, storeSnap] = await Promise.all([
-                get(outletRef('settings/Delivery')),
+                get(outletRef('settings/Delivery/slabs')),
                 get(outletRef('settings/Store')),
             ]);
-            const delSettings = delSnap.val() || {};
+            const delSettings = delSnap.val() || [];
             const storeSettings = storeSnap.val() || {};
             const outletCoords = {
                 lat: parseFloat(storeSettings.lat ?? (OUTLET === 'cake' ? 25.887472 : 25.887944)),
                 lng: parseFloat(storeSettings.lng ?? (OUTLET === 'cake' ? 85.026861 : 85.026194)),
             };
             const dist = calculateDistance(M.location.lat, M.location.lng, outletCoords.lat, outletCoords.lng);
-            _deliveryFee = getFeeFromSlabs(dist, delSettings.slabs || []);
+            _deliveryFee = getFeeFromSlabs(dist, delSettings);
             _deliveryFeeCache = _deliveryFee;
         }
     }
@@ -455,6 +455,7 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
             sessionId: M.sessionId,
             source: M.source,
             botPhone: M.botPhone,
+            webviewToken: M.token,
         });
 
         clearCart();

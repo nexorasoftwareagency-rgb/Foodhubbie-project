@@ -35,6 +35,7 @@ const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const admin = require('firebase-admin');
 const { getData, setData, updateData, db, resolvePath, getUserProfile, saveUserProfile } = require('./firebase');
+const { resolveBusinessIdFor } = require('./helpers/outlet-resolution');
 const discountEngine = require('./discount-engine');
 
 // ── Extracted modules ──────────────────────────────────────────────────────
@@ -1290,7 +1291,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     // MESSAGE2: Menu image + CTA + URL (triggers WhatsApp preview)
                     const phone = sender.replace(/[^0-9]/g, '').slice(-10);
                     const token = await createWebviewToken(OUTLET, phone);
-                    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/${OUTLET}/delivery.html?session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
+                    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
                     const menuImg = bot?.menuImage || store?.bannerImage;
                     const ctaText = `🛒 *Ready to order?*\n👇 *TAP THE LINK BELOW TO ORDER NOW* 👇\n--------------------------\n${menuUrl}`;
                     await sendImage(sock, sender, menuImg, ctaText, OUTLET, true);
@@ -1308,7 +1309,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     if (/^(order|menu|pizza|cake)$/i.test(text)) {
                         const phone = sender.replace(/[^0-9]/g, '').slice(-10);
                         const token = await createWebviewToken(OUTLET, phone);
-                        const menuUrl = `${WEBVIEW_DELIVERY_HOST}/${OUTLET}/delivery.html?session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
+                        const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
                         const menuImg = bot?.menuImage || store?.bannerImage;
                         const ctaText = `🛒 *Ready to order?*\n👇 *TAP THE LINK BELOW TO ORDER NOW* 👇\n--------------------------\n${menuUrl}`;
                         return sendImage(sock, sender, menuImg, ctaText, OUTLET, true);
@@ -1320,7 +1321,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     // Default: friendly nudge + menu image + link
                     const phone = sender.replace(/[^0-9]/g, '').slice(-10);
                     const token = await createWebviewToken(OUTLET, phone);
-                    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/${OUTLET}/delivery.html?session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
+                    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
                     const menuImg = bot?.menuImage || store?.bannerImage;
                     const ctaText = `💡 *Tap below to browse & order!*\n--------------------------\n${menuUrl}`;
                     return sendImage(sock, sender, menuImg, ctaText, OUTLET, true);

@@ -55,7 +55,7 @@ export function isConnected() {
 // else inferred per-outlet (two restaurants = two businesses).
 // ---------------------------------------------------------------
 const pathParts = window.location.pathname.split('/').filter(Boolean);
-export const OUTLET = pathParts[0] || 'pizza';
+export const OUTLET = new URLSearchParams(window.location.search).get('o') || pathParts[0] || 'pizza';
 const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
 export const BUSINESS_ID = new URLSearchParams(window.location.search).get('b') || BUSINESS_BY_OUTLET[OUTLET] || 'roshani-pizza';
 
