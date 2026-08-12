@@ -910,7 +910,7 @@ async function startBot() {
         const textPreview = content?.text ? content.text.slice(0, 60) : (content?.caption ? content.caption.slice(0, 60) : 'non-text');
         try {
             const result = await _origSendMessage(jid, content, opts);
-            const msgId = result?.key?.id || result;
+            const msgId = result?.key?.id || result?.messages?.[0]?.id || result;
             const cryptoWarn = cryptoErrorCount > 10 ? ` cryptoErrs=${cryptoErrorCount}` : '';
             console.log(`[SEND OK] to ${maskJid(jid)} text="${textPreview}" wsOpen=${sock.ws?.isOpen} msgId=${msgId}${cryptoWarn}`);
             return result;
