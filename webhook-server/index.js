@@ -16,6 +16,7 @@ if (!admin.apps.length) {
 
 const app = express();
 app.use(express.json());
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
