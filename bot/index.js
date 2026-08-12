@@ -2,7 +2,7 @@
  * ROSHANI ERP | WHATSAPP BOT CORE v4.0
  * Single-Outlet Instance (Pizza-Bot / Cake-Bot)
  */
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 // =============================
 // OUTLET CONFIGURATION (UNIFIED CORE)
