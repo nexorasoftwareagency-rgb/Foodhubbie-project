@@ -50,9 +50,12 @@ async function sendWhatsAppImage(phoneNumberId, accessToken, to, imageUrl, capti
 
 async function sendWhatsAppUrlButton(phoneNumberId, accessToken, to, { body, url, title, headerImageUrl }) {
   const interactive = {
-    type: 'button',
+    type: 'cta_url',
     body: { text: body },
-    action: { buttons: [{ type: 'url', url, title }] }
+    action: {
+      name: 'cta_url',
+      parameters: { display_text: title, url }
+    }
   };
   if (headerImageUrl && headerImageUrl.startsWith('http')) {
     interactive.header = { type: 'image', image: { link: headerImageUrl } };
