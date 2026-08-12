@@ -36,7 +36,7 @@ app.post('/webhook', async (req, res) => {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0]?.value;
     if (change?.statuses) {
-      console.log('[STATUS]', JSON.stringify(change.statuses.map(s => ({ id: s.id, status: s.status, err: s.errors?.[0]?.error_title, ts: s.timestamp }))));
+      console.log('[STATUS]', JSON.stringify(change.statuses));
       return;
     }
     const phoneNumberId = change?.metadata?.phone_number_id;
