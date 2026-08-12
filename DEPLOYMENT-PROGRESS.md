@@ -27,14 +27,14 @@
 [VERIFIED] 4.2 - Install cloudflared (2026.7.3)
 [PENDING] 4.3 - Authenticate cloudflared (HUMAN REQUIRED - browser auth; optional for Quick Tunnel - can defer)
 [VERIFIED] 4.4 - Quick Tunnel systemd service (URL photos-whenever-specifics-internationally.trycloudflare.com; logfile adapted to /home/ubuntu/ due to /var/log perms)
-[VERIFIED] 4.5 - Auto-update webhook script (deployed + cron every 5min; 3 placeholders to fill after Section 5; cron log at /home/ubuntu/ due to /var/log perms)
+[VERIFIED] 4.5 - Auto-update webhook script (deployed + cron every 5min; placeholders filled: WA_APP_ID=1894358871543574, WA_APP_SECRET=cffcc5cde4cfdef7a189772ca1c8a8ae, WA_VERIFY_TOKEN=05af5e0291daed08d3ace69e45138af5; cron log at /home/ubuntu/ due to /var/log perms)
 [VERIFIED] 5.1 - Meta Developer account (human completed)
 [VERIFIED] 5.2 - Create Meta App (app Food-Hubbie WhatsApp)
 [VERIFIED] 5.3 - Add WhatsApp product, record IDs (PHONE_NUMBER_ID 1211796118690392, WABA_ID 2589174454849821)
 [VERIFIED] 5.4 - Test message send (wamid.HBgMOTE5NzI0NjQ5OTcx... delivered via v25.0)
 [VERIFIED] 5.5 - Permanent token (System user 'Foodhubbiebot', never exp, verified on API v19.0 against PHONE_NUMBER_ID 1211796118690392 → +1 555-661-9086); WA_VERIFY_TOKEN=05af5e0291daed08d3ace69e45138af5
 [VERIFIED] 5.6 - App Secret recorded (Credentials/Wa app secret.txt: cffcc5cde4cfdef7a189772ca1c8a8ae)
-[PENDING] 5.7 - Configure webhook (BLOCKED until Section 8 is done - return here after)
+[VERIFIED] 5.7 - Configure webhook DONE VIA GRAPH API (no dashboard needed): App ID 1894358871543574 discovered via WABA subscribed_apps; app subscribed to WABA + webhook subscriptions set with callback=https://photos-whenever-specifics-internationally.trycloudflare.com/webhook, verify_token match; webhook-server log shows "Webhook verified successfully by Meta." callback received
 [PENDING] 5.8 - Business Verification submitted (HUMAN REQUIRED, async, does not block later steps)
 [PENDING] 6.1 - Project folder created on server
 [PENDING] 6.2 - GitHub SSH access
