@@ -75,7 +75,7 @@ const fbSrc = read('bot/firebase.js');
 const sharedList = ['admins', 'riders', 'riderStats', 'migrationStatus', 'logs', 'settlements', 'phoneNumberIndex'];
 const sharedOk = sharedList.every(n => fbSrc.includes(`'${n}'`));
 check('resolvePath shared list intact', sharedOk, sharedOk ? sharedList.join(',') : 'missing node');
-check('resolvePath uses outlet-resolution helper', /outletPath\(resolveBusinessId\(\)/.test(fbSrc));
+        check('resolvePath uses outlet-resolution helper', /outletPath\(resolveBusinessIdFor\(outlet\), outlet, path\)/.test(fbSrc));
 check('no botUsers references', !/botUsers/.test(fbSrc));
 check('no botStatus references', !/botStatus/.test(fbSrc));
 
@@ -113,7 +113,7 @@ check('Outlet.ref falls back to tenantRef', /return tenantRef\(this\.current/.te
 // ---- 6. rider-app constants.ts — tenantPath + BUSINESS_ID ----
 console.log('\n[6] rider-app/src/lib/constants.ts');
 const riderSrc = read('rider-app/src/lib/constants.ts');
-check('BUSINESS_ID constant', /export const BUSINESS_ID = "roshani"/.test(riderSrc));
+check('BUSINESS_BY_OUTLET map', /export const BUSINESS_BY_OUTLET/.test(riderSrc));
 check('tenantPath helper', /export function tenantPath/.test(riderSrc));
 check('orders dbPath tenant-scoped', /singleOrder: \(outlet: OutletId, orderId: string\) => tenantPath\(outlet, `orders\/\$\{orderId\}`\)/.test(riderSrc));
 check('settlements stays platform-root', /settlements: \(rId: string\) => `settlements\/\$\{rId\}`/.test(riderSrc));
@@ -163,7 +163,7 @@ admin.database().ref('businesses').limitToFirst(1).once('value', (snap) => {
   console.log('OK: found businesses/' + bid + '/outlets/' + Object.keys(outlets)[0]);
   process.exit(0);
 }).catch(e => { console.log('FAIL:' + e.message); process.exit(1); });`;
-            const out = execFileSync(process.execPath, ['-e', script], { cwd: ROOT, encoding: 'utf8' });
+            const out = execFileSync(process.execPath, ['-e', script], { cwd: path.join(ROOT, 'bot'), encoding: 'utf8' });
             check('live businesses/{bid}/outlets exists', /OK:/.test(out), out.trim());
         } catch (e) {
             check('live businesses/{bid}/outlets exists', false, String(e.stdout || e.message).trim());

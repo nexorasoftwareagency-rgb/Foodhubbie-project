@@ -7,7 +7,7 @@ require('dotenv').config();
 // =============================
 // OUTLET CONFIGURATION (UNIFIED CORE)
 // =============================
-const OUTLET = process.env.OUTLET || 'pizza';
+const OUTLET = (process.env.OUTLET || 'pizza').trim();
 const OUTLET_NAME = OUTLET === 'pizza' ? 'Roshani Pizza' : 'Roshani Cake';
 const OUTLET_EMOJI = OUTLET === 'pizza' ? '🍕' : '🎂';
 const OTHER_OUTLET_NAME = OUTLET === 'pizza' ? 'Roshani Cake' : 'Roshani Pizza';
@@ -16,6 +16,10 @@ const OTHER_OUTLET_NUMBER = '';
 // Fixed developer number (mirrors getReportRecipients). Used by promo opt-out
 // filter to recognize admin senders and let them continue ordering.
 const DEVELOPER_NUMBER_FALLBACK = "9724649971";
+
+// WhatsApp delivery webview — served from the QR menu hosting target.
+const WEBVIEW_DELIVERY_HOST = "https://foodhubbie-qrmenu.web.app";
+const WEBVIEW_BOT_PHONE = process.env.WA_BOT_PHONE || "919724649971";
 
 const fs = require('fs');
 const path = require('path');
@@ -325,6 +329,16 @@ async function generateOrderId(outlet = 'pizza') {
     return `${dateStr}-${seqNum.toString().padStart(4, '0')}`;
 }
 
+async function createWebviewToken(outlet, phone) {
+    const token = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    await db.ref(resolvePath(`webviewTokens/${token}`, outlet)).set({
+        phone,
+        createdAt: new Date().toISOString(),
+        used: false,
+    });
+    return token;
+}
+
 async function appendContactInfo(text, outlet = 'pizza') {
     if (!text) return '';
     try {
@@ -338,8 +352,8 @@ async function appendContactInfo(text, outlet = 'pizza') {
     }
 }
 
-async function sendImage(sock, to, image, text, outlet = 'pizza') {
-    const finalMsg = await appendContactInfo(text, outlet);
+async function sendImage(sock, to, image, text, outlet = 'pizza', skipContact = false) {
+    const finalMsg = skipContact ? text : await appendContactInfo(text, outlet);
     if (!image) {
         await sock.sendMessage(to, { text: finalMsg });
         return;
@@ -605,6 +619,12 @@ async function notifyAdmin(sock, orderId, order, type = 'NEW') {
         let msg = "";
         if (type === 'CANCELLED') {
             msg = `⚠️ *LOST SALE / ABANDONED* ⚠️\n━━━━━━━━━━━━━━━━━━━━\n👤 *Customer:* ${order.customerName || 'Anonymous'}\n📞 *Phone:* ${order.phone || 'N/A'}\n💰 *Potential Total:* ₹${order.total || 0}\n🏪 *Outlet:* ${outlet.toUpperCase()}\n━━━━━━━━━━━━━━━━━━━━\n_User cancelled at final checkout step._`;
+        } else if (type === 'RIDER_ACCEPTED') {
+            const riderName = order.riderName || order.riderId || order.assignedRider || 'A rider';
+            msg = `🛵 *RIDER ON THE WAY TO RESTAURANT* 🛵\n━━━━━━━━━━━━━━━━━━━━\n🆔 ID: #${orderId.slice(-5)}\n👤 Customer: ${order.customerName || 'N/A'}\n📞 Phone: ${order.phone || 'N/A'}\n🛵 Rider: ${riderName}\n📞 Rider Phone: ${order.riderPhone || 'N/A'}\n━━━━━━━━━━━━━━━━━━━━\n_Get the order ready for pickup._`;
+        } else if (type === 'RIDER_ARRIVED') {
+            const riderName = order.riderName || order.riderId || order.assignedRider || 'A rider';
+            msg = `🛵 *RIDER ARRIVED AT RESTAURANT* 🛵\n━━━━━━━━━━━━━━━━━━━━\n🆔 ID: #${orderId.slice(-5)}\n🛵 Rider: ${riderName}\n━━━━━━━━━━━━━━━━━━━━\n_Hand over the order for pickup._`;
         } else {
             let itemsText = (order.items || []).map(i => `• ${i.name} (${i.size}) x${i.quantity}`).join('\n');
             let adminMsg = type === 'NEW' ? `🔔 *NEW ORDER RECEIVED!* 🔔\n` : `📦 *ORDER UPDATE* 📦\n`;
@@ -722,11 +742,15 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                         await riderNotify.broadcastPickupAvailable(sock, id, order, getData, addInAppNotification);
                     }
                 }
-            } else if (statusLower === "arriving at restaurant" || statusLower === "arrived at restaurant") {
-                const riderLabel = statusLower === "arriving at restaurant"
-                    ? "Our rider is on the way to the restaurant to pick up your order! 🛵"
-                    : "Our rider has arrived at the restaurant and is picking up your order now! 📦";
-                msg = `📍 *RIDER UPDATE* 📍\n━━━━━━━━━━━━━━━━━━━━\n${riderLabel}\n\n🆔 Order: #${id.slice(-5)}\n💰 Total: ₹${order.total || 0}\n\n_Your order will be on its way shortly!_ 🙏`;
+            } else if (statusLower === "arriving at restaurant") {
+                // Rider accepted -> restaurant staff should know the rider is en route
+                // (this is an internal alert, not a customer-facing one — the customer
+                // is told at pickup/delivery milestones instead).
+                notifyAdmin(sock, id, order, 'RIDER_ACCEPTED').catch(() => {});
+                msg = "";
+            } else if (statusLower === "arrived at restaurant") {
+                notifyAdmin(sock, id, order, 'RIDER_ARRIVED').catch(() => {});
+                msg = "";
             } else if (statusLower === "picked up" || statusLower === "out for delivery") {
                 let otp = storedOTP;
                 if (!otp) {
@@ -953,6 +977,70 @@ async function sendDailyReportSafely(dateOverride = null) {
 
         const currentProcessedStatus = await getProcessedStatus(snap.key);
         if (!currentProcessedStatus && orderTime > startupTime - timeBuffer) {
+            // --- WEBVIEW DELIVERY ORDER: server-side finalization ---
+            // The delivery webview (menu/delivery.html) writes the order
+            // straight to Firebase (no chat round-trip). The bot never ran
+            // processOrderPlacement() for this order, so the side effects
+            // that function normally handles — stock deduction and saving
+            // the customer's profile/record — haven't happened yet. Do them
+            // here, reusing the SAME functions processOrderPlacement uses,
+            // before the "Order Placed" message goes out below.
+            if (order.source === "webview_delivery" && !order.stockDeducted) {
+                try {
+                    deductInventoryStock(currentSock, order.items, order.outlet).catch(e =>
+                        console.error("[WebOrder] Stock deduction failed:", e));
+                    await updateData(`orders/${snap.key}`, { stockDeducted: true }, order.outlet);
+
+                    notifyAdmin(currentSock, snap.key, order, "NEW").catch(() => {});
+
+                    if (order.phone) {
+                        const cleanPhone = String(order.phone).replace(/\D/g, "").slice(-10);
+                        const jid = formatJid(order.phone);
+                        saveUserProfile(jid, {
+                            name: order.customerName || "",
+                            phone: order.phone,
+                            address: order.address || "",
+                            location: (order.lat && order.lng) ? { lat: order.lat, lng: order.lng } : null,
+                            lastOutlet: order.outlet
+                        }).catch(() => {});
+
+                        const mapsLink = (order.lat && order.lng) ? `https://maps.google.com/?q=${order.lat},${order.lng}` : "";
+                        db.ref(resolvePath(`customers/${cleanPhone}`, order.outlet)).transaction((existing) => {
+                            const base = existing || {};
+                            return {
+                                ...base,
+                                name: order.customerName || base.name,
+                                phone: cleanPhone,
+                                address: order.address || base.address || "",
+                                location: (order.lat && order.lng) ? { lat: order.lat, lng: order.lng } : (base.location || null),
+                                mapsLink: mapsLink || base.mapsLink || "",
+                                lastOrderDate: order.createdAt || new Date().toISOString(),
+                                promotionalConsent: true,
+                                orderCount: (base.orderCount || 0) + 1,
+                                totalSpent: (base.totalSpent || 0) + (order.total || 0),
+                                lastSeen: Date.now()
+                            };
+                        }).catch(() => {});
+                    }
+
+                    if (order.discount > 0 && order.discountId) {
+                        discountEngine.recordDiscountUsage({
+                            OUTLET: order.outlet,
+                            discountId: order.discountId,
+                            orderId: snap.key,
+                            customerPhone: order.phone,
+                            amountGiven: order.discount,
+                            channel: "webview",
+                            globalLimit: order.discountGlobalLimit,
+                            discountLabel: order.discountLabel,
+                            discountSource: order.discountSource
+                        }).catch(() => {});
+                    }
+                } catch (webOrderErr) {
+                    console.error("[WebOrder] Finalization error:", webOrderErr);
+                }
+            }
+
             handleOrderStatusUpdate(currentSock, snap.key, order, true);
         } else {
             // Just mark as processed without sending message
@@ -1182,26 +1270,60 @@ async function sendDailyReportSafely(dateOverride = null) {
                     let welcome = "";
                     if (user.hasProfile && user.name) {
                         welcome += `Welcome back, *${user.name}*! 👋\n`;
-                        welcome += `Your favorite items are ready for you. ${OUTLET_EMOJI}\n\n`;
+                        welcome += `Your favorite items are ready for you. ${OUTLET_EMOJI}`;
                     } else {
-                        welcome += `Hello *${pushName}*! 👋\n\n`;
+                        welcome += `Hello *${pushName}*! 👋`;
                     }
 
-                    welcome += `✨ *WELCOME TO ${OUTLET_NAME.toUpperCase()}* ${OUTLET_EMOJI}\n`;
-                    welcome += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                    welcome += `Delicious food, delivered fast to your doorstep! 🚀\n\n`;
+                    welcome += `\n------------------------`;
+                    welcome += `\n✨ *WELCOME TO ${OUTLET_NAME.toUpperCase()}* ${OUTLET_EMOJI}`;
+                    welcome += `\n------------------------`;
+                    welcome += `\nDelicious food, delivered fast to your doorstep! 🚀`;
 
-                    // Cross-promotion for other outlet
-                    if (OTHER_OUTLET_NUMBER) {
-                        welcome += `${OTHER_OUTLET_EMOJI} Also try *${OTHER_OUTLET_NAME}*!\n`;
-                        welcome += `📱 Order at: wa.me/${OTHER_OUTLET_NUMBER}\n\n`;
-                    }
-
-                    welcome += `_Loading menu... one moment_ ⏳`;
-
+                    // MESSAGE1: Greeting image + text (no CTA, no link)
                     const greetingImg = bot?.greetingImage || store?.bannerImage;
                     await sendImage(sock, sender, greetingImg, welcome);
-                    return sendCategories(sock, sender, user);
+
+                    // Wait 2 seconds for WhatsApp to prepare preview rendering
+                    await new Promise(r => setTimeout(r, 2000));
+
+                    // MESSAGE2: Menu image + CTA + URL (triggers WhatsApp preview)
+                    const phone = sender.replace(/[^0-9]/g, '').slice(-10);
+                    const token = await createWebviewToken(OUTLET, phone);
+                    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/${OUTLET}/delivery.html?session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
+                    const menuImg = bot?.menuImage || store?.bannerImage;
+                    const ctaText = `🛒 *Ready to order?*\n👇 *TAP THE LINK BELOW TO ORDER NOW* 👇\n--------------------------\n${menuUrl}`;
+                    await sendImage(sock, sender, menuImg, ctaText, OUTLET, true);
+
+                    // Set user step to WEBVIEW so bot knows they're ordering via webview
+                    user.step = "WEBVIEW";
+                    return;
+                }
+
+                // WEBVIEW STEP: User is ordering via webview link
+                // They might send "back", "order", or just chat
+                if (user.step === "WEBVIEW") {
+                    const bot = await getData("settings/Bot", OUTLET);
+                    // If they send "order" or "menu" again, resend menu image + CTA + link
+                    if (/^(order|menu|pizza|cake)$/i.test(text)) {
+                        const phone = sender.replace(/[^0-9]/g, '').slice(-10);
+                        const token = await createWebviewToken(OUTLET, phone);
+                        const menuUrl = `${WEBVIEW_DELIVERY_HOST}/${OUTLET}/delivery.html?session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
+                        const menuImg = bot?.menuImage || store?.bannerImage;
+                        const ctaText = `🛒 *Ready to order?*\n👇 *TAP THE LINK BELOW TO ORDER NOW* 👇\n--------------------------\n${menuUrl}`;
+                        return sendImage(sock, sender, menuImg, ctaText, OUTLET, true);
+                    }
+                    // If they send "track" or "status", check for recent orders
+                    if (/^(track|status|where)$/i.test(text)) {
+                        return sock.sendMessage(sender, { text: "📋 Type *status* to check your order status, or tap the menu link above to order again." });
+                    }
+                    // Default: friendly nudge + menu image + link
+                    const phone = sender.replace(/[^0-9]/g, '').slice(-10);
+                    const token = await createWebviewToken(OUTLET, phone);
+                    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/${OUTLET}/delivery.html?session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
+                    const menuImg = bot?.menuImage || store?.bannerImage;
+                    const ctaText = `💡 *Tap below to browse & order!*\n--------------------------\n${menuUrl}`;
+                    return sendImage(sock, sender, menuImg, ctaText, OUTLET, true);
                 }
 
 

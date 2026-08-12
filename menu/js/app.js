@@ -416,7 +416,7 @@ function onCartChanged() {
 async function loadMenu() {
     const [catSnap, dishSnap] = await Promise.all([get(outletRef('categories')), get(outletRef('dishes'))]);
     M.categories = Object.entries(catSnap.val() || {}).map(([id, c]) => ({ id, ...c }));
-    M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.available !== false).map(([id, d]) => ({ id, ...d }));
+    M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.stock !== false).map(([id, d]) => ({ id, ...d }));
     renderMenuScreen();
 }
 
@@ -472,6 +472,11 @@ function openCustomize(dishId) {
     heroImg.onerror = () => { heroImg.style.display = 'none'; };
     heroImg.alt = dish.name || 'Dish image';
     document.getElementById('customDishName').textContent = dish.name;
+    const descEl = document.getElementById('customDishDesc');
+    if (descEl) {
+        descEl.textContent = dish.description || '';
+        descEl.style.display = dish.description ? '' : 'none';
+    }
     document.getElementById('draftQtyVal').textContent = '1';
     renderCustomizeSections();
     document.getElementById('specialInstructions').value = '';

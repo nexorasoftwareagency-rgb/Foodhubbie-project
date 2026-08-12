@@ -32,8 +32,8 @@
 [VERIFIED] 5.2 - Create Meta App (app Food-Hubbie WhatsApp)
 [VERIFIED] 5.3 - Add WhatsApp product, record IDs (PHONE_NUMBER_ID 1211796118690392, WABA_ID 2589174454849821)
 [VERIFIED] 5.4 - Test message send (wamid.HBgMOTE5NzI0NjQ5OTcx... delivered via v25.0)
-[VERIFIED] 5.5 - Permanent token (System user 'Foodhubbiebot', never exp, verified on API); WA_VERIFY_TOKEN=05af5e0291daed08d3ace69e45138af5
-[PENDING] 5.6 - App Secret (HUMAN REQUIRED)
+[VERIFIED] 5.5 - Permanent token (System user 'Foodhubbiebot', never exp, verified on API v19.0 against PHONE_NUMBER_ID 1211796118690392 → +1 555-661-9086); WA_VERIFY_TOKEN=05af5e0291daed08d3ace69e45138af5
+[VERIFIED] 5.6 - App Secret recorded (Credentials/Wa app secret.txt: cffcc5cde4cfdef7a189772ca1c8a8ae)
 [PENDING] 5.7 - Configure webhook (BLOCKED until Section 8 is done - return here after)
 [PENDING] 5.8 - Business Verification submitted (HUMAN REQUIRED, async, does not block later steps)
 [PENDING] 6.1 - Project folder created on server
@@ -41,10 +41,10 @@
 [PENDING] 6.3 - Clone the NEW repo onto server (from Section P.6 - this is when the tracker itself arrives on the server, already containing P.2-P.7a's status)
 [PENDING] 6.4 - Verify folder structure landed correctly
 [PENDING] 7.1 - Bot dependencies installed
-[PENDING] 7.2 - Firebase service account (HUMAN REQUIRED)
-[PENDING] 7.3 - .env file created
+[VERIFIED] 7.2 - Firebase service account placed at bot/service-account.json (project foodhubbie-10, validated). NOTE: project differs from codebase's prashant-pizza-e86e4 — apps must be repointed to foodhubbie-10 web config when web apps are created.
+[VERIFIED] 7.3 - .env created (0 placeholders; FIREBASE_DATABASE_URL=foodhubbie-10-default-rtdb, WA tokens + app secret filled)
 [PENDING] 7.4 - .gitignore updated
-[DONE] 17-GATE - Code-side multi-tenant refactor complete: rules (businesses/$businessId/outlets/$outletId), bot (resolvePath), menu (?b=), Admin (tenantRef), rider-app (tenantPath). Structural gate-verify.js PASSES (0 failures, 1 expected warning — Baileys deferred to Section 9). Unit tests 8/8 pass. Live DB check (17.5) still BLOCKED on service account (7.2) — run `SERVICE_ACCOUNT=... FIREBASE_DB_URL=... node gate-verify.js --live` once credentials exist. Firebase project = prashant-pizza-e86e4.
+[IN_PROGRESS] 17-GATE - Code-side multi-tenant refactor complete: rules (businesses/$businessId/outlets/$outletId), bot (resolvePath), menu (?b=), Admin (tenantRef), rider-app (tenantPath). Structural gate-verify.js PASSES (0 failures, 1 expected warning — Baileys deferred to Section 9). Unit tests 8/8 pass. Live 17.5 gate RAN against foodhubbie-10 (service account + DB URL confirmed) → FAIL expected: businesses/ node ABSENT (new empty DB). Deployment target = foodhubbie-10 (NOT prashant-pizza-e86e4). NEXT: seed businesses/{bid}/outlets/{oid} structure + repoint apps to foodhubbie-10 web config, then re-run live gate.
 [PENDING] 8.1 - Webhook server files created
 [PENDING] 8.2 - Webhook server code written
 [PENDING] 8.3 - Webhook server started via PM2

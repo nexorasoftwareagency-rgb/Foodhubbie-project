@@ -3,7 +3,7 @@ const admin = require('firebase-admin');
 // =============================
 // FIREBASE CONFIG
 // =============================
-const FIREBASE_URL = "https://prashant-pizza-e86e4-default-rtdb.firebaseio.com";
+const FIREBASE_URL = "https://foodhubbie-10-default-rtdb.firebaseio.com";
 
 // Try to load service account from file
 try {
@@ -53,8 +53,8 @@ function resolvePath(path, outlet = 'pizza') {
     if (rootNode === 'businesses' || shared.includes(rootNode)) return path;
 
     // Tenant-scoped: businesses/{bid}/outlets/{oid}/{path}
-    const { outletPath, resolveBusinessId } = require('./helpers/outlet-resolution');
-    return outletPath(resolveBusinessId(), outlet, path);
+    const { outletPath, resolveBusinessIdFor } = require('./helpers/outlet-resolution');
+    return outletPath(resolveBusinessIdFor(outlet), outlet, path);
 }
 
 // =============================

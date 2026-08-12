@@ -60,7 +60,13 @@ export function onConnectionChange(fn) {
     };
 }
 
-export const BUSINESS_ID = () => (window.currentBusinessId || 'roshani').toLowerCase().trim() || 'roshani';
+// Two restaurants = two businesses, each with one outlet.
+const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
+export const BUSINESS_ID = () => {
+    const explicit = (window.currentBusinessId || '').toLowerCase().trim();
+    if (explicit) return explicit;
+    return BUSINESS_BY_OUTLET[Outlet.current] || 'roshani-pizza';
+};
 
 // Tenant-scoped ref: businesses/{bid}/outlets/{outlet}/{path}
 export function tenantRef(outlet, path) {

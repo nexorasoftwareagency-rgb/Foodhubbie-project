@@ -1,18 +1,27 @@
 {
   "projects": {
-    "default": "prashant-pizza-e86e4"
+    "default": "foodhubbie-10"
   },
   "targets": {
-    "prashant-pizza-e86e4": {
+    "foodhubbie-10": {
       "hosting": {
         "admin": [
-          "roshani-sudha-admin"
+          "foodhubbie-admins"
         ],
         "rider": [
-          "roshani-sudha-rider"
+          "foodhubbie-riderapp"
         ],
         "menu": [
-          "roshani-sudha-menu"
+          "foodhubbie-qrmenu"
+        ],
+        "supreme": [
+          "foodhubbie-supremeadmin"
+        ],
+        "delivery": [
+          "foodhubbie-delivery"
+        ],
+        "website": [
+          "foodhubbie-web"
         ]
       }
     }

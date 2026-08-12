@@ -5,6 +5,48 @@
 
 const { formatJid, isSocketDead } = require('./utils');
 
+function buildRiderOrderMessage(order, { title, footer, id, includeOutlet = false, includeOTP = false } = {}) {
+    let itemsText = "";
+    const items = order.normalizedItems || order.items || [];
+    items.forEach((item) => {
+        const qty = item.quantity || item.qty || 1;
+        const price = item.lineTotal || item.total || (item.price * qty) || 0;
+        itemsText += `• *${item.name || item.item}* (${item.size || 'Reg'}) x${qty} - ₹${price}\n`;
+        if (item.addons && item.addons.length > 0) {
+            const addonNames = Array.isArray(item.addons)
+                ? item.addons.map(a => a.name || a).join(", ")
+                : Object.keys(item.addons).join(", ");
+            itemsText += `  _Addons: ${addonNames}_\n`;
+        }
+    });
+
+    const mapsLink = (order.lat && order.lng) ? `https://www.google.com/maps?q=${order.lat},${order.lng}` : (order.locationLink || "");
+
+    let msg = `${title}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `🆔 *Order ID:* #${order.orderId || id || 'N/A'}\n`;
+    if (includeOutlet) msg += `🏪 *Outlet:* ${(order.outlet || 'pizza').toUpperCase()}\n`;
+    msg += `🧾 *INVOICE DETAILS:*\n`;
+    msg += `${itemsText}`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `💰 *Subtotal:* ₹${order.subtotal || order.itemTotal || 0}\n`;
+    if (order.deliveryFee) msg += `🚚 *Delivery:* ₹${order.deliveryFee}\n`;
+    if (order.discount) msg += `🎁 *Discount${order.discountMode === 'percent' && order.discountValue ? ` (${order.discountValue}% off)` : ''}:* -₹${order.discount}\n`;
+    msg += `💵 *TOTAL: ₹${order.total || 0}* (${order.paymentMethod || 'N/A'})\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `👤 *CUSTOMER INFO:*\n`;
+    msg += `*Name:* ${order.customerName || 'Customer'}\n`;
+    msg += `*Phone:* ${order.phone || 'N/A'}\n`;
+    msg += `*Address:* ${order.address || 'Address not provided'}\n`;
+    msg += `*Distance:* ${order.distanceKm ? order.distanceKm + ' km' : 'N/A'}\n`;
+    if (mapsLink) msg += `📍 *Location:* ${mapsLink}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    if (includeOTP) msg += `🔑 *DELIVERY OTP:* ${order.deliveryOTP || order.otp || 'N/A'}\n━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += footer;
+
+    return msg;
+}
+
 async function notifyRiderPickup(sock, order, addInAppNotification) {
     try {
         if (!sock || isSocketDead(sock)) return;
@@ -18,42 +60,11 @@ async function notifyRiderPickup(sock, order, addInAppNotification) {
             return;
         }
 
-        let itemsText = "";
-        const items = order.normalizedItems || order.items || [];
-        items.forEach((item) => {
-            const qty = item.quantity || item.qty || 1;
-            const price = item.lineTotal || item.total || (item.price * qty) || 0;
-            itemsText += `• *${item.name || item.item}* (${item.size || 'Reg'}) x${qty} - ₹${price}\n`;
-            if (item.addons && item.addons.length > 0) {
-                const addonNames = Array.isArray(item.addons)
-                    ? item.addons.map(a => a.name || a).join(", ")
-                    : Object.keys(item.addons).join(", ");
-                itemsText += `  _Addons: ${addonNames}_\n`;
-            }
+        const msg = buildRiderOrderMessage(order, {
+            title: `🛵 *READY FOR PICKUP* 🛵`,
+            footer: `_The order is packed and waiting. Please arrive at the outlet immediately!_`,
+            includeOTP: true,
         });
-
-        const mapsLink = (order.lat && order.lng) ? `https://www.google.com/maps?q=${order.lat},${order.lng}` : (order.locationLink || "");
-
-        const msg = `🛵 *READY FOR PICKUP* 🛵\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🆔 *Order ID:* #${order.orderId || 'N/A'}\n\n` +
-            `🧾 *INVOICE DETAILS:*\n` +
-            `${itemsText}` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `💰 *Subtotal:* ₹${order.subtotal || order.itemTotal || 0}\n` +
-            (order.deliveryFee ? `🚚 *Delivery:* ₹${order.deliveryFee}\n` : "") +
-            (order.discount ? `🎁 *Discount${order.discountMode === 'percent' && order.discountValue ? ` (${order.discountValue}% off)` : ''}:* -₹${order.discount}\n` : "") +
-            `💵 *TOTAL: ₹${order.total || 0}* (${order.paymentMethod || 'N/A'})\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `👤 *CUSTOMER INFO:*\n` +
-            `*Name:* ${order.customerName || 'Customer'}\n` +
-            `*Phone:* ${order.phone || 'N/A'}\n` +
-            `*Address:* ${order.address || 'Address not provided'}\n\n` +
-            (mapsLink ? `📍 *LIVE LOCATION:*\n${mapsLink}\n\n` : "") +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🔑 *DELIVERY OTP:* ${order.deliveryOTP || order.otp || 'N/A'}\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `_The order is packed and waiting. Please arrive at the outlet immediately!_`;
 
         await sock.sendMessage(riderJid, { text: msg });
         console.log(`[RIDER] ✅ Pickup notification sent to ${riderPhone}`);
@@ -82,46 +93,11 @@ async function notifyRiderAssignment(sock, orderId, order, addInAppNotification)
             return;
         }
 
-        let itemsText = "";
-        const items = order.normalizedItems || order.items || [];
-        items.forEach((item) => {
-            const qty = item.quantity || item.qty || 1;
-            const price = item.lineTotal || item.total || (item.price * qty) || 0;
-            itemsText += `• *${item.name || item.item}* (${item.size || 'Reg'}) x${qty} - ₹${price}\n`;
-            if (item.addons && item.addons.length > 0) {
-                const addonNames = Array.isArray(item.addons)
-                    ? item.addons.map(a => a.name || a).join(", ")
-                    : Object.keys(item.addons).join(", ");
-                itemsText += `  _Addons: ${addonNames}_\n`;
-            }
+        const msg = buildRiderOrderMessage(order, {
+            title: `🔔 *NEW ORDER ASSIGNED* 🔔`,
+            footer: `🚀 *Please reach the outlet for pickup!*`,
+            id: orderId.slice(-5),
         });
-
-        const mapsLink = (order.lat && order.lng) ? `https://www.google.com/maps?q=${order.lat},${order.lng}` : (order.locationLink || "");
-
-        let msg = `🔔 *NEW ORDER ASSIGNED* 🔔\n`;
-        msg += `━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `🆔 *Order ID:* #${order.orderId || orderId.slice(-5)}\n\n`;
-        msg += `🧾 *INVOICE DETAILS:*\n`;
-        msg += `${itemsText}`;
-        msg += `━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `💰 *Subtotal:* ₹${order.subtotal || order.itemTotal || 0}\n`;
-        if (order.deliveryFee) msg += `🚚 *Delivery:* ₹${order.deliveryFee}\n`;
-        if (order.discount) msg += `🎁 *Discount${order.discountMode === 'percent' && order.discountValue ? ` (${order.discountValue}% off)` : ''}:* -₹${order.discount}\n`;
-        msg += `💵 *TOTAL: ₹${order.total || 0}* (${order.paymentMethod || 'N/A'})\n`;
-        msg += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-        msg += `👤 *CUSTOMER INFO:*\n`;
-        msg += `*Name:* ${order.customerName || 'Customer'}\n`;
-        msg += `*Phone:* ${order.phone || 'N/A'}\n`;
-        msg += `*Address:* ${order.address || 'Address not provided'}\n\n`;
-
-        if (mapsLink) {
-            msg += `📍 *LIVE LOCATION:*\n${mapsLink}\n\n`;
-        } else {
-            msg += `📍 *LOCATION:* _No map link provided by customer_\n\n`;
-        }
-
-        msg += `━━━━━━━━━━━━━━━━━━━━\n`;
-        msg += `🚀 *Please reach the outlet for pickup!*`;
 
         console.log(`[RIDER] 📤 Sending assignment message to rider: ${riderPhone} for #${orderId.slice(-5)}`);
         await sock.sendMessage(riderJid, { text: msg });
@@ -157,40 +133,12 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
             return;
         }
 
-        let itemsText = "";
-        const items = order.normalizedItems || order.items || [];
-        items.forEach((item) => {
-            const qty = item.quantity || item.qty || 1;
-            const price = item.lineTotal || item.total || (item.price * qty) || 0;
-            itemsText += `• *${item.name || item.item}* (${item.size || 'Reg'}) x${qty} - ₹${price}\n`;
-            if (item.addons && item.addons.length > 0) {
-                const addonNames = Array.isArray(item.addons)
-                    ? item.addons.map(a => a.name || a).join(", ")
-                    : Object.keys(item.addons).join(", ");
-                itemsText += `  _Addons: ${addonNames}_\n`;
-            }
+        const msg = buildRiderOrderMessage(order, {
+            title: `🔔 *PICKUP AVAILABLE* 🔔`,
+            footer: `🚀 *Go to Rider Portal now to Accept!*`,
+            id: orderId.slice(-5),
+            includeOutlet: true,
         });
-
-        const mapsLink = (order.lat && order.lng) ? `https://www.google.com/maps?q=${order.lat},${order.lng}` : (order.locationLink || "");
-
-        const msg = `🔔 *PICKUP AVAILABLE* 🔔\n━━━━━━━━━━━━━━━━━━━━\n` +
-            `🆔 *Order ID:* #${order.orderId || orderId.slice(-5)}\n` +
-            `🏪 *Outlet:* ${(order.outlet || 'pizza').toUpperCase()}\n\n` +
-            `🧾 *INVOICE DETAILS:*\n` +
-            `${itemsText}` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `💰 *Subtotal:* ₹${order.subtotal || order.itemTotal || 0}\n` +
-            (order.deliveryFee ? `🚚 *Delivery:* ₹${order.deliveryFee}\n` : "") +
-            (order.discount ? `🎁 *Discount${order.discountMode === 'percent' && order.discountValue ? ` (${order.discountValue}% off)` : ''}:* -₹${order.discount}\n` : "") +
-            `💵 *TOTAL: ₹${order.total || 0}* (${order.paymentMethod || 'N/A'})\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n\n` +
-            `👤 *CUSTOMER INFO:*\n` +
-            `*Name:* ${order.customerName || 'Customer'}\n` +
-            `*Phone:* ${order.phone || 'N/A'}\n` +
-            `*Address:* ${order.address || 'Address not provided'}\n\n` +
-            (mapsLink ? `📍 *LIVE LOCATION:*\n${mapsLink}\n\n` : "") +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🚀 *Go to Rider Portal now to Accept!*`;
 
         for (const rider of onlineRiders) {
             const riderJid = formatJid(rider.phone);

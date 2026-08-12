@@ -51,10 +51,12 @@ export class OtpBlockedError extends Error {
   }
 }
 
-function assertProximity(riderLat: number, riderLng: number, targetLat: number, targetLng: number, maxKm: number, accuracyKm?: number) {
-  if (accuracyKm != null && accuracyKm > maxKm) throw new ProximityError(accuracyKm, maxKm);
+function assertProximity(riderLat: number, riderLng: number, targetLat: number, targetLng: number, maxKm: number, accuracyMeters?: number) {
   const distance = getDistanceKm(riderLat, riderLng, targetLat, targetLng);
   if (distance > maxKm) throw new ProximityError(distance, maxKm);
+  if (accuracyMeters != null && accuracyMeters / 1000 > maxKm * 4) {
+    throw new ProximityError(Math.max(distance, accuracyMeters / 1000), maxKm);
+  }
 }
 
 /** ─── Outlet coordinates + backup code (real Store/Delivery settings, with the
@@ -269,10 +271,11 @@ export async function acceptOrder(params: {
   accuracy?: number;
   customerPhone?: string;
 }): Promise<void> {
-  const { outlet, orderId, riderEmail, riderUid, riderPhone, riderName, riderLat, riderLng, outletLat, outletLng, customerPhone, accuracy } =
-    params;
+  const { outlet, orderId, riderEmail, riderUid, riderPhone, riderName, customerPhone } = params;
 
-  assertProximity(riderLat, riderLng, outletLat, outletLng, PROXIMITY.PICKUP_RADIUS_KM, accuracy);
+  // ponytail: no proximity gate on ACCEPT — riders accept from anywhere and drive
+  // to the store (matches the desired flow "Rider accepts -> on way to restaurant").
+  // The 0.5km gate still applies at markReachedOutlet/confirmPickup (physical presence).
 
   const orderPath = dbPaths.singleOrder(outlet, orderId);
   const result = await runTransaction(ref(db, orderPath), (current) => {
@@ -325,9 +328,11 @@ export async function markReachedOutlet(params: {
   });
 }
 
-/** ─── Confirm pickup — matches window.confirmPickup + startNavigation, which run
- *  back-to-back in the real app (Picked Up → Out for Delivery within the same
- *  user action), so this performs both writes together. ─────────────────────── */
+/** ─── Confirm pickup — rider has physically picked up the order. Writes the
+ *  real "Picked Up" status (desired flow: Picked Up + OTP -> heading to
+ *  delivery). The bot's handleOrderStatusUpdate sends the customer the OTP +
+ *  "heading to your location" message for both "picked up" and "out for
+ *  delivery", so the customer is notified here. ─────────────────────────────── */
 
 export async function confirmPickup(params: {
   outlet: OutletId;
@@ -344,7 +349,7 @@ export async function confirmPickup(params: {
   assertProximity(riderLat, riderLng, outletLat, outletLng, PROXIMITY.PICKUP_RADIUS_KM, accuracy);
 
   await update(ref(db, dbPaths.singleOrder(outlet, orderId)), {
-    status: "Out for Delivery",
+    status: "Picked Up",
     pickedUpAt: serverTimestamp(),
   });
 
@@ -362,16 +367,15 @@ export async function markReachedDrop(params: {
   orderId: string;
   customerPhone?: string;
 }): Promise<void> {
-  const { outlet, orderId, customerPhone } = params;
+  const { outlet, orderId } = params;
 
   await update(ref(db, dbPaths.singleOrder(outlet, orderId)), {
     status: "Reached Drop Location",
     reachedDropAt: serverTimestamp(),
   });
-
-  if (customerPhone) {
-    await whatsappService.sendArrived(outlet, customerPhone, orderId).catch(() => {});
-  }
+  // ponytail: no direct ARRIVED send here — the bot's handleOrderStatusUpdate
+  // already messages the customer on "reached drop location" (with the OTP), so
+  // sending sendArrived too duplicated the alert. Removed the duplicate.
 }
 
 /** ─── OTP verification — matches window.verifyOTP exactly (10 attempts / 60s block) */

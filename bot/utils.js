@@ -147,6 +147,7 @@ function formatOrderInvoice(orderId, order) {
     msg += `📦 *ITEMS:*\n${itemsText}\n`;
     msg += `━━━━━━━━━━━━━━━━━━━━\n`;
     msg += `💰 *Subtotal:* ₹${order.subtotal || order.itemTotal || 0}\n`;
+    if (order.distanceKm) msg += `📍 *Distance:* ${order.distanceKm} km\n`;
     if (order.deliveryFee) msg += `🚚 *Shipping:* ₹${order.deliveryFee}\n`;
     if (order.discount) {
         const pctInfo = order.discountMode === 'percent' && order.discountValue ? ` (${order.discountValue}% off)` : '';

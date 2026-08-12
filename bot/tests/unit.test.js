@@ -19,10 +19,12 @@ test('resolvePath: shared (platform-root) nodes pass through unchanged', () => {
 });
 
 test('resolvePath: tenant-scoped paths get businesses/{bid}/outlets/{oid} prefix', () => {
-    assert.strictEqual(firebaseResolvePath('orders'), 'businesses/roshani/outlets/pizza/orders');
-    assert.strictEqual(firebaseResolvePath('bot/commands'), 'businesses/roshani/outlets/pizza/bot/commands');
-    assert.strictEqual(firebaseResolvePath('profiles/9197'), 'businesses/roshani/outlets/pizza/profiles/9197');
-    assert.strictEqual(firebaseResolvePath('inventory', 'cake'), 'businesses/roshani/outlets/cake/inventory');
+    // default outlet (pizza) maps to its own business
+    assert.strictEqual(firebaseResolvePath('orders'), 'businesses/roshani-pizza/outlets/pizza/orders');
+    assert.strictEqual(firebaseResolvePath('bot/commands'), 'businesses/roshani-pizza/outlets/pizza/bot/commands');
+    assert.strictEqual(firebaseResolvePath('profiles/9197'), 'businesses/roshani-pizza/outlets/pizza/profiles/9197');
+    // cake is its own separate business
+    assert.strictEqual(firebaseResolvePath('inventory', 'cake'), 'businesses/roshani-cake/outlets/cake/inventory');
 });
 
 test('resolvePath: empty/null input returns empty string', () => {
@@ -32,17 +34,17 @@ test('resolvePath: empty/null input returns empty string', () => {
 });
 
 test('outlet-resolution: outletPath builds correct tenant path', () => {
-    assert.strictEqual(helpers.outletPath('roshani', 'pizza', 'orders'), 'businesses/roshani/outlets/pizza/orders');
-    assert.strictEqual(helpers.outletPath('roshani', 'pizza'), 'businesses/roshani/outlets/pizza');
-    assert.strictEqual(helpers.outletPath('roshani', 'cake', 'bot', 'commands'), 'businesses/roshani/outlets/cake/bot/commands');
-    // falsy args fall back to env/defaults
-    assert.strictEqual(helpers.outletPath(null, null, 'orders'), 'businesses/roshani/outlets/pizza/orders');
+    assert.strictEqual(helpers.outletPath('roshani-pizza', 'pizza', 'orders'), 'businesses/roshani-pizza/outlets/pizza/orders');
+    assert.strictEqual(helpers.outletPath('roshani-pizza', 'pizza'), 'businesses/roshani-pizza/outlets/pizza');
+    assert.strictEqual(helpers.outletPath('roshani-cake', 'cake', 'bot', 'commands'), 'businesses/roshani-cake/outlets/cake/bot/commands');
+    // falsy args fall back to env/defaults (default outlet pizza -> roshani-pizza)
+    assert.strictEqual(helpers.outletPath(null, null, 'orders'), 'businesses/roshani-pizza/outlets/pizza/orders');
 });
 
 test('outlet-resolution: resolvePath(scope, ...rest)', () => {
     assert.strictEqual(helpers.resolvePath({ businessId: 'b1', outletId: 'o1' }, 'orders'), 'businesses/b1/outlets/o1/orders');
-    // scope wins over env
-    assert.strictEqual(helpers.resolvePath({ outletId: 'cake' }, 'settings'), 'businesses/roshani/outlets/cake/settings');
+    // scope outletId only -> business inferred from outlet map
+    assert.strictEqual(helpers.resolvePath({ outletId: 'cake' }, 'settings'), 'businesses/roshani-cake/outlets/cake/settings');
 });
 
 test('outlet-resolution: env vars override defaults', (t) => {
@@ -58,7 +60,7 @@ test('outlet-resolution: env vars override defaults', (t) => {
 });
 
 test('outlet-resolution: defaults without env', () => {
-    assert.strictEqual(helpers.resolveBusinessId(), 'roshani');
+    assert.strictEqual(helpers.resolveBusinessId(), 'roshani-pizza');
     assert.strictEqual(helpers.resolveOutletId(), 'pizza');
 });
 

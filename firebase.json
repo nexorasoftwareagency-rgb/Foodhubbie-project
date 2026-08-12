@@ -2,6 +2,12 @@
   "database": {
     "rules": "database.rules.json"
   },
+  "auth": {
+    "authorizedDomains": ["localhost"],
+    "providers": {
+      "emailPassword": true
+    }
+  },
   "functions": [
     {
       "source": "functions",

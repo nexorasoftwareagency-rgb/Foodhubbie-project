@@ -5,13 +5,13 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey: "AIzaSyDcx-SN5eak8PAs-8NtTGelJ_sICr5yb7Y",
-  authDomain: "prashant-pizza-e86e4.firebaseapp.com",
-  databaseURL: "https://prashant-pizza-e86e4-default-rtdb.firebaseio.com",
-  projectId: "prashant-pizza-e86e4",
-  storageBucket: "prashant-pizza-e86e4.firebasestorage.app",
-  messagingSenderId: "857471482885",
-  appId: "1:857471482885:web:9eb8bbb90c77c588fbb06c"
+  apiKey: "AIzaSyCaVoTjl9_ZT8RECxUUxiBGSZE3G2jTdF4",
+  authDomain: "foodhubbie-10.firebaseapp.com",
+  databaseURL: "https://foodhubbie-10-default-rtdb.firebaseio.com",
+  projectId: "foodhubbie-10",
+  storageBucket: "foodhubbie-10.firebasestorage.app",
+  messagingSenderId: "372428105696",
+  appId: "1:372428105696:web:a3a979191a5cf94569ed85"
 });
 
 const fcmMessaging = firebase.messaging();

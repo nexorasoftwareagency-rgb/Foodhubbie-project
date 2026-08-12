@@ -11,7 +11,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const SERVICE_ACCOUNT = path.join(__dirname, '..', 'service-account.json');
-const DB_URL = process.env.FIREBASE_DB_URL || 'https://prashant-pizza-e86e4-default-rtdb.firebaseio.com';
+const DB_URL = process.env.FIREBASE_DB_URL || 'https://foodhubbie-10-default-rtdb.firebaseio.com';
 
 function hasCredentials() {
     return fs.existsSync(SERVICE_ACCOUNT);

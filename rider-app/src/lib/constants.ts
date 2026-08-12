@@ -11,12 +11,20 @@ export const OUTLETS = [
 
 export type OutletId = "pizza" | "cake";
 
-/** Multi-tenant business id (matches bot/Admin default). */
-export const BUSINESS_ID = "roshani";
+/** Two restaurants = two businesses, each with one outlet.
+ *  Matches Admin/js/firebase.js BUSINESS_BY_OUTLET and bot helpers. */
+export const BUSINESS_BY_OUTLET: Record<OutletId, string> = {
+  pizza: "roshani-pizza",
+  cake: "roshani-cake",
+};
+
+export function businessIdFor(outlet: OutletId): string {
+  return BUSINESS_BY_OUTLET[outlet];
+}
 
 /** Prefix outlet-scoped paths under businesses/{bid}/outlets/{oid}/. */
 export function tenantPath(outlet: OutletId, path: string) {
-  return `businesses/${BUSINESS_ID}/outlets/${outlet}/${path}`;
+  return `businesses/${businessIdFor(outlet)}/outlets/${outlet}/${path}`;
 }
 
 export const dbPaths = {

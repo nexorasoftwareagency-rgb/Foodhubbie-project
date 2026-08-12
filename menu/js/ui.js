@@ -269,7 +269,14 @@ export function renderCartList(lines, { onStep }) {
     });
 }
 
-export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serviceChargeEnabled, serviceChargeName, serviceChargeRate, discount = null, taxRates) {
+export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serviceChargeEnabled, serviceChargeName, serviceChargeRate, discount = null, taxRates, deliveryFee = 0) {
+    const fee = typeof deliveryFee === 'number' && deliveryFee > 0 ? deliveryFee : 0;
+    // Delivery fee row (delivery webview only; dine-in has no such row)
+    const deliveryRow = document.getElementById('cartDeliveryRow');
+    if (deliveryRow) deliveryRow.classList.toggle('hidden', fee <= 0);
+    const deliveryFeeEl = document.getElementById('cartDeliveryFee');
+    if (deliveryFeeEl) deliveryFeeEl.textContent = fmtMoney(fee);
+
     const rates = (taxRates && Array.isArray(taxRates) && taxRates.length > 0) ? taxRates : (taxEnabled !== false ? [{ name: taxName || 'Tax', rate: taxPercent || 5 }] : []);
     const taxItems = rates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
     const tax = taxItems.reduce((s, t) => s + t.amount, 0);
@@ -296,7 +303,7 @@ export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serv
 
     // Discount row
     const discountRow = document.getElementById('cartDiscountRow');
-    const discountAmount = discount && discount.amount > 0 ? Math.min(discount.amount, subtotal + tax + sc) : 0;
+    const discountAmount = discount && discount.amount > 0 ? Math.min(discount.amount, subtotal + tax + sc + fee) : 0;
     if (discountRow) discountRow.classList.toggle('hidden', discountAmount <= 0);
     if (el('cartDiscountLabel')) {
         const pctInfo = discount?.mode === 'percent' && discount?.value ? ` (${discount.value}% off)` : '';
@@ -304,8 +311,8 @@ export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serv
     }
     if (el('cartDiscount')) el('cartDiscount').textContent = '-' + fmtMoney(discountAmount);
 
-    if (el('cartTotal')) el('cartTotal').textContent = fmtMoney(subtotal + tax + sc - discountAmount);
-    return { tax, serviceCharge: sc, discount: discountAmount, total: subtotal + tax + sc - discountAmount };
+    if (el('cartTotal')) el('cartTotal').textContent = fmtMoney(subtotal + tax + sc + fee - discountAmount);
+    return { tax, serviceCharge: sc, discount: discountAmount, deliveryFee: fee, total: subtotal + tax + sc + fee - discountAmount };
 }
 
 export function updateSessionNoteInCart(session, groupOrders, groupTotal) {
