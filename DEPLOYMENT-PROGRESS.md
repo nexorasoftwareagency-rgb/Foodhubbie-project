@@ -52,10 +52,9 @@
 [VERIFIED] 8.5 - Test health endpoint through the tunnel (photos-whenever-specifics-internationally.trycloudflare.com/health OK)
 [VERIFIED] 8.6 - Webhook verify-token check PASSES via tunnel (good token echoes challenge, bad token 403; log shows "Webhook verified successfully by Meta."). Synthetic inbound POST -> HTTP 200 + log "Routed message to bot-inbox:roshani-pizza:pizza". phoneNumberIndex/1211796118690392 seeded -> {roshani-pizza, pizza}. META DASHBOARD "Verify and Save" (5.7) now ready for human to click.
 [VERIFIED] 9.1 - whatsapp-send.js helper created (bot/whatsapp-send.js, pushed 5706e5a). REAL send SUCCESS: wamid.HBgMOTE5NzI0NjQ5OTcx... delivered to 919724649971 via Meta Cloud API.
-[PENDING] 9.2 - bot/index.js Baileys migration (grep-checklist method, see Section 9.2)
-[PENDING] 9.2 - bot/index.js Baileys migration (grep-checklist method, see Section 9.2)
-[PENDING] 9.3 - Baileys package removed
-[PENDING] 9.4 - End-to-end message test
+[VERIFIED] 9.2 - bot dual-transport abstraction (bot/transport.js, pushed c46829b): createMetaTransport (Baileys-shaped sock over Meta Cloud API), getTransportMode (bot/{outlet}/transport <- env BOT_TRANSPORT <- baileys), getPhoneNumberId (bot/phoneNumberId <- phoneNumberIndex <- env). bot/index.js startBot branches on mode; shared message/connection/creds handlers wired for BOTH transports. Deployed + bot online in meta mode (pizza, BOT_TRANSPORT=meta in .env; dotenv path fixed to load root .env). LOCAL CHECK: bot/test-transport.js passes.
+[VERIFIED] 9.3 - Meta E2E synthetic inbound test PASSES through FULL CHAIN: tunnel POST /webhook -> webhook-server -> Redis bot-inbox:roshani-pizza:pizza -> meta transport -> state machine -> Meta Cloud API reply (SEND OK, wamid.HBgMOTE5NzI0NjQ5OTcx... confirmed). Dedup by msgId confirmed working (repeat POSTs skipped). [Baileys path kept for QR real-number mode per user decision]
+[PENDING] 9.3 - Baileys package removed (KEPT intentionally - Baileys remains the real-number transport for QR mode)
 [PENDING] 10.1 - Orchestrator dependencies
 [PENDING] 10.2 - Orchestrator code written
 [PENDING] 10.3 - Orchestrator started
