@@ -41,6 +41,11 @@ async function main() {
   assert.strictEqual(sock.user.id, 'meta:1211796118690392');
   assert.ok(sock.ws.isOpen);
 
+  // sendButton -> interactive URL button
+  origSend.sendWhatsAppUrlButton = async (_p, _t, to, opts) => { sent.push([to, 'BTN:' + opts.url, opts.title]); return { id: 'wamid.b' }; };
+  await sock.sendButton('919724649971', { body: 'Order', url: 'https://menu.test/x', title: 'Order Now' });
+  assert.deepStrictEqual(sent[3], ['919724649971', 'BTN:https://menu.test/x', 'Order Now'], 'url button path');
+
   console.log('transport.js sanity checks passed');
 }
 

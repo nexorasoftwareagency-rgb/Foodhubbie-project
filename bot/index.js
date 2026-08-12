@@ -341,6 +341,62 @@ async function createWebviewToken(outlet, phone) {
     return token;
 }
 
+// Reuse this phone's last token within 30 min of generation; after that, mint a new one.
+// (Client-side webview already expires tokens 1h after creation.)
+const WEBVIEW_TOKEN_REUSE_MS = 30 * 60 * 1000;
+async function getOrCreateWebviewToken(outlet, phone, user) {
+    const existing = user?.webviewToken;
+    if (existing && user.webviewTokenAt && Date.now() - user.webviewTokenAt < WEBVIEW_TOKEN_REUSE_MS) {
+        const snap = await db.ref(resolvePath(`webviewTokens/${existing}`, outlet)).once('value').catch(() => null);
+        const td = snap?.val();
+        if (td && !td.used) return existing;
+    }
+    const token = await createWebviewToken(outlet, phone);
+    if (user) { user.webviewToken = token; user.webviewTokenAt = Date.now(); }
+    return token;
+}
+
+// Send the CTA as an interactive URL button (meta transport); falls back to image + link text (baileys).
+async function sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl) {
+    if (typeof sock.sendButton === 'function') {
+        return sock.sendButton(sender, {
+            body: ctaText,
+            url: menuUrl,
+            title: 'Order Now',
+            headerImageUrl: typeof menuImg === 'string' && menuImg.startsWith('http') ? menuImg : undefined
+        });
+    }
+    return sendImage(sock, sender, menuImg, `${ctaText}\n--------------------------\n${menuUrl}`, OUTLET, true);
+}
+
+// Full greeting flow: greeting image + menu + order button. Token reused within 30 min.
+async function sendOrderFlow(sock, sender, pushName, user) {
+    const [store, bot] = await Promise.all([
+        getData("settings/Store", OUTLET),
+        getData("settings/Bot", OUTLET)
+    ]);
+
+    let welcome = (user?.hasProfile && user?.name)
+        ? `Welcome back, *${user.name}*! 👋\nYour favorite items are ready for you. ${OUTLET_EMOJI}`
+        : `Hello *${pushName}*! 👋`;
+    welcome += `\n------------------------`;
+    welcome += `\n✨ *WELCOME TO ${OUTLET_NAME.toUpperCase()}* ${OUTLET_EMOJI}`;
+    welcome += `\n------------------------`;
+    welcome += `\nDelicious food, delivered fast to your doorstep! 🚀`;
+    const greetingImg = bot?.greetingImage || store?.bannerImage;
+    await sendImage(sock, sender, greetingImg, welcome);
+
+    // Wait 2 seconds for WhatsApp to prepare preview rendering
+    await new Promise(r => setTimeout(r, 2000));
+
+    const phone = sender.replace(/[^0-9]/g, '').slice(-10);
+    const token = await getOrCreateWebviewToken(OUTLET, phone, user);
+    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
+    const menuImg = bot?.menuImage || store?.bannerImage;
+    const ctaText = `🛒 *Ready to order?*\n👇 *TAP THE BUTTON BELOW TO ORDER NOW* 👇`;
+    return sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl);
+}
+
 async function appendContactInfo(text, outlet = 'pizza') {
     if (!text) return '';
     try {
@@ -1289,43 +1345,15 @@ async function sendDailyReportSafely(dateOverride = null) {
                 // STATE MACHINE
                 if (user.step === "START") {
                     user.outlet = OUTLET; // Hardcoded — no outlet selection needed
-                    const [store, bot] = await Promise.all([
-                        getData("settings/Store", OUTLET),
-                        getData("settings/Bot", OUTLET)
-                    ]);
+                    const store = await getData("settings/Store", OUTLET);
 
                     // Check if shop is open before showing menu
                     if (store && !isShopOpen(store.shopOpenTime, store.shopCloseTime, store.shopStatus)) {
                         return sock.sendMessage(sender, { text: `🌙 *${OUTLET_NAME.toUpperCase()} IS CLOSED*\n\nHours: ${store.shopOpenTime || 'N/A'} - ${store.shopCloseTime || 'N/A'}\n\nSee you later! 👋` });
                     }
 
-                    let welcome = "";
-                    if (user.hasProfile && user.name) {
-                        welcome += `Welcome back, *${user.name}*! 👋\n`;
-                        welcome += `Your favorite items are ready for you. ${OUTLET_EMOJI}`;
-                    } else {
-                        welcome += `Hello *${pushName}*! 👋`;
-                    }
-
-                    welcome += `\n------------------------`;
-                    welcome += `\n✨ *WELCOME TO ${OUTLET_NAME.toUpperCase()}* ${OUTLET_EMOJI}`;
-                    welcome += `\n------------------------`;
-                    welcome += `\nDelicious food, delivered fast to your doorstep! 🚀`;
-
-                    // MESSAGE1: Greeting image + text (no CTA, no link)
-                    const greetingImg = bot?.greetingImage || store?.bannerImage;
-                    await sendImage(sock, sender, greetingImg, welcome);
-
-                    // Wait 2 seconds for WhatsApp to prepare preview rendering
-                    await new Promise(r => setTimeout(r, 2000));
-
-                    // MESSAGE2: Menu image + CTA + URL (triggers WhatsApp preview)
-                    const phone = sender.replace(/[^0-9]/g, '').slice(-10);
-                    const token = await createWebviewToken(OUTLET, phone);
-                    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
-                    const menuImg = bot?.menuImage || store?.bannerImage;
-                    const ctaText = `🛒 *Ready to order?*\n👇 *TAP THE LINK BELOW TO ORDER NOW* 👇\n--------------------------\n${menuUrl}`;
-                    await sendImage(sock, sender, menuImg, ctaText, OUTLET, true);
+                    // Full flow: greeting + menu image + order button (token reused within 30 min)
+                    await sendOrderFlow(sock, sender, pushName, user);
 
                     // Set user step to WEBVIEW so bot knows they're ordering via webview
                     user.step = "WEBVIEW";
@@ -1333,29 +1361,15 @@ async function sendDailyReportSafely(dateOverride = null) {
                 }
 
                 // WEBVIEW STEP: User is ordering via webview link
-                // They might send "back", "order", or just chat
+                // Every message triggers the full flow (greeting + menu + order button),
+                // reusing this phone's token within 30 min of generation.
                 if (user.step === "WEBVIEW") {
-                    const bot = await getData("settings/Bot", OUTLET);
-                    // If they send "order" or "menu" again, resend menu image + CTA + link
-                    if (/^(order|menu|pizza|cake)$/i.test(text)) {
-                        const phone = sender.replace(/[^0-9]/g, '').slice(-10);
-                        const token = await createWebviewToken(OUTLET, phone);
-                        const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
-                        const menuImg = bot?.menuImage || store?.bannerImage;
-                        const ctaText = `🛒 *Ready to order?*\n👇 *TAP THE LINK BELOW TO ORDER NOW* 👇\n--------------------------\n${menuUrl}`;
-                        return sendImage(sock, sender, menuImg, ctaText, OUTLET, true);
-                    }
                     // If they send "track" or "status", check for recent orders
                     if (/^(track|status|where)$/i.test(text)) {
-                        return sock.sendMessage(sender, { text: "📋 Type *status* to check your order status, or tap the menu link above to order again." });
+                        return sock.sendMessage(sender, { text: "📋 Type *status* to check your order status, or tap the order button above to order again." });
                     }
-                    // Default: friendly nudge + menu image + link
-                    const phone = sender.replace(/[^0-9]/g, '').slice(-10);
-                    const token = await createWebviewToken(OUTLET, phone);
-                    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
-                    const menuImg = bot?.menuImage || store?.bannerImage;
-                    const ctaText = `💡 *Tap below to browse & order!*\n--------------------------\n${menuUrl}`;
-                    return sendImage(sock, sender, menuImg, ctaText, OUTLET, true);
+                    // Full flow every time: greeting + menu image + order button
+                    return sendOrderFlow(sock, sender, pushName, user);
                 }
 
 

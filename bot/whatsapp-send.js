@@ -48,4 +48,37 @@ async function sendWhatsAppImage(phoneNumberId, accessToken, to, imageUrl, capti
   return data;
 }
 
-module.exports = { sendWhatsAppMessage, sendWhatsAppImage };
+async function sendWhatsAppUrlButton(phoneNumberId, accessToken, to, { body, url, title, headerImageUrl }) {
+  const interactive = {
+    type: 'button',
+    body: { text: body },
+    action: { buttons: [{ type: 'url', url, title }] }
+  };
+  if (headerImageUrl && headerImageUrl.startsWith('http')) {
+    interactive.header = { type: 'image', image: { link: headerImageUrl } };
+  }
+  const res = await fetch(
+    `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'interactive',
+        interactive
+      })
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    console.error('WhatsApp url-button send failed:', JSON.stringify(data));
+    throw new Error(data.error?.message || 'WhatsApp url-button send failed');
+  }
+  return data;
+}
+
+module.exports = { sendWhatsAppMessage, sendWhatsAppImage, sendWhatsAppUrlButton };

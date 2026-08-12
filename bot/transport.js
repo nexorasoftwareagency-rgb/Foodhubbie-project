@@ -69,6 +69,17 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       }
       return waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, text);
     },
+    // Interactive URL button (replaces plain links in chat). Falls back to plain text if Meta rejects.
+    async sendButton(jid, opts) {
+      const to = toPlainPhone(jid);
+      if (!to) throw new Error(`Invalid JID: ${jid}`);
+      try {
+        return await waSend.sendWhatsAppUrlButton(phoneNumberId, accessToken, to, opts);
+      } catch (e) {
+        console.warn(`[META-TRANSPORT] Button send failed for ${jid}: ${e.message}; sending text fallback`);
+        return waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, `${opts.body}\n\n${opts.url}`);
+      }
+    },
     async readMessages() { /* no-op: Meta API has no read receipts */ },
     async sendPresenceUpdate() { /* no-op: Meta API has no typing indicator */ },
     async start() {
