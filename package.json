@@ -9,5 +9,8 @@
   "devDependencies": {
     "esbuild": "^0.28.1",
     "purgecss": "^8.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }

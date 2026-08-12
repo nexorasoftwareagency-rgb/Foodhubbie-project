@@ -43,8 +43,8 @@
 [PENDING] 7.1 - Bot dependencies installed
 [VERIFIED] 7.2 - Firebase service account placed at bot/service-account.json (project foodhubbie-10, validated). NOTE: project differs from codebase's prashant-pizza-e86e4 — apps must be repointed to foodhubbie-10 web config when web apps are created.
 [VERIFIED] 7.3 - .env created (0 placeholders; FIREBASE_DATABASE_URL=foodhubbie-10-default-rtdb, WA tokens + app secret filled)
-[PENDING] 7.4 - .gitignore updated
-[IN_PROGRESS] 17-GATE - Code-side multi-tenant refactor complete: rules (businesses/$businessId/outlets/$outletId), bot (resolvePath), menu (?b=), Admin (tenantRef), rider-app (tenantPath). Structural gate-verify.js PASSES (0 failures, 1 expected warning — Baileys deferred to Section 9). Unit tests 8/8 pass. Live 17.5 gate RAN against foodhubbie-10 (service account + DB URL confirmed) → FAIL expected: businesses/ node ABSENT (new empty DB). Deployment target = foodhubbie-10 (NOT prashant-pizza-e86e4). NEXT: seed businesses/{bid}/outlets/{oid} structure + repoint apps to foodhubbie-10 web config, then re-run live gate.
+[VERIFIED] 7.4 - .gitignore updated
+[VERIFIED] 17-GATE - Code-side multi-tenant refactor complete + LIVE VERIFIED: gate-verify.js --live PASSES against foodhubbie-10 (found businesses/roshani-cake/outlets/cake + roshani-pizza/outlets/pizza). DB seeded with businesses/{bid}/outlets/{oid} for both restaurants; migrationStatus.multiOutlet = {migrated:true, outlets:[pizza,cake]}. All apps (menu/Admin/rider) repointed to foodhubbie-10 web config. Admin + rider apps built and deployed to hosting:admin + hosting:rider; menu + database deployed. DELIVERY WEBVIEW fixes verified: OUTLET resolution (?o=/?b=), webviewTokens rules, settings/Delivery/slabs public read, webview_delivery order gate, geolocation=(self) policy, sw v8. E2E order placed live. BOT deploy to EC2 remains PENDING (instance unreachable from this machine).
 [PENDING] 8.1 - Webhook server files created
 [PENDING] 8.2 - Webhook server code written
 [PENDING] 8.3 - Webhook server started via PM2
