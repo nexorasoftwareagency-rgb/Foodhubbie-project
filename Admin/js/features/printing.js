@@ -60,12 +60,12 @@ export async function printOrderReceipt(rawOrder, isReprint = false) {
 
     let store = {
         entityName: "",
-        storeName: Outlet.current === 'pizza' ? 'ROSHANI PIZZA' : 'ROSHANI CAKES',
+        storeName: "Our Restaurant",
         address: "",
         gstin: "",
         fssai: "",
         tagline: "THANK YOU",
-        poweredBy: "Powered by Roshani ERP",
+        poweredBy: "Powered by FoodHubbie",
         config: {
             showStoreName: true,
             showAddress: true,
@@ -288,7 +288,7 @@ export async function printKotById(orderId) {
         const now = new Date();
         const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-        const storeName = Outlet.current === 'pizza' ? 'ROSHANI PIZZA' : 'ROSHANI CAKES';
+        const storeName = "Our Restaurant";
         const itemRows = items.map(i => {
             const addons = [];
             if (i.addon && i.addon !== 'None') addons.push(i.addon);

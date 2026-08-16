@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | ANALYTICS UNIFIED VIEW  (Admin/js/features/analytics-mobile.js)
+ * FoodHubbie ERP | ANALYTICS UNIFIED VIEW  (Admin/js/features/analytics-mobile.js)
  * ============================================================================
  * Renders the redesigned Analytics layout (KPI cards with sparklines, Sales
  * Overview chart, Top Highlights, Payment Method donut, and a custom

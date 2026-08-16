@@ -1,8 +1,8 @@
 {
-  "name": "Roshani ERP Admin",
-  "short_name": "Roshani ERP",
+  "name": "FoodHubbie Admin",
+  "short_name": "FoodHubbie",
   "id": "/Admin/index.html",
-  "description": "Enterprise Management System for Roshani Pizza & Cakes",
+  "description": "Restaurant management system — orders, tables, menu, riders, and live operations",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",

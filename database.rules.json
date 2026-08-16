@@ -68,6 +68,12 @@
         ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
       }
     },
+    "appTemplates": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      "$templateId": {
+        ".write": "auth != null && root.child('admins').child(auth.uid).child('isSuper').val() == true"
+      }
+    },
     "orders": {
       ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
       ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
@@ -90,6 +96,7 @@
       ".write": "auth != null && (root.child('admins').child(auth.uid).exists())"
     },
     "businesses": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
       "$businessId": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('businessId').val() == $businessId || root.child('admins').child(auth.uid).child('outlet').exists())",
         ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('businessId').val() == $businessId)",

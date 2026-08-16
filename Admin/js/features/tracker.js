@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | LIVE RIDER TRACKER MODULE
+ * FoodHubbie ERP | LIVE RIDER TRACKER MODULE
  * Leaflet map + rider sidebar with named markers, per-rider info, and status legend.
  */
 

@@ -64,7 +64,7 @@ export function SyncIndicator() {
     <div className="flex items-center gap-2 px-3.5 py-1.5 text-[11.5px] font-semibold bg-[#FEF9E7] text-[#946200] border-b border-[#F5E7BC]">
       <WifiOff size={13} />
       <span>
-        Offline{queueLength > 0 ? ` — ${queueLength} action${queueLength > 1 ? "s" : ""} queued` : " — reconnecting to Roshani..."}
+        Offline{queueLength > 0 ? ` — ${queueLength} action${queueLength > 1 ? "s" : ""} queued` : " — reconnecting..."}
       </span>
     </div>
   );

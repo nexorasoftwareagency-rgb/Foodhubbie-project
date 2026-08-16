@@ -174,6 +174,7 @@ setTimeout(() => signOut(auth), 3000);
 
         // Initialize Session
         state.adminData = adminData;
+        if (adminData.businessId) window.currentBusinessId = adminData.businessId;
         sessionStorage.setItem('adminIsLoggedIn', 'true');
         logAudit('LOGIN_SUCCESS', { email: user.email });
         if (sessionStorage.getItem('PENDING_LOGIN_AUDIT') === 'true') {

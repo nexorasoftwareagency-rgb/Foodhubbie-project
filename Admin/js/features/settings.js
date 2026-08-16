@@ -109,7 +109,7 @@ export async function loadStoreSettings() {
         setVal('settingGSTIN', s.gstin || '');
         setVal('settingFSSAI', s.fssai || '');
         setVal('settingTagline', s.tagline || '');
-        setVal('settingPoweredBy', s.poweredBy || 'Powered by Roshani ERP');
+        setVal('settingPoweredBy', s.poweredBy || 'Powered by FoodHubbie');
         setVal('settingOpenTime', s.shopOpenTime || '10:00');
         setVal('settingCloseTime', s.shopCloseTime || '23:00');
         setVal('settingShopStatus', s.shopStatus || 'AUTO');

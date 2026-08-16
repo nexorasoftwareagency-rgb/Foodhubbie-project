@@ -85,4 +85,29 @@ async function sendWhatsAppUrlButton(phoneNumberId, accessToken, to, { body, url
   return data;
 }
 
-module.exports = { sendWhatsAppMessage, sendWhatsAppImage, sendWhatsAppUrlButton };
+async function sendWhatsAppTemplate(phoneNumberId, accessToken, to, { name, language = 'en', body }) {
+  const template = { name, language: { code: language } };
+  // Body component only when the template actually has a {{1}} placeholder —
+  // passing `text` to a no-variable template is rejected by Graph (code 100),
+  // which callers rely on to fall back to plain text.
+  template.components = body ? [{ type: 'BODY', parameters: [{ type: 'text', text: body }] }] : [];
+  const res = await fetch(
+    `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'template', template })
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    console.error('WhatsApp template send failed:', JSON.stringify(data));
+    throw new Error(data.error?.message || 'WhatsApp template send failed');
+  }
+  return data;
+}
+
+module.exports = { sendWhatsAppMessage, sendWhatsAppImage, sendWhatsAppUrlButton, sendWhatsAppTemplate };

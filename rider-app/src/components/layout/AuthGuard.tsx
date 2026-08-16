@@ -19,7 +19,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
             <path d="M12 6l2 5h5" />
           </svg>
         </div>
-        <LoadingSpinner label="Loading Roshani Rider..." className="text-white/60" />
+        <LoadingSpinner label="Loading FoodHubbie Rider..." className="text-white/60" />
       </div>
     );
   }

@@ -1,7 +1,7 @@
 {
-  "name": "roshani-pizza-bot",
+  "name": "foodhubbie-bot",
   "version": "1.0.0",
-  "description": "WhatsApp ordering bot for Roshani Pizza",
+  "description": "WhatsApp ordering bot for FoodHubbie",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -10,7 +10,7 @@
   "keywords": [
     "whatsapp",
     "bot",
-    "pizza",
+    "food",
     "ordering"
   ],
   "author": "",

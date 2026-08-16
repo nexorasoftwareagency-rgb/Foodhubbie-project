@@ -138,7 +138,7 @@ async function boot() {
         } catch (e) {
             console.warn('[Boot] Settings fetch failed, using defaults:', e?.message || e);
         }
-        if (brandName) document.getElementById('welcomeBrandName').textContent = brandName;
+        if (brandName) UI.applyBrand(brandName);
         M.taxEnabled = dineSettings.taxEnabled !== false;
         M.taxName = dineSettings.taxName || 'GST';
         M.taxPercent = typeof dineSettings.taxRate === 'number' ? dineSettings.taxRate : 5;

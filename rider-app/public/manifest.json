@@ -1,7 +1,7 @@
 {
-  "name": "Roshani Rider Hub",
-  "short_name": "Roshani Rider",
-  "description": "Roshani Sudha delivery partner app — accept pizza & cake orders, navigate, and get paid.",
+  "name": "FoodHubbie Rider",
+  "short_name": "Rider",
+  "description": "Delivery partner app — accept orders, navigate, and get paid.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

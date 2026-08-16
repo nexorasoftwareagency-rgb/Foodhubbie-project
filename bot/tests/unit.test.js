@@ -71,3 +71,38 @@ test('stripUndefined: removes undefined leaves, keeps null/arrays', () => {
     assert.strictEqual(stripUndefined(undefined), null);
     assert.strictEqual(stripUndefined(5), 5);
 });
+
+// G5 quota: the bot (getISTDateInfo().dateStr) and the quota endpoint (inline
+// IST-shift) must key usage by the SAME day, or `used` never matches the
+// counter. Mirrors the endpoint's exact expression.
+test('quota usage day key matches bot getISTDateInfo().dateStr', () => {
+    const { getISTDateInfo } = require('../utils');
+    const botDay = getISTDateInfo().dateStr;
+    const endpointDay = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
+    assert.strictEqual(botDay, endpointDay);
+});
+
+// F1: template sends must carry a BODY component ONLY when the template has a
+// {{1}} variable. Passing `text` to a no-variable template is rejected by Graph
+// (code 100) — that rejection is what drives the text fallback in SEND_GENERIC
+// _MESSAGE / promos, so the payload shape is load-bearing.
+test('sendWhatsAppTemplate: body component only when a {{1}} variable is supplied', async () => {
+    const waSend = require('../whatsapp-send');
+    const captured = [];
+    Object.defineProperty(global, 'fetch', {
+        value: async (url, opts) => {
+            captured.push({ url, body: JSON.parse(opts.body) });
+            return { ok: true, json: async () => ({ id: 'wamid.X' }) };
+        },
+        writable: true, configurable: true
+    });
+    await waSend.sendWhatsAppTemplate('PN', 'TOK', '919700000000', { name: 'bot_live_update' });
+    await waSend.sendWhatsAppTemplate('PN', 'TOK', '919700000000', { name: 'announcement', body: 'Hi {{1}}!' });
+    assert.strictEqual(captured.length, 2);
+    // no-variable template → no components
+    assert.deepStrictEqual(captured[0].body.template.components, []);
+    assert.deepStrictEqual(captured[0].body.type, 'template');
+    // variable template → BODY component with the text
+    assert.deepStrictEqual(captured[1].body.template.components, [{ type: 'BODY', text: 'Hi {{1}}!' }]);
+    assert.strictEqual(captured[1].body.template.language.code, 'en');
+});

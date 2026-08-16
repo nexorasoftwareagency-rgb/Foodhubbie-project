@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | DISCOUNTS MODULE
+ * FoodHubbie ERP | DISCOUNTS MODULE
  * CRUD UI for /discounts/* — global, category, firstOrder, coupon types.
  */
 

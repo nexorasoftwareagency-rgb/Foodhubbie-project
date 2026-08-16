@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | PWA & SYSTEM
+ * FoodHubbie ERP | PWA & SYSTEM
  * Handles service worker, installation prompt, and refresh circuit breaker.
  */
 

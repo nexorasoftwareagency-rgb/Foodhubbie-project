@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | PROMOTIONS MODULE
+ * FoodHubbie ERP | PROMOTIONS MODULE
  * Composer, recipient picker, control panel, live progress, kill switch.
  * Features: greeting prefix, menu footer attachment, Excel/CSV import,
  * image preview, dashboard-level enable toggle, manual phone fallback.
@@ -414,7 +414,7 @@ export async function _preview() {
     const store = storeSnap.exists() ? storeSnap.val() : {};
     const sampleName = 'Aarav';
     const tokens = {
-        '{storeName}': store.storeName || 'Roshani Pizza',
+        '{storeName}': store.storeName || 'this restaurant',
         '{name}': sampleName,
         '{phone}': '9876543210',
         '{lastOrderDate}': '15 Jun 2026',

@@ -28,9 +28,21 @@ let _promoEnabledCache = { value: true, ts: 0 };
 
 async function sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage, sendStopMsg) {
     let finalText = text;
-    if (closingMessage) finalText += '\n\n' + closingMessage;
-    if (sendStopMsg && !/stop/i.test(finalText)) finalText += '\n\n_Reply STOP to unsubscribe._';
+    if (closingMessage) finalText += '\n------------------------\n' + closingMessage;
+    if (sendStopMsg && !/stop/i.test(finalText)) finalText += '\n------------------------\n_Reply STOP to unsubscribe._';
     try {
+        // Meta transport: promotional sends are biz-initiated — plain text is
+        // dropped with 131047 outside the 24h window. Try an approved template
+        // first; fall back to the legacy text/image path (delivers in-window).
+        const isMetaSock = !!sock.user?.id?.startsWith('meta:');
+        if (isMetaSock && typeof sock.sendTemplate === 'function') {
+            try {
+                await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'bot_live_update', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText });
+                return;
+            } catch (e) {
+                console.warn(`[Promo] Template send failed for ${jid}, text fallback: ${e.message || e}`);
+            }
+        }
         if (mediaUrl) {
             let payload;
             if (typeof mediaUrl === 'string' && mediaUrl.startsWith('data:image')) {
@@ -293,9 +305,9 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                     const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
                     const cust = await getData(`customers/${cleanPhone}`, OUTLET);
                     const name = cust?.name || 'there';
-                    if (!/^hi\s+/i.test(text)) text = `Hi ${name},\n\n${text}`;
+                    if (!/^hi\s+/i.test(text)) text = `Hi ${name},\n------------------------\n${text}`;
                 } catch (_) {
-                    if (!/^hi\s+/i.test(text)) text = `Hi there,\n\n${text}`;
+                    if (!/^hi\s+/i.test(text)) text = `Hi there,\n------------------------\n${text}`;
                 }
             }
 
@@ -305,7 +317,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
             // menu image go as a separate message (WhatsApp = 1 image/message).
             let finalText = text;
             if (menuText && String(menuText).trim().length > 0) {
-                finalText += '\n\n' + String(menuText);
+                finalText += '\n------------------------\n' + String(menuText);
             }
             let mainImage = mediaUrl;
             let extraImage = null;

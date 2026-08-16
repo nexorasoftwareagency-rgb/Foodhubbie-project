@@ -19,7 +19,7 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const title = payload?.notification?.title || "Roshani Rider";
+  const title = payload?.notification?.title || "FoodHubbie Rider";
   const options = {
     body: payload?.notification?.body || "",
     icon: "/icon-192.png",

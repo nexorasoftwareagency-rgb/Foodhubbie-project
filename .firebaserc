@@ -22,6 +22,9 @@
         ],
         "website": [
           "foodhubbie-web"
+        ],
+        "assets": [
+          "foodhubbie-assets"
         ]
       }
     }

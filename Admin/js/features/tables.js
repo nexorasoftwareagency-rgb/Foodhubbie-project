@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | TABLE MANAGEMENT MODULE  (Admin/js/features/tables.js)
+ * FoodHubbie ERP | TABLE MANAGEMENT MODULE  (Admin/js/features/tables.js)
  * ============================================================================
  * Implements the session-based Dine-In architecture:
  *   pizza/tables          — floor plan, status, capacity, secure token
@@ -27,7 +27,7 @@
  * ============================================================================
  */
 
-import { Outlet, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange } from '../firebase.js';
+import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange } from '../firebase.js';
 import { state } from '../state.js';
 import { showToast, showConfirm, showDeleteConfirm, showPaymentPicker } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
@@ -1131,7 +1131,7 @@ function _printTableKOT(tableId) {
         <h2>KOT — TABLE ${escapeHtml(t.number)}</h2>
         <div class="sub">${new Date().toLocaleString('en-IN')} · Session ${escapeHtml(sess.sessionId || '')}</div>
         ${itemRows || '<p>No items</p>'}
-        <div class="foot">Roshani Pizza — Kitchen Copy</div>
+        <div class="foot">Kitchen Copy</div>
         <script>window.onload=function(){window.print();};</script></body></html>`);
     w.document.close();
 }
@@ -1259,9 +1259,9 @@ async function _dineInBaseUrl() {
             get(_settingsRef('qrBaseUrl')),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
         ]);
-        _dineInBaseUrlCache = snap.exists() ? snap.val() : `${window.location.origin}/menu/`;
+        _dineInBaseUrlCache = snap.exists() ? snap.val() : 'https://foodhubbie-qrmenu.web.app/';
     } catch {
-        _dineInBaseUrlCache = `${window.location.origin}/menu/`;
+        _dineInBaseUrlCache = 'https://foodhubbie-qrmenu.web.app/';
     }
     return _dineInBaseUrlCache;
 }
@@ -1374,7 +1374,7 @@ async function _qrDataUri(text, size = 220) {
 async function _qrUrlForTable(t) {
     const base = await _dineInBaseUrl();
     const sep = base.includes('?') ? '&' : '?';
-    return `${base}${sep}t=${t.token}`;
+    return `${base}${sep}o=${encodeURIComponent(Outlet.current)}&b=${encodeURIComponent(BUSINESS_ID())}&t=${t.token}`;
 }
 
 async function _openQrModal(id) {

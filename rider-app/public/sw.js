@@ -1,9 +1,9 @@
 // === public/sw.js ===
-// PWA service worker for Roshani Rider (React build). Network-first for the app
+// PWA service worker for FoodHubbie Rider (React build). Network-first for the app
 // shell so riders always get the latest code, cache-first-with-fallback for
 // static assets so the app still opens instantly during dead zones.
 
-const CACHE_NAME = "roshani-rider-v1.0.0";
+const CACHE_NAME = "foodhubbie-rider-v1.0.1";
 const PRECACHE_ASSETS = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {

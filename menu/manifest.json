@@ -1,8 +1,8 @@
 {
-  "name": "Roshani Pizza — Order",
-  "short_name": "Roshani Menu",
+  "name": "Order",
+  "short_name": "Menu",
   "id": "/index.html",
-  "description": "Order food at Roshani Pizza & Cakes",
+  "description": "Order food online",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",

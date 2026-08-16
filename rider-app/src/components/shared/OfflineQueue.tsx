@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { PackageX } from "lucide-react";
 import type { OfflineAction } from "@/types";
 
-const QUEUE_KEY = "roshani_offline_queue";
+const QUEUE_KEY = "foodhubbie_offline_queue";
 
 function readQueue(): OfflineAction[] {
   try {

@@ -1,0 +1,18 @@
+{
+  "name": "bot-control-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Auth-gated PM2 control API for Food-Hubbie Supreme Admin",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "firebase-admin": "^12.3.0",
+    "pm2": "^5.4.2"
+  }
+}

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#241608">
-<title>Roshani Pizza</title>
+<title>FoodHubbie</title>
 <style>
   :root{
     --primary:#E84908;      /* tomato / fire */
@@ -375,7 +375,7 @@
         <path d="M30 118 C30 55 65 28 110 28 C155 28 190 55 190 118" stroke="#F5B62D" stroke-opacity="0.28" stroke-width="3"/>
       </svg>
       <div class="hero-content">
-        <div class="brand">Roshani Pizza</div>
+        <div class="brand">FoodHubbie</div>
         <div class="tagline">Wood&#8209;Fired&nbsp;&middot;&nbsp;Table&#8209;Side&nbsp;&middot;&nbsp;Ordered by QR</div>
         <div class="flame-rule"></div>
       </div>
@@ -449,7 +449,7 @@
       <div class="scanner-topbar">
         <div class="scanner-title">
           Scan Your Table QR
-          <span>Roshani Pizza</span>
+          <span>FoodHubbie</span>
         </div>
         <button class="scanner-close" onclick="closeScanner()" aria-label="Close scanner">&#10005;</button>
       </div>
@@ -579,7 +579,7 @@
         stopScannerStream();
         setTimeout(function () { window.location.href = target; }, 500);
       } else {
-        showScannerError("That doesn't look like a Roshani Pizza table QR. Please scan the code on your table.");
+        showScannerError("That doesn't look like a valid table QR code. Please scan the code on your table.");
       }
     }
 
@@ -612,6 +612,15 @@
     document.addEventListener('visibilitychange', function () {
       if (document.hidden && scannerActive) closeScanner();
     });
+  </script>
+
+  <script type="module">
+    import { outletRef, get, OUTLET, BUSINESS_ID } from './js/firebase.js';
+    import { applyBrand } from './js/ui.js';
+    try {
+      const nameSnap = await get(outletRef('settings/Store/storeName'));
+      if (nameSnap.exists()) applyBrand(nameSnap.val());
+    } catch (_) { /* non-critical — keep static brand on failure */ }
   </script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | POS (WALK-IN) MODULE
+ * FoodHubbie ERP | POS (WALK-IN) MODULE
  * Handles walk-in sales, menu selection, cart management, and receipt generation.
  */
 

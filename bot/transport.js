@@ -77,8 +77,15 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
         return await waSend.sendWhatsAppUrlButton(phoneNumberId, accessToken, to, opts);
       } catch (e) {
         console.warn(`[META-TRANSPORT] Button send failed for ${jid}: ${e.message}; sending text fallback`);
-        return waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, `${opts.body}\n\n${opts.url}`);
+        return waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, `${opts.body}\n------------------------\n${opts.url}`);
       }
+    },
+    // Approved-template send (the only kind of biz-initiated message Meta
+    // delivers outside the 24h customer-service window).
+    async sendTemplate(jid, opts = {}) {
+      const to = toPlainPhone(jid);
+      if (!to) throw new Error(`Invalid JID: ${jid}`);
+      return waSend.sendWhatsAppTemplate(phoneNumberId, accessToken, to, opts);
     },
     async readMessages() { /* no-op: Meta API has no read receipts */ },
     async sendPresenceUpdate() { /* no-op: Meta API has no typing indicator */ },
@@ -93,16 +100,32 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       await subscriber.subscribe(channel, async (raw) => {
         try {
           const msg = JSON.parse(raw);
-          if (!msg || !msg.from || !msg.text?.body) return;
+          if (!msg || !msg.from) return;
+          const isText = !!msg.text?.body;
+          const isLocation = msg.type === 'location' || !!msg.location;
+          if (!isText && !isLocation) return;
+          let message;
+          if (isLocation) {
+            const loc = msg.location || {};
+            message = {
+              locationMessage: {
+                degreesLatitude: parseFloat(loc.latitude),
+                degreesLongitude: parseFloat(loc.longitude)
+              }
+            };
+            console.log(`[META-TRANSPORT] Inbound location on ${channel} from ${msg.from}: ${loc.latitude},${loc.longitude}`);
+          } else {
+            message = { conversation: String(msg.text.body) };
+            console.log(`[META-TRANSPORT] Inbound on ${channel} from ${msg.from}: "${String(msg.text.body).slice(0, 60)}"`);
+          }
           const upsert = {
             type: 'notify',
             messages: [{
               key: { remoteJid: formatJid(msg.from), id: msg.id || `${Date.now()}`, fromMe: false },
-              message: { conversation: String(msg.text.body) },
+              message,
               pushName: msg.pushName || ''
             }]
           };
-          console.log(`[META-TRANSPORT] Inbound on ${channel} from ${msg.from}: "${String(msg.text.body).slice(0, 60)}"`);
           if (events['messages.upsert']) events['messages.upsert'](upsert);
         } catch (e) {
           console.error('[META-TRANSPORT] Inbound processing error:', e.message);

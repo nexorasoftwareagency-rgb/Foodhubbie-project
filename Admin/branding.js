@@ -50,7 +50,7 @@
         return {
             type: 'erp',
             primary: primaryColor,
-            name: 'Roshani ERP',
+            name: 'FoodHubbie',
             tagline: 'Enterprise Management System'
         };
     };

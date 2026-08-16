@@ -3,9 +3,18 @@
     "rules": "database.rules.json"
   },
   "auth": {
-    "authorizedDomains": ["localhost"],
+    "authorizedDomains": [
+      "localhost"
+    ],
     "providers": {
-      "emailPassword": true
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "FoodHubbie",
+        "supportEmail": "foodhubbie10@gmail.com",
+        "authorizedRedirectUris": [
+          "https://foodhubbie-supremeadmin.web.app/__/auth/handler"
+        ]
+      }
     }
   },
   "functions": [
@@ -34,15 +43,22 @@
         "rider_old/**"
       ],
       "rewrites": [
-        {"source": "**", "destination": "/index.html"}
-      ],
-      "headers": [
         {
-          "source": "**/*.@(js)",
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+"headers": [
+        {
+          "source": "**/*.@(js|html|css)",
           "headers": [
             {
               "key": "Cache-Control",
               "value": "no-cache, no-store, must-revalidate"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
             },
             {
               "key": "Pragma",
@@ -171,7 +187,10 @@
         "rider_old/**"
       ],
       "rewrites": [
-        {"source": "**", "destination": "/index.html"}
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
       ],
       "headers": [
         {
@@ -257,8 +276,14 @@
         "**/node_modules/**"
       ],
       "rewrites": [
-        {"source": "/home", "destination": "/home.html"},
-        {"source": "**", "destination": "/index.html"}
+        {
+          "source": "/home",
+          "destination": "/home.html"
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
       ],
       "headers": [
         {
@@ -324,6 +349,84 @@
             }
           ]
         }
+      ]
+    },
+    {
+      "target": "supreme",
+      "public": "SupremeAdmin",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "!.well-known/**",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(js|html|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate, proxy-revalidate"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "Referrer-Policy",
+              "value": "strict-origin-when-cross-origin"
+            },
+            {
+              "key": "Permissions-Policy",
+              "value": "geolocation=(), microphone=(), camera=()"
+            },
+            {
+              "key": "Strict-Transport-Security",
+              "value": "max-age=31536000; includeSubDomains"
+            },
+            {
+              "key": "Content-Security-Policy",
+              "value": "default-src 'self'; script-src 'self' 'unsafe-inline' blob: https://*.firebaseio.com https://*.firebasedatabase.app https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://cdnjs.cloudflare.com https://connect.facebook.net https://*.cloudflaretunnel.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://* https://cdnjs.cloudflare.com https://unpkg.com; frame-src https://www.facebook.com https://*.facebook.com https://*.firebaseio.com https://*.firebasedatabase.app https://accounts.google.com https://apis.google.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; connect-src 'self' wss://*.firebaseio.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.googleapis.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.cloudflaretunnel.com https://graph.facebook.com https://connect.facebook.net https://*.facebook.com;"
+            }
+          ]
+        },
+        {
+          "source": "index.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-store, no-cache, must-revalidate, proxy-revalidate"
+            },
+            {
+              "key": "Pragma",
+              "value": "no-cache"
+            },
+            {
+              "key": "Expires",
+              "value": "0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "assets",
+      "public": "assets",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "!.well-known/**",
+        "**/node_modules/**"
       ]
     }
   ]

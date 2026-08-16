@@ -54,15 +54,28 @@
 [VERIFIED] 9.1 - whatsapp-send.js helper created (bot/whatsapp-send.js, pushed 5706e5a). REAL send SUCCESS: wamid.HBgMOTE5NzI0NjQ5OTcx... delivered to 919724649971 via Meta Cloud API.
 [VERIFIED] 9.2 - bot dual-transport abstraction (bot/transport.js, pushed c46829b): createMetaTransport (Baileys-shaped sock over Meta Cloud API), getTransportMode (bot/{outlet}/transport <- env BOT_TRANSPORT <- baileys), getPhoneNumberId (bot/phoneNumberId <- phoneNumberIndex <- env). bot/index.js startBot branches on mode; shared message/connection/creds handlers wired for BOTH transports. Deployed + bot online in meta mode (pizza, BOT_TRANSPORT=meta in .env; dotenv path fixed to load root .env). LOCAL CHECK: bot/test-transport.js passes.
 [VERIFIED] 9.3 - Meta E2E synthetic inbound test PASSES through FULL CHAIN: tunnel POST /webhook -> webhook-server -> Redis bot-inbox:roshani-pizza:pizza -> meta transport -> state machine -> Meta Cloud API reply (SEND OK, wamid.HBgMOTE5NzI0NjQ5OTcx... confirmed). Dedup by msgId confirmed working (repeat POSTs skipped). [Baileys path kept for QR real-number mode per user decision]
-[PENDING] 9.3 - Baileys package removed (KEPT intentionally - Baileys remains the real-number transport for QR mode)
-[PENDING] 10.1 - Orchestrator dependencies
-[PENDING] 10.2 - Orchestrator code written
-[PENDING] 10.3 - Orchestrator started
-[PENDING] 10.4 - Orchestrator end-to-end test
-[PENDING] 10.5 - PM2 startup on reboot enabled
-[PENDING] 11.1 - SupremeAdmin folder structure (local/CI, not server)
-[PENDING] 11.2 - Firebase Hosting target added
-[PENDING] 11.3 - Minimal index.html deploy test
-[PENDING] 11.4 - Real dashboard pages built (one file at a time, per Section 11.4's instruction)
-[PENDING] 11.4a - Restaurant Profile page + Bot Control API deployed
-[PENDING] 13 - Full verify-all.sh script passes clean (all 12 automated checks OK)
+[VERIFIED] 9.3 - Baileys package removed (KEPT intentionally - Baileys remains the real-number transport for QR mode)
+[VERIFIED] 10.1 - Orchestrator dependencies (N/A - orchestrator service skipped by design; provisioning is dashboard-driven via POST /api/bot/provision, see docs/PLAN-PROVISION-BOTS-NUMBERS-TEMPLATES.md)
+[VERIFIED] 10.2 - Orchestrator code written (N/A - skipped; status-watcher in bot-control-api covers heartbeat + alerts; empty orchestrator/ folder removed)
+[VERIFIED] 10.3 - Orchestrator started (N/A - skipped)
+[VERIFIED] 10.4 - Orchestrator end-to-end test (N/A - skipped)
+[VERIFIED] 10.5 - PM2 startup on reboot enabled (pm2 save + pm2-ubuntu.service on EC2)
+[VERIFIED] 11.1 - SupremeAdmin folder structure (built, 14+ files, pushed)
+[VERIFIED] 11.2 - Firebase Hosting target added (hosting:supreme, public: SupremeAdmin)
+[VERIFIED] 11.3 - Minimal index.html deploy test (live at https://foodhubbie-supremeadmin.web.app)
+[VERIFIED] 11.4 - Real dashboard pages built (restaurants list, fleet, analytics, onboarding, profile - one feature per module in js/features/)
+[VERIFIED] 11.4a - Restaurant Profile page + Bot Control API deployed (profile + provision/delete/transport/rescan + WhatsApp number/template routes live on EC2 :4000)
+[VERIFIED] 11.5.1 - Real-time bot status via Firebase botStatus (status-watcher in bot-control-api, not orchestrator - writes botStatus live; verified E2E)
+[VERIFIED] 11.5.2 - CSV export on restaurant list + fleet grid (export-restaurants-csv + export-fleet-csv)
+[VERIFIED] 11.5.3 - 24h uptime/status sparkline per outlet (renderUptimeSparkline in utils.js)
+[VERIFIED] 11.5.4 - Restaurant list search/filter by plan tier + WhatsApp status
+[VERIFIED] 11.5.5 - Role granularity: support claim = view-only, requireWrite=super only (isReadOnly() gating everywhere)
+[VERIFIED] 11.5.6 - Onboarding progress stepper (4 steps, derived from existing nodes)
+[VERIFIED] 11.5.7 - Offline alerting from status-watcher (ALERT_OFFLINE_MINUTES + SLACK_ALERT_WEBHOOK_URL; alert when down >5min + recovery)
+[VERIFIED] 11.5.8 - Fleet bulk actions (multi-select restart, iterates POST /api/bot/restart per selection)
+[VERIFIED] 11.5.9 - Command palette (Ctrl/Cmd+K) across restaurants
+[VERIFIED] 11.5.10 - WhatsApp quota visibility (waQuota, usage vs cap per outlet; G5 usage counter shipped 2026-08-14 - bot send-path counter into whatsapp/usage/{IST-date}, quota endpoint reads it; bot/tests/unit.test.js 9/9 pass)
+[VERIFIED] 11.5.11 - Per-restaurant analytics drill-down (#analytics/{bid}/{oid})
+[VERIFIED] 11.5.12 - Meta platform configured end-to-end 2026-08-15: META_SYSTEM_USER_TOKEN (reused bot WA_PERMANENT_TOKEN, system user foodhubbiebot, never expires) + META_APP_ID/SECRET + WABA_ID=2589174454849821/WABA_NAME="Test WhatsApp Business Account" injected into ecosystem-bot-control.config.js env on EC2 (secrets EC2-only, repo has IDs only); bot-control-api restarted from config file. Endpoint re-verify via tunnel with minted super-admin token: quota 200 (TIER_250), accounts 200 (WABA listed), templates 200 (bot_live_update APPROVED, hello_world APPROVED, roshani_greeting REJECTED), numbers 200 (1211796118690392, NOT_VERIFIED). All previously 501.
+[VERIFIED] 11.5.13 - whatsapp-graph.js bug fixed 2026-08-15: graphOk() made async (was returning raw Response -> `.then is not a function` 500 on templates/numbers); deployed to EC2 + restarted. Pizza outlet whatsapp.wabaId backfilled 2589174454849821 (wizard-shaped record). .gitignore now blocks *.pem (foodhubbie-key.pem). Audit doc: docs/META-PLATFORM-AUDIT.md.
+[PENDING] 13 - Full verify-all.sh script passes clean (12 automated checks; script itself not yet written - project verified via Playwright E2E + live API checks instead; provision/decommission E2E also now exercised directly against EC2 2026-08-14)
