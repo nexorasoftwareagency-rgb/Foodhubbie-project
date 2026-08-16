@@ -36,7 +36,7 @@ firebase.messaging().onBackgroundMessage((payload) => {
 
 // This SW handles caching, navigation, and offline support only.
 
-const CACHE_NAME = 'prasant-pizza-erp-shell-v5.3.29';
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.4.0';
 const ASSETS_TO_CACHE = [
   './index.html',
   './style.css?v=5.3.29',
