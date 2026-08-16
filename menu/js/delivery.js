@@ -43,6 +43,10 @@ const M = {
 async function boot() {
     try {
         restoreCart();
+        try {
+            const nameSnap = await get(outletRef('settings/Store/storeName'));
+            if (nameSnap.exists()) UI.applyBrand(nameSnap.val());
+        } catch (_) { /* non-critical — keep static brand on failure */ }
         await loadMenu();
         UI.showScreen('screenMenu');
         document.getElementById('bottomNav')?.classList.remove('hidden');

@@ -15,8 +15,30 @@ if (!admin.apps.length) {
 }
 
 const app = express();
-app.use(express.json());
 app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// Proxy /api/* → Bot Control API (port 4000). The Cloudflare Quick Tunnel
+// only routes to a single local port (this webhook server on 5000), so the
+// Supreme Admin dashboard's /api calls reach PM2 control by forwarding here.
+const http = require('http');
+const BOT_CONTROL_PORT = process.env.BOT_CONTROL_PORT || 4000;
+app.use('/api', (req, res) => {
+  const proxyReq = http.request({
+    host: '127.0.0.1',
+    port: BOT_CONTROL_PORT,
+    path: req.originalUrl,
+    method: req.method,
+    headers: { ...req.headers, host: `127.0.0.1:${BOT_CONTROL_PORT}` },
+  }, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(res);
+  });
+  proxyReq.on('error', (err) => {
+    console.error('[PROXY] Bot Control API unreachable:', err.message);
+    if (!res.headersSent) res.status(502).json({ error: 'Bot Control API unreachable' });
+  });
+  req.pipe(proxyReq);
+});
 
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
@@ -30,7 +52,7 @@ app.get('/webhook', (req, res) => {
   res.sendStatus(403);
 });
 
-app.post('/webhook', async (req, res) => {
+app.post('/webhook', express.json(), async (req, res) => {
   res.sendStatus(200);
   try {
     const entry = req.body.entry?.[0];

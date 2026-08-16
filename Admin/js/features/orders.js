@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | ORDERS FEATURE
+ * FoodHubbie ERP | ORDERS FEATURE
  * Handles real-time order synchronization, rendering, and status updates.
  */
 

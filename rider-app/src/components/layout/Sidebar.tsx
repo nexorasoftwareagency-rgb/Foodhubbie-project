@@ -154,7 +154,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         open={confirmReset}
         onOpenChange={setConfirmReset}
         title="Reset App"
-        description="This clears cached data and reloads Roshani Rider fresh. Your account and delivery history are not affected."
+        description="This clears cached data and reloads FoodHubbie Rider fresh. Your account and delivery history are not affected."
         confirmLabel="Reset & Reload"
         destructive={false}
         onConfirm={() => completeSiteRefresh()}

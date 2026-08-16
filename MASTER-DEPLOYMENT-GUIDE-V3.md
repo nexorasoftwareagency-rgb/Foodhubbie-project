@@ -199,6 +199,7 @@ Section P.0 (below) contains a strict, non-negotiable list of what may and may n
 - [Section 9 — Sending/Receiving Messages](#section-9)
 - [Section 10 — Orchestrator Service](#section-10)
 - [Section 11 — Supreme Admin Dual-Dashboard](#section-11)
+  - 11.5 Ops & Fleet Expansion Plan (11 features) — real-time status · CSV · sparkline · filters · roles · onboarding stepper · alerting · bulk actions · ⌘K · quota · per-restaurant analytics
 - [Section 12 — New Restaurant Onboarding Flow](#section-12)
 - [Section 13 — Final Cross-Verification Checklist](#section-13)
 - [Section 14 — Quick Command Reference](#section-14)
@@ -1813,6 +1814,162 @@ curl -s -o /dev/null -w "%{http_code}" <TUNNEL_URL>/api/bot/status/test/test
 
 
 **Agent instruction**: build and deploy ONE file at a time, verify each with `firebase deploy --only hosting:supremeadmin` + a `curl` check that the new page loads without a JS console error, before moving to the next file. Do not batch all 8 files and deploy once — smaller verifiable increments reduce risk of an undiagnosable combined failure.
+
+---
+
+### 11.5 — Ops & Fleet Expansion Plan (11 features, implement one at a time)
+
+> **Cross-cutting principle**: every feature below is *additive* to Sections 10 & 11. None touches the order-flow state machine (Section 16 boundary — the "don't rewrite `bot/index.js`" rule still applies). Each feature lands as its own file/commit with its own VERIFY. Build order is listed so that dependencies land first: **1 → 5 → 3 → 6 → 7 → 2 → 4 → 9 → 10 → 11 → 8**.
+
+| # | Feature | Touches | Depends on |
+|---|---|---|---|
+| 1 | Real-time bot status (replace 15s polling) | orchestrator, `bot-fleet-overview.js`, bot-control-api | — |
+| 5 | Role granularity (support = view-only) | `auth.js`, bot-control-api, all feature pages | — |
+| 3 | 24h uptime/status sparkline per outlet | orchestrator, `bot-fleet-overview.js` | 1 |
+| 6 | Onboarding progress stepper | `restaurant-onboarding.js` | 1 |
+| 7 | Offline alerting (Slack/email webhook) | orchestrator | 1 |
+| 2 | CSV export (restaurant list + fleet grid) | `utils.js`, `restaurant-list.js`, `bot-fleet-overview.js` | — |
+| 4 | Search/filter by plan tier + WhatsApp status | `restaurant-list.js` | — |
+| 9 | Command palette (⌘K) | `cmd-palette.js`, `main.js` | — |
+| 10 | WhatsApp quota visibility (usage vs cap) | orchestrator, fleet card, profile | — |
+| 11 | Per-restaurant analytics drill-down | `restaurant-analytics.js` | — |
+| 8 | Fleet bulk actions (multi-select restart) | `bot-fleet-overview.js`, bot-control-api | 5 |
+
+---
+
+#### Feature 1 — Real-time bot status (replace 15s polling)
+
+**Problem**: 11.4's design has the dashboard `fetch()` the Bot Control API every 15s per outlet; across a growing fleet that's N requests/sec hammering PM2's `describe`.
+
+**Data model** — orchestrator owns `businesses/{bid}/outlets/{oid}/botStatus`:
+```json
+{ "status": "online|offline|restarting|stopped", "uptimeMs": 123456, "cpu": 0.05, "memoryMb": 123, "transport": "meta", "updatedAt": 1710000000000 }
+```
+
+**Orchestrator change** (Section 10.2's `index.js`):
+- After every `pm2.start` / `pm2.stop` / `pm2.restart` callback, write `botStatus` for that worker.
+- Add a 30s heartbeat `setInterval` that re-reads `pm2.list()` once (batched — one PM2 call for all workers, not one per outlet) and writes each worker's `botStatus` + `updatedAt`. This also self-heals a stale `botStatus` after an orchestrator restart.
+- Add a `pm2.launchBus()` listener for `process:event` (`online`/`exit`) to catch crashes the interval might miss.
+
+**Fleet page** (`bot-fleet-overview.js`): replace the poll loop with
+```javascript
+firebase.database().ref('businesses').on('value', snap => renderFleet(snap.val()));
+```
+and read each outlet's `botStatus` from the snapshot. Keep `fetchBotStatus` only as a manual "refresh now" button.
+
+**Bot Control API**: `/api/bot/status/:bid/:oid` becomes optional (dashboard no longer calls it). Keep the endpoint for curl/manual checks. This is the load-reduction win.
+
+**VERIFY**: `pm2 stop bot-roshani-pizza-pizza` → within ~30s `botStatus.status` in Firebase shows `offline` with no browser polling; `pm2 restart` → flips back `online` with new `uptimeMs`.
+
+---
+
+#### Feature 2 — CSV export (restaurant list + fleet grid)
+
+- Add `SupremeAdmin/js/utils.js` with one function reusing the pattern already in `Admin/js/features/orders.js`:
+```javascript
+function exportCsv(filename, headers, rows) { /* Blob + a.download + \ufeff BOM so Excel keeps unicode */ }
+```
+- "Export CSV" toolbar button on both the restaurant-list page and the fleet grid, exporting the **currently filtered** rows (not the raw Firebase dump).
+- **VERIFY**: apply a filter, click export → file downloads, headers match visible columns, ₹/names open un-mangled in Excel.
+
+---
+
+#### Feature 3 — 24h uptime/status sparkline per outlet
+
+- The 30s heartbeat (Feature 1) also appends `{ t: <epochMs>, s: 'online'|'offline' }` to `botStatus.history`, capped at the last 288 samples (5-min × 24h) — shift when over.
+- Fleet card + profile render an inline SVG sparkline from `history` (colored cells — no chart library, ponytail: native SVG).
+- **VERIFY**: view fleet → each card shows 24h of color cells; a bot you stopped for a minute shows a visible offline notch.
+
+---
+
+#### Feature 4 — Restaurant list search/filter by plan tier + WhatsApp status
+
+- Filter row above the table: name text + **plan tier** dropdown (`free|basic|pro`) + **WhatsApp status** dropdown (`connected|not_connected`).
+- Source of truth: tier from `businesses/{bid}/plan/tier` if the field exists, else `businesses/{bid}/settings/plan` (confirm at implementation); WhatsApp status from `outlet.whatsapp.phoneNumberId` presence.
+- Extend 11.4a's `searchRestaurants(query, filters)` — combine text + tier + status with AND logic.
+- **VERIFY**: set tier=`pro` + status=`connected` → table shows only matching restaurants; combined with a name query still narrows correctly.
+
+---
+
+#### Feature 5 — Role granularity (support = view-only)
+
+**Data model**: `admins/{uid}/role` ∈ `super | support`, default `support`. Existing supers keep `isSuper: true` (backward compatible — `super` implies `isSuper`).
+
+- `SupremeAdmin/js/auth.js`: read `role`; render the dashboard read-only for `support` — hide/disable the Restart/Stop/Reconnect buttons and bulk-restart.
+- **Bot Control API**: split the single `requireSupreme` middleware into `requireRead` (GET status — `super` **or** `support`) and `requireWrite` (all POST actions — `super` only). POST with a support token → `403`.
+- **VERIFY**: create a `support` user in Firebase, log in → restart button absent, fleet grid checkboxes hidden; `curl -X POST /api/bot/restart/roshani-pizza/pizza` with the support user's ID token → `403`.
+
+---
+
+#### Feature 6 — Onboarding progress stepper
+
+No new schema — derive all four steps from existing nodes (ponytail: derivation over storage):
+| Step | Derivation |
+|---|---|
+| 1. Business created | `businesses/{bid}` exists |
+| 2. Outlet created | `businesses/{bid}/outlets/{oid}` exists |
+| 3. WhatsApp linked | `outlet.whatsapp.phoneNumberId` set |
+| 4. Bot online | `botStatus.status === 'online'` (Feature 1) |
+
+- `restaurant-onboarding.js` renders a 4-cell stepper; the current stuck step is highlighted, so "where is onboarding stuck" is answered at a glance.
+- **VERIFY**: open the page → stepper shows real state (e.g. WhatsApp linked but bot offline → step 3 done, step 4 pending).
+
+---
+
+#### Feature 7 — Offline alerting (Slack/email webhook from Orchestrator)
+
+- Config: `OFFLINE_ALERT_MINUTES` (default 10) in `/var/www/foodhubbie/.env` + `ALERT_WEBHOOK_URL`. Primary = Slack incoming webhook (zero dependency). If the human has no Slack webhook, a generic HTTPS endpoint works too (e.g. IFTTT/Make email trigger); document `nodemailer` only as a last resort.
+- Orchestrator logic (on top of Feature 1's heartbeat): track `offlineSince` per worker; when still offline past `OFFLINE_ALERT_MINUTES`, POST once (native Node `fetch` — Node 20+, no new dependency):
+```json
+{ "text": "🟥 Bot OFFLINE: <outletName> (<bid>/<oid>) since <ts> — transport <transport>" }
+```
+- Debounce: fire once per offline episode; clear `offlineSince` on recovery.
+- **VERIFY**: set `OFFLINE_ALERT_MINUTES=1`, `pm2 stop` a bot → webhook receives the alert ~1 min later; restart → no repeat alert.
+
+---
+
+#### Feature 8 — Fleet bulk actions (multi-select restart)
+
+- Fleet grid gets a checkbox column + "Restart selected" toolbar button (super only, per Feature 5).
+- Bot Control API adds one endpoint (single auth check, one round-trip):
+```javascript
+app.post('/api/bot/bulk/restart', requireWrite, (req, res) => {
+  const { bots } = req.body; // [{bid,oid}, ...]
+  pm2.connect(() => {
+    const ops = bots.map(b => new Promise(r => pm2.restart(`bot-${b.bid}-${b.oid}`, () => r())));
+    Promise.all(ops).then(() => { pm2.disconnect(); res.json({ success: true, count: bots.length }); });
+  });
+});
+```
+- **VERIFY**: select 3 offline bots → restart → all flip `online` in the realtime view within ~30s.
+
+---
+
+#### Feature 9 — Command palette (⌘K)
+
+- `SupremeAdmin/js/cmd-palette.js`: global `keydown` for `Ctrl/Cmd+K` opens an overlay; input fuzzy-matches restaurant/outlet names + actions; ↑/↓ + Enter navigate to `#profile/{bid}/{oid}`.
+- Hand-rolled contains/fuzzy filter — no dependency (ponytail: a few lines).
+- **VERIFY**: press ⌘K → type a restaurant name → Enter → profile page opens.
+
+---
+
+#### Feature 10 — WhatsApp quota visibility (usage vs cap)
+
+- Meta exposes per-WABA messaging-limit tier + usage. Orchestrator hourly cron writes `businesses/{bid}/outlets/{oid}/waQuota = { tier, conversationLimit, currentUsage, updatedAt }`. Confirm the exact Graph field names at implementation time against the WABA (`GET /{WABA_ID}/account_metrics` with usage/messaging-limit fields) — field names have shifted across Graph versions.
+- Fleet card + profile render a usage-vs-cap bar (green <70%, amber 70–90%, red >90%).
+- **VERIFY**: quota bar renders live values; cross-check the number against Meta's WhatsApp Manager limits page.
+
+---
+
+#### Feature 11 — Per-restaurant analytics drill-down
+
+- `restaurant-analytics.js`: add an outlet selector; the platform-wide aggregation queries become scoped to `businesses/{bid}/outlets/{oid}/orders` + session totals when an outlet is chosen. Route `#analytics/{bid}/{oid}` so it's linkable from the fleet card.
+- Reuse the same aggregation code as the platform-wide view — one source, scoped by path.
+- **VERIFY**: pick an outlet → charts show only that outlet's orders/revenue; link from a fleet card lands on the scoped view.
+
+---
+
+**Agent instruction for 11.5**: implement in the table's dependency order, ONE feature per commit. Each feature ends with its VERIFY passing against the live Firebase + PM2 (Feature 1 and 3 require orchestrator redeploys — `pm2 restart orchestrator`). Features that only touch `SupremeAdmin/` verify via `firebase deploy --only hosting:supremeadmin`. Do not combine features in a single deploy.
 
 ---
 

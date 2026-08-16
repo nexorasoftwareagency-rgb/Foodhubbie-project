@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'pizza-bot',
+      name: 'bot-roshani-pizza-pizza',
       script: 'index.js',
       cwd: './bot',
       watch: false,
@@ -11,7 +11,7 @@ module.exports = {
       }
     },
     {
-      name: 'cake-bot',
+      name: 'bot-roshani-cake-cake',
       script: 'index.js',
       cwd: './bot',
       watch: false,

@@ -5,8 +5,8 @@
 /** Roshani runs exactly two fixed outlets — not a dynamic multi-tenant discovery
  *  like FoodHubbie. Matches window.outletCoords fallback values in app.js. */
 export const OUTLETS = [
-  { id: "pizza" as const, name: "Pizza", icon: "🍕", color: "#E84908", fallbackLat: 25.887944, fallbackLng: 85.026194 },
-  { id: "cake" as const, name: "Cake", icon: "🎂", color: "#D946EF", fallbackLat: 25.887472, fallbackLng: 85.026861 },
+  { id: "pizza" as const, name: "Store 1", icon: "🏪", color: "#E84908", fallbackLat: 25.887944, fallbackLng: 85.026194 },
+  { id: "cake" as const, name: "Store 2", icon: "🏪", color: "#D946EF", fallbackLat: 25.887472, fallbackLng: 85.026861 },
 ];
 
 export type OutletId = "pizza" | "cake";
@@ -89,7 +89,7 @@ export const GHOST_ORDER_WINDOW_MS = 48 * 60 * 60 * 1000;
  *  ("Removed triggerWhatsAppAlert from here to hide OTP from Rider" — real code comment). */
 export const WHATSAPP_TEMPLATES = {
   ACCEPTED: (riderName: string, orderId: string) =>
-    `Hello! I am ${riderName}, your delivery partner for Roshani Sudha order #${orderId}. I am on my way to pick up your order! \u{1F6F5}`,
+    `Hello! I am ${riderName}, your delivery partner for order #${orderId}. I am on my way to pick up your order! \u{1F6F5}`,
 
   PICKED_UP: (riderPhone: string, orderId: string) =>
     `Great news! I have picked up your order #${orderId}. If you need anything, you can call me at ${riderPhone}. I am on my way! \u{1F355}\u{1F382}`,

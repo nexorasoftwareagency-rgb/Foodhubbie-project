@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | FEEDBACK MANAGEMENT MODULE
+ * FoodHubbie ERP | FEEDBACK MANAGEMENT MODULE
  * mob-data-table (plain HTML, no Tabulator) — same design as the Payments tab.
  */
 

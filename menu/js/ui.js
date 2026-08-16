@@ -7,6 +7,46 @@
 export function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+/**
+ * Overwrite every static brand surface (title, meta, logos, welcome brand,
+ * scanner labels, PWA manifest) with the live storeName so no hardcoded
+ * brand trace survives for a different restaurant.
+ */
+export function applyBrand(storeName) {
+    const name = String(storeName || '').trim();
+    if (!name) return;
+
+    if (document.title) document.title = document.title.replace(/FoodHubbie|Roshani/g, name);
+    const setMeta = (sel, attr) => {
+        const el = document.head.querySelector(sel);
+        if (el && el.getAttribute(attr)) el.setAttribute(attr, el.getAttribute(attr).replace(/FoodHubbie|Roshani/g, name));
+    };
+    setMeta('meta[property="og:title"]', 'content');
+    setMeta('meta[property="og:site_name"]', 'content');
+    setMeta('meta[name="twitter:title"]', 'content');
+
+    const sr = document.querySelector('h1.sr-only');
+    if (sr) sr.textContent = sr.textContent.replace(/FoodHubbie|Roshani/g, name);
+    document.querySelectorAll('.topbar-logo').forEach(el => { el.textContent = name; });
+    const wb = document.getElementById('welcomeBrandName');
+    if (wb) wb.textContent = name;
+    const brand = document.querySelector('.brand');
+    if (brand) brand.textContent = name;
+    const scanTitle = document.querySelector('.scanner-title span');
+    if (scanTitle) scanTitle.textContent = name;
+
+    // PWA manifest — regenerate with the live brand so install prompts match
+    const link = document.querySelector('link[rel="manifest"]');
+    if (link && link.getAttribute('href') === 'manifest.json') {
+        fetch('manifest.json').then(r => r.json()).then(m => {
+            m.name = `${name} — Order`;
+            m.short_name = name;
+            m.description = `Order from ${name}`;
+            link.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' }));
+        }).catch(() => {});
+    }
+}
 export function fmtMoney(n) { return '₹' + Number(n || 0).toFixed(0); }
 
 /**
@@ -639,11 +679,12 @@ function buildInstagramUrl(handle) {
     if (/^https?:\/\//i.test(handle)) return handle;
     return `https://instagram.com/${handle.replace(/^@/, '').trim()}`;
 }
-function buildWhatsappUrl(number) {
+function buildWhatsappUrl(number, storeName) {
     if (!number) return null;
     const clean = String(number).replace(/[^\d]/g, '');
     if (!clean) return null;
-    return `https://wa.me/${clean}?text=${encodeURIComponent('Hi! I just dined at Roshani Pizza 🍕')}`;
+    const text = storeName ? `Hi! I just dined at ${storeName}` : 'Hi! I just dined here';
+    return `https://wa.me/${clean}?text=${encodeURIComponent(text)}`;
 }
 
 export function renderPromotionsLinks(store) {
@@ -658,7 +699,7 @@ export function renderPromotionsLinks(store) {
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>' },
         { key: 'facebook', title: 'Like us on Facebook', sub: 'Stay updated with news & events', url: s.facebook, cls: 'promo-link-facebook',
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2h-3a5 5 0 0 0-5 5v3H6v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>' },
-        { key: 'whatsapp', title: 'Chat on WhatsApp', sub: 'Questions or feedback? Message us', url: buildWhatsappUrl(s.whatsappNumber), cls: 'promo-link-whatsapp',
+        { key: 'whatsapp', title: 'Chat on WhatsApp', sub: 'Questions or feedback? Message us', url: buildWhatsappUrl(s.whatsappNumber, s.storeName), cls: 'promo-link-whatsapp',
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3.5A11 11 0 0 0 2.1 17.6L1 23l5.5-1.4A11 11 0 1 0 20.5 3.5zM12 20.9a9 9 0 0 1-4.6-1.3l-.3-.2-3.4.9.9-3.3-.2-.3A9 9 0 1 1 12 20.9z"/></svg>' }
     ].filter(l => l.url);
 

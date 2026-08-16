@@ -4,7 +4,7 @@
 <base href="/">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Roshani Pizza — Order</title>
+<title>FoodHubbie — Order</title>
 <meta name="theme-color" content="#E84908">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,7 +14,7 @@
 <body>
 
 <a href="#screenMenu" class="skip-link">Skip to main content</a>
-<h1 class="sr-only">Roshani Pizza Menu</h1>
+<h1 class="sr-only">FoodHubbie Menu</h1>
 
 <div id="app">
 
@@ -34,7 +34,7 @@
             <div class="welcome-table-pill">TABLE</div>
             <div class="welcome-table-num" id="welcomeTableNum">07</div>
             <div class="welcome-title">Welcome to</div>
-            <div class="welcome-brand" id="welcomeBrandName">Roshani Pizza</div>
+            <div class="welcome-brand" id="welcomeBrandName">FoodHubbie</div>
             <div class="welcome-sub">Dine In Ordering</div>
             <div id="welcomeOffers" class="welcome-offers hidden"></div>
             <button class="btn-start" id="btnStartOrdering">START ORDERING</button>
@@ -60,7 +60,7 @@
     <div id="screenMenu" class="screen">
         <div class="topbar">
             <div class="topbar-brand">
-                <span class="topbar-logo">Roshani</span>
+                <span class="topbar-logo">FoodHubbie</span>
                 <span class="topbar-greeting hidden" id="menuGreeting"></span>
             </div>
             <span class="topbar-table-chip" id="menuTableChip">TABLE 07</span>
@@ -107,7 +107,7 @@
             <button class="topbar-back" id="btnBackFromCustomize" aria-label="Back to menu">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
             <button class="topbar-cart-btn" id="btnOpenCartFromCustomize" aria-label="View cart">
                 <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
                 <span class="topbar-cart-count hidden" id="customizeCartCount">0</span>
@@ -156,7 +156,7 @@
             <button class="topbar-back" id="btnBackFromCart" aria-label="Back to menu">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
             <span style="width:38px;"></span>
         </div>
         <div style="padding:14px 16px 0; font-size:15px; font-weight:800;" id="cartHeaderTitle">Your Cart (Table 07)</div>
@@ -212,7 +212,7 @@
             <button class="topbar-back" id="btnMenuFromTracking" aria-label="Order more" title="Order more">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
             </button>
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
             <span style="width:38px;"></span>
         </div>
         <div class="tracking-body">
@@ -318,7 +318,7 @@
             <button class="topbar-back" id="btnBackFromWaiter" aria-label="Back">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
             <span style="width:38px;"></span>
         </div>
         <div class="waiter-body">
@@ -416,7 +416,7 @@
             <svg class="icon" style="width:48px;height:48px;color:var(--text-sub);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
             <h3>Session Expired</h3>
             <p>Your dining session has ended due to inactivity. Please scan the QR code on your table again to continue ordering.</p>
-            <button class="btn-start" onclick="location.href='/home'">Scan Again</button>
+            <button class="btn-start" onclick="location.href='/home'+location.search">Scan Again</button>
         </div>
     </div>
 
@@ -435,7 +435,7 @@
     <!-- ============== SCREEN: ORDER HISTORY (this visit) ============== -->
     <div id="screenHistory" class="screen">
         <div class="topbar">
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
         </div>
         <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Your Orders This Visit</div>
         <div id="historyListContainer" class="history-list"></div>
@@ -444,7 +444,7 @@
     <!-- ============== SCREEN: PROMOTIONS ============== -->
     <div id="screenPromotions" class="screen">
         <div class="topbar">
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
         </div>
         <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Stay Connected</div>
         <div style="padding:2px 16px 12px; font-size:12px; color:var(--text-sub);">Loved the food? Let others know, and stay in touch with us.</div>

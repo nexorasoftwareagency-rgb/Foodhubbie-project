@@ -13,9 +13,9 @@ export function LoginCard() {
           <path d="M12 6l2 5h5" />
         </svg>
       </div>
-      <h1 className="text-center text-[19px] font-extrabold text-white tracking-tight">Roshani Rider</h1>
+      <h1 className="text-center text-[19px] font-extrabold text-white tracking-tight">FoodHubbie Rider</h1>
       <p className="text-center text-[12.5px] text-white/55 mt-1 mb-6 leading-relaxed">
-        Pizza &amp; Cake Delivery Partner
+        Delivery Partner
         <br />
         Sign in to start delivering
       </p>

@@ -22,7 +22,7 @@ function useMod(name) {
 document.addEventListener('DOMContentLoaded', async () => {
     logger.info('SYSTEM', '🚀 DOM Content Loaded. Initializing Admin ERP...', { version: '5.2.0', time: new Date().toISOString() });
     console.log(
-        '%c ROSHANI ERP %c v5.2.0 %c\n' +
+        '%c FOODHUBBIE %c v5.2.0 %c\n' +
         '%cAll user actions, button clicks, and module activity are logged here.\n' +
         'Use the topbar "terminal" button to open the Activity Log panel,\n' +
         'or inspect with: %c__adminLogger',
@@ -775,4 +775,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-console.log("\uD83D\uDE80 Roshani Pizza ERP Modules Loaded");
+console.log("\uD83D\uDE80 FoodHubbie ERP Modules Loaded");

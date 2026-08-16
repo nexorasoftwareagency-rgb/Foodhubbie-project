@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Food-Hubbie Supreme Admin</title>
+  <meta name="robots" content="noindex, nofollow" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- Auth gate: nothing else renders until auth.js resolves the isSuper claim -->
+  <div id="auth-screen"></div>
+
+  <div id="app-shell" style="display:none;">
+    <header id="app-topbar">
+      <div id="app-brand">
+        <div class="brand-mark">FH</div>
+        <div class="brand-name">Supreme Admin <span>· Food-Hubbie</span></div>
+      </div>
+
+      <div id="dashboard-switcher">
+        <button class="dash-tab dash-restaurant" data-action="switch-dashboard" data-dashboard="restaurant">
+          <svg data-lucide="utensils"></svg> <span class="dash-tab-label">Restaurant Management</span>
+        </button>
+        <button class="dash-tab dash-agent" data-action="switch-dashboard" data-dashboard="agent">
+          <svg data-lucide="message-circle"></svg> <span class="dash-tab-label">WhatsApp Agents</span>
+        </button>
+      </div>
+
+      <div id="app-user">
+        <button id="command-palette-trigger" title="Jump to restaurant" data-action="open-command-palette">
+          <svg data-lucide="search"></svg> <span class="cp-trigger-label">Jump to…</span> <kbd id="cp-kbd">Ctrl K</kbd>
+        </button>
+        <span class="user-email" id="current-user-email"></span>
+        <button id="logout-btn" title="Sign out" aria-label="Sign out" data-action="logout">
+          <svg data-lucide="log-out"></svg>
+        </button>
+      </div>
+    </header>
+
+    <nav id="app-subnav">
+      <div class="subnav-group" data-group="restaurant">
+        <a href="#restaurants" class="nav-link" data-route="restaurants"><svg data-lucide="store"></svg> Restaurants</a>
+        <a href="#analytics" class="nav-link" data-route="analytics"><svg data-lucide="bar-chart-3"></svg> Analytics</a>
+      </div>
+      <div class="subnav-group" data-group="agent">
+        <a href="#agents" class="nav-link" data-route="agents"><svg data-lucide="activity"></svg> Bot Fleet</a>
+      </div>
+    </nav>
+
+    <main id="app-main"></main>
+  </div>
+
+  <!-- Shared drawer / modal / toast mount points (features render into these) -->
+  <div id="drawer-root"></div>
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+
+  <!-- Firebase (compat SDK — matches the pattern used by the existing Admin panel) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+
+  <!-- Icons -->
+  <!-- Pinned, not @latest — this project has hit silent icon-name breakage
+       from unpinned Lucide before (see PROJECT_LEDGER.md). If you bump this,
+       grep the whole SupremeAdmin tree for data-lucide="..." and verify every
+       icon name still exists in the new version's manifest before deploying. -->
+  <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.js"></script>
+
+  <!-- QR rendering for Baileys pairing (exposes window.QRCode) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/utils.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+</body>
+</html>

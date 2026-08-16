@@ -72,7 +72,21 @@ CLAude Adv Video/
 # AWS credentials (local, never commit)
 AWS/
 
+# EC2 SSH key (never commit)
+*.pem
+foodhubbie-key.pem
 
 # Local credentials (never commit)
 Credentials/
+
+
+# Local credentials (never commit)
+foodhubbie-10-firebase-adminsdk-*.json
+nilesh-admin_*.csv
+
+
+# Claude reference copy (working folder)
+Supreme Admin Claude/
+# DB dump script (live data)
+dump-businesses.js
 

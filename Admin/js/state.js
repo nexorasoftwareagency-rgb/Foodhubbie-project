@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | GLOBAL STATE
+ * FoodHubbie ERP | GLOBAL STATE
  * Reactive state management for the application.
  */
 

@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | GESTURE MANAGEMENT
+ * FoodHubbie ERP | GESTURE MANAGEMENT
  * Handles mobile-specific gestures like swipe-to-close for drawers.
  */
 

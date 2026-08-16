@@ -73,7 +73,7 @@ export async function registerPushNotifications(uid: string): Promise<void> {
     }
 
     onMessage(messaging, (payload) => {
-      const title = payload?.notification?.title || "Roshani Rider";
+      const title = payload?.notification?.title || "FoodHubbie Rider";
       const body = payload?.notification?.body || "";
       // Foreground pushes don't show a native OS notification by themselves —
       // surface them as both an in-app record (so they persist in the bell menu)

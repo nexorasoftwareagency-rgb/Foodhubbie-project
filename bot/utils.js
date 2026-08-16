@@ -119,7 +119,8 @@ function formatCartSummary(cart) {
         if (item.addons && item.addons.length > 0) {
             lines += `   + ${item.addons.map(a => a.name).join(', ')}\n`;
         }
-        lines += `   Qty: ${item.quantity} x ₹${item.unitPrice + (item.addons?.reduce((s, a) => s + a.price, 0) || 0)} = ₹${itemTotal}\n\n`;
+        lines += `   Qty: ${item.quantity} x ₹${item.unitPrice + (item.addons?.reduce((s, a) => s + a.price, 0) || 0)} = ₹${itemTotal}\n`;
+        if (i < cart.length - 1) lines += `------------------------\n`;
     });
     return { lines, subtotal };
 }
@@ -144,7 +145,7 @@ function formatOrderInvoice(orderId, order) {
     msg += `👤 *Customer:* ${order.customerName || "Guest"}\n`;
     msg += `📍 *Type:* ${order.type || "Online"}\n`;
     msg += `━━━━━━━━━━━━━━━━━━━━\n`;
-    msg += `📦 *ITEMS:*\n${itemsText}\n`;
+    msg += `📦 *ITEMS:*\n${itemsText}`;
     msg += `━━━━━━━━━━━━━━━━━━━━\n`;
     msg += `💰 *Subtotal:* ₹${order.subtotal || order.itemTotal || 0}\n`;
     if (order.distanceKm) msg += `📍 *Distance:* ${order.distanceKm} km\n`;
@@ -182,7 +183,7 @@ function getFoodFunnyProgress(status, name = "") {
         "Delivered": "✅👨‍🍳🔥📦🍕"
     };
     const bar = bars[status] || "⬜⬜⬜⬜⬜";
-    return `\n*Progress:* [ ${bar} ]\n`;
+    return `\n------------------------\n*Progress:* [ ${bar} ]\n`;
 }
 
 // ── Coupon ─────────────────────────────────────────────────────────────────

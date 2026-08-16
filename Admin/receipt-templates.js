@@ -23,7 +23,7 @@ window.ReceiptTemplates = {
         `).join('');
 
         // Generate dynamic feedback link using base URL from settings or default
-        const baseUrl = store.reviewUrl || `https://roshanipizza.web.app/feedback`;
+        const baseUrl = store.reviewUrl || `https://foodhubbie-qrmenu.web.app/feedback`;
         const feedbackUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}order=${order.orderId}&outlet=${window.currentOutlet || 'default'}`;
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(feedbackUrl)}`;
 
@@ -86,7 +86,7 @@ window.ReceiptTemplates = {
                     <!-- Store Branding -->
                     ${(!store.config || store.config.showStoreName !== false) ? `
                         ${store.entityName ? `<div class="store-entity bold">${this.escapeHtml(store.entityName)}</div>` : ''}
-                        <h1 class="store-name">${this.escapeHtml(store.storeName || (window.currentOutlet === 'pizza' ? 'ROSHANI PIZZA' : 'ROSHANI CAKES'))}</h1>
+                        <h1 class="store-name">${this.escapeHtml(store.storeName || 'Our Restaurant')}</h1>
                     ` : ''}
                     
                     ${(!store.config || store.config.showAddress !== false) ? `<div class="address-text">${this.escapeHtml(store.address || '')}</div>` : ''}
@@ -173,7 +173,7 @@ window.ReceiptTemplates = {
                     ${(!store.config || store.config.showTagline !== false) ? `<div class="bold">${this.escapeHtml(store.tagline || 'Thank You! Visit Again')}</div>` : ''}
                     ${(!store.config || store.config.showPoweredBy !== false) ? `
                     <div style="margin-top:5px; font-size: 0.65rem; opacity:0.7;">
-                        ${this.escapeHtml(store.poweredBy || 'Powered by Roshani ERP')}
+                        ${this.escapeHtml(store.poweredBy || 'Powered by FoodHubbie')}
                     </div>` : ''}
                     <div style="font-size: 0.6rem; margin-top:5px;">*** This is a computer generated bill ***</div>
                 </div>

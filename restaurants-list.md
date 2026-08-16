@@ -1,0 +1,97 @@
+- generic [ref=f22e17]:
+  - banner [ref=f22e18]:
+    - generic [ref=f22e19]:
+      - generic [ref=f22e20]: FH
+      - generic [ref=f22e21]: Supreme Admin · Food-Hubbie
+    - generic [ref=f22e22]:
+      - button "Restaurant Management" [ref=f22e23] [cursor=pointer]
+      - button "WhatsApp Agents" [ref=f22e28] [cursor=pointer]
+    - generic [ref=f22e32]:
+      - button "Jump to… Ctrl K" [ref=f22e33] [cursor=pointer]:
+        - generic [ref=f22e37]: Jump to…
+        - generic [ref=f22e38]: Ctrl K
+      - generic [ref=f22e39]: nileshshah84870@gmail.com
+      - button "Sign out" [ref=f22e40] [cursor=pointer]
+  - navigation [ref=f22e44]:
+    - generic [ref=f22e45]:
+      - link "Restaurants" [ref=f22e46] [cursor=pointer]:
+        - /url: "#restaurants"
+      - link "Analytics" [ref=f22e52] [cursor=pointer]:
+        - /url: "#analytics"
+  - main [ref=f22e55]:
+    - button "All restaurants" [ref=f22e114] [cursor=pointer]
+    - generic [ref=f22e117]:
+      - generic [ref=f22e118]:
+        - generic [ref=f22e119]:
+          - heading "Roshani Pizza" [level=1] [ref=f22e120]
+          - generic [ref=f22e121]:
+            - text: Roshani Pizza · 919724649971
+            - generic [ref=f22e122]: Live
+        - generic [ref=f22e124]:
+          - button "View analytics" [ref=f22e125] [cursor=pointer]
+          - generic [ref=f22e128]: Online
+      - generic [ref=f22e130]:
+        - strong [ref=f22e131]: Outlet details
+        - generic [ref=f22e132]:
+          - generic [ref=f22e133]: "Business ID: roshani-pizza"
+          - generic [ref=f22e134]: "Outlet ID: pizza"
+          - generic [ref=f22e135]: "Plan: —"
+      - generic [ref=f22e136]:
+        - generic [ref=f22e137]:
+          - strong [ref=f22e138]: Admin login
+          - button "Update password" [ref=f22e142] [cursor=pointer]
+        - generic [ref=f22e143]:
+          - generic [ref=f22e144]: "Username: roshanipizza@gmail.com"
+          - generic [ref=f22e145]: "Password: Ns@9724649971"
+          - generic [ref=f22e146]:
+            - text: "Admin app:"
+            - link "https://foodhubbie-admins.web.app" [ref=f22e147] [cursor=pointer]:
+              - /url: https://foodhubbie-admins.web.app
+      - generic [ref=f22e148]:
+        - generic [ref=f22e149]: WhatsApp — Official API & Bot Channel
+        - generic [ref=f22e152]:
+          - generic [ref=f22e153]:
+            - generic [ref=f22e154]: Agent status
+            - generic [ref=f22e157]: Online
+          - generic [ref=f22e158]:
+            - generic [ref=f22e159]: Uptime
+            - generic [ref=f22e163]: 36m
+          - generic [ref=f22e164]:
+            - generic [ref=f22e165]: Memory
+            - generic [ref=f22e169]: 105 MB
+          - generic [ref=f22e170]:
+            - generic [ref=f22e171]: Official WhatsApp
+            - generic [ref=f22e174]: +1 555-661-9086
+            - generic [ref=f22e175]: Test Number
+          - generic [ref=f22e176]:
+            - generic [ref=f22e177]: Bot channel
+            - generic [ref=f22e180]: Official API
+        - generic [ref=f22e181]:
+          - generic [ref=f22e182]: Status over last 24h
+          - img "Status over last 24h" [ref=f22e183]
+        - generic [ref=f22e209]:
+          - generic [ref=f22e210]:
+            - strong [ref=f22e211]: Official WhatsApp number
+            - button "Deregister" [ref=f22e212] [cursor=pointer]
+          - generic [ref=f22e213]:
+            - generic [ref=f22e214]: "Number: +1 555-661-9086"
+            - generic [ref=f22e215]: "Verified name: Test Number"
+            - generic [ref=f22e216]: "Phone number ID: 1211796118690392"
+        - generic [ref=f22e217]:
+          - strong [ref=f22e218]: Message templates
+          - generic [ref=f22e219]: Could not load the template library.
+        - generic [ref=f22e221]:
+          - strong [ref=f22e222]: Manage agent
+          - generic [ref=f22e223]:
+            - button "Restart" [ref=f22e224] [cursor=pointer]
+            - button "Stop" [ref=f22e228] [cursor=pointer]
+            - button "Decommission" [ref=f22e233] [cursor=pointer]
+          - generic [ref=f22e237]: bot-roshani-pizza-pizza
+          - generic [ref=f22e238]: Bot channel
+          - generic [ref=f22e239]:
+            - button "Official API" [ref=f22e240] [cursor=pointer]
+            - button "WhatsApp Web (QR)" [ref=f22e242] [cursor=pointer]
+          - generic [ref=f22e244]: "Currently using: Official API"
+          - generic [ref=f22e245]:
+            - generic [ref=f22e246]: "Official API phone number ID: 1211796118690392"
+            - generic [ref=f22e247]: "Connected WhatsApp number: +1 555-661-9086"

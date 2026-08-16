@@ -44,18 +44,30 @@ export function updateBranding() {
     const mobBadge = document.getElementById('mobileOutletBadge');
     const sidebarBrand = document.getElementById('sidebarBrandText');
 
-    const label = state.currentOutlet === 'cake' ? 'CAKES' : 'PIZZA';
-    if (badge) badge.innerText = label;
-    if (mobBadge) mobBadge.innerText = label;
-    if (sidebarBrand) sidebarBrand.innerText = 'ROSHANI ERP';
-
-    document.title = 'Roshani ERP | Admin Dashboard';
+    if (sidebarBrand) sidebarBrand.innerText = 'FOODHUBBIE';
+    document.title = 'FoodHubbie | Admin Dashboard';
 
     const isPizza = state.currentOutlet !== 'cake';
     const ridersMenu = document.getElementById("menu-riders");
     if (ridersMenu) {
         const isSuper = state.adminData && state.adminData.isSuper;
         ridersMenu.classList.toggle('hidden', !(isPizza || isSuper));
+    }
+    refreshBrand();
+}
+
+async function refreshBrand() {
+    const badge = document.getElementById('outletBadge');
+    const mobBadge = document.getElementById('mobileOutletBadge');
+    try {
+        const { Outlet, get } = await import('./firebase.js');
+        const snap = await get(Outlet.ref('settings/Store'));
+        const storeName = snap.exists() && snap.val().storeName ? snap.val().storeName : 'Our Restaurant';
+        if (badge) badge.innerText = storeName;
+        if (mobBadge) mobBadge.innerText = storeName;
+    } catch (_) {
+        if (badge) badge.innerText = 'Our Restaurant';
+        if (mobBadge) mobBadge.innerText = 'Our Restaurant';
     }
 }
 

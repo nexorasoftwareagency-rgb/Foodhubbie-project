@@ -1,29 +1,29 @@
-Ôªø<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <base href="/">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Open Graph / WhatsApp Link Preview -->
-<meta property="og:title" content="Roshani Pizza ‚Äî Order for Delivery">
-<meta property="og:description" content="Browse our menu, customize your order, and get it delivered hot! Fresh pizza, cakes & more delivered to your door.">
+<meta property="og:title" content="FoodHubbie ó Order for Delivery">
+<meta property="og:description" content="Browse our menu, customize your order, and get it delivered hot! Fresh food delivered to your door.">
 <meta property="og:image" content="https://foodhubbie-qrmenu.web.app/assets/og-banner.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:url" content="https://foodhubbie-qrmenu.web.app/pizza/delivery.html">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Roshani Pizza">
+<meta property="og:site_name" content="FoodHubbie">
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Roshani Pizza ‚Äî Order for Delivery">
+<meta name="twitter:title" content="FoodHubbie ó Order for Delivery">
 <meta name="twitter:description" content="Browse our menu, customize your order, and get it delivered hot!">
 <meta name="twitter:image" content="https://foodhubbie-qrmenu.web.app/assets/og-banner.jpg">
-<title>Roshani Pizza ‚Äî Order for Delivery</title>
+<title>FoodHubbie ó Order for Delivery</title>
 <meta name="theme-color" content="#E84908">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<!-- SAME stylesheet as the dine-in QR app (menu/index.html) ‚Äî every dish
+<!-- SAME stylesheet as the dine-in QR app (menu/index.html) ó every dish
      card, button, color, and font below comes from this file, unmodified,
      so this page looks identical to the existing menu app. -->
 <link rel="stylesheet" href="css/app.css">
@@ -54,16 +54,16 @@
 <body>
 
 <a href="#screenMenu" class="skip-link">Skip to main content</a>
-<h1 class="sr-only">Roshani Pizza ‚Äî Delivery Menu</h1>
+<h1 class="sr-only">FoodHubbie ó Delivery Menu</h1>
 
 <div id="app">
 
     <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner"></div>
-        <p style="font-size:13px;color:var(--text-sub);">Loading menu‚Ä¶</p>
+        <p style="font-size:13px;color:var(--text-sub);">Loading menuÖ</p>
     </div>
     <div id="offlineBanner" class="offline-banner">
-        Connection trouble ‚Äî
+        Connection trouble ó
         <button id="btnRetryConnection" type="button" style="background:none;border:none;color:#fff;text-decoration:underline;font:inherit;font-weight:800;cursor:pointer;padding:0;margin-left:4px;">Tap to retry</button>
     </div>
 
@@ -76,7 +76,7 @@
     <div id="screenMenu" class="screen">
         <div class="topbar">
             <div class="topbar-brand">
-                <span class="topbar-logo">Roshani</span>
+                <span class="topbar-logo">FoodHubbie</span>
             </div>
             <span class="topbar-table-chip">DELIVERY</span>
             <button class="topbar-cart-btn" id="btnOpenCartFromMenu" aria-label="View cart">
@@ -88,7 +88,7 @@
         <div class="search-row">
             <div class="search-input-wrap">
                 <svg class="icon" style="width:16px;height:16px;color:var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="text" id="dishSearchInput" placeholder="Search for dishes‚Ä¶">
+                <input type="text" id="dishSearchInput" placeholder="Search for dishesÖ">
             </div>
         </div>
 
@@ -100,8 +100,8 @@
         <div id="menuCartBar" class="menu-cart-bar hidden">
             <button id="btnViewCartBar">
                 <span id="menuCartBarCount">0 items</span>
-                <span id="menuCartBarTotal">‚Çπ0</span>
-                <span>View Cart ‚Ä∫</span>
+                <span id="menuCartBarTotal">?0</span>
+                <span>View Cart õ</span>
             </button>
         </div>
     </div>
@@ -112,7 +112,7 @@
             <button class="topbar-back" id="btnBackFromCustomize" aria-label="Back to menu">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
             <button class="topbar-cart-btn" id="btnOpenCartFromCustomize" aria-label="View cart">
                 <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
                 <span class="topbar-cart-count hidden" id="customizeCartCount">0</span>
@@ -124,7 +124,7 @@
             <div class="custom-body">
                 <div class="custom-title-row">
                     <div class="custom-title" id="customDishName">Dish Name</div>
-                    <div class="custom-base-price" id="customBasePrice">‚Çπ0</div>
+                    <div class="custom-base-price" id="customBasePrice">?0</div>
                 </div>
                 <p class="custom-desc" id="customDishDesc" style="display:none;"></p>
 
@@ -139,12 +139,12 @@
                 </div>
 
                 <div class="custom-section-label">Special Instructions (Optional)</div>
-                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicy‚Ä¶"></textarea>
+                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicyÖ"></textarea>
             </div>
         </div>
         <div class="custom-footer">
             <div class="qty-stepper qty-stepper-lg">
-                <button class="qty-btn" id="btnDraftQtyMinus">‚àí</button>
+                <button class="qty-btn" id="btnDraftQtyMinus">-</button>
                 <span class="qty-val" id="draftQtyVal">1</span>
                 <button class="qty-btn" id="btnDraftQtyPlus">+</button>
             </div>
@@ -155,7 +155,7 @@
         </div>
     </div>
 
-    <!-- ============== SCREEN: CART ‚Äî same as QR app's cart, minus the
+    <!-- ============== SCREEN: CART ó same as QR app's cart, minus the
          table-only "Guests" stepper, plus Address + Location. Discount
          code entry point is IDENTICAL (menu/js/discount.js, unmodified). ============== -->
     <div id="screenCart" class="screen">
@@ -163,7 +163,7 @@
             <button class="topbar-back" id="btnBackFromCart" aria-label="Back to menu">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
             <span style="width:38px;"></span>
         </div>
         <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Your Cart (Delivery)</div>
@@ -184,7 +184,7 @@
             </div>
             <div class="form-group-mini">
                 <label>Special Note (Optional)</label>
-                <textarea id="checkoutNote" placeholder="e.g. Ring the bell, extra spicy‚Ä¶" rows="2" maxlength="200"></textarea>
+                <textarea id="checkoutNote" placeholder="e.g. Ring the bell, extra spicyÖ" rows="2" maxlength="200"></textarea>
             </div>
             <div class="form-group-mini discount-input-wrap" id="discountInputWrap">
                 <label>Discount Code (Optional)</label>
@@ -197,12 +197,12 @@
         </div>
 
         <div class="cart-summary" id="cartSummaryWrap">
-            <div class="cart-summary-row"><span>Item Total</span><span id="cartSubtotal">‚Çπ0</span></div>
+            <div class="cart-summary-row"><span>Item Total</span><span id="cartSubtotal">?0</span></div>
             <div id="cartTaxRows"></div>
-            <div class="cart-summary-row hidden" id="cartDeliveryRow"><span>Delivery Fee</span><span id="cartDeliveryFee">‚Çπ0</span></div>
-            <div class="cart-summary-row hidden" id="cartServiceChargeRow"><span><span id="cartServiceChargeName">Service Charge</span> (<span id="cartServiceChargePct">0</span>%)</span><span id="cartServiceCharge">‚Çπ0</span></div>
-            <div class="cart-summary-row cart-summary-discount hidden" id="cartDiscountRow"><span id="cartDiscountLabel">Discount</span><span id="cartDiscount">-‚Çπ0</span></div>
-            <div class="cart-summary-row cart-summary-total"><span>Total</span><span id="cartTotal">‚Çπ0</span></div>
+            <div class="cart-summary-row hidden" id="cartDeliveryRow"><span>Delivery Fee</span><span id="cartDeliveryFee">?0</span></div>
+            <div class="cart-summary-row hidden" id="cartServiceChargeRow"><span><span id="cartServiceChargeName">Service Charge</span> (<span id="cartServiceChargePct">0</span>%)</span><span id="cartServiceCharge">?0</span></div>
+            <div class="cart-summary-row cart-summary-discount hidden" id="cartDiscountRow"><span id="cartDiscountLabel">Discount</span><span id="cartDiscount">-?0</span></div>
+            <div class="cart-summary-row cart-summary-total"><span>Total</span><span id="cartTotal">?0</span></div>
             <button class="btn-place-order" id="btnPlaceOrder">PLACE ORDER</button>
         </div>
     </div>
@@ -210,16 +210,16 @@
     <!-- ============== SCREEN: PROMOTIONS (identical to QR app) ============== -->
     <div id="screenPromotions" class="screen">
         <div class="topbar">
-            <span class="topbar-logo" style="margin:0 auto;">Roshani</span>
+            <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
         </div>
         <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Stay Connected</div>
         <div style="padding:2px 16px 12px; font-size:12px; color:var(--text-sub);">Loved the food? Let others know, and stay in touch with us.</div>
         <div id="promotionsLinksContainer" class="promotions-links"></div>
     </div>
 
-    <!-- ============== BOTTOM NAVIGATION ‚Äî Menu / Cart / Promos only.
+    <!-- ============== BOTTOM NAVIGATION ó Menu / Cart / Promos only.
          Tracking, History, and table-only actions (Call Waiter / Other
-         Request) are intentionally NOT included ‚Äî there's no table
+         Request) are intentionally NOT included ó there's no table
          session and no order-tracking screen for delivery. ============== -->
     <nav id="bottomNav" class="bottom-nav hidden">
         <button class="bottom-nav-item active" data-bottom-tab="screenMenu">
@@ -244,7 +244,7 @@
 <!-- Location Permission Dialog -->
 <div id="locDialogOverlay" class="loc-dialog-overlay">
     <div class="loc-dialog">
-        <div class="loc-dialog-icon">üìç</div>
+        <div class="loc-dialog-icon">??</div>
         <div class="loc-dialog-title">Enable Location</div>
         <div class="loc-dialog-desc">
             We need your location to calculate delivery fees and ensure your order reaches you accurately.

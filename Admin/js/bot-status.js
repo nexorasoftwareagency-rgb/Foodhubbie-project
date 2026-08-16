@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | GLOBAL BOT-STATUS LISTENER
+ * FoodHubbie ERP | GLOBAL BOT-STATUS LISTENER
  * Monitors bot/{outlet}/status from Firebase and dispatches a
  * `botStatusChange` custom event so any component can react.
  */

@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | DISCOUNTS REPORTS MODULE
+ * FoodHubbie ERP | DISCOUNTS REPORTS MODULE
  * Renders per-discount performance analytics in a modal:
  *   - KPI cards (redemptions, total saved, active count, average)
  *   - Per-discount breakdown (count, total saved, average)

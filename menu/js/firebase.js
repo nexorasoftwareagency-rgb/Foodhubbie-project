@@ -50,7 +50,7 @@ export function isConnected() {
 
 // ---------------------------------------------------------------
 // Tenant resolution — parsed once from the URL:
-//   https://menu.roshani.com/pizza/?t=7YH8K2P4X9F6M2A&b=roshani
+//   ?t=7YH8K2P4X9F6M2A&b=roshani
 // OUTLET = first path segment; BUSINESS_ID = `b` query param,
 // else inferred per-outlet (two restaurants = two businesses).
 // ---------------------------------------------------------------

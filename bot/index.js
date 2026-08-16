@@ -8,9 +8,9 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 // OUTLET CONFIGURATION (UNIFIED CORE)
 // =============================
 const OUTLET = (process.env.OUTLET || 'pizza').trim();
-const OUTLET_NAME = OUTLET === 'pizza' ? 'Roshani Pizza' : 'Roshani Cake';
+let OUTLET_NAME = OUTLET === 'pizza' ? 'Our Restaurant' : 'Our Restaurant';
 const OUTLET_EMOJI = OUTLET === 'pizza' ? '🍕' : '🎂';
-const OTHER_OUTLET_NAME = OUTLET === 'pizza' ? 'Roshani Cake' : 'Roshani Pizza';
+let OTHER_OUTLET_NAME = 'Our Other Store';
 const OTHER_OUTLET_EMOJI = OUTLET === 'pizza' ? '🎂' : '🍕';
 const OTHER_OUTLET_NUMBER = '';
 // Fixed developer number (mirrors getReportRecipients). Used by promo opt-out
@@ -299,8 +299,23 @@ function initCommandListener(sock) {
             } else if (cmd.action === "SEND_GENERIC_MESSAGE") {
                 const jid = formatJid(cmd.phone);
                 if (jid) {
-                    await sock.sendMessage(jid, { text: cmd.message || "" });
-                    console.log(`[Bot] Generic message sent to ${maskJid(jid)}`);
+                    if (sock.user?.id?.startsWith('meta:') && typeof sock.sendTemplate === 'function') {
+                        try {
+                            // Proactive (biz-initiated) plain text is dropped by Meta
+                            // with 131047 outside the 24h service window — send via an
+                            // approved template instead. No-variable templates reject
+                            // the body component (code 100) → falls back to text below.
+                            await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'bot_live_update', language: process.env.PROACTIVE_LANGUAGE || 'en', body: cmd.message || '' });
+                            console.log(`[Bot] Generic message sent (template) to ${maskJid(jid)}`);
+                        } catch (e) {
+                            console.warn(`[Bot] Template send failed, text fallback for ${maskJid(jid)}: ${e.message || e}`);
+                            await sock.sendMessage(jid, { text: cmd.message || "" });
+                            console.log(`[Bot] Generic message sent (text) to ${maskJid(jid)}`);
+                        }
+                    } else {
+                        await sock.sendMessage(jid, { text: cmd.message || "" });
+                        console.log(`[Bot] Generic message sent to ${maskJid(jid)}`);
+                    }
                 } else {
                     console.warn(`[Bot] SEND_GENERIC_MESSAGE skipped — invalid phone: "${cmd.phone}"`);
                 }
@@ -390,11 +405,23 @@ async function sendOrderFlow(sock, sender, pushName, user) {
     // Wait 2 seconds for WhatsApp to prepare preview rendering
     await new Promise(r => setTimeout(r, 2000));
 
+    return resendMenuCTA(sock, sender, user, store, bot);
+}
+
+// Resend just the menu CTA (menu image + order link/button) — used for C2/C3/C5.
+async function resendMenuCTA(sock, sender, user, store, bot, ctaText) {
+    if (!store || !bot) {
+        const data = await Promise.all([
+            getData("settings/Store", OUTLET),
+            getData("settings/Bot", OUTLET)
+        ]);
+        store = data[0]; bot = data[1];
+    }
     const phone = sender.replace(/[^0-9]/g, '').slice(-10);
     const token = await getOrCreateWebviewToken(OUTLET, phone, user);
     const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
     const menuImg = bot?.menuImage || store?.bannerImage;
-    const ctaText = `🛒 *Ready to order?*\n👇 *TAP THE BUTTON BELOW TO ORDER NOW* 👇`;
+    if (!ctaText) ctaText = `🛒 *Ready to order?*\n👇 *TAP THE LINK BELOW TO ORDER NOW* 👇`;
     return sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl);
 }
 
@@ -405,7 +432,7 @@ async function appendContactInfo(text, outlet = 'pizza') {
         const deliverySettings = await getData("settings/Delivery", outlet) || {};
         const DEVELOPER_NUMBER = "9724649971";
         const adminNum = storeSettings.phone || deliverySettings.reportPhone || DEVELOPER_NUMBER;
-        return `${text}\n\n━━━━━━━━━━━━━━━━━━━━\nIf you have any Doubt Contact Admin: *${adminNum}*`;
+        return `${text}\n${'-'.repeat(32)}\nIf you have any Doubt Contact Admin: *${adminNum}*`;
     } catch (e) {
         return text;
     }
@@ -465,7 +492,7 @@ async function deductInventoryStock(sock, items, outlet = 'pizza') {
                     const alertMsg = `⚠️ *LOW STOCK ALERT* ⚠️\n━━━━━━━━━━━━━━━━━━━━\n` +
                         `📦 Item: *${data.name}*\n` +
                         `📉 Current Stock: *${newStock}*\n` +
-                        `🚩 Threshold: *${threshold}*\n\n` +
+                        `🚩 Threshold: *${threshold}*\n------------------------\n` +
                         `_Please refill stock from Admin Panel immediately!_`;
 
                     const jid = formatJid(notifyPhone);
@@ -544,10 +571,10 @@ async function sendInvalidInputHelp(sock, sender, user) {
     let helpMsg = "⚠️ *Invalid Selection.* ";
     switch (user.step) {
         case "CATEGORY":
-            helpMsg += "Please reply with a *Category Number* from the list above.\n\n🛒 *9* View Cart\n🏠 *0* Main Menu";
+            helpMsg += "Please reply with a *Category Number* from the list above.\n------------------------\n🛒 *9* View Cart\n🏠 *0* Main Menu";
             break;
         case "DISH":
-            helpMsg += "Please reply with an *Item Number* from the list above.\n\n🛒 *9* View Cart\n🔙 *0* Back to Categories";
+            helpMsg += "Please reply with an *Item Number* from the list above.\n------------------------\n🛒 *9* View Cart\n🔙 *0* Back to Categories";
             break;
         case "SIZE":
             helpMsg += "Please select a *Size Number* (1, 2, etc.) from the options above.";
@@ -559,7 +586,7 @@ async function sendInvalidInputHelp(sock, sender, user) {
             helpMsg += "Please enter a quantity between *1* and *50*.";
             break;
         case "LOCATION":
-            helpMsg += "To continue, please share your *Live/Current Location* using the 📎 (Paperclip) or + button in WhatsApp and selecting 'Location'.";
+            helpMsg += "You *must* share your location to proceed.\n\n📍 *How to share:*\n1️⃣ Tap 📎 (Paperclip) or *+* → *Location* → *Send Your Current Location*\n\n⚙️ *If Location option is missing:*\n→ *Settings > Apps > WhatsApp > Permissions > Location* → Allow\n→ Turn ON *GPS/Location Services* in phone settings";
             break;
         case "CONFIRM_PAY":
             helpMsg += "Please reply with *1* to Confirm Order or *2* to Cancel.";
@@ -607,13 +634,13 @@ async function sendCategories(sock, sender, user) {
     const headerEmoji = outlet === 'pizza' ? "🔥" : "✨";
 
     let msg = `✨ *${storeName.toUpperCase()}* ✨\n`;
-    msg += `🍽️ *SELECT CATEGORY - ${outlet.toUpperCase()}*\n\n`;
+    msg += `🍽️ *SELECT CATEGORY - ${outlet.toUpperCase()}*\n`;
 
     user.categoryList.forEach((c, i) => {
         msg += `${i + 1}️⃣  ${c.name}\n`;
     });
 
-    msg += `\n🛒 *9* View Cart\n0️⃣ *Take one step Back* 🔙\n\n`;
+    msg += `🛒 *9* View Cart\n0️⃣ *Take one step Back* 🔙\n`;
     msg += `_Reply with a number to browse_`;
 
     user.step = "CATEGORY";
@@ -623,21 +650,21 @@ async function sendCategories(sock, sender, user) {
 
 async function sendCartView(sock, sender, user, isAdded = false) {
     if (!user.cart || user.cart.length === 0) {
-        let msg = `🛒 *YOUR CART IS EMPTY*\n\n`;
-        msg += `You haven't added anything to your cart yet. 🍕\n\n`;
+        let msg = `🛒 *YOUR CART IS EMPTY*\n`;
+        msg += `You haven't added anything to your cart yet. 🍕\n`;
         msg += `1️⃣  *Browse Menu* 🍽️\n`;
         msg += `🏠 *0* Main Menu`;
         user.step = "EMPTY_CART_VIEW";
         return sock.sendMessage(sender, { text: msg });
     }
     const { lines, subtotal } = formatCartSummary(user.cart);
-    let msg = isAdded ? `✅ *ADDED TO CART!* 🛒\n\n` : `🛒 *YOUR CART SUMMARY*\n\n`;
+    let msg = `${isAdded ? `✅ *ADDED TO CART!* 🛒` : `🛒 *YOUR CART SUMMARY*`}\n`;
     msg += lines;
-    msg += `💰 *Subtotal: ₹${subtotal}*\n\n`;
+    msg += `------------------------\n💰 *Subtotal: ₹${subtotal}*\n`;
     msg += `1️⃣  *Add another item* 🍕\n`;
     msg += `2️⃣  *Proceed to Checkout* 🚀\n`;
     msg += `3️⃣  *Clear Cart* 🗑️\n`;
-    msg += `0️⃣  *Back* 🔙\n\n`;
+    msg += `0️⃣  *Back* 🔙\n`;
     msg += `_Reply with 1, 2, 3 or 0_`;
     user.step = "CART_VIEW";
     return sock.sendMessage(sender, { text: await appendContactInfo(msg, user.outlet) });
@@ -686,8 +713,8 @@ async function notifyAdmin(sock, orderId, order, type = 'NEW') {
             msg = `🛵 *RIDER ARRIVED AT RESTAURANT* 🛵\n━━━━━━━━━━━━━━━━━━━━\n🆔 ID: #${orderId.slice(-5)}\n🛵 Rider: ${riderName}\n━━━━━━━━━━━━━━━━━━━━\n_Hand over the order for pickup._`;
         } else {
             let itemsText = (order.items || []).map(i => `• ${i.name} (${i.size}) x${i.quantity}`).join('\n');
-            let adminMsg = type === 'NEW' ? `🔔 *NEW ORDER RECEIVED!* 🔔\n` : `📦 *ORDER UPDATE* 📦\n`;
-            adminMsg += `\n🆔 ID: #${orderId.slice(-5)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n\n📦 Items:\n${itemsText}\n\n💰 Total: ₹${order.total || 0}\n💳 Method: ${order.paymentMethod}`;
+            let adminMsg = type === 'NEW' ? `🔔 *NEW ORDER RECEIVED!* 🔔\n------------------------\n` : `📦 *ORDER UPDATE* 📦\n------------------------\n`;
+            adminMsg += `🆔 ID: #${orderId.slice(-5)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n------------------------\n📦 Items:\n${itemsText}\n------------------------\n💰 Total: ₹${order.total || 0}\n💳 Method: ${order.paymentMethod}`;
             msg = adminMsg;
         }
 
@@ -781,17 +808,17 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             let img = null;
 
             if (statusLower === "placed") {
-                msg = `🎉 *ORDER PLACED!* 🍕\n━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n\nThank you for your order! 🙏\nWe have received it and our team is reviewing it now. ⏳\n\nYou will receive an update as soon as it's confirmed! ❤️\n${getFoodFunnyProgress("Placed")}`;
+                msg = `🎉 *ORDER PLACED!* ${OUTLET_EMOJI}\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}We've received your order and our team is reviewing it now. ⏳\nYou'll get an update as soon as it's confirmed! ❤️`;
                 img = botSettings.imgPlaced || botSettings.imgConfirmed;
             } else if (statusLower === "confirmed") {
                 if (isDineIn && isNew) {
-                    msg = `🍕 *WELCOME TO ROSHANI ${order.outlet?.toUpperCase() || 'PIZZA'}!* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour counter order has been *CONFIRMED*! 🎊\n\n🆔 *Order ID:* #${id.slice(-5)}\n👤 *Customer:* ${order.customerName || 'Guest'}\n${order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nYour delicious meal is being prepared right now! 👨‍🍳🔥\n\n_Thank you for dining with us!_ 🙏`;
+                    msg = `🍕 *WELCOME TO ROSHANI ${order.outlet?.toUpperCase() || 'PIZZA'}!* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour counter order has been *CONFIRMED*! 🎊\n🆔 *Order ID:* #${id.slice(-5)}\n👤 *Customer:* ${order.customerName || 'Guest'}\n${order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour delicious meal is being prepared right now! 👨‍🍳🔥\n_Thank you for dining with us!_ 🙏`;
                 } else {
-                    msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}\nYour order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")}`;
+                    msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}Your order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")}`;
                 }
                 img = botSettings.imgConfirmed;
             } else if (statusLower === "ready" || statusLower === "packed") {
-                msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${id.slice(-5)} is ready and packed! 🍱\n\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")}`;
+                msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${id.slice(-5)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")}`;
                 img = botSettings.imgReady;
 
                 if (!isDineIn) {
@@ -827,9 +854,9 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 }
 
                 if (isOtpChanged) {
-                    msg = `🔑 *NEW DELIVERY OTP!* 🔄\n━━━━━━━━━━━━━━━━━━━━\nYour previous code is now invalid. Please use the new one below for your delivery #${id.slice(-5)}:\n\n🔑 *NEW OTP:* ${otp}${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n\n_Share this code ONLY with the rider upon arrival._`;
+                    msg = `🔑 *NEW DELIVERY OTP!* 🔄\n━━━━━━━━━━━━━━━━━━━━\nYour previous code is now invalid. Please use the new one below for your delivery #${id.slice(-5)}:\n🔑 *NEW OTP:* ${otp}${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n_Share this code ONLY with the rider upon arrival._`;
                 } else {
-                    msg = `🛵 *OUT FOR DELIVERY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nOur rider is on the way to your location! 🛵💨\n\n🆔 Order: #${id.slice(-5)}\n🔑 *OTP:* ${otp} (Share with rider only)${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n${getFoodFunnyProgress("Out for Delivery")}`;
+                    msg = `🛵 *OUT FOR DELIVERY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nOur rider is on the way to your location! 🛵💨\n🆔 Order: #${id.slice(-5)}\n🔑 *OTP:* ${otp} (Share with rider only)${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n${getFoodFunnyProgress("Out for Delivery")}`;
                 }
                 img = botSettings.imgOut;
             } else if (statusLower === "reached drop location") {
@@ -838,13 +865,13 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     otp = Math.floor(1000 + Math.random() * 9000).toString();
                     await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
-                msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${id.slice(-5)}.\n\n🔑 *OTP:* ${otp} (Please share with rider)\n\nPlease be ready to receive your order. Thank you! 🙏`;
+                msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${id.slice(-5)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nPlease be ready to receive your order. Thank you! 🙏`;
                 img = botSettings.imgOut;
             } else if (statusLower === "delivered" || statusLower === "served") {
-                msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🍕❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n\n${getFunnyFoodJoke()}`;
+                msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🍕❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
                 img = botSettings.imgDelivered;
             } else if (statusLower === "cancelled") {
-                msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nWe're sorry, your order #${id.slice(-5)} has been cancelled.\n\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\n\nIf you have any questions, please contact us. 🙏`;
+                msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nWe're sorry, your order #${id.slice(-5)} has been cancelled.\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nIf you have any questions, please contact us. 🙏`;
             }
 
             const prevStatus = currentProcessedStatus?.status || "None";
@@ -852,7 +879,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
 
             if (msg) {
                 console.log(`[BOT] 📧 Sending ${currentStatus} notification to ${maskJid(jid)}...`);
-                const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'pizza');
+                const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'pizza', true);
 
                 // CRITICAL: Preserve ALL fields in processedStatus to avoid duplicate rider pings on next update
                 await saveProcessedStatus(id, {
@@ -906,6 +933,12 @@ process.on('unhandledRejection', (err) => {
 });
 
 async function startBot() {
+    // Resolve live store name from Firebase (ponytail: hardcoded brand removed —
+    // falls back to "Our Restaurant" if the store name isn't set yet).
+    try {
+        const storeSettings = await getData("settings/Store", OUTLET);
+        if (storeSettings && storeSettings.storeName) OUTLET_NAME = storeSettings.storeName.trim();
+    } catch (_) {}
     console.log(`🚀 Starting ${OUTLET_NAME} WhatsApp Bot (${OUTLET})...`);
 
     // Determine active transport (meta | baileys) — controlled from Supreme Admin
@@ -942,6 +975,34 @@ async function startBot() {
             }
         });
     } else {
+        // Pairing intent from the Supreme dashboard. Two cases:
+        //  - switch to baileys (requested, no rescan): keep the saved session
+        //    if one exists — Baileys reconnects silently, no QR needed.
+        //  - explicit re-pair (rescan): wipe the session dir so a fresh QR
+        //    is emitted.
+        // Must run BEFORE useMultiFileAuthState — wiping after loading state
+        // would leave the old creds in memory and `makeWASocket` would use
+        // them anyway.
+        const pairIntent = await getData('bot/pair', OUTLET);
+        if (pairIntent && pairIntent.requested === true) {
+            const dir = 'session_data_' + OUTLET;
+            if (pairIntent.rescan === true) {
+                try {
+                    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+                    console.log(`[PAIR] re-pair requested — wiped ${dir}, emitting fresh QR`);
+                } catch (err) {
+                    console.error('[PAIR] failed to wipe session dir:', err.message);
+                }
+            } else {
+                const hasSession = fs.existsSync(`${dir}/creds.json`);
+                console.log(`[PAIR] switched to baileys — ${hasSession ? 'reusing saved session (no QR needed)' : 'no saved session, waiting for QR'}`);
+            }
+            await updateData('bot/pair', { requested: false, rescan: false, status: 'waiting', updatedAt: Date.now() }, OUTLET);
+        }
+
+        // useMultiFileAuthState writes creds.json immediately; ensure the dir
+        // exists (rescan wipes it above, and first-time baileys has none).
+        fs.mkdirSync('session_data_' + OUTLET, { recursive: true });
         const { state, saveCreds } = await useMultiFileAuthState('session_data_' + OUTLET);
         const { version } = await fetchLatestBaileysVersion();
 
@@ -970,6 +1031,15 @@ async function startBot() {
             const msgId = result?.key?.id || result?.messages?.[0]?.id || result;
             const cryptoWarn = cryptoErrorCount > 10 ? ` cryptoErrs=${cryptoErrorCount}` : '';
             console.log(`[SEND OK] to ${maskJid(jid)} text="${textPreview}" wsOpen=${sock.ws?.isOpen} msgId=${msgId}${cryptoWarn}`);
+            // G5: Meta messaging quota numerator. Baileys sends don't consume
+            // Cloud API tier, so only meta transport counts. Per-IST-day key,
+            // atomic increment — the quota endpoint sums today's sends.
+            if (isMetaTransport) {
+                const bid = resolveBusinessIdFor(OUTLET);
+                const day = getISTDateInfo().dateStr;
+                const usageRef = db.ref(`businesses/${bid}/outlets/${OUTLET}/whatsapp/usage/${day}`);
+                usageRef.transaction((count) => (count || 0) + 1).catch(() => {});
+            }
             return result;
         } catch (err) {
             console.error(`[SEND ERR] to ${maskJid(jid)} text="${textPreview}":`, err.message || err);
@@ -1142,13 +1212,22 @@ async function sendDailyReportSafely(dateOverride = null) {
         if (isMetaTransport) return; // Meta transport registers its own connection.update handler
         if (sock !== currentSock) return;
         const { connection, lastDisconnect, qr } = update;
-        if (qr) qrcode.generate(qr, { small: true });
+        if (qr) {
+            qrcode.generate(qr, { small: true });
+            // Stream the QR to Firebase so the Supreme Admin dashboard can
+            // render it live (its data-store already subscribes to
+            // businesses/{bid}/outlets/{oid}/bot/*). Writing on every QR
+            // refresh is fine — Baileys re-emits ~every 20-30s while unpaired.
+            updateData('bot/pair', { qr, status: 'waiting', updatedAt: Date.now() }, OUTLET).catch(() => {});
+        }
         if (connection === 'open') {
             initFCMWatcher();
     console.log(`✅ ${OUTLET_NAME.toUpperCase()} BOT IS ONLINE`);
             console.log(`[AUTH] user=${JSON.stringify(sock.user)}`);
             reconnectAttempts = 0;
             cryptoErrorCount = 0;
+            // Pairing complete — drop the QR, mark connected (dashboard closes its QR modal).
+            updateData('bot/pair', { qr: null, status: 'connected', connectedAt: Date.now() }, OUTLET).catch(() => {});
         }
         const DISCONNECT_REASON_NAMES = Object.fromEntries(
             Object.entries(DisconnectReason).map(([name, code]) => [code, name])
@@ -1165,6 +1244,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                 if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; startBot(); }, delay);
             } else {
                 console.log(`❌ Logged out [${reasonName}]. Delete session folder and restart.`);
+                updateData('bot/pair', { qr: null, status: 'logged_out', updatedAt: Date.now() }, OUTLET).catch(() => {});
             }
         }
     });
@@ -1350,7 +1430,7 @@ async function sendDailyReportSafely(dateOverride = null) {
 
                     // Check if shop is open before showing menu
                     if (store && !isShopOpen(store.shopOpenTime, store.shopCloseTime, store.shopStatus)) {
-                        return sock.sendMessage(sender, { text: `🌙 *${OUTLET_NAME.toUpperCase()} IS CLOSED*\n\nHours: ${store.shopOpenTime || 'N/A'} - ${store.shopCloseTime || 'N/A'}\n\nSee you later! 👋` });
+                        return sock.sendMessage(sender, { text: `🌙 *${OUTLET_NAME.toUpperCase()} IS CLOSED*\n------------------------\nHours: ${store.shopOpenTime || 'N/A'} - ${store.shopCloseTime || 'N/A'}\n------------------------\nSee you later! 👋` });
                     }
 
                     // Full flow: greeting + menu image + order button (token reused within 30 min)
@@ -1365,12 +1445,16 @@ async function sendDailyReportSafely(dateOverride = null) {
                 // Every message triggers the full flow (greeting + menu + order button),
                 // reusing this phone's token within 30 min of generation.
                 if (user.step === "WEBVIEW") {
-                    // If they send "track" or "status", check for recent orders
+                    // C4: If they send "track" or "status", check for recent orders
                     if (/^(track|status|where)$/i.test(text)) {
-                        return sock.sendMessage(sender, { text: "📋 Type *status* to check your order status, or tap the order button above to order again." });
+                        return sock.sendMessage(sender, { text: "📋 Type *status* to check your order status, or tap the menu link above to order again." });
                     }
-                    // Full flow every time: greeting + menu image + order button
-                    return sendOrderFlow(sock, sender, pushName, user);
+                    // C3: Menu keywords → resend just the menu CTA
+                    if (/^(order|menu|pizza|cake|food|start|restart)$/i.test(text)) {
+                        return resendMenuCTA(sock, sender, user);
+                    }
+                    // C5: Anything else → nudge + resend the menu CTA
+                    return resendMenuCTA(sock, sender, user, null, null, `💡 *Tap below to browse & order!*`);
                 }
 
 
@@ -1391,8 +1475,8 @@ async function sendDailyReportSafely(dateOverride = null) {
 
                         if (user.dishList.length === 0) return sock.sendMessage(sender, { text: "❌ No items in this category." });
 
-                        let dMsg = `🍽️ *${cat.name.toUpperCase()}*\n\n`;
-                        user.dishList.forEach((d, i) => { dMsg += `${i + 1}️⃣  *${d.name}*\n\n`; });
+                        let dMsg = `🍽️ *${cat.name.toUpperCase()}*\n`;
+                        user.dishList.forEach((d, i) => { dMsg += `${i + 1}️⃣  *${d.name}*\n`; });
                         dMsg += `🛒 *9* View Cart\n0️⃣ *Take one step Back* 🔙`;
                         user.step = "DISH";
                         return await sendImage(sock, sender, cat.image, dMsg);
@@ -1410,9 +1494,9 @@ async function sendDailyReportSafely(dateOverride = null) {
 
                     user.current = { dish };
                     user.sizeList = Object.entries(dish.sizes || { "Regular": dish.price });
-                    let sMsg = `📏 *SELECT SIZE*\n\n`;
+                    let sMsg = `📏 *SELECT SIZE*\n`;
                     user.sizeList.forEach(([s, p], i) => { sMsg += `${i + 1}️⃣  ${s} — ₹${p}\n`; });
-                    sMsg += `\n0️⃣ *Take one step Back* 🔙`;
+                    sMsg += `0️⃣ *Take one step Back* 🔙`;
                     user.step = "SIZE";
                     return await sendImage(sock, sender, dish.image, sMsg);
                 }
@@ -1422,8 +1506,8 @@ async function sendDailyReportSafely(dateOverride = null) {
                         const dishList = user.dishList || [];
                         if (dishList.length === 0) return sendCategories(sock, sender, user);
 
-                        let dMsg = `🍽️ *ITEM SELECTION*\n\n`;
-                        dishList.forEach((d, i) => { dMsg += `${i + 1}️⃣  *${d.name}*\n\n`; });
+                        let dMsg = `🍽️ *${(dishList[0]?.category || "ITEMS").toUpperCase()}*\n`;
+                        dishList.forEach((d, i) => { dMsg += `${i + 1}️⃣  *${d.name}*\n`; });
                         dMsg += `🛒 *9* View Cart\n0️⃣ *Take one step Back* 🔙`;
                         user.step = "DISH";
                         return sock.sendMessage(sender, { text: dMsg });
@@ -1436,8 +1520,8 @@ async function sendDailyReportSafely(dateOverride = null) {
                     user.current.addons = [];
 
                     user.step = "QUANTITY";
-                    let qtyMsg = `🔢 *STEP 4: ENTER QUANTITY* 🍕\n\n`;
-                    qtyMsg += `*How many of this item would you like to order?*\n\n`;
+                    let qtyMsg = `🔢 *STEP 4: ENTER QUANTITY* 🍕\n`;
+                    qtyMsg += `*How many of this item would you like to order?*\n`;
                     qtyMsg += `_Example: Reply with 1, 2, 5, etc._\n`;
                     qtyMsg += `0️⃣ *Take one step Back* 🔙`;
                     return sock.sendMessage(sender, { text: await appendContactInfo(qtyMsg, user.outlet) });
@@ -1448,9 +1532,9 @@ async function sendDailyReportSafely(dateOverride = null) {
                     if (text === "0") {
                         const dish = user.current.dish;
                         user.sizeList = Object.entries(dish.sizes || { "Regular": dish.price });
-                        let sMsg = `📏 *SELECT SIZE*\n\n`;
+                        let sMsg = `📏 *SELECT SIZE*\n`;
                         user.sizeList.forEach(([s, p], i) => { sMsg += `${i + 1}️⃣  ${s} — ₹${p}\n`; });
-                        sMsg += `\n0️⃣ *Take one step Back* 🔙`;
+                        sMsg += `0️⃣ *Take one step Back* 🔙`;
                         user.step = "SIZE";
                         return sock.sendMessage(sender, { text: sMsg });
                     }
@@ -1478,9 +1562,9 @@ async function sendDailyReportSafely(dateOverride = null) {
                         // Back to SIZE selection for the current dish
                         const dish = user.current.dish;
                         user.sizeList = Object.entries(dish.sizes || { "Regular": dish.price });
-                        let sMsg = `📏 *SELECT SIZE*\n\n`;
+                        let sMsg = `📏 *SELECT SIZE*\n`;
                         user.sizeList.forEach(([s, p], i) => { sMsg += `${i + 1}️⃣  ${s} — ₹${p}\n`; });
-                        sMsg += `\n0️⃣ *Take one step Back* 🔙`;
+                        sMsg += `0️⃣ *Take one step Back* 🔙`;
                         user.step = "SIZE";
                         return await sendImage(sock, sender, dish.image, sMsg);
                     }
@@ -1498,9 +1582,9 @@ async function sendDailyReportSafely(dateOverride = null) {
                     if (text === "2") {
                         // New: optional coupon step
                         user.step = "AWAIT_COUPON";
-                        let couponMsg = `🎟️ *HAVE A COUPON CODE?* 🎟️\n\n`;
+                        let couponMsg = `🎟️ *HAVE A COUPON CODE?* 🎟️\n`;
                         couponMsg += `If you have a discount code, reply with it now.\n`;
-                        couponMsg += `Otherwise, reply *0* to skip and continue to checkout.\n\n`;
+                        couponMsg += `Otherwise, reply *0* to skip and continue to checkout.\n`;
                         couponMsg += `0️⃣ *Skip — continue to checkout*`;
                         return sock.sendMessage(sender, { text: await appendContactInfo(couponMsg, user.outlet) });
                     }
@@ -1519,18 +1603,18 @@ async function sendDailyReportSafely(dateOverride = null) {
                         // Skip coupon; go to REUSE_PROFILE or NAME
                         if (user.profile && user.profile.name) {
                             user.step = "REUSE_PROFILE";
-                            let profileMsg = `👤 *REUSE YOUR SAVED DETAILS?*\n\n`;
+                            let profileMsg = `👤 *REUSE YOUR SAVED DETAILS?*\n`;
                             profileMsg += `Name: ${user.profile.name}\n`;
                             profileMsg += `Phone: ${user.profile.phone}\n`;
-                            profileMsg += `Address: ${user.profile.address || "N/A"}\n\n`;
+                            profileMsg += `Address: ${user.profile.address || "N/A"}\n`;
                             profileMsg += `1️⃣ Yes, use these details\n`;
                             profileMsg += `2️⃣ No, enter new details\n`;
                             profileMsg += `0️⃣ *Take one step Back* 🔙`;
                             return sock.sendMessage(sender, { text: await appendContactInfo(profileMsg, user.outlet) });
                         }
                         user.step = "NAME";
-                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n\n`;
-                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n\n`;
+                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n`;
+                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n`;
                         nameMsg += `_Example: Rajesh Kumar_\n`;
                         nameMsg += `0️⃣ *Take one step Back* 🔙`;
                         return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
@@ -1565,18 +1649,18 @@ async function sendDailyReportSafely(dateOverride = null) {
                     // Proceed to REUSE_PROFILE or NAME
                     if (user.profile && user.profile.name) {
                         user.step = "REUSE_PROFILE";
-                        let profileMsg = `👤 *REUSE YOUR SAVED DETAILS?*\n\n`;
+                        let profileMsg = `👤 *REUSE YOUR SAVED DETAILS?*\n`;
                         profileMsg += `Name: ${user.profile.name}\n`;
                         profileMsg += `Phone: ${user.profile.phone}\n`;
-                        profileMsg += `Address: ${user.profile.address || "N/A"}\n\n`;
+                        profileMsg += `Address: ${user.profile.address || "N/A"}\n`;
                         profileMsg += `1️⃣ Yes, use these details\n`;
                         profileMsg += `2️⃣ No, enter new details\n`;
                         profileMsg += `0️⃣ *Take one step Back* 🔙`;
                         return sock.sendMessage(sender, { text: await appendContactInfo(profileMsg, user.outlet) });
                     }
                     user.step = "NAME";
-                    let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n\n`;
-                    nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n\n`;
+                    let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n`;
+                    nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n`;
                     nameMsg += `_Example: Rajesh Kumar_\n`;
                     nameMsg += `0️⃣ *Take one step Back* 🔙`;
                     return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
@@ -1591,19 +1675,25 @@ async function sendDailyReportSafely(dateOverride = null) {
                         // Note: We intentionally DO NOT reuse user.location here as per request
 
                         user.step = "LOCATION";
-                        let locMsg = `📍 *SHARE YOUR LOCATION* 🌍\n\n`;
-                        locMsg += `Please share your *Live* or *Current* Location so we can calculate the delivery fee.\n\n`;
+                        let locMsg = `📍 *SHARE YOUR LOCATION* 🌍\n`;
+                        locMsg += `Please share your *Live* or *Current* Location so we can calculate the delivery fee.\n`;
                         locMsg += `*How to share:*\n`;
-                        locMsg += `1️⃣ Click the 📎 (Paperclip) or *+* button in WhatsApp\n`;
-                        locMsg += `2️⃣ Select 'Location'\n`;
-                        locMsg += `3️⃣ Choose 'Send Your Current Location'\n\n`;
-                        locMsg += `_This step is mandatory for delivery calculation._`;
+                        locMsg += `1️⃣ Tap the 📎 (Paperclip) or *+* button in WhatsApp\n`;
+                        locMsg += `2️⃣ Tap *Location*\n`;
+                        locMsg += `3️⃣ Tap *Send Your Current Location*\n`;
+                        locMsg += `------------------------\n`;
+                        locMsg += `⚙️ *Location option missing?*\n`;
+                        locMsg += `→ *Settings > Apps > WhatsApp > Permissions > Location* → Allow\n`;
+                        locMsg += `→ Also turn ON *GPS/Location Services* in phone settings\n`;
+                        locMsg += `------------------------\n`;
+                        locMsg += `⚠️ *Order cannot be placed without location.*\n`;
+                        locMsg += `0️⃣ *Take one step Back* 🔙`;
                         return sock.sendMessage(sender, { text: await appendContactInfo(locMsg, user.outlet) });
                     }
                     if (text === "2") {
                         user.step = "NAME";
-                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n\n`;
-                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n\n`;
+                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n`;
+                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n`;
                         nameMsg += `_Example: Rajesh Kumar_\n`;
                         nameMsg += `0️⃣ *Take one step Back* 🔙`;
                         return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
@@ -1624,14 +1714,14 @@ async function sendDailyReportSafely(dateOverride = null) {
                     if (user.name) {
                         saveUserProfile(sender, { name: user.name, phone: user.phone || "", address: user.address || "" }, user.outlet || OUTLET).catch(() => {});
                     }
-                    return sock.sendMessage(sender, { text: await appendContactInfo("📞 *STEP 2: ENTER YOUR 10 DIGIT MOBILE NUMBER*\n\n_Example: 9876543210. We will use this to contact you regarding your order._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
+                    return sock.sendMessage(sender, { text: await appendContactInfo("📞 *STEP 2: ENTER YOUR 10 DIGIT MOBILE NUMBER*\n_Example: 9876543210. We will use this to contact you regarding your order._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
                 }
 
                 if (user.step === "PHONE") {
                     if (text === "0") {
                         user.step = "NAME";
-                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n\n`;
-                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n\n`;
+                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n`;
+                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n`;
                         nameMsg += `_Example: Rajesh Kumar_\n`;
                         nameMsg += `0️⃣ *Take one step Back* 🔙`;
                         return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
@@ -1639,24 +1729,29 @@ async function sendDailyReportSafely(dateOverride = null) {
                     user.phone = text;
                     saveUserProfile(sender, { name: user.name || "", phone: user.phone }, user.outlet || OUTLET).catch(() => {});
                     user.step = "ADDRESS";
-                    return sock.sendMessage(sender, { text: await appendContactInfo("🏠 *STEP 3: ENTER YOUR DELIVERY ADDRESS*\n\n_Please provide your complete address including landmark, house number, etc._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
+                    return sock.sendMessage(sender, { text: await appendContactInfo("🏠 *STEP 3: ENTER YOUR DELIVERY ADDRESS*\n_Please provide your complete address including landmark, house number, etc._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
                 }
 
                 if (user.step === "ADDRESS") {
                     if (text === "0") {
                         user.step = "PHONE";
-                        return sock.sendMessage(sender, { text: await appendContactInfo("📞 *STEP 2: ENTER YOUR 10 DIGIT MOBILE NUMBER*\n\n_Example: 9876543210. We will use this to contact you regarding your order._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
+                        return sock.sendMessage(sender, { text: await appendContactInfo("📞 *STEP 2: ENTER YOUR 10 DIGIT MOBILE NUMBER*\n_Example: 9876543210. We will use this to contact you regarding your order._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
                     }
                     user.address = text;
                     saveUserProfile(sender, { name: user.name || "", phone: user.phone || "", address: user.address }, user.outlet || OUTLET).catch(() => {});
                     user.step = "LOCATION";
-                    let locMsg = `📍 *SHARE YOUR LOCATION* 🌍\n\n`;
-                    locMsg += `Please share your *Live* or *Current* Location so we can calculate the delivery fee.\n\n`;
+                    let locMsg = `📍 *SHARE YOUR LOCATION* 🌍\n`;
+                    locMsg += `Please share your *Live* or *Current* Location so we can calculate the delivery fee.\n`;
                     locMsg += `*How to share:*\n`;
-                    locMsg += `1️⃣ Click the 📎 (Paperclip) or *+* button in WhatsApp\n`;
-                    locMsg += `2️⃣ Select 'Location'\n`;
-                    locMsg += `3️⃣ Choose 'Send Your Current Location'\n\n`;
-                    locMsg += `_This step is mandatory for delivery calculation._\n`;
+                    locMsg += `1️⃣ Tap the 📎 (Paperclip) or *+* button in WhatsApp\n`;
+                    locMsg += `2️⃣ Tap *Location*\n`;
+                    locMsg += `3️⃣ Tap *Send Your Current Location*\n`;
+                    locMsg += `------------------------\n`;
+                    locMsg += `⚙️ *Location option missing?*\n`;
+                    locMsg += `→ *Settings > Apps > WhatsApp > Permissions > Location* → Allow\n`;
+                    locMsg += `→ Also turn ON *GPS/Location Services* in phone settings\n`;
+                    locMsg += `------------------------\n`;
+                    locMsg += `⚠️ *Order cannot be placed without location.*\n`;
                     locMsg += `0️⃣ *Take one step Back* 🔙`;
                     return sock.sendMessage(sender, { text: await appendContactInfo(locMsg, user.outlet) });
                 }
@@ -1664,11 +1759,12 @@ async function sendDailyReportSafely(dateOverride = null) {
                 if (user.step === "LOCATION") {
                     if (text === "0") {
                         user.step = "ADDRESS";
-                        return sock.sendMessage(sender, { text: await appendContactInfo("🏠 *STEP 3: ENTER YOUR DELIVERY ADDRESS*\n\n_Please provide your complete address including landmark, house number, etc._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
+                        return sock.sendMessage(sender, { text: await appendContactInfo("🏠 *STEP 3: ENTER YOUR DELIVERY ADDRESS*\n_Please provide your complete address including landmark, house number, etc._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
                     }
                     const loc = msg.message?.locationMessage;
-                    if (!loc) return sendInvalidInputHelp(sock, sender, user);
-
+                    if (!loc) {
+                        return sock.sendMessage(sender, { text: await appendContactInfo("❌ *LOCATION REQUIRED — Cannot proceed without it!*\n\n📍 Please share your location using the steps below:\n\n1️⃣ Tap the 📎 (Paperclip) or *+* button\n2️⃣ Tap *Location*\n3️⃣ Tap *Send Your Current Location*\n\n⚙️ *If Location option is missing:*\n→ Go to your phone *Settings > Apps > WhatsApp > Permissions*\n→ Set *Location* to *Allow*\n→ Also enable *GPS/Location Services* in your phone settings\n\n🔄 Try again after enabling — we cannot deliver without your location.\n0️⃣ *Take one step Back* 🔙", user.outlet) });
+                    }
                     user.location = { lat: loc.degreesLatitude, lng: loc.degreesLongitude };
                     saveUserProfile(sender, { name: user.name || "", phone: user.phone || "", address: user.address || "", location: user.location }, user.outlet || OUTLET).catch(() => {});
                     return handleCheckoutFinal(sock, sender, user);
@@ -1760,6 +1856,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                             address: user.address,
                             lat: user.location.lat, lng: user.location.lng,
                             subtotal, deliveryFee, total: subtotal + deliveryFee - (user.discount || 0),
+                            distanceKm: user.distanceKm,
                             status: "Placed", paymentMethod: method, paymentStatus: "Pending",
                             createdAt: new Date().toISOString(),
                             assignedRider: "",
@@ -1781,10 +1878,10 @@ async function sendDailyReportSafely(dateOverride = null) {
                         // Send confirmation to user IMMEDIATELY (fastest possible response)
                         let successMsg = `🎉 *ORDER PLACED SUCCESSFULLY!* 🎉\n`;
                         successMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                        successMsg += `🆔 *Order ID:* #${orderId.slice(-5)}\n`;
+                        successMsg += `🆔 *Order ID:* #${finalOrder.orderId.slice(-5)}\n`;
                         successMsg += `🏪 *Shop:* ${OUTLET_NAME}\n`;
                         successMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                        successMsg += `*Please wait while the admin confirms your order!* ⏳\n\n`;
+                        successMsg += `*Please wait while the admin confirms your order!* ⏳\n`;
                         successMsg += `Total: ₹${finalOrder.total}`;
                         await sock.sendMessage(sender, { text: await appendContactInfo(successMsg, user.outlet) });
 
@@ -1883,9 +1980,14 @@ async function handleCheckoutFinal(sock, sender, user) {
             lng: parseFloat(storeSettings?.lng || (user.outlet === 'cake' ? 85.026861 : 85.026194))
         };
 
-        const dist = calculateDistance(user.location.lat, user.location.lng, outletCoords.lat, outletCoords.lng);
-        const fee = getFeeFromSlabs(dist, delSettings.slabs || []);
+        let dist = 0;
+        let fee = 0;
+        if (user.location) {
+            dist = calculateDistance(user.location.lat, user.location.lng, outletCoords.lat, outletCoords.lng);
+            fee = getFeeFromSlabs(dist, delSettings.slabs || []);
+        }
 
+        user.distanceKm = dist;
         user.deliveryFee = fee;
         const { lines, subtotal } = formatCartSummary(user.cart);
 
@@ -1929,11 +2031,12 @@ async function handleCheckoutFinal(sock, sender, user) {
         sum += `💰 Subtotal: ₹${subtotal}\n`;
         sum += `🚚 Delivery (${dist.toFixed(1)}km): ₹${fee}\n`;
         if (user.discount) {
-            const discLabel = user.discountLabel ? ` (${user.discountLabel})` : '';
-            const pctInfo = user.discountMode === 'percent' ? ` ${user.discountValue}% off` : '';
-            sum += `🎁 Discount${discLabel}${pctInfo}: -₹${user.discount}\n`;
+            const discLabel = user.discountMode === 'percent' && user.discountValue
+                ? `${user.discountLabel || ''} ${user.discountValue}% off`.trim()
+                : user.discountLabel || '';
+            sum += `🎁 Discount (${discLabel}): -₹${user.discount}\n`;
         }
-        sum += `💵 *TOTAL: ₹${subtotal + fee - (user.discount || 0)}*\n\n`;
+        sum += `💵 *TOTAL: ₹${subtotal + fee - (user.discount || 0)}*\n`;
         sum += `1️⃣ Confirm Order\n`;
         sum += `2️⃣ Cancel\n`;
         sum += `0️⃣ *Take one step Back* 🔙`;

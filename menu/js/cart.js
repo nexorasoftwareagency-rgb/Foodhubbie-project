@@ -10,7 +10,7 @@
  * refresh does not lose the user's lineup.
  */
 
-const STORAGE_KEY = 'roshani_cart';
+const STORAGE_KEY = 'foodhubbie_cart';
 
 function persistCart() {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(Cart.lines)); } catch (e) { console.warn('[Cart] Storage error:', e); }

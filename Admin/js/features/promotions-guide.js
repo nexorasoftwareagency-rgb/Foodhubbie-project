@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | PROMOTIONS GUIDE
+ * FoodHubbie ERP | PROMOTIONS GUIDE
  * Renders a 6-step "How to use" article inside the guide modal.
  */
 

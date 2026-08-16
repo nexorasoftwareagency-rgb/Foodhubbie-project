@@ -56,12 +56,12 @@ async function sendDailyReport(sock, ctx, targetDate = null) {
         const displayDate = new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
         const nowIST = getISTDateInfo().istObject;
 
-        const msg = `📊 *${OUTLET_NAME.toUpperCase()} — DAILY SALES REPORT* ${OUTLET_EMOJI}\n\n` +
+        const msg = `📊 *${OUTLET_NAME.toUpperCase()} — DAILY SALES REPORT* ${OUTLET_EMOJI}\n------------------------\n` +
             `📅 Sales Date: *${displayDate}*\n` +
-            `⏰ Generated: ${nowIST.getUTCHours().toString().padStart(2, '0')}:${nowIST.getUTCMinutes().toString().padStart(2, '0')} IST\n\n` +
+            `⏰ Generated: ${nowIST.getUTCHours().toString().padStart(2, '0')}:${nowIST.getUTCMinutes().toString().padStart(2, '0')} IST\n------------------------\n` +
             (reportDetails || "_No sales recorded for this date._\n") +
-            `\n💵 *TOTAL REVENUE:* ₹${totalRevenue.toLocaleString()}\n` +
-            `📦 *TOTAL ORDERS:* ${totalOrders}\n\n` +
+            `\n------------------------\n💵 *TOTAL REVENUE:* ₹${totalRevenue.toLocaleString()}\n` +
+            `📦 *TOTAL ORDERS:* ${totalOrders}\n------------------------\n` +
             `_Sent automatically by ${OUTLET_NAME} Bot_`;
 
         await Promise.allSettled(jids.map(jid => sock.sendMessage(jid, { text: msg })));
@@ -108,11 +108,11 @@ async function sendMonthlyReport(sock, ctx) {
 
         const jids = await getCachedAdminJids();
 
-        const msg = `📈 *${OUTLET_NAME.toUpperCase()} — MONTHLY SALES REPORT* ${OUTLET_EMOJI}\n\n` +
-            `📅 Month: ${now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}\n\n` +
+        const msg = `📈 *${OUTLET_NAME.toUpperCase()} — MONTHLY SALES REPORT* ${OUTLET_EMOJI}\n------------------------\n` +
+            `📅 Month: ${now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}\n------------------------\n` +
             reportDetails +
-            `\n\n💵 *MONTHLY TOTAL:* ₹${totalRevenue.toLocaleString()}\n` +
-            `📦 *TOTAL ORDERS:* ${totalOrders}\n\n` +
+            `\n------------------------\n💵 *MONTHLY TOTAL:* ₹${totalRevenue.toLocaleString()}\n` +
+            `📦 *TOTAL ORDERS:* ${totalOrders}\n------------------------\n` +
             `_Sent automatically by ${OUTLET_NAME} Bot_`;
 
         await Promise.allSettled(jids.map(jid => sock.sendMessage(jid, { text: msg })));
@@ -161,11 +161,11 @@ async function sendWeeklyReport(sock, ctx) {
 
         const jids = await getCachedAdminJids();
 
-        const msg = `📊 *${OUTLET_NAME.toUpperCase()} — WEEKLY SALES REPORT* ${OUTLET_EMOJI}\n\n` +
-            `📅 Week: ${startOfWeek.toLocaleDateString('en-IN')} - ${now.toLocaleDateString('en-IN')}\n\n` +
+        const msg = `📊 *${OUTLET_NAME.toUpperCase()} — WEEKLY SALES REPORT* ${OUTLET_EMOJI}\n------------------------\n` +
+            `📅 Week: ${startOfWeek.toLocaleDateString('en-IN')} - ${now.toLocaleDateString('en-IN')}\n------------------------\n` +
             reportDetails +
-            `\n\n💵 *WEEKLY TOTAL:* ₹${totalRevenue.toLocaleString()}\n` +
-            `📦 *TOTAL ORDERS:* ${totalOrders}\n\n` +
+            `\n------------------------\n💵 *WEEKLY TOTAL:* ₹${totalRevenue.toLocaleString()}\n` +
+            `📦 *TOTAL ORDERS:* ${totalOrders}\n------------------------\n` +
             `_Sent automatically by ${OUTLET_NAME} Bot_`;
 
         await Promise.allSettled(jids.map(jid => sock.sendMessage(jid, { text: msg })));
