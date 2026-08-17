@@ -1,5 +1,6 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const express = require('express');
+const crypto = require('crypto');
 const admin = require('firebase-admin');
 const { createClient } = require('redis');
 const path = require('path');
@@ -12,6 +13,13 @@ if (!admin.apps.length) {
     credential: admin.credential.cert(require(serviceAccountPath)),
     databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://foodhubbie-10-default-rtdb.firebaseio.com'
   });
+}
+
+// Single shared Redis client — creating one per webhook was churning connections
+const redis = process.env.REDIS_URL ? createClient({ url: process.env.REDIS_URL }) : null;
+if (redis) {
+  redis.on('error', (err) => console.error('[REDIS]', err.message));
+  redis.connect().catch((err) => console.error('[REDIS] connect failed:', err.message));
 }
 
 const app = express();
@@ -52,9 +60,27 @@ app.get('/webhook', (req, res) => {
   res.sendStatus(403);
 });
 
-app.post('/webhook', express.json(), async (req, res) => {
+app.post('/webhook', express.json({
+  verify: (req, res, buf) => { req.rawBody = buf; }
+}), async (req, res) => {
   res.sendStatus(200);
   try {
+    const appSecret = process.env.META_APP_SECRET;
+    if (appSecret) {
+      const signature = req.headers['x-hub-signature-256'];
+      const expected = 'sha256=' + crypto
+        .createHmac('sha256', appSecret)
+        .update(req.rawBody || '')
+        .digest('hex');
+      const a = Buffer.from(expected);
+      const b = Buffer.from(signature || '');
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        console.warn('[WEBHOOK] Rejected request with invalid X-Hub-Signature-256');
+        return;
+      }
+    } else {
+      console.warn('[WEBHOOK] META_APP_SECRET not set — signature verification disabled');
+    }
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0]?.value;
     if (change?.statuses) {
@@ -73,14 +99,15 @@ app.post('/webhook', express.json(), async (req, res) => {
       return;
     }
 
-    const redis = createClient({ url: process.env.REDIS_URL });
-    await redis.connect();
-    await redis.publish(
-      `bot-inbox:${routing.businessId}:${routing.outletId}`,
-      JSON.stringify(message)
-    );
-    await redis.quit();
-    console.log(`Routed message to bot-inbox:${routing.businessId}:${routing.outletId}`);
+    if (redis) {
+      await redis.publish(
+        `bot-inbox:${routing.businessId}:${routing.outletId}`,
+        JSON.stringify(message)
+      );
+      console.log(`Routed message to bot-inbox:${routing.businessId}:${routing.outletId}`);
+    } else {
+      console.warn('Redis not configured — message dropped:', JSON.stringify(message));
+    }
   } catch (err) {
     console.error('Webhook processing error:', err);
   }

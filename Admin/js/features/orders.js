@@ -1066,12 +1066,12 @@ export async function updateStatus(id, status) {
                 const storeSettings = storeSnap.val() || {};
 
                 const outletCoords = {
-                    lat: parseFloat(storeSettings.lat || (outletKey === 'cake' ? 25.887472 : 25.887944)),
-                    lng: parseFloat(storeSettings.lng || (outletKey === 'cake' ? 85.026861 : 85.026194))
+                    lat: parseFloat(storeSettings.lat || 0),
+                    lng: parseFloat(storeSettings.lng || 0)
                 };
 
-                const dist = calculateDistance(lat, lng, outletCoords.lat, outletCoords.lng);
-                const fee = getFeeFromSlabs(dist, delSettings.slabs || []);
+                const dist = outletCoords.lat && outletCoords.lng ? calculateDistance(lat, lng, outletCoords.lat, outletCoords.lng) : 0;
+                const fee = dist > 0 ? getFeeFromSlabs(dist, delSettings.slabs || []) : 0;
                 
                 const subtotal = parseFloat(order.subtotal || order.itemTotal || 0);
                 updates.deliveryFee = fee;
