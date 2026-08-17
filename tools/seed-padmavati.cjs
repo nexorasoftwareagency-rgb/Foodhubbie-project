@@ -28,6 +28,7 @@ async function main() {
     contactPhone: '+919999999999',
     createdAt: now,
     whatsapp: { status: 'pending' },
+    adminLogin: { email: 'padmavati@example.com' },
     settings: {
       Store: { storeName: 'Padmavati Restaurant' },
       Delivery: { enabled: true },
