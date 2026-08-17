@@ -8,7 +8,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 // OUTLET CONFIGURATION (UNIFIED CORE)
 // =============================
 const OUTLET = (process.env.OUTLET || 'pizza').trim();
-let OUTLET_NAME = OUTLET === 'pizza' ? 'Our Restaurant' : 'Our Restaurant';
+let OUTLET_NAME = 'Our Restaurant';
 const OUTLET_EMOJI = OUTLET === 'pizza' ? '🍕' : '🎂';
 let OTHER_OUTLET_NAME = 'Our Other Store';
 const OTHER_OUTLET_EMOJI = OUTLET === 'pizza' ? '🎂' : '🍕';
@@ -108,9 +108,10 @@ let currentSock = null;
 // HEALTH CHECK ENDPOINT
 // =============================
 const http = require('http');
-const HEALTH_PORT = process.env.HEALTH_PORT || (OUTLET === 'pizza' ? 3001 : 3002);
+// port 0 → OS-assigned free port; provision always passes HEALTH_PORT explicitly
+const HEALTH_PORT = Number(process.env.HEALTH_PORT) || 0;
 
-http.createServer((req, res) => {
+const healthSrv = http.createServer((req, res) => {
     if (req.url !== '/health') { res.writeHead(404); return res.end(); }
     const isConnected = currentSock && !isSocketDead(currentSock);
     const body = JSON.stringify({
@@ -123,7 +124,8 @@ http.createServer((req, res) => {
     });
     res.writeHead(isConnected ? 200 : 503, { 'Content-Type': 'application/json' });
     res.end(body);
-}).listen(HEALTH_PORT, () => console.log(`🩺 Health check listening on :${HEALTH_PORT}/health`));
+});
+healthSrv.listen(HEALTH_PORT, () => console.log(`🩺 Health check listening on :${healthSrv.address().port}/health`));
 
 let firebaseListenersInitialized = false;
 
@@ -629,7 +631,7 @@ async function sendCategories(sock, sender, user) {
 
     user.categoryList = Object.entries(categories).map(([id, val]) => ({ id, ...val }));
 
-    const storeName = storeSettings.storeName || (outlet === 'pizza' ? "Roshani Pizza" : "Roshani Cake");
+    const storeName = storeSettings.storeName || 'Our Restaurant';
     const emoji = outlet === 'pizza' ? "🍕" : "🎂";
     const headerEmoji = outlet === 'pizza' ? "🔥" : "✨";
 
@@ -1976,13 +1978,13 @@ async function handleCheckoutFinal(sock, sender, user) {
         ]);
 
         const outletCoords = {
-            lat: parseFloat(storeSettings?.lat || (user.outlet === 'cake' ? 25.887472 : 25.887944)),
-            lng: parseFloat(storeSettings?.lng || (user.outlet === 'cake' ? 85.026861 : 85.026194))
+            lat: parseFloat(storeSettings?.lat || 0),
+            lng: parseFloat(storeSettings?.lng || 0)
         };
 
         let dist = 0;
         let fee = 0;
-        if (user.location) {
+        if (user.location && outletCoords.lat && outletCoords.lng) {
             dist = calculateDistance(user.location.lat, user.location.lng, outletCoords.lat, outletCoords.lng);
             fee = getFeeFromSlabs(dist, delSettings.slabs || []);
         }

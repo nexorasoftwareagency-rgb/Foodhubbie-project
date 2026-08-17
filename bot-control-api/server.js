@@ -24,6 +24,7 @@ const path = require('path');
 const waGraph = require('./whatsapp-graph');
 const { pm2, connectOnce } = require('./pm2-client');
 const { startStatusWatcher } = require('./status-watcher');
+const { startOrchestrator } = require('./orchestrator');
 
 const PORT = process.env.BOT_CONTROL_PORT || 4000;
 
@@ -698,4 +699,8 @@ app.listen(PORT, () => console.log(`Bot Control API listening on :${PORT}`));
 
 startStatusWatcher({ admin, processName, statusOf }).catch((err) => {
   console.error('Status watcher failed to start — bot status will not be real-time until this is fixed', err);
+});
+
+startOrchestrator({ admin, processName, nextHealthPort }).catch((err) => {
+  console.error('Orchestrator failed to start — bots will not auto-start on WhatsApp link until this is fixed', err);
 });

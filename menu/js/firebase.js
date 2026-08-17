@@ -56,6 +56,10 @@ export function isConnected() {
 // ---------------------------------------------------------------
 const pathParts = window.location.pathname.split('/').filter(Boolean);
 export const OUTLET = new URLSearchParams(window.location.search).get('o') || pathParts[0] || 'pizza';
+// ponytail: legacy fallback for the 2 original restaurants only — new outlets
+// must arrive with `?b=` on the link (bot webview links always carry it). Keep
+// in sync with bot/helpers/outlet-resolution.js. Served statically (no build),
+// so this can't import shared/ — same pattern as menu/js/geo.js.
 const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
 export const BUSINESS_ID = new URLSearchParams(window.location.search).get('b') || BUSINESS_BY_OUTLET[OUTLET] || 'roshani-pizza';
 

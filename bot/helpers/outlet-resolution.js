@@ -15,6 +15,9 @@
 'use strict';
 
 // Two restaurants = two businesses, each with one outlet.
+// ponytail: legacy fallback for the 2 original restaurants only — provision
+// always sets BUSINESS_ID/OUTLET_ID env for new outlets (see resolveBusinessIdFor
+// below). Keep in sync with menu/js/firebase.js; new outlets must pass env/`?b=`.
 const DEFAULT_BUSINESS_ID = 'roshani-pizza';
 const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
 
