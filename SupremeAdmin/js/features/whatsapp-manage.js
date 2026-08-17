@@ -58,7 +58,8 @@ function renderBody(connected, readOnly) {
         ${wa.verifiedName ? `<div>Verified name: ${escapeHtml(wa.verifiedName)}</div>` : ''}
         <div>Phone number ID: <span class="mono">${escapeHtml(wa.phoneNumberId || '—')}</span></div>
         ${wa.wabaId ? `<div>WABA ID: <span class="mono">${escapeHtml(wa.wabaId)}</span></div>` : ''}
-      </div>`;
+      </div>
+      ${renderCoexistence(wa, readOnly)}`;
   }
 
   if (readOnly) {
@@ -144,6 +145,55 @@ function renderActions() {
   return `<button class="btn btn-ghost btn-sm" data-action="wa-reset">Back</button>`;
 }
 
+// Coexistence (Business App + Cloud API on the same number). Meta-side
+// onboarding — we can only detect (webhook origin.type) and guide. No toggle.
+function renderCoexistence(wa, readOnly) {
+  const co = wa.coexistence || {};
+  const detected = co.mode === 'business_app' || co.mode === 'update';
+  const enabled = detected || !!co.enabledAt;
+
+  const pill = enabled
+    ? `<span class="status-pill online"><span class="static-dot"></span>Business App mirroring is ON</span>`
+    : `<span class="status-pill unknown"><span class="static-dot"></span>Business App mirroring is OFF</span>`;
+
+  let body = '';
+  if (enabled) {
+    body = `
+      <div style="margin-top:10px;font-size:12px;color:var(--text-secondary);line-height:1.7">
+        Staff can see and reply to bot chats from the WhatsApp Business App on their phone.
+        ${detected ? 'Detected automatically via message mirroring.' : 'Marked enabled — the bot confirms automatically once mirrored messages arrive.'}
+        <div style="margin-top:6px;opacity:.85">While mirroring is on, disappearing messages / view-once / live-location are disabled in the app.</div>
+      </div>`;
+  } else if (!readOnly) {
+    const steps = state.coexOpen ? `
+      <div style="margin-top:10px;border-top:1px solid var(--glass-border);padding-top:10px;font-size:13px;line-height:1.9">
+        <div style="font-weight:600;margin-bottom:4px">Enable in 3 taps (on the owner's device):</div>
+        <div>1. Tap <a href="https://business.facebook.com/wa-manager/" target="_blank" rel="noopener">WhatsApp Manager</a> and open this number.</div>
+        <div>2. Scan the QR with the restaurant's WhatsApp Business App (v2.24.17+).</div>
+        <div>3. Confirm chat-history consent.</div>
+        ${state.coexBusy
+          ? `<div style="color:var(--text-secondary);margin-top:10px;font-size:13px">${escapeHtml(state.coexBusy)}</div>`
+          : `<div style="margin-top:10px;display:flex;gap:8px">
+              <button class="btn btn-primary btn-sm" data-action="wa-coex-enable">I've enabled it</button>
+              <button class="btn btn-ghost btn-sm" data-action="wa-coex-toggle">Cancel</button>
+            </div>`}
+        ${state.coexErr ? `<div style="color:var(--status-offline,#f87171);margin-top:8px;font-size:12px">${escapeHtml(state.coexErr)}</div>` : ''}
+        <div style="margin-top:8px;font-size:12px;color:var(--text-secondary)">While mirroring is on, disappearing messages / view-once / live-location are disabled in the app.</div>
+      </div>` : '';
+    body = `
+      <div style="margin-top:10px">
+        <button class="btn btn-ghost btn-sm" data-action="wa-coex-toggle">${state.coexOpen ? 'Close' : 'Enable'}</button>
+      </div>
+      ${steps}`;
+  }
+  if (!body) return '';
+  return `
+    <div style="margin-top:14px;border-top:1px solid var(--glass-border);padding-top:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">${pill}</div>
+      ${body}
+    </div>`;
+}
+
 function setState(patch, rerender = true) {
   state = { ...state, ...patch };
   if (rerender) render();
@@ -160,7 +210,7 @@ export function mount(bid, oid, wa) {
     render();
     return;
   }
-  state = { bid, oid, wa, connected, step: null, wabas: null, numbers: null, addForm: false, busy: null, err: null };
+  state = { bid, oid, wa, connected, step: null, wabas: null, numbers: null, addForm: false, busy: null, err: null, coexOpen: false, coexBusy: null, coexErr: null };
   render();
 }
 
@@ -289,7 +339,26 @@ export function registerActions() {
   });
 
   registerAction('wa-reset', () => {
-    setState({ step: null, wabas: null, numbers: null, addForm: false, busy: null, err: null });
+    setState({ step: null, wabas: null, numbers: null, addForm: false, busy: null, err: null, coexOpen: false, coexBusy: null, coexErr: null });
+  });
+
+  registerAction('wa-coex-toggle', () => {
+    setState({ coexOpen: !s().coexOpen, coexErr: null });
+  });
+
+  registerAction('wa-coex-enable', async () => {
+    const o = s();
+    setState({ coexBusy: 'Recording…' });
+    try {
+      const uid = firebase.auth().currentUser.uid;
+      await firebase.database()
+        .ref(`businesses/${o.bid}/outlets/${o.oid}/whatsapp/coexistence`)
+        .update({ enabledAt: Date.now(), by: uid });
+      setState({ coexOpen: false, coexBusy: null, coexErr: null, wa: { ...(o.wa || {}), coexistence: { ...(o.wa?.coexistence || {}), enabledAt: Date.now(), by: uid } } });
+      showToast('Recorded. The bot confirms automatically once mirrored messages arrive.', 'success');
+    } catch (err) {
+      setState({ coexBusy: null, coexErr: err.message });
+    }
   });
 
   async function sendCode(method) {

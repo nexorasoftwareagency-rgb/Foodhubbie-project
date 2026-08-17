@@ -181,6 +181,8 @@
 
     <link rel="stylesheet" href="mobile-overrides.css?v=5.3.29">
 
+    <link rel="stylesheet" href="chat.css?v=5.3.30">
+
     <link rel="manifest" href="manifest.json?v=3">
 
     <link rel="icon" type="image/jpeg" href="icon-erp-logo.jpeg">
@@ -567,6 +569,18 @@
                     <button data-action="switchTab" data-tab="customers" class="nav-btn">
 
                         <i data-lucide="users"></i> <span>Customers</span>
+
+                    </button>
+
+                </li>
+
+                <li id="menu-chat" title="WhatsApp Conversations with Customers">
+
+                    <button data-action="switchTab" data-tab="chat" class="nav-btn">
+
+                        <i data-lucide="messages-square"></i> <span>Chats</span>
+
+                        <span id="badge-chat" class="nav-badge count hidden">0</span>
 
                     </button>
 
@@ -2957,6 +2971,54 @@
                             <i data-lucide="file-text" class="icon-18"></i>
                             <span>PDF</span>
                         </button>
+                    </div>
+                </div>
+
+            </div>
+
+
+
+            <!-- CHAT TAB -->
+
+            <div id="tab-chat" class="tab-content hidden">
+
+                <div id="chatApp" class="chat-app">
+                    <div class="chat-app-inner">
+                        <aside class="chat-list-pane" aria-label="Conversation list">
+                            <div class="chat-list-header">
+                                <h3><i data-lucide="messages-square" class="icon-18"></i> Chats</h3>
+                                <span id="chatTotalUnread" class="chat-total-unread hidden">0 unread</span>
+                            </div>
+                            <div class="chat-search-wrap">
+                                <i data-lucide="search" class="icon-16"></i>
+                                <input type="text" id="chatSearch" placeholder="Search chats..." aria-label="Search chats" autocomplete="off">
+                            </div>
+                            <div id="chatThreadList" class="chat-thread-list" role="list"></div>
+                        </aside>
+                        <section class="chat-conv-pane" aria-label="Conversation">
+                            <div id="chatEmptyState" class="chat-empty-state">
+                                <i data-lucide="message-circle" class="icon-40"></i>
+                                <h4>No conversation selected</h4>
+                                <p>Pick a chat from the list. When customers message the WhatsApp bot, threads appear here and you can reply from this panel.</p>
+                            </div>
+                            <div id="chatThreadView" class="chat-thread-view hidden">
+                                <header class="chat-thread-header">
+                                    <button id="chatBackBtn" class="chat-back-btn" aria-label="Back to chat list"><i data-lucide="arrow-left"></i></button>
+                                    <div class="chat-thread-avatar" id="chatThreadAvatar"></div>
+                                    <div class="chat-thread-meta">
+                                        <strong id="chatThreadName"></strong>
+                                        <span id="chatThreadPhone"></span>
+                                    </div>
+                                </header>
+                                <div id="chatMessageList" class="chat-message-list" role="log" aria-live="polite"></div>
+                                <div class="chat-composer">
+                                    <textarea id="chatComposerInput" rows="1" placeholder="Type a message" aria-label="Type a message"></textarea>
+                                    <button id="chatSendBtn" class="chat-send-btn" aria-label="Send message">
+                                        <i data-lucide="send"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </div>
 

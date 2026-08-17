@@ -168,12 +168,18 @@ In production each restaurant brings (Path A) or the platform assigns (Path B) a
 
 Note `META_SYSTEM_USER_TOKEN` (control-plane calls from the API) and `WA_PERMANENT_TOKEN` (data-plane sends from the bot) are conceptually the same kind of token used in two different places — both are platform-owned system-user tokens with `whatsapp_business_management` + `whatsapp_business_messaging` scopes.
 
-### 2.5 App publish state (the one open Meta-side item)
+### 2.5 Meta-side state (audited 2026-08-17 via live Graph API)
 
-The app is currently **Unpublished**. Consequences while unpublished:
-- **Embedded Signup works only for people with roles on the app** (admin/developer/tester). A random restaurant owner's popup will fail.
-- **Webhooks deliver only test events.** Real production messages won't reach the webhook server.
-- **App Review / business verification** is required to publish. This is the single outstanding Meta-side item before Path A is production-ready.
+| Item | State | Notes |
+|---|---|---|
+| System user `foodhubbiebot` token | Working | `whatsapp_business_management` + `whatsapp_business_messaging` both **granted** |
+| WABA `2589174454849821` | `account_review_status: APPROVED` | but it's Meta's **test** WABA — holds exactly one test number |
+| Test number `+1 555 661 9086` (`1211796118690392`) | `CONNECTED`, quality GREEN | `code_verification_status: NOT_VERIFIED` (cosmetic for test numbers) |
+| App `Foodhubbie` | **Unpublished** | embedded signup works only for app-role accounts; webhooks deliver only test events |
+
+The two real gates to production, and their fixes:
+- **Real numbers need a real WABA.** Test WABAs reject a second number with `#3 Application does not have the capability` — not a permissions bug. Fix: create a real WABA under a verified Meta Business and register the real number (§6.1).
+- **App publish** requires business verification + App Review. Until then, Path A embedded signup only works for users with a role on the app.
 
 ---
 
@@ -352,6 +358,8 @@ The **register** step maps to Graph `POST {phoneNumberId}/register { messaging_p
 
 ## 5. Webhooks — inbound message routing
 
+> **Coexistence (WhatsApp Business App + Cloud API on the same number) is app-side onboarding** — no Graph API toggle. `webhook-server` only *detects* it via `message.origin.type` (`business_app`/`update`) and writes `outlet.whatsapp.coexistence`; Supreme Admin shows status + a 3-tap guide + "I've enabled it" record. See `docs/PLAN-CHAT-HISTORY-COEXISTENCE.md`.
+
 Meta calls a URL you configure whenever a message or status change happens on a subscribed object. Our endpoint is `https://photos-whenever-specifics-internationally.trycloudflare.com/webhook` (Cloudflare Quick Tunnel → EC2 :5000), with the `messages` webhook field subscribed.
 
 ### 5.1 The verification handshake
@@ -409,9 +417,45 @@ The `200`-first discipline matters: Meta treats non-2xx as a failure and retries
 
 ### Production caveats for a real restaurant number
 - **Dedicated number:** the Cloud API number should be a number the restaurant controls and ideally one *not* actively running the consumer WhatsApp app. Running the same number on both causes conflicts (both sides receive messages, sessions fight).
-- **Business verification:** until the business portfolio is verified, sending is capped to the test tier and template volume is limited. Verification is a Meta-side process (documentation + PIN/phone verification).
 - **2FA pin:** mandatory and set at registration. If lost, you must deregister and re-register (which re-verifies ownership).
 - **24-hour customer-service window:** the bot can reply freely to customer messages within 24h of the customer's last inbound message. Beyond that window, only **approved templates** can be sent (§8).
+
+### 6.1 Going live: real WABA + business verification (exact steps)
+
+The current WABA (`2589174454849821`) is Meta's **test** WABA — `account_review_status: APPROVED`, holding the single test number `+1 555 661 9086`. Test WABAs can hold **exactly one** test number, which is why "add number" returns `#3 Application does not have the capability`. A real restaurant number needs its own real WABA under a verified Meta Business.
+
+**Who does what.** Meta-side clicks (dashboard login, document upload, OTP, number OTP) are done by the account owner in the browser. Platform-side wiring (env vars, `phoneNumberIndex`, pm2 restart) is done by the agent/ops. The agent cannot log into Meta dashboards.
+
+**Stage 1 — Meta Business Manager + business verification (owner, ~1–7 business days).**
+1. `business.facebook.com` → Business Settings → Security Center → **Business Verification**.
+2. Upload a document whose legal name matches the Business Manager name **exactly** (top rejection cause in 2026; e.g. GST registration / Udyam cert for Indian businesses). Expired licences are rejected automatically.
+3. Verify the business phone/email when prompted. Check the Security Center chat for the decision; resubmit with corrected docs if rejected.
+4. Proceed with Stages 2–3 in parallel while verification is pending.
+
+**Stage 2 — create the real WABA (owner, minutes).**
+1. Business Manager → WhatsApp Manager → **Add WhatsApp Business Account**.
+2. Choose the (verified/verifying) business; this creates a real WABA. Note its **WABA ID** (24-hour support limit: 20 WABAs per business initially).
+3. Create the business profile: category, logo, website, hours.
+
+**Stage 3 — add + verify + register the real number (owner, minutes).**
+1. **Prepare the number:** must not be active in the consumer WhatsApp/WhatsApp Business app — if it is, delete the account in the app first (Meta "takes over" the number). IVR/auto-attendants must be off. A fresh SIM or the shop line both work.
+2. WhatsApp Manager → the new WABA → **Add phone number** → receive **SMS or voice OTP** → enter it. This sets `code_verification_status: VERIFIED`.
+3. Set the **display name** (the name customers see — no slogans, no all-caps, must honestly describe the business; reviewed by Meta).
+4. Give the agent the new **WABA ID** and **Phone Number ID**.
+
+**Stage 4 — platform wiring (agent, ~5 min — already live-tested machinery).**
+1. EC2 `ecosystem-bot-control.config.js` + `.env`: set `WABA_ID` to the new WABA; bot worker's `PHONE_NUMBER_ID`/`WA_PERMANENT_TOKEN` to the new number.
+2. `webhook-server/seed-phone-index.cjs`: add `phoneNumberIndex/{phoneNumberId}` → `{ businessId, outletId }`.
+3. If using the dashboard wizard (Path B): Supreme Admin → restaurant profile → WhatsApp → add/pick the number → request+verify code → **register** (sets the mandatory 2FA pin). On `status: 'active'`, **the orchestrator auto-starts the worker** (no manual provision).
+4. `pm2 restart bot-control-api webhook-server` + the affected worker. Verify `whatsapp.status:'active'`, bot `Online`, `phoneNumberIndex` routed (same checks as the test-number deploy).
+
+**Stage 5 — templates for proactive sends (owner/ops, 24–48h review).**
+- Add the proactive templates in WhatsApp Manager (or via the dashboard template wizard → `createTemplate()`). Utility-category templates must not contain promo language and variables like `{{1}}` need surrounding context (2026 rule). Marketing sends need user opt-in.
+
+**Stage 6 — app publish (owner).**
+- After the business is verified, run **App Review** for the app's permissions so any restaurant owner can connect via Embedded Signup, not just app-role accounts. This is the last Meta-side gate.
+
+**Key gotchas.** Number must be free of the consumer app; legal name must match docs exactly; the 2FA pin is mandatory at registration and if lost the number must be deregistered/re-registered; the 14-day registration window after Embedded Signup still applies to Path A.
 
 ---
 
@@ -483,17 +527,19 @@ This is *the restaurant's* bill from Meta, not ours. We surface a **quota card**
 - [x] Meta App "Foodhubbie" exists — App ID `1894358871543574`
 - [x] Embedded Signup config created — Config ID `1624840945941910` (User token, General, WhatsApp permissions)
 - [x] Test WABA `2589174454849821` + test number `+1 555 661 9086` / `1211796118690392`
-- [ ] **Publish the app** (business verification) so real restaurant owners can connect, not just app roles
-- [ ] (production) each restaurant has its own verified WABA + dedicated number
+- [ ] **Business verification** (Security Center, docs matching legal name — §6.1 Stage 1)
+- [ ] **Real WABA** under the verified business + real number registered (§6.1 Stage 2–3)
+- [ ] **Publish the app** (App Review after business verification) so real restaurant owners can connect, not just app roles
 
 ### EC2 / server side (one-time)
-- [ ] `META_APP_SECRET` set in the bot-control-api env (**Path A hard-blocked without it**)
-- [ ] `META_SYSTEM_USER_TOKEN` set (Path B, quota, templates)
+- [x] `META_APP_SECRET` set in the bot-control-api env (verified in live process env, 2026-08-17)
+- [x] `META_SYSTEM_USER_TOKEN` set (Path B, quota, templates)
 - [ ] `WA_PERMANENT_TOKEN` set (bot worker send path)
-- [ ] `WA_VERIFY_TOKEN` set for the webhook server
-- [ ] Cloudflare tunnel: `/api/* → :4000`, `/webhook* → :5000`
-- [ ] Meta dashboard webhook configured: callback URL, verify token, `messages` subscribed
-- [ ] Orchestrator watcher active (starts/restarts `bot-{bid}-{oid}` on transport change)
+- [x] `WA_VERIFY_TOKEN` set for the webhook server
+- [x] Cloudflare tunnel: `/api/* → :4000`, `/webhook* → :5000`
+- [x] Meta dashboard webhook configured: callback URL, verify token, `messages` subscribed
+- [x] Orchestrator watcher active (starts/restarts `bot-{bid}-{oid}` on transport change)
+- [ ] When a real number is added: update `WABA_ID`/`PHONE_NUMBER_ID` in env + `seed-phone-index.cjs`, restart (§6.1 Stage 4)
 
 ### Per restaurant (Supreme Admin UI)
 - [ ] Add Restaurant form → business + outlet records land in Firebase

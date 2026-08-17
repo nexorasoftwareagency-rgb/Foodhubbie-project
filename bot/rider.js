@@ -66,7 +66,7 @@ async function notifyRiderPickup(sock, order, addInAppNotification) {
             includeOTP: true,
         });
 
-        await sock.sendMessage(riderJid, { text: msg });
+        await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
         console.log(`[RIDER] ✅ Pickup notification sent to ${riderPhone}`);
 
         if (riderId) {
@@ -100,7 +100,7 @@ async function notifyRiderAssignment(sock, orderId, order, addInAppNotification)
         });
 
         console.log(`[RIDER] 📤 Sending assignment message to rider: ${riderPhone} for #${orderId.slice(-5)}`);
-        await sock.sendMessage(riderJid, { text: msg });
+        await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
         console.log(`[RIDER] ✅ Assignment notification sent to ${riderPhone}`);
 
         if (riderId) {
@@ -144,7 +144,7 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
             const riderJid = formatJid(rider.phone);
             if (riderJid) {
                 try {
-                    await sock.sendMessage(riderJid, { text: msg });
+                    await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
                     await addInAppNotification(rider.uid, "New Pickup Available!", `Order #${orderId.slice(-5)} is ready for pickup.`, 'success', 'shopping-bag', order.outlet);
                 } catch (sendErr) {
                     console.error(`[RIDER] ❌ Failed to send broadcast to ${rider.phone}:`, sendErr.message);

@@ -102,7 +102,22 @@ test('sendWhatsAppTemplate: body component only when a {{1}} variable is supplie
     // no-variable template → no components
     assert.deepStrictEqual(captured[0].body.template.components, []);
     assert.deepStrictEqual(captured[0].body.type, 'template');
-    // variable template → BODY component with the text
-    assert.deepStrictEqual(captured[1].body.template.components, [{ type: 'BODY', text: 'Hi {{1}}!' }]);
+    // variable template → BODY component carrying the substituted value in
+    // Meta's parameters array (the Graph API rejects a bare `text` key on a
+    // BODY component with code 100 — this shape is what callers rely on).
+    assert.deepStrictEqual(captured[1].body.template.components, [{ type: 'BODY', parameters: [{ type: 'text', text: 'Hi {{1}}!' }] }]);
     assert.strictEqual(captured[1].body.template.language.code, 'en');
+});
+
+// Chat history: thread key = last-10-digits of the sender JID — the same
+// convention as customers/{cleanPhone} and promo opt-out keys, so Baileys
+// (9197...@s.whatsapp.net) and Meta (9197...) map to ONE thread.
+test('customerIdFromJid: last-10-digits thread key for Baileys and Meta jids', () => {
+    const { customerIdFromJid } = require('../chat-log');
+    assert.strictEqual(customerIdFromJid('919876543210@s.whatsapp.net'), '9876543210');
+    assert.strictEqual(customerIdFromJid('919876543210'), '9876543210');
+    assert.strictEqual(customerIdFromJid('9876543210'), '9876543210');
+    // too short → null (never a real 10-digit Indian number)
+    assert.strictEqual(customerIdFromJid('123@s.whatsapp.net'), null);
+    assert.strictEqual(customerIdFromJid(null), null);
 });

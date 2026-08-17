@@ -12,7 +12,6 @@ Fragile Files before starting ANY task.
 - **`_effectiveTotal(sess)`** replaces direct `sess.grandTotal` reads everywhere (table card, drawer, CSV, KPI).
 - **`equalTo(null)`** (not `equalTo("")`) for unassigned rider queries — `assignedRider` is absent/null, not empty string.
 - **Firebase v12**: `enableIndexedDbPersistence` removed — offline persistence is now automatic. No action needed.
-- **WhatsApp validate rule** has known `.validate` path mismatch with `push()` — PRODUCTION_ISSUES.md #1.
 
 <!-- STANDING_DECISIONS_START -->
 - [2026-08-12 02:20 UTC] **DUAL-TRANSPORT WHATSAPP BOT (per restaurant)**: each restaurant/business supports BOTH Meta Cloud API (`BOT_TRANSPORT=meta`) and Baileys (`BOT_TRANSPORT=baileys`). ONLY ONE is active per restaurant at a time. Transport is controlled remotely from **Supreme Admin → Restaurants Profiles → WhatsApp Baileys section** (Scan QR button → shows QR + live status), mirrored on the WhatsApp second dashboard. Meta API is the default/primary; Baileys used when a restaurant wants a real number via QR. Bot reads transport mode from Firebase `bot/{outlet}/transport` (or env default), switchable at runtime.
@@ -25,7 +24,6 @@ Fragile Files before starting ANY task.
 - `_effectiveTotal()` canonical
 - `equalTo(null)` canonical
 - Firebase v12 auto-persistence
-- WhatsApp `.validate` needs fixing (see PRODUCTION_ISSUES.md)
 <!-- STANDING_DECISIONS_END -->
 
 ## Fragile Files
@@ -35,12 +33,8 @@ Fragile Files before starting ANY task.
   `bot/$outletId/commands` validate rule must handle `push()`-generated keys.
 - **`Admin/js/features/orders.js`**: `STATUS_SEQUENCES` and `STATUS_MAPPING` must stay in
   sync with rider status pipeline (12 statuses total).
-- **`firebase.json`**: 3 hosting targets (admin, rider, menu); rider CSP differs from admin.
-  Rider CSP img-src currently has `http://*` — needs to match admin's `https://*`.
-- **`rider-app/src/services/orderService.ts`**: Core delivery lifecycle. `resendOtp` has
-  known non-atomic write bug. `assertProximity` now has GPS accuracy guard.
-- **`rider-app/src/services/whatsappService.ts`**: `.validate` in database rules blocks all
-  pushes. Fix both sides in sync.
+- **`firebase.json`**: 3 hosting targets (admin, rider, menu); rider CSP img-src is `https://*` (http:// removed 2026-07).
+- **`rider-app/src/services/orderService.ts`**: Core delivery lifecycle. `assertProximity` has GPS accuracy guard.
 
 <!-- FRAGILE_FILES_START -->
 - `Admin/index.html` & `Admin/sw.js` — contain emoji/₹/typography; any version bump/edit MUST use the UTF-8-safe PowerShell pattern (Standing Decision 2026-08-04) or all non-ASCII corrupts
@@ -49,7 +43,6 @@ Fragile Files before starting ANY task.
 - Admin/js/features/orders.js — STATUS_SEQUENCES alignment
 - firebase.json — 3-target hosting, CSP divergence
 - rider-app/src/services/orderService.ts — delivery lifecycle
-- rider-app/src/services/whatsappService.ts — validate rule mismatch
 <!-- FRAGILE_FILES_END -->
 
 ## Task Log
@@ -81,6 +74,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260817-153659-927d] H5: deploy chat history tab + coexistence (rules, hosting:admin+supreme, bot EC2, webhook-server EC2)
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-08-17 15:36 UTC
+- Files touched: database.rules.json,bot/index.js,bot/chat-log.js,bot/promotions.js,bot/rider.js,webhook-server/index.js,Admin/js/features/chat.js,SupremeAdmin/js/features/whatsapp-manage.js
+- Verified: rules released; admin+supreme hosting live; 5 EC2 files md5-identical to local, node --check clean, pm2 online no crash; end-to-end logChatMessage write landed in RTDB at chats/9712345678 then removed; hosting /js/features/chat.js + /js/features/whatsapp-manage.js 200; err-log errors predate deploy (mtime 14:13 < restart 15:27)
+- NOT verified / open risk: real inbound WABA message end-to-end UI render in browser (no Playwright; structural wiring mirrors verified patterns)
+- Confidence: HIGH
+- Ended: 2026-08-17 15:37 UTC
+
 ### [20260812-011800-8f2d] fix: delivery webview boot + token-gated order write + geolocation policy
 - TIER: 3 (high-risk — security rules + prod deploy)
 - STATUS: DONE (live-verified end-to-end in clean browser)

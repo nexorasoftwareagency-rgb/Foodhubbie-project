@@ -106,6 +106,7 @@ async function main() {
           /^settings-/,
           /^catalog-/,
           /^inventory-/,
+          /^chat-/,
           /^dynamic-modal/,
           'dynamic-modal-overlay',
           'dynamic-modal-box',
