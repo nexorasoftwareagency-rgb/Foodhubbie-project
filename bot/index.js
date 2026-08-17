@@ -50,6 +50,7 @@ const {
 const promo = require('./promotions');
 const { sendDailyReport, sendMonthlyReport, sendWeeklyReport } = require('./reports');
 const riderNotify = require('./rider');
+const { logChatMessage } = require('./chat-log');
 
 let redisClient;
 
@@ -1024,8 +1025,31 @@ async function startBot() {
         sock.ev.on('creds.update', saveCreds);
     }
 
-    // Patch sendMessage to log every send attempt with delivery diagnostics
+    // Patch sendMessage to log every send attempt with delivery diagnostics.
+    // Chat history is logged from sendMessage AND sendTemplate/sendButton
+    // (Meta transport sends replies via sendTemplate, not sendMessage), so
+    // the chat tab always sees the bot's half of the conversation.
     const _origSendMessage = sock.sendMessage.bind(sock);
+    const _logOutboundChat = (jid, text, msgId) => {
+        // Best-effort AND fire-and-forget (never delays the send). Skip
+        // admin numbers (reports/test chatter), groups/broadcast, and any
+        // send explicitly tagged _logChat:false (promo campaigns, rider ops).
+        try {
+            const target = String(jid);
+            const isGroupish = target.includes('@g.us') || target.includes('@broadcast') || target.includes('@newsletter');
+            if (!isGroupish && msgId) {
+                getCachedAdminJids().then((adminNumbers) => {
+                    const isAdminOut = adminNumbers.includes(target);
+                    const isMetaSelf = isMetaTransport && String(sock.user?.id || '').includes(target.split('@')[0]);
+                    if (!isAdminOut && !isMetaSelf) {
+                        logChatMessage({ outlet: OUTLET, jid: target, msgId, from: 'bot', text: text || '' });
+                    }
+                }).catch((e) => console.warn("[CHAT-LOG] outbound hook error:", e.message));
+            }
+        } catch (chatLogErr) {
+            console.warn("[CHAT-LOG] outbound hook error:", chatLogErr.message);
+        }
+    };
     sock.sendMessage = async function(jid, content, opts) {
         const textPreview = content?.text ? content.text.slice(0, 60) : (content?.caption ? content.caption.slice(0, 60) : 'non-text');
         try {
@@ -1033,6 +1057,9 @@ async function startBot() {
             const msgId = result?.key?.id || result?.messages?.[0]?.id || result;
             const cryptoWarn = cryptoErrorCount > 10 ? ` cryptoErrs=${cryptoErrorCount}` : '';
             console.log(`[SEND OK] to ${maskJid(jid)} text="${textPreview}" wsOpen=${sock.ws?.isOpen} msgId=${msgId}${cryptoWarn}`);
+            if (opts?._logChat !== false) {
+                _logOutboundChat(jid, content?.text || content?.caption || '', msgId);
+            }
             // G5: Meta messaging quota numerator. Baileys sends don't consume
             // Cloud API tier, so only meta transport counts. Per-IST-day key,
             // atomic increment — the quota endpoint sums today's sends.
@@ -1049,6 +1076,31 @@ async function startBot() {
         }
     };
     currentSock = sock;
+
+    // Meta transport delivers replies via sendTemplate/sendButton (not
+    // sendMessage) — patch those too so the chat tab logs the bot's half.
+    if (typeof sock.sendTemplate === 'function') {
+        const _origSendTemplate = sock.sendTemplate.bind(sock);
+        sock.sendTemplate = async function(jid, opts = {}) {
+            const result = await _origSendTemplate(jid, opts);
+            const msgId = result?.key?.id || result?.messages?.[0]?.id || result;
+            if (opts?._logChat !== false) {
+                _logOutboundChat(jid, opts?.body || '', msgId);
+            }
+            return result;
+        };
+    }
+    if (typeof sock.sendButton === 'function') {
+        const _origSendButton = sock.sendButton.bind(sock);
+        sock.sendButton = async function(jid, opts = {}) {
+            const result = await _origSendButton(jid, opts);
+            const msgId = result?.key?.id || result?.messages?.[0]?.id || result;
+            if (opts?._logChat !== false) {
+                _logOutboundChat(jid, opts?.body || '', msgId);
+            }
+            return result;
+        };
+    }
 
     initCommandListener(sock);
 
@@ -1307,6 +1359,20 @@ async function sendDailyReportSafely(dateOverride = null) {
             const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || "").trim();
             const pushName = msg.pushName || "";
             console.log(`[IN] ${maskJid(sender)}: "${text.slice(0, 80)}"`);
+
+            // Chat history — log every customer message (incl. STOP/START)
+            // BEFORE the opt-out handler so those replies still land in the
+            // thread. Best-effort; skip admins (test chatter, not customers).
+            try {
+                const adminNumbers = await getCachedAdminJids();
+                const isAdminIn = adminNumbers.includes(sender) || sender.startsWith(DEVELOPER_NUMBER_FALLBACK);
+                const isGroupish = sender.includes('@g.us') || sender.includes('@broadcast') || sender.includes('@newsletter');
+                if (!isAdminIn && !isGroupish) {
+                    logChatMessage({ outlet: OUTLET, jid: sender, msgId, from: 'customer', text, name: pushName || undefined });
+                }
+            } catch (chatLogErr) {
+                console.warn("[CHAT-LOG] inbound hook error:", chatLogErr.message);
+            }
 
             // --- PROMOTIONAL OPT-OUT / OPT-IN HANDLER ---
             // Detect STOP / START from non-admin senders BEFORE the order-flow

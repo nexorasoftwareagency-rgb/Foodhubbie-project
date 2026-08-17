@@ -37,7 +37,7 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage,
         const isMetaSock = !!sock.user?.id?.startsWith('meta:');
         if (isMetaSock && typeof sock.sendTemplate === 'function') {
             try {
-                await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'bot_live_update', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText });
+                await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'bot_live_update', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
                 return;
             } catch (e) {
                 console.warn(`[Promo] Template send failed for ${jid}, text fallback: ${e.message || e}`);
@@ -51,9 +51,9 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage,
             } else {
                 payload = { image: { url: mediaUrl }, caption: finalText };
             }
-            await sock.sendMessage(jid, payload);
+            await sock.sendMessage(jid, payload, { _logChat: false });
         } else {
-            await sock.sendMessage(jid, { text: finalText });
+            await sock.sendMessage(jid, { text: finalText }, { _logChat: false });
         }
     } catch (err) {
         console.error(`[Promo] sendMessage failed for ${jid}:`, err.message || err);
@@ -352,7 +352,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                         } else {
                             imgPayload = { image: { url: extraImage } };
                         }
-                        await sock.sendMessage(jid, imgPayload);
+                        await sock.sendMessage(jid, imgPayload, { _logChat: false });
                     } catch (e) {
                         console.warn(`[Promo] Menu image failed for ${jid}:`, e.message || e);
                     }

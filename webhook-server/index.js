@@ -99,6 +99,22 @@ app.post('/webhook', express.json({
       return;
     }
 
+    // WhatsApp coexistence: when the same number runs on the WhatsApp
+    // Business App + Cloud API, mirrored messages carry origin.type =
+    // 'business_app'. ('update' means *message edited* — NOT coexistence —
+    // so we only trust 'business_app'.) Record it (best-effort) so the
+    // Supreme Admin can show the mode. Never auto-flip OFF — the owner may
+    // disable it in-app, which we can't observe, so absence is left as-is.
+    const originType = message.origin?.type;
+    if (originType === 'business_app') {
+      // update() not set() — the "I've enabled it" record ({enabledAt, by})
+      // lives on the same node and must survive mirrored-message writes.
+      admin.database()
+        .ref(`businesses/${routing.businessId}/outlets/${routing.outletId}/whatsapp/coexistence`)
+        .update({ mode: originType, lastSeenAt: Date.now() })
+        .catch((err) => console.warn('[COEXISTENCE] record failed:', err.message));
+    }
+
     if (redis) {
       await redis.publish(
         `bot-inbox:${routing.businessId}:${routing.outletId}`,

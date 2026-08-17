@@ -322,6 +322,21 @@
                   ".write": "auth != null && (root.child('admins').child(auth.uid).exists())"
                 }
               }
+            },
+            "chats": {
+              ".read": "auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
+              ".write": "auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
+              "$customerId": {
+                "meta": {
+                  ".indexOn": ["lastTs"],
+                  ".validate": "newData.hasChildren(['name','phone','lastTs','lastText','lastDir','unread']) && newData.child('lastTs').isNumber() && newData.child('unread').isNumber()"
+                },
+                "messages": {
+                  "$msgId": {
+                    ".validate": "newData.hasChildren(['from','text','ts','type']) && (newData.child('from').val() == 'customer' || newData.child('from').val() == 'bot') && newData.child('ts').isNumber()"
+                  }
+                }
+              }
             }
           }
         }
