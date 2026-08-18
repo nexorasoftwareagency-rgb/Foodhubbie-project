@@ -36,8 +36,11 @@ async function logChatMessage(o) {
         const ts = Date.now();
         const cleanText = (text || '').trim() || '<media>';
         const base = resolvePath(`chats/${customerId}`, outlet);
+        // Meta message IDs are `wamid.XXX` — Firebase keys can't contain ".". 
+        // Replace dots (and other reserved chars) with "_" so the key stays valid.
+        const safeMsgId = String(msgId).replace(/[.#$\[\]]/g, '_');
         // Message record (idempotent by msgId).
-        await db.ref(`${base}/messages/${msgId}`).set({
+        await db.ref(`${base}/messages/${safeMsgId}`).set({
             from, text: cleanText, ts, type: 'text'
         });
         // Thread meta — unread only counts customer->bot messages.

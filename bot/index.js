@@ -1032,19 +1032,13 @@ async function startBot() {
     const _origSendMessage = sock.sendMessage.bind(sock);
     const _logOutboundChat = (jid, text, msgId) => {
         // Best-effort AND fire-and-forget (never delays the send). Skip
-        // admin numbers (reports/test chatter), groups/broadcast, and any
-        // send explicitly tagged _logChat:false (promo campaigns, rider ops).
+        // groups/broadcast, and any send explicitly tagged _logChat:false
+        // (promo campaigns, rider ops).
         try {
             const target = String(jid);
             const isGroupish = target.includes('@g.us') || target.includes('@broadcast') || target.includes('@newsletter');
             if (!isGroupish && msgId) {
-                getCachedAdminJids().then((adminNumbers) => {
-                    const isAdminOut = adminNumbers.includes(target);
-                    const isMetaSelf = isMetaTransport && String(sock.user?.id || '').includes(target.split('@')[0]);
-                    if (!isAdminOut && !isMetaSelf) {
-                        logChatMessage({ outlet: OUTLET, jid: target, msgId, from: 'bot', text: text || '' });
-                    }
-                }).catch((e) => console.warn("[CHAT-LOG] outbound hook error:", e.message));
+                logChatMessage({ outlet: OUTLET, jid: target, msgId, from: 'bot', text: text || '' });
             }
         } catch (chatLogErr) {
             console.warn("[CHAT-LOG] outbound hook error:", chatLogErr.message);
