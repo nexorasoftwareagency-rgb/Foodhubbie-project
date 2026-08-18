@@ -3,7 +3,7 @@
  * Monitors bot/{outlet}/status from Firebase and dispatches a
  * `botStatusChange` custom event so any component can react.
  */
-import { tenantRef, onValue } from './firebase.js';
+import { Outlet, tenantRef, onValue } from './firebase.js';
 import { logger } from './utils/logger.js';
 
 if (!window.__botStatusInit) {

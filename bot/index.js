@@ -1360,14 +1360,12 @@ async function sendDailyReportSafely(dateOverride = null) {
             const pushName = msg.pushName || "";
             console.log(`[IN] ${maskJid(sender)}: "${text.slice(0, 80)}"`);
 
-            // Chat history — log every customer message (incl. STOP/START)
+            // Chat history — log every inbound message (incl. STOP/START)
             // BEFORE the opt-out handler so those replies still land in the
-            // thread. Best-effort; skip admins (test chatter, not customers).
+            // thread. Best-effort; groups/broadcasts are skipped (not threads).
             try {
-                const adminNumbers = await getCachedAdminJids();
-                const isAdminIn = adminNumbers.includes(sender) || sender.startsWith(DEVELOPER_NUMBER_FALLBACK);
                 const isGroupish = sender.includes('@g.us') || sender.includes('@broadcast') || sender.includes('@newsletter');
-                if (!isAdminIn && !isGroupish) {
+                if (!isGroupish) {
                     logChatMessage({ outlet: OUTLET, jid: sender, msgId, from: 'customer', text, name: pushName || undefined });
                 }
             } catch (chatLogErr) {

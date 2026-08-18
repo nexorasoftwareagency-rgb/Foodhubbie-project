@@ -1,5 +1,5 @@
 import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
-import { app, auth, db, ref, update } from './firebase.js';
+import { app, auth, db, ref, set } from './firebase.js';
 import { showToast } from '../../shared/dom/modal.js';
 
 let messaging = null;
@@ -20,7 +20,7 @@ function getMessagingInstance() {
 async function storeToken(userId, token) {
   try {
     if (userId) {
-      await update(ref(db, `admins/${userId}`), { fcmToken: token });
+      await set(ref(db, `admins/${userId}/fcmToken`), token);
     }
   } catch (e) {
     console.error('[FCM] Failed to store token:', e);
