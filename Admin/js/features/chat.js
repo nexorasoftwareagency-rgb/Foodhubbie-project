@@ -27,6 +27,7 @@ let _listener = null;
 let _listenerOutlet = null;
 let _chatData = {};              // customerId -> { meta, messages: {id: msg} }
 let _selectedCustomerId = null;
+let _renderedThreadId = null;
 let _searchTerm = '';
 let _wired = false;
 
@@ -165,6 +166,14 @@ function _renderThreadView() {
     const listEl = document.getElementById('chatMessageList');
     if (!listEl) return;
 
+    // Preserve scroll position across re-renders (the listener re-renders on
+    // ANY chats change). Only snap to the newest message when the user is
+    // already at/near the bottom — otherwise reading history gets yanked back.
+    const threadChanged = _renderedThreadId !== _selectedCustomerId;
+    if (threadChanged) listEl.scrollTop = 0;
+    const stickToBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 40;
+    const prevTop = listEl.scrollTop;
+
     let html = '';
     let lastDay = null;
     for (const [msgId, m] of msgs) {
@@ -185,8 +194,13 @@ function _renderThreadView() {
     }
     listEl.innerHTML = html || `<div class="chat-list-empty">No messages in this thread yet.</div>`;
 
-    // Scrolling follows newest message
-    requestAnimationFrame(() => { listEl.scrollTop = listEl.scrollHeight; });
+    // Stick to bottom only if we were already there; else keep reading position.
+    if (stickToBottom) {
+        listEl.scrollTop = listEl.scrollHeight;
+    } else {
+        listEl.scrollTop = prevTop;
+    }
+    _renderedThreadId = _selectedCustomerId;
 }
 
 // ---------------------------------------------------------------------
