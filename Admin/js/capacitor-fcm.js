@@ -1,4 +1,4 @@
-import { db, ref, update } from './firebase.js';
+import { db, ref, set } from './firebase.js';
 import { showToast } from '../../shared/dom/modal.js';
 
 export async function setupCapacitorFCM(userId) {
@@ -15,7 +15,7 @@ export async function setupCapacitorFCM(userId) {
     const token = result?.value;
     if (!token) return;
 
-    await update(ref(db, `admins/${userId}`), { fcmToken: token });
+    await set(ref(db, `admins/${userId}/fcmToken`), token);
 
     PushNotifications.addListener('pushNotificationReceived', (notification) => {
       const title = notification.title || 'New Alert';
