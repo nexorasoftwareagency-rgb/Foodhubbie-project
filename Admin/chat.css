@@ -7,7 +7,8 @@
 
 #tab-chat {
     padding: 0;
-    height: calc(100vh - 130px);
+    height: calc(100vh - 60px);
+    margin-bottom: -30px;
 }
 
 .chat-app {
@@ -16,7 +17,7 @@
 
 .chat-app-inner {
     display: grid;
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: 400px 1fr;
     grid-template-rows: minmax(0, 100%);
     height: 100%;
     border-radius: 14px;
