@@ -49,7 +49,7 @@ export function render() {
     <div class="glass-card" style="padding:0;overflow:hidden">
       <table class="data-table" id="restaurant-table">
         <thead>
-          <tr><th>Outlet</th><th>Business</th><th>Plan</th><th>Contact</th><th>WhatsApp</th><th>Bot status</th><th></th></tr>
+          <tr><th scope="col">Outlet</th><th scope="col">Business</th><th scope="col">Plan</th><th scope="col">Contact</th><th scope="col">WhatsApp</th><th scope="col">Bot status</th><th scope="col"></th></tr>
         </thead>
         <tbody id="restaurant-tbody">
           <tr><td colspan="7"><div class="skeleton" style="height:20px"></div></td></tr>
@@ -139,7 +139,7 @@ function renderRows(rows) {
         ? `<span class="status-pill unknown"><span class="static-dot"></span>No bot</span><div class="cell-meta">set up on profile</div>`
         : `<span class="onboard-mini" title="Onboarding in progress">${onboardMiniDots(r)}</span>`;
     return `
-    <tr class="row-link ${stale ? 'row-stale' : ''}" data-action="open-profile" data-bid="${escapeHtml(r.bid)}" data-oid="${escapeHtml(r.oid)}" title="${stale ? 'Last status update was over 5 minutes ago — the bot may be unresponsive.' : ''}">
+    <tr class="row-link ${stale ? 'row-stale' : ''}" data-action="open-profile" data-bid="${escapeHtml(r.bid)}" data-oid="${escapeHtml(r.oid)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(r.outletName)} profile" title="${stale ? 'Last status update was over 5 minutes ago — the bot may be unresponsive.' : ''}">
       <td><strong>${escapeHtml(r.outletName)}</strong></td>
       <td>${escapeHtml(r.businessName)}</td>
       <td style="text-transform:capitalize">${escapeHtml(r.plan)}</td>

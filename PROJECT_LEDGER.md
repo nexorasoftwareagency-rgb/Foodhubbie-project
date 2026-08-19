@@ -74,6 +74,38 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260819-035920-83fc] Design + plan restaurant soft-delete/disable flow (3-step confirm, Disabled tab, data preserved, reactivate)
+- TIER: 3 (high-risk)
+- STATUS: IN PROGRESS
+- Started: 2026-08-19 03:59 UTC
+
+### [20260819-032020-84c5] Supreme Admin UI: accessibility (focus-visible, skip-link, ARIA) + P1 (spacing tokens, hardcoded colors, tab ARIA, combobox)
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-08-19 03:20 UTC
+- Verified: CSS: focus-visible styles + spacing tokens added. HTML: skip-to-content link + aria-live on toast root. JS: ARIA roles on clickable rows/collapsibles, tab panel aria-controls/tabpanel, command palette combobox ARIA pattern. All syntax checks pass. CSS braces balanced.
+- NOT verified / open risk: Browser-level accessibility audit not run (no Playwright). Hardcoded colors intentionally kept (WhatsApp-themed, chart palettes).
+- Confidence: HIGH
+- Ended: 2026-08-19 03:34 UTC
+
+### [20260819-024710-bebf] EC2 Bot Fleet: restart pm2 processes after crash
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-08-19 02:47 UTC
+- Verified: Both bots restarted via pm2 start ecosystem.config.js + pm2 save. bot-roshani-pizza-pizza PID 127807 online, bot-roshani-cake-cake PID 127808 online. Webhook-server (5000) and bot-control-api (4000) confirmed healthy. Port 3001 free, no conflict.
+- NOT verified / open risk: Root cause of original pm2 crash not determined (logs showed WhatsApp API errors, not crash). PM2 save ensures auto-restart on reboot.
+- Confidence: HIGH
+- Ended: 2026-08-19 02:47 UTC
+
+### [20260818-155605-53f7] 17-GATE: complete multi-tenant refactor — seed DB, repoint apps, verify live gate
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-08-18 15:56 UTC
+- Verified: Live gate PASS: 0 failures, businesses/padmavati-test/outlets/padmavati found in foodhubbie-10 RTDB, all 8 gate groups pass
+- NOT verified / open risk: Baileys still imported (deferred to Section 9, cosmetic warning only)
+- Confidence: HIGH
+- Ended: 2026-08-18 16:17 UTC
+
 ### [20260817-153659-927d] H5: deploy chat history tab + coexistence (rules, hosting:admin+supreme, bot EC2, webhook-server EC2)
 - TIER: 3 (high-risk)
 - STATUS: DONE

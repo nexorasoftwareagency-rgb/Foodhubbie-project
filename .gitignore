@@ -79,6 +79,9 @@ foodhubbie-key.pem
 # Local credentials (never commit)
 Credentials/
 
+# Server access guide contains live AWS/Meta secrets
+GUIDEs/SERVER-ACCESS-GUIDE.md
+
 
 # Local credentials (never commit)
 foodhubbie-10-firebase-adminsdk-*.json
@@ -89,4 +92,16 @@ nilesh-admin_*.csv
 Supreme Admin Claude/
 # DB dump script (live data)
 dump-businesses.js
+
+# Ad-hoc tools / SSM temp output
+tools/check-*.sh
+tools/check-*.js
+tools/run-popup.js
+tools/ssm-*.txt
+tools/ssm-*.json
+tools/ssm-*.ps1
+.pw-profile/
+
+# Stray empty file
+{
 
