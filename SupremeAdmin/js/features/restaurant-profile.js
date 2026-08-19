@@ -108,16 +108,16 @@ function renderProfile(bid, oid, biz, outlet) {
     </div>
 
     <div class="profile-tabs" role="tablist" aria-label="Profile sections">
-      <button class="profile-tab${currentTab === 'overview' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'overview'}" data-action="profile-tab" data-tab="overview">
+      <button class="profile-tab${currentTab === 'overview' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'overview'}" aria-controls="tabpanel-overview" id="tab-overview" data-action="profile-tab" data-tab="overview">
         <svg data-lucide="layout-grid"></svg> Overview
       </button>
-      <button class="profile-tab${currentTab === 'analytics' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'analytics'}" data-action="profile-tab" data-tab="analytics">
+      <button class="profile-tab${currentTab === 'analytics' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'analytics'}" aria-controls="tabpanel-analytics" id="tab-analytics" data-action="profile-tab" data-tab="analytics">
         <svg data-lucide="bar-chart-3"></svg> Analytics
       </button>
     </div>
 
     ${currentTab === 'analytics'
-      ? `<div id="pa-root"><div class="skeleton" style="height:320px;border-radius:14px"></div></div>`
+      ? `<div id="pa-root" role="tabpanel" aria-labelledby="tab-analytics"><div class="skeleton" style="height:320px;border-radius:14px"></div></div>`
       : `
     ${fullyOnboarded ? '' : renderOnboardingStepper({
       businessCreated: true,
@@ -144,7 +144,7 @@ function renderProfile(bid, oid, biz, outlet) {
     </div>
 
     <div class="glass-card accent-edge" style="margin-bottom:16px">
-      <div class="collapsible-header${collapsedSections.has('admin-login-body') ? ' collapsed' : ''}" data-action="toggle-section" data-target="admin-login-body" style="margin-bottom:10px">
+      <div class="collapsible-header${collapsedSections.has('admin-login-body') ? ' collapsed' : ''}" data-action="toggle-section" data-target="admin-login-body" role="button" tabindex="0" aria-expanded="${!collapsedSections.has('admin-login-body')}" aria-controls="admin-login-body" style="margin-bottom:10px">
         <strong style="display:block"><svg data-lucide="key-round" style="width:14px;height:14px;vertical-align:-2px"></svg> Admin login</strong>
         <div style="display:flex;align-items:center;gap:6px">
           ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" data-action="${adminEdit ? 'cancel-admin-edit' : 'edit-admin-login'}">${adminEdit ? 'Cancel' : 'Update password'}</button>`}
@@ -160,7 +160,7 @@ function renderProfile(bid, oid, biz, outlet) {
          WhatsApp green so this section reads as belonging to that
          dashboard, even though the rest of the profile stays orange. -->
     <div class="theme-agent">
-      <div class="collapsible-header section-eyebrow${collapsedSections.has('whatsapp-body') ? ' collapsed' : ''}" data-action="toggle-section" data-target="whatsapp-body" style="margin-bottom:0">
+      <div class="collapsible-header section-eyebrow${collapsedSections.has('whatsapp-body') ? ' collapsed' : ''}" data-action="toggle-section" data-target="whatsapp-body" role="button" tabindex="0" aria-expanded="${!collapsedSections.has('whatsapp-body')}" aria-controls="whatsapp-body" style="margin-bottom:0">
         <div><svg data-lucide="message-circle"></svg> WhatsApp — Official API &amp; Bot Channel</div>
         <svg data-lucide="chevron-down" class="chevron-icon" style="width:14px;height:14px;color:var(--accent)"></svg>
       </div>

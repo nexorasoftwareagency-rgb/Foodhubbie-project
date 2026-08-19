@@ -13,10 +13,10 @@ export function open() {
       <div class="command-palette-box">
         <div class="command-palette-input-row">
           <svg data-lucide="search"></svg>
-          <input type="text" id="cp-input" placeholder="Jump to a restaurant or outlet…" autocomplete="off" />
+          <input type="text" id="cp-input" placeholder="Jump to a restaurant or outlet…" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="cp-results" aria-autocomplete="list" aria-activedescendant="cp-active" />
           <kbd>esc</kbd>
         </div>
-        <div id="cp-results" class="command-palette-results"></div>
+        <div id="cp-results" class="command-palette-results" role="listbox" aria-label="Restaurants"></div>
       </div>
     </div>`;
   refreshIcons(root);
@@ -64,9 +64,13 @@ function moveActive(delta) {
 }
 
 function highlightActive() {
+  const input = document.getElementById('cp-input');
   document.querySelectorAll('#cp-results [data-cp-index]').forEach((el) => {
-    el.classList.toggle('active', Number(el.dataset.cpIndex) === activeIndex);
+    const isActive = Number(el.dataset.cpIndex) === activeIndex;
+    el.classList.toggle('active', isActive);
+    el.setAttribute('aria-selected', String(isActive));
   });
+  if (input) input.setAttribute('aria-activedescendant', `cp-${activeIndex}`);
 }
 
 function selectActive() {
@@ -88,7 +92,7 @@ function renderResults(rows, query) {
   }
 
   el.innerHTML = rows.map((r, i) => `
-    <div class="command-palette-row${i === 0 ? ' active' : ''}" data-cp-index="${i}">
+    <div class="command-palette-row${i === 0 ? ' active' : ''}" data-cp-index="${i}" role="option" id="cp-${i}" aria-selected="${i === activeIndex}">
       <div>
         <div class="cp-row-title">${escapeHtml(r.outletName)}</div>
         <div class="cp-row-sub">${escapeHtml(r.businessName)}</div>

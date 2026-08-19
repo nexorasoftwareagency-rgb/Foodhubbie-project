@@ -140,6 +140,17 @@ document.addEventListener('click', (e) => {
   if (handler) handler(btn, e);
 });
 
+// Keyboard accessibility: Enter/Space on [role="button"][data-action] triggers click
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const target = e.target.closest('[role="button"][data-action]');
+  if (!target) return;
+  // Don't hijack Space on inputs/textareas
+  if (e.key === ' ' && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+  e.preventDefault();
+  target.click();
+});
+
 // ---- command palette (⌘K / Ctrl+K) ---------------------------------------
 function openCommandPalette() {
   mod('/js/features/command-palette.js').then((m) => m.open());
