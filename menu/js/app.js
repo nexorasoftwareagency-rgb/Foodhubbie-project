@@ -4,7 +4,7 @@
  * This is the only file with top-level event listener registration.
  */
 import { outletRef, get, onValue, push, set, OUTLET, isConnected } from './firebase.js';
-import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, touchSession, createOrderGroup, getCurrentGroupOrders } from './session.js';
+import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart } from './cart.js';
 import { placeOrder } from './order.js';
 import { validateCoupon } from './discount.js';
@@ -114,6 +114,23 @@ async function boot() {
                 _showConnectionIssue();
             }
             return;
+        }
+
+        // Restaurant-disabled gate: if this outlet is disabled, the whole
+        // ordering app is blocked regardless of token validity. The rules
+        // also deny all unauth writes, so this screen is defense-in-depth
+        // plus a clear message instead of a silent permission error.
+        try {
+            await assertOutletEnabled();
+        } catch (e) {
+            if (e.code === 'OUTLET_DISABLED') {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                document.getElementById('offlineBanner').classList.remove('visible');
+                UI.showScreen('screenDisabled');
+                clearTimeout(_bootWatchdog);
+                return;
+            }
+            console.warn('[Boot] Disabled check failed (proceeding):', e?.message || e);
         }
 
         // Register event listeners immediately after session init

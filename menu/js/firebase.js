@@ -50,16 +50,15 @@ export function isConnected() {
 
 // ---------------------------------------------------------------
 // Tenant resolution — parsed once from the URL:
-//   ?t=7YH8K2P4X9F6M2A&b=roshani
-// OUTLET = first path segment; BUSINESS_ID = `b` query param,
-// else inferred per-outlet (two restaurants = two businesses).
+//   ?o=outletId&b=businessId
+// OUTLET = `o` query param or first path segment
+// BUSINESS_ID = `b` query param (required for new outlets)
+// Legacy outlets fall back to legacy map for backward compat.
 // ---------------------------------------------------------------
 const pathParts = window.location.pathname.split('/').filter(Boolean);
 export const OUTLET = new URLSearchParams(window.location.search).get('o') || pathParts[0] || 'pizza';
-// ponytail: legacy fallback for the 2 original restaurants only — new outlets
-// must arrive with `?b=` on the link (bot webview links always carry it). Keep
-// in sync with bot/helpers/outlet-resolution.js. Served statically (no build),
-// so this can't import shared/ — same pattern as menu/js/geo.js.
+// Legacy map for backward compatibility with existing QR codes (no ?b= param)
+// New outlets MUST pass `?b=businessId` in the URL
 const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
 export const BUSINESS_ID = new URLSearchParams(window.location.search).get('b') || BUSINESS_BY_OUTLET[OUTLET] || 'roshani-pizza';
 

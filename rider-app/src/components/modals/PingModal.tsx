@@ -1,7 +1,7 @@
 // === src/components/modals/PingModal.tsx ===
 // Full-screen new-order alert with a 30s countdown. Mounted once at the app shell
-// level so it fires no matter which tab the rider is looking at. Watches both
-// fixed outlets (pizza + cake) simultaneously via useAvailableOrders.
+// level so it fires no matter which tab the rider is looking at. Watches the
+// rider's assigned outlet via useAvailableOrders.
 import { useEffect, useRef, useState } from "react";
 import { useLocation as useWouterLocation } from "wouter";
 import { MapPin, Navigation2 } from "lucide-react";

@@ -1,17 +1,17 @@
 /**
  * ROSHANI ERP | WHATSAPP BOT CORE v4.0
- * Single-Outlet Instance (Pizza-Bot / Cake-Bot)
+ * Multi-Outlet Instance (Restaurant-Bot)
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 // =============================
 // OUTLET CONFIGURATION (UNIFIED CORE)
 // =============================
-const OUTLET = (process.env.OUTLET || 'pizza').trim();
-let OUTLET_NAME = 'Our Restaurant';
-const OUTLET_EMOJI = OUTLET === 'pizza' ? '🍕' : '🎂';
+const OUTLET = (process.env.OUTLET || 'outlet').trim();
+const OUTLET_NAME = 'Our Restaurant';
+const OUTLET_EMOJI = '🏪';
 let OTHER_OUTLET_NAME = 'Our Other Store';
-const OTHER_OUTLET_EMOJI = OUTLET === 'pizza' ? '🎂' : '🍕';
+const OTHER_OUTLET_EMOJI = '🏪';
 const OTHER_OUTLET_NUMBER = '';
 // Fixed developer number (mirrors getReportRecipients). Used by promo opt-out
 // filter to recognize admin senders and let them continue ordering.
@@ -35,7 +35,7 @@ const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const admin = require('firebase-admin');
 const { getData, setData, updateData, db, resolvePath, getUserProfile, saveUserProfile } = require('./firebase');
-const { resolveBusinessIdFor } = require('./helpers/outlet-resolution');
+const { resolveBusinessIdFor, initializeOutletBusinessIndex } = require('./helpers/outlet-resolution');
 const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
 const discountEngine = require('./discount-engine');
 
@@ -335,7 +335,7 @@ function initCommandListener(sock) {
 // 2. ORDER & NOTIFICATION CORE
 // =============================
 
-async function generateOrderId(outlet = 'pizza') {
+async function generateOrderId(outlet = 'outlet') {
     const today = new Date();
     const y = today.getFullYear();
     const m = (today.getMonth() + 1).toString().padStart(2, '0');
@@ -428,7 +428,7 @@ async function resendMenuCTA(sock, sender, user, store, bot, ctaText) {
     return sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl);
 }
 
-async function appendContactInfo(text, outlet = 'pizza') {
+async function appendContactInfo(text, outlet = 'outlet') {
     if (!text) return '';
     try {
         const storeSettings = await getData("settings/Store", outlet) || {};
@@ -441,7 +441,7 @@ async function appendContactInfo(text, outlet = 'pizza') {
     }
 }
 
-async function sendImage(sock, to, image, text, outlet = 'pizza', skipContact = false) {
+async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact = false) {
     const finalMsg = skipContact ? text : await appendContactInfo(text, outlet);
     if (!image) {
         await sock.sendMessage(to, { text: finalMsg });
@@ -467,7 +467,7 @@ async function sendImage(sock, to, image, text, outlet = 'pizza', skipContact = 
     }
 }
 
-async function deductInventoryStock(sock, items, outlet = 'pizza') {
+async function deductInventoryStock(sock, items, outlet = 'outlet') {
     if (!items || !Array.isArray(items) || items.length === 0) return;
     try {
         const inventoryRef = db.ref(resolvePath('inventory', outlet));
@@ -546,7 +546,7 @@ async function cleanupStaleOrders(sock) {
     }
 }
 
-async function getRiderByEmail(email, outlet = 'pizza') {
+async function getRiderByEmail(email, outlet = 'outlet') {
     if (!email) return null;
     try {
         const riders = await getData("riders", outlet);
@@ -560,7 +560,7 @@ async function getRiderByEmail(email, outlet = 'pizza') {
     return null;
 }
 
-async function addInAppNotification(uid, title, body, type = 'info', icon = 'bell', outlet = 'pizza') {
+async function addInAppNotification(uid, title, body, type = 'info', icon = 'bell', outlet = 'outlet') {
     if (!uid) return;
     try {
         const notifId = "NOTIF" + Date.now();
@@ -622,7 +622,7 @@ async function sendInvalidInputHelp(sock, sender, user) {
 // =============================
 
 async function sendCategories(sock, sender, user) {
-    const outlet = user.outlet || 'pizza';
+    const outlet = user.outlet || 'outlet';
     const [categories, botSettings, storeSettings] = await Promise.all([
         getData('categories', outlet),
         getData("settings/Bot", outlet).catch(() => ({})),
@@ -633,8 +633,8 @@ async function sendCategories(sock, sender, user) {
     user.categoryList = Object.entries(categories).map(([id, val]) => ({ id, ...val }));
 
     const storeName = storeSettings.storeName || 'Our Restaurant';
-    const emoji = outlet === 'pizza' ? "🍕" : "🎂";
-    const headerEmoji = outlet === 'pizza' ? "🔥" : "✨";
+    const emoji = '🏪';
+    const headerEmoji = '🔥';
 
     let msg = `✨ *${storeName.toUpperCase()}* ✨\n`;
     msg += `🍽️ *SELECT CATEGORY - ${outlet.toUpperCase()}*\n`;
@@ -654,7 +654,7 @@ async function sendCategories(sock, sender, user) {
 async function sendCartView(sock, sender, user, isAdded = false) {
     if (!user.cart || user.cart.length === 0) {
         let msg = `🛒 *YOUR CART IS EMPTY*\n`;
-        msg += `You haven't added anything to your cart yet. 🍕\n`;
+        msg += `You haven't added anything to your cart yet. 🍽️\n`;
         msg += `1️⃣  *Browse Menu* 🍽️\n`;
         msg += `🏠 *0* Main Menu`;
         user.step = "EMPTY_CART_VIEW";
@@ -664,7 +664,7 @@ async function sendCartView(sock, sender, user, isAdded = false) {
     let msg = `${isAdded ? `✅ *ADDED TO CART!* 🛒` : `🛒 *YOUR CART SUMMARY*`}\n`;
     msg += lines;
     msg += `------------------------\n💰 *Subtotal: ₹${subtotal}*\n`;
-    msg += `1️⃣  *Add another item* 🍕\n`;
+    msg += `1️⃣  *Add another item* 🍽️\n`;
     msg += `2️⃣  *Proceed to Checkout* 🚀\n`;
     msg += `3️⃣  *Clear Cart* 🗑️\n`;
     msg += `0️⃣  *Back* 🔙\n`;
@@ -675,7 +675,7 @@ async function sendCartView(sock, sender, user, isAdded = false) {
 
 async function sendFCMToAdmins(orderId, order) {
     try {
-        const outlet = order.outlet || 'pizza';
+        const outlet = order.outlet || 'outlet';
         const snap = await db.ref('admins').once('value');
         const admins = snap.val();
         if (!admins) return;
@@ -698,10 +698,27 @@ async function sendFCMToAdmins(orderId, order) {
     }
 }
 
+async function sendFCMToRider(riderId, title, body, data = {}) {
+    try {
+        const snap = await db.ref(`riders/${riderId}/fcmToken`).once('value');
+        const token = snap.val();
+        if (!token) return;
+        await admin.messaging().send({
+            token,
+            notification: { title, body },
+            data,
+            android: { priority: 'high', ttl: '86400s' },
+            webpush: { headers: { TTL: '86400', Urgency: 'high' } }
+        });
+    } catch (e) {
+        console.error(`[FCM] sendFCMToRider error (rider ${riderId}):`, e.message);
+    }
+}
+
 async function notifyAdmin(sock, orderId, order, type = 'NEW') {
     try {
         if (!sock || isSocketDead(sock)) return;
-        const outlet = order.outlet || 'pizza';
+        const outlet = order.outlet || 'outlet';
         const jids = await getCachedAdminJids();
         if (!jids || jids.length === 0) return;
 
@@ -815,7 +832,8 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 img = botSettings.imgPlaced || botSettings.imgConfirmed;
             } else if (statusLower === "confirmed") {
                 if (isDineIn && isNew) {
-                    msg = `🍕 *WELCOME TO ROSHANI ${order.outlet?.toUpperCase() || 'PIZZA'}!* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour counter order has been *CONFIRMED*! 🎊\n🆔 *Order ID:* #${id.slice(-5)}\n👤 *Customer:* ${order.customerName || 'Guest'}\n${order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour delicious meal is being prepared right now! 👨‍🍳🔥\n_Thank you for dining with us!_ 🙏`;
+                    const outletName = order.outlet?.toUpperCase() || 'OUR RESTAURANT';
+                    msg = `🏪 *WELCOME TO ${outletName}!* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour counter order has been *CONFIRMED*! 🎊\n🆔 *Order ID:* #${id.slice(-5)}\n👤 *Customer:* ${order.customerName || 'Guest'}\n${order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour delicious meal is being prepared right now! 👨‍🍳🔥\n_Thank you for dining with us!_ 🙏`;
                 } else {
                     msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}Your order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")}`;
                 }
@@ -850,7 +868,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 let riderInfoText = "";
                 const riderId = order.riderId || order.assignedRider;
                 if (riderId) {
-                    const rider = (riderId.includes('@')) ? await getRiderByEmail(riderId, order.outlet || 'pizza') : { name: order.riderName, phone: order.riderPhone };
+                    const rider = (riderId.includes('@')) ? await getRiderByEmail(riderId, order.outlet || 'outlet') : { name: order.riderName, phone: order.riderPhone };
                     if (rider) {
                         riderInfoText = `\n📞 *Rider:* ${rider.name || "Delivery Partner"} (${rider.phone || ""})`;
                     }
@@ -871,7 +889,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${id.slice(-5)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nPlease be ready to receive your order. Thank you! 🙏`;
                 img = botSettings.imgOut;
             } else if (statusLower === "delivered" || statusLower === "served") {
-                msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🍕❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
+                msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
                 img = botSettings.imgDelivered;
             } else if (statusLower === "cancelled") {
                 msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nWe're sorry, your order #${id.slice(-5)} has been cancelled.\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nIf you have any questions, please contact us. 🙏`;
@@ -882,7 +900,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
 
             if (msg) {
                 console.log(`[BOT] 📧 Sending ${currentStatus} notification to ${maskJid(jid)}...`);
-                const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'pizza', true);
+                const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'outlet', true);
 
                 // CRITICAL: Preserve ALL fields in processedStatus to avoid duplicate rider pings on next update
                 await saveProcessedStatus(id, {
@@ -936,6 +954,13 @@ process.on('unhandledRejection', (err) => {
 });
 
 async function startBot() {
+    // Initialize outlet -> businessId reverse index for O(1) tenant path resolution
+    try {
+        await initializeOutletBusinessIndex(db);
+    } catch (e) {
+        console.error('[Bot] Failed to initialize outlet business index:', e.message);
+    }
+
     // Resolve live store name from Firebase (ponytail: hardcoded brand removed —
     // falls back to "Our Restaurant" if the store name isn't set yet).
     try {
@@ -1130,7 +1155,7 @@ async function sendDailyReportSafely(dateOverride = null) {
     } catch (err) {
         console.error('[REPORT] ❌ Daily report failed:', err);
         const jids = await getCachedAdminJids().catch(() => []);
-        const alertMsg = `⚠️ *Daily report failed to generate* for ${OUTLET_NAME} (${dateOverride || 'today'}).\nCheck \`pm2 logs ${OUTLET === 'pizza' ? 'pizza-bot' : 'cake-bot'}\` for details.`;
+        const alertMsg = `⚠️ *Daily report failed to generate* for ${OUTLET_NAME} (${dateOverride || 'today'}).\nCheck \`pm2 logs ${OUTLET}-bot\` for details.`;
         await Promise.all((jids || []).map(jid => sock.sendMessage(jid, { text: alertMsg }).catch(() => {})));
     }
 }
@@ -1510,7 +1535,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         return sock.sendMessage(sender, { text: "📋 Type *status* to check your order status, or tap the menu link above to order again." });
                     }
                     // C3: Menu keywords → resend just the menu CTA
-                    if (/^(order|menu|pizza|cake|food|start|restart)$/i.test(text)) {
+                    if (/^(order|menu|food|start|restart)$/i.test(text)) {
                         return resendMenuCTA(sock, sender, user);
                     }
                     // C5: Anything else → nudge + resend the menu CTA
@@ -1580,7 +1605,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     user.current.addons = [];
 
                     user.step = "QUANTITY";
-                    let qtyMsg = `🔢 *STEP 4: ENTER QUANTITY* 🍕\n`;
+                    let qtyMsg = `🔢 *STEP 4: ENTER QUANTITY* 🏪\n`;
                     qtyMsg += `*How many of this item would you like to order?*\n`;
                     qtyMsg += `_Example: Reply with 1, 2, 5, etc._\n`;
                     qtyMsg += `0️⃣ *Take one step Back* 🔙`;
@@ -1855,7 +1880,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                             cart: user.cart || [],
                             sourceStep: "CONFIRM_PAY",
                             reason: "Cancelled at final invoice step",
-                            outlet: user.outlet || "pizza",
+                            outlet: user.outlet || "outlet",
                             channel: "whatsapp"
                         };
 
@@ -1886,7 +1911,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                             customerName: user.name || "Anonymous",
                             phone: user.phone || "N/A",
                             total,
-                            outlet: user.outlet || "pizza"
+                            outlet: user.outlet || "outlet"
                         }, 'CANCELLED');
 
                         const outlet = user.outlet;
@@ -2112,16 +2137,43 @@ async function handleCheckoutFinal(sock, sender, user) {
 // Watch for new orders from non-WA sources (QR menu, REST API) → send FCM to admins
 function initFCMWatcher() {
   const ONE_MIN_MS = 60000;
-  for (const outlet of ['pizza', 'cake']) {
-    db.ref(resolvePath('orders', outlet)).on('child_added', (snap) => {
-      const order = snap.val() || {};
-      if (order._fcmSent) return;
-      const createdAt = new Date(order.createdAt).getTime();
-      if (Date.now() - createdAt > ONE_MIN_MS) return; // skip old orders on restart
-      sendFCMToAdmins(snap.key, order).catch(() => {});
-      snap.ref.child('_fcmSent').set(true).catch(() => {});
-    });
-  }
+  const orderState = new Map(); // orderId -> { riderId, status } (RTDB child_changed has no `before`)
+
+  // Bot runs as single-outlet instance (determined by process.env.OUTLET)
+  // resolvePath('orders') uses the bot's own outlet from process.env.OUTLET
+  const ordersRef = db.ref(resolvePath('orders'));
+
+  ordersRef.on('child_added', (snap) => {
+    const order = snap.val() || {};
+    orderState.set(snap.key, { riderId: order.riderId, status: order.status });
+    if (order._fcmSent) return;
+    const createdAt = new Date(order.createdAt).getTime();
+    if (Date.now() - createdAt > ONE_MIN_MS) return; // skip old orders on restart
+    sendFCMToAdmins(snap.key, order).catch(() => {});
+    snap.ref.child('_fcmSent').set(true).catch(() => {});
+  });
+
+  // Rider push on assignment / key status change (this bot only handles its own outlet)
+  // The outlet is derived from the listener's scope, not from order data
+  // (QR/menu orders don't have an 'outlet' field on the record)
+  // Use the bot's configured outlet for FCM payload
+  const botOutlet = resolveOutletId();
+  ordersRef.on('child_changed', (snap) => {
+    const after = snap.val() || {};
+    const orderId = snap.key;
+    const before = orderState.get(orderId) || {};
+    orderState.set(orderId, { riderId: after.riderId, status: after.status });
+    if (after.riderId && after.riderId !== before.riderId) {
+      sendFCMToRider(after.riderId, 'New Order Assigned!', `Order #${orderId.slice(-5)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: './index.html' });
+    } else if (after.riderId && after.status && after.status !== before.status) {
+      const s = String(after.status).toLowerCase();
+      if (['ready', 'packed', 'cooked'].includes(s)) {
+        sendFCMToRider(after.riderId, `Order #${orderId.slice(-5)}`, `Order #${orderId.slice(-5)} is ready for pickup!`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
+      } else if (s === 'cancelled') {
+        sendFCMToRider(after.riderId, `Order #${orderId.slice(-5)}`, `Order #${orderId.slice(-5)} has been cancelled.`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
+      }
+    }
+  });
 }
 
 startBot();

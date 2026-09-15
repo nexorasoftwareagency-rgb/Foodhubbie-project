@@ -40,6 +40,7 @@ const routes = [
       const [, bid, oid] = h.split('/');
       return mod('/js/features/restaurant-analytics.js').then((m) => m.render(bid, oid));
     } },
+  { test: (h) => h === 'notifications', dashboard: 'restaurant', load: () => mod('/js/features/notifications.js').then((m) => m.render()) },
 ];
 
 // Home route for each dashboard — used by the switcher when jumping

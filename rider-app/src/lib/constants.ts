@@ -1,30 +1,53 @@
 // === src/lib/constants.ts ===
-// Firebase path helpers, proximity gates, rate limits, and WhatsApp templates —
-// extracted 1:1 from rider/app.js and rider/js/whatsapp.js in roshani-pizza-bot.
+// Firebase path helpers, proximity gates, rate limits, and WhatsApp templates.
+// Supports dynamic outlets — outlet metadata fetched from Firebase at runtime.
 
-/** Roshani runs exactly two fixed outlets — not a dynamic multi-tenant discovery
- *  like FoodHubbie. Matches window.outletCoords fallback values in app.js. */
-export const OUTLETS = [
-  { id: "pizza" as const, name: "Store 1", icon: "🏪", color: "#E84908", fallbackLat: 25.887944, fallbackLng: 85.026194 },
-  { id: "cake" as const, name: "Store 2", icon: "🏪", color: "#D946EF", fallbackLat: 25.887472, fallbackLng: 85.026861 },
-];
+/** Outlet ID is any string (business-specific). Fallback coords for unknown outlets. */
+export type OutletId = string;
 
-export type OutletId = "pizza" | "cake";
+/** Fallback coordinates when outlet settings not yet loaded. */
+export const FALLBACK_COORDS = { lat: 25.887944, lng: 85.026194 };
 
-/** Two restaurants = two businesses, each with one outlet.
- *  Matches Admin/js/firebase.js BUSINESS_BY_OUTLET and bot helpers. */
-export const BUSINESS_BY_OUTLET: Record<OutletId, string> = {
-  pizza: "roshani-pizza",
-  cake: "roshani-cake",
-};
+/** In-memory cache for outlet -> businessId mapping */
+const outletBusinessIdCache = new Map<OutletId, string>();
 
-export function businessIdFor(outlet: OutletId): string {
-  return BUSINESS_BY_OUTLET[outlet];
+/** Resolve businessId for an outlet at runtime. */
+export async function resolveBusinessIdForOutlet(outletId: OutletId): Promise<string> {
+  if (outletBusinessIdCache.has(outletId)) {
+    return outletBusinessIdCache.get(outletId)!;
+  }
+  const { db, ref, get } = await import("@/lib/firebase");
+  const snap = await get(ref(db, `businesses`));
+  const businesses = (snap.val() || {}) as Record<string, any>;
+  
+  for (const [bid, business] of Object.entries(businesses)) {
+    if (business.outlets && business.outlets[outletId]) {
+      outletBusinessIdCache.set(outletId, bid);
+      return bid;
+    }
+  }
+  // Fallback to first business (should not happen in production)
+  const firstBid = Object.keys(businesses)[0];
+  outletBusinessIdCache.set(outletId, firstBid);
+  return firstBid;
 }
 
-/** Prefix outlet-scoped paths under businesses/{bid}/outlets/{oid}/. */
-export function tenantPath(outlet: OutletId, path: string) {
-  return `businesses/${businessIdFor(outlet)}/outlets/${outlet}/${path}`;
+/** Synchronous version using cached businessId (for use after cache is populated) */
+export function getBusinessIdForOutlet(outletId: OutletId): string {
+  return outletBusinessIdCache.get(outletId) || "";
+}
+
+/** Prefix outlet-scoped paths under businesses/{bid}/outlets/{oid}/.
+ *  Business ID resolved at runtime from outlet settings. */
+export function tenantPath(outlet: OutletId, path: string): string {
+  const bid = getBusinessIdForOutlet(outlet);
+  return `businesses/${bid}/outlets/${outlet}/${path}`;
+}
+
+/** Async version for paths that need runtime resolution */
+export async function tenantPathAsync(outlet: OutletId, path: string): Promise<string> {
+  const bid = await resolveBusinessIdForOutlet(outlet);
+  return `businesses/${bid}/outlets/${outlet}/${path}`;
 }
 
 export const dbPaths = {
@@ -32,12 +55,12 @@ export const dbPaths = {
   riderNotifs: (rId: string) => `riders/${rId}/notifications`,
   riderLocation: (rId: string) => `riders/${rId}/location`,
   /** Per-outlet, matching the real schema exactly (NOT the unused top-level riderStats node). */
-  riderStats: (outlet: OutletId, rId: string) => tenantPath(outlet, `riderStats/${rId}`),
-  orders: (outlet: OutletId) => tenantPath(outlet, "orders"),
-  singleOrder: (outlet: OutletId, orderId: string) => tenantPath(outlet, `orders/${orderId}`),
-  outletSettings: (outlet: OutletId) => tenantPath(outlet, "settings"),
-  botCommands: (outlet: OutletId) => tenantPath(outlet, "bot/commands"),
-  otpAttempts: (outlet: OutletId, orderId: string) => tenantPath(outlet, `otpAttempts/${orderId}`),
+  riderStats: (outlet: OutletId, rId: string) => `businesses/${getBusinessIdForOutlet(outlet)}/outlets/${outlet}/riderStats/${rId}`,
+  orders: (outlet: OutletId) => `businesses/${getBusinessIdForOutlet(outlet)}/outlets/${outlet}/orders`,
+  singleOrder: (outlet: OutletId, orderId: string) => `businesses/${getBusinessIdForOutlet(outlet)}/outlets/${outlet}/orders/${orderId}`,
+  outletSettings: (outlet: OutletId) => `businesses/${getBusinessIdForOutlet(outlet)}/outlets/${outlet}/settings`,
+  botCommands: (outlet: OutletId) => `businesses/${getBusinessIdForOutlet(outlet)}/outlets/${outlet}/bot/commands`,
+  otpAttempts: (outlet: OutletId, orderId: string) => `businesses/${getBusinessIdForOutlet(outlet)}/outlets/${outlet}/otpAttempts/${orderId}`,
   settlements: (rId: string) => `settlements/${rId}`,
   riderErrors: (rId: string) => `logs/riderErrors/${rId}`,
 };
@@ -58,35 +81,29 @@ export const ORDER_STATUSES = [
   "Cancelled",
 ] as const;
 
-/** Proximity gate — Roshani uses ONE uniform radius for accept/reached-outlet/
- *  confirm-pickup (window.PICKUP_RADIUS_KM = 0.5), and NO gate at all for
- *  reached-drop (verified against app.js — reachedDropLocation has no distance check). */
+/** Proximity gate — uniform radius for accept/reached-outlet/
+ *  confirm-pickup (PICKUP_RADIUS_KM = 0.5), and NO gate at all for
+ *  reached-drop (reachedDropLocation has no distance check). */
 export const PROXIMITY = {
   PICKUP_RADIUS_KM: 0.5,
 };
 
-/** OTP rate limiting — identical constants to the real app.js (10 attempts / 60s block, 60s resend). */
+/** OTP rate limiting — 10 attempts / 60s block, 60s resend. */
 export const OTP_LIMITS = {
   MAX_ATTEMPTS: 10,
   BLOCK_DURATION_MS: 60 * 1000,
   RESEND_COOLDOWN_MS: 60 * 1000,
 };
 
-/** GPS sync interval while Online (matches FoodHubbie port's cadence — reasonable
- *  default; the real app.js doesn't specify one since it's a distinct interaction). */
+/** GPS sync interval while Online. */
 export const LOCATION_SYNC_INTERVAL_MS = 10 * 1000;
 
 export const PING_COUNTDOWN_SECONDS = 30;
 
-/** Ghost-order filtering window — matches existing rider app's 48h window. */
+/** Ghost-order filtering window — 48h window. */
 export const GHOST_ORDER_WINDOW_MS = 48 * 60 * 60 * 1000;
 
-/** WhatsApp templates — exact strings from rider/js/whatsapp.js, branded "Roshani Sudha"
- *  (the real customer-facing name used in these messages, distinct from the "Roshani
- *  Pizza | Rider Portal" browser title). NOTE: there is deliberately NO template call
- *  for sending the OTP itself — the WhatsApp bot independently watches the order's
- *  deliveryOTP field and messages the customer; the rider app never has that responsibility
- *  ("Removed triggerWhatsAppAlert from here to hide OTP from Rider" — real code comment). */
+/** WhatsApp templates — generic for any restaurant brand. */
 export const WHATSAPP_TEMPLATES = {
   ACCEPTED: (riderName: string, orderId: string) =>
     `Hello! I am ${riderName}, your delivery partner for order #${orderId}. I am on my way to pick up your order! \u{1F6F5}`,
@@ -112,6 +129,5 @@ export const CONFETTI_COLORS = ["#E84908", "#FF7A00", "#22C55E"];
 
 export const APP_VERSION = "1.0.0";
 
-/** Motivational weekly earnings target shown on the Earnings page. No backend field
- *  for this exists — safe to wire to a real Firebase setting later if needed. */
+/** Motivational weekly earnings target shown on the Earnings page. Configurable via settings. */
 export const WEEKLY_EARNINGS_TARGET = 4000;

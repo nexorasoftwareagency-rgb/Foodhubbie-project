@@ -435,7 +435,22 @@ export async function touchSession() {
     _lastHeartbeat = now;
 }
 
-/** Saves customer name, phone, guest count, and special note on the session record. */
+/**
+ * Centralized outlet disabled check.
+ * Throws an error if the outlet is disabled, with a user-friendly message.
+ * Call this at app boot (app.js) and before placing orders (order.js).
+ * The rules also deny writes, but this gives a clear UI message instead of
+ * a silent permission failure.
+ */
+export async function assertOutletEnabled() {
+    const disabledSnap = await get(outletRef('disabled'));
+    if (disabledSnap.exists() && disabledSnap.val() === true) {
+        const err = new Error('OUTLET_DISABLED');
+        err.userMessage = 'This restaurant is temporarily disabled. Please try again later.';
+        err.code = 'OUTLET_DISABLED';
+        throw err;
+    }
+}
 export async function saveCheckoutContact(name, phone, guestCount, specialNote) {
     if (!Session.sessionId) return;
     const now = Date.now();

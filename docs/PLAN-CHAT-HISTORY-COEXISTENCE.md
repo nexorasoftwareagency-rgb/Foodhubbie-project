@@ -1,6 +1,6 @@
 # Plan — WhatsApp Coexistence + Chat History Tab
 
-**Status:** ⬜ planned (not started)
+**Status:** ✅ implemented + deployed 2026-08-17 (H1–H5 in `docs/SUPREME-ADMIN-PROGRESS.md`; Feature B shipped, Feature A shipped as detect+guide, not a magic toggle)
 **Date:** 2026-08-17
 **Owner directive:** *"can i manage and operate the WhatsApp + Coexistence feature use and directly connect from supreme admin with least taps and clicks...and also plan to make a new tab with same WhatsApp real app ui and ux in Admin Dashboard of the restaurant... Build a Chat history tab."*
 

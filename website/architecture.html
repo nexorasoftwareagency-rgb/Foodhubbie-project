@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How It Works — FoodHubbie ERP</title>
+<meta name="description" content="Real-world flows for FoodHubbie ERP — customer ordering, dine-in, delivery, rider, and admin — explained simply.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{--brand:#E84908;--brand-dark:#c23a05;--brand-light:#fff3e2;--ink:#111827;--muted:#6b7280;--bg:#fff;--soft:#faf8f6;--line:#e5e7eb;--radius:16px;--shadow:0 1px 3px rgba(0,0,0,.06);--shadow-lg:0 10px 40px rgba(0,0,0,.08)}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--ink);line-height:1.65;-webkit-font-smoothing:antialiased;padding-bottom:64px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+
+  header{position:sticky;top:0;background:rgba(255,255,255,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:100}
+  nav{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{font-weight:800;font-size:18px;text-decoration:none;color:var(--ink)}
+  .logo span{color:var(--brand)}
+  nav .links{display:flex;align-items:center;gap:24px}
+  nav a.link{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500}
+  nav a.link:hover{color:var(--ink)}
+
+  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%);text-align:center}
+  .kicker{color:var(--brand);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+  h1{font-size:clamp(28px,5vw,42px);letter-spacing:-.025em;font-weight:800;margin-bottom:12px}
+  .sub{color:var(--muted);font-size:17px;max-width:640px;margin:0 auto}
+
+  .flow-section{padding:56px 0 0}
+  .flow-section .head{display:flex;align-items:center;gap:16px;margin-bottom:8px}
+  .flow-section .head .badge{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+  .flow-section h2{font-size:24px;font-weight:800;letter-spacing:-.02em}
+  .flow-section .desc{color:var(--muted);font-size:15px;max-width:640px;margin-bottom:28px}
+
+  .flow{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow)}
+  .stepbox{flex:1;min-width:120px;max-width:180px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:16px 14px;text-align:center;position:relative}
+  .stepbox .step-num{width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 10px}
+  .stepbox .step-icon{font-size:26px;margin-bottom:8px;display:block}
+  .stepbox b{font-size:13.5px;font-weight:700;display:block;margin-bottom:4px}
+  .stepbox small{font-size:12px;color:var(--muted);line-height:1.5;display:block}
+  .flow-arrow{display:flex;align-items:center;color:var(--brand);font-size:22px;font-weight:800;padding:0 2px;align-self:center}
+  @media(max-width:720px){
+    .flow{flex-direction:column;align-items:stretch}
+    .stepbox{max-width:none}
+    .flow-arrow{transform:rotate(90deg);align-self:center;padding:4px 0}
+  }
+
+  .who{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:48px 0 24px}
+  @media(max-width:900px){.who{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.who{grid-template-columns:1fr}}
+  .who-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:28px;text-align:center;box-shadow:var(--shadow)}
+  .who-card .icon{font-size:34px;margin-bottom:10px}
+  .who-card h3{font-size:16px;font-weight:700;margin-bottom:6px}
+  .who-card p{color:var(--muted);font-size:13px;line-height:1.6}
+
+  .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:100}
+  .bottom-nav .wrap{display:flex;justify-content:center;gap:0}
+  .bottom-nav a{flex:1;max-width:200px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px 10px;text-decoration:none;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-top:2px solid transparent}
+  .bottom-nav a:hover{color:var(--brand)}
+  .bottom-nav a.active{color:var(--brand);border-top-color:var(--brand)}
+  .nav-icon{font-size:20px}
+
+  footer{background:#0a0a0a;color:rgba(255,255,255,.5);padding:40px 0 24px;margin-top:72px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+  footer .logo{color:#fff;font-weight:800;font-size:16px}
+  footer .logo span{color:var(--brand)}
+  footer a{color:rgba(255,255,255,.5);text-decoration:none;font-size:13px}
+  footer a:hover{color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="index.html">Food<span>Hubbie</span> ERP</a>
+      <div class="links">
+        <a class="link" href="index.html">Home</a>
+        <a class="link" href="architecture.html" style="color:var(--brand)">How It Works</a>
+        <a class="link" href="contact.html">Contact</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <a href="index.html" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;margin-bottom:32px">← Back to Home</a>
+    <div class="kicker">How It Works</div>
+    <h1>Real-world flows, no jargon</h1>
+    <p class="sub">Here's what actually happens when a customer scans a QR code, dines in, or orders delivery — and how your team and riders use FoodHubbie every day.</p>
+  </div>
+</section>
+
+<div class="wrap">
+
+  <div class="who">
+    <div class="who-card"><div class="icon">🙂</div><h3>Customers</h3><p>Scan, browse, order, pay, and track — all from their own phone. No app download.</p></div>
+    <div class="who-card"><div class="icon">👨‍🍳</div><h3>Kitchen</h3><p>Orders appear on the kitchen screen instantly. Cook, mark ready, done.</p></div>
+    <div class="who-card"><div class="icon">🛵</div><h3>Riders</h3><p>Go online, get assigned deliveries, follow the flow, and get paid per delivery.</p></div>
+    <div class="who-card"><div class="icon">🧑‍💼</div><h3>Owner / Staff</h3><p>One dashboard for orders, tables, menu, inventory, promotions, and money.</p></div>
+  </div>
+
+  <!-- CUSTOMER FLOW -->
+  <section class="flow-section">
+    <div class="head">
+      <div class="badge" style="background:#fff7ed">📱</div>
+      <h2>Customer Ordering — Delivery</h2>
+    </div>
+    <p class="desc">Someone hungry finds your restaurant and orders from their phone. Here's the journey.</p>
+    <div class="flow">
+      <div class="stepbox"><span class="step-num">1</span><span class="step-icon">🍕</span><b>Opens the menu</b><small>via website link or scanned QR code</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">2</span><span class="step-icon">🛒</span><b>Builds the order</b><small>picks pizza, toppings, add-ons, size</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">3</span><span class="step-icon">💳</span><b>Checks out</b><small>adds coupon, confirms total, pays</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">4</span><span class="step-icon">👨‍🍳</span><b>Kitchen prepares</b><small>order appears on the kitchen screen</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">5</span><span class="step-icon">🛵</span><b>Rider delivers</b><small>customer tracks the rider live on a map</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">6</span><span class="step-icon">✅</span><b>Food arrives</b><small>OTP confirms delivery — done!</small></div>
+    </div>
+  </section>
+
+  <!-- DINE-IN FLOW -->
+  <section class="flow-section">
+    <div class="head">
+      <div class="badge" style="background:#fef2f2">🪑</div>
+      <h2>Dine-In — QR Ordering at the Table</h2>
+    </div>
+    <p class="desc">Customers sit down, scan the code on their table, and order without waiting for a waiter.</p>
+    <div class="flow">
+      <div class="stepbox"><span class="step-num">1</span><span class="step-icon">🪑</span><b>Sits &amp; scans</b><small>every table has its own QR code</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">2</span><span class="step-icon">📋</span><b>Orders from seat</b><small>browses menu, adds to cart</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">3</span><span class="step-icon">👨‍🍳</span><b>Kitchen cooks</b><small>order lands on the kitchen display</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">4</span><span class="step-icon">🍽️</span><b>Served at table</b><small>staff marks order as delivered</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">5</span><span class="step-icon">🧾</span><b>Requests the bill</b><small>one tap from the phone — no shouting</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">6</span><span class="step-icon">👋</span><b>Pays &amp; leaves</b><small>even group splits stay independent</small></div>
+    </div>
+  </section>
+
+  <!-- RIDER FLOW -->
+  <section class="flow-section">
+    <div class="head">
+      <div class="badge" style="background:#eff6ff">🛵</div>
+      <h2>Rider's Day — Delivery App</h2>
+    </div>
+    <p class="desc">What your delivery partner sees on their phone from clock-in to paycheck.</p>
+    <div class="flow">
+      <div class="stepbox"><span class="step-num">1</span><span class="step-icon">🟢</span><b>Goes online</b><small>one tap — ready for deliveries</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">2</span><span class="step-icon">📨</span><b>Gets assigned</b><small>nearest free rider gets the order</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">3</span><span class="step-icon">🏪</span><b>Picks up</b><small>arrives at restaurant, collects food</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">4</span><span class="step-icon">📍</span><b>Delivers</b><small>customer shares OTP — handoff confirmed</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">5</span><span class="step-icon">💰</span><b>Earns</b><small>delivery fee lands in the wallet</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">6</span><span class="step-icon">📊</span><b>Tracks earnings</b><small>today's total, history, settlements</small></div>
+    </div>
+  </section>
+
+  <!-- ADMIN FLOW -->
+  <section class="flow-section">
+    <div class="head">
+      <div class="badge" style="background:#f5f3ff">🖥️</div>
+      <h2>Owner / Staff — Admin Dashboard</h2>
+    </div>
+    <p class="desc">Everything happening across the restaurant, live in one place — on desktop or phone.</p>
+    <div class="flow">
+      <div class="stepbox"><span class="step-num">1</span><span class="step-icon">📊</span><b>Live dashboard</b><small>orders, revenue, riders — updated live</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">2</span><span class="step-icon">🍕</span><b>Runs the kitchen</b><small>kitchen display, order statuses, tables</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">3</span><span class="step-icon">🧑‍💼</span><b>Manages the menu</b><small>items, categories, prices, inventory</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">4</span><span class="step-icon">📣</span><b>Sends promotions</b><small>discounts, coupons, WhatsApp campaigns</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">5</span><span class="step-icon">🔍</span><b>Tracks everything</b><small>customers, feedback, rider performance</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="stepbox"><span class="step-num">6</span><span class="step-icon">📈</span><b>Grows with data</b><small>top items, lost sales, sales reports</small></div>
+    </div>
+  </section>
+
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener" class="active">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="index.html">Home</a> · <a href="architecture.html">How It Works</a> · <a href="contact.html">Contact</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

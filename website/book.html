@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book a Order — FoodHubbie ERP</title>
+<meta name="description" content="Tell us about your restaurant and we'll get back to you. Book an order, free trial, or demo for FoodHubbie ERP.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{--brand:#E84908;--brand-dark:#c23a05;--brand-light:#fff3e2;--ink:#111827;--muted:#6b7280;--bg:#fff;--soft:#faf8f6;--line:#e5e7eb;--radius:16px;--shadow:0 1px 3px rgba(0,0,0,.06);--shadow-lg:0 10px 40px rgba(0,0,0,.08)}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--ink);line-height:1.65;-webkit-font-smoothing:antialiased;padding-bottom:64px;background:var(--soft)}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+
+  header{position:sticky;top:0;background:rgba(255,255,255,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:100}
+  nav{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{font-weight:800;font-size:18px;text-decoration:none;color:var(--ink)}
+  .logo span{color:var(--brand)}
+  nav .links{display:flex;align-items:center;gap:24px}
+  nav a.link{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500}
+  nav a.link:hover{color:var(--ink)}
+
+  .hero{padding:72px 0 32px;text-align:center}
+  .kicker{color:var(--brand);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+  h1{font-size:clamp(28px,5vw,40px);letter-spacing:-.025em;font-weight:800;margin-bottom:12px}
+  .sub{color:var(--muted);font-size:17px;max-width:600px;margin:0 auto}
+
+  .form-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg);max-width:640px;margin:32px auto 0;padding:40px}
+  .form-card label{display:block;font-size:13px;font-weight:600;margin:18px 0 6px;color:var(--ink)}
+  .form-card input,.form-card select,.form-card textarea{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;background:#fff;color:var(--ink);transition:border-color .15s;outline:none}
+  .form-card input:focus,.form-card select:focus,.form-card textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(232,73,8,.12)}
+  .form-card textarea{min-height:110px;resize:vertical}
+  .form-card .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:560px){.form-card .row{grid-template-columns:1fr}}
+  .form-card .hint{font-size:12px;color:var(--muted);margin-top:5px}
+
+  .submit-btn{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:10px;background:#25D366;color:#fff;padding:16px;border-radius:12px;border:0;font-size:16px;font-weight:700;cursor:pointer;margin-top:26px;transition:all .2s}
+  .submit-btn:hover{background:#1da851;box-shadow:0 8px 24px rgba(37,211,102,.3)}
+  .submit-btn:disabled{opacity:.5;cursor:wait}
+
+  .success{display:none;margin-top:22px;background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:18px 20px;font-size:14px;color:#166534}
+  .success.show{display:block}
+
+  .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:100}
+  .bottom-nav .wrap{display:flex;justify-content:center;gap:0}
+  .bottom-nav a{flex:1;max-width:200px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px 10px;text-decoration:none;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-top:2px solid transparent}
+  .bottom-nav a:hover{color:var(--brand)}
+  .bottom-nav a.active{color:var(--brand);border-top-color:var(--brand)}
+  .nav-icon{font-size:20px}
+
+  footer{background:#0a0a0a;color:rgba(255,255,255,.5);padding:40px 0 24px;margin-top:56px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+  footer .logo{color:#fff;font-weight:800;font-size:16px}
+  footer .logo span{color:var(--brand)}
+  footer a{color:rgba(255,255,255,.5);text-decoration:none;font-size:13px}
+  footer a:hover{color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="index.html">Food<span>Hubbie</span> ERP</a>
+      <div class="links">
+        <a class="link" href="index.html">Home</a>
+        <a class="link" href="architecture.html">How It Works</a>
+        <a class="link" href="contact.html">Contact</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <a href="index.html" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;margin-bottom:28px">← Back to Home</a>
+    <div class="kicker">Book a Order / Inquiry</div>
+    <h1>Tell us about your restaurant</h1>
+    <p class="sub">Fill the form and hit submit — your inquiry opens directly in WhatsApp with everything prefilled, ready to send to the FoodHubbie team.</p>
+  </div>
+</section>
+
+<div class="wrap">
+  <form class="form-card" id="inquiryForm" onsubmit="return handleSubmit(event)">
+    <div class="row">
+      <div>
+        <label for="fname">Your Name *</label>
+        <input type="text" id="fname" required placeholder="e.g. Rahul Sharma">
+      </div>
+      <div>
+        <label for="fphone">WhatsApp / Mobile Number *</label>
+        <input type="tel" id="fphone" required placeholder="e.g. 9724649971">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="fstore">Restaurant / Store Name</label>
+        <input type="text" id="fstore" placeholder="e.g. Pizza Palace">
+      </div>
+      <div>
+        <label for="fcity">City</label>
+        <input type="text" id="fcity" placeholder="e.g. Mumbai">
+      </div>
+    </div>
+
+    <label for="ftype">What do you want? *</label>
+    <select id="ftype" required>
+      <option value="" disabled selected>Select an option…</option>
+      <option value="Book a Order">Book a Order</option>
+      <option value="Free Trial">Free Trial</option>
+      <option value="Book a Demo">Book a Demo</option>
+      <option value="New Setup / Partnership">New Setup / Partnership</option>
+      <option value="Support / Help">Support / Help</option>
+    </select>
+
+    <label for="fmsg">Your Message *</label>
+    <textarea id="fmsg" required placeholder="Tell us about your restaurant, how many outlets, what you need…"></textarea>
+    <div class="hint">On submit, this message opens in WhatsApp with everything prefilled. Just press send.</div>
+
+    <button type="submit" class="submit-btn" id="submitBtn">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Submit &amp; Send via WhatsApp
+    </button>
+
+    <div class="success" id="successMsg">
+      ✅ Your inquiry is saved and WhatsApp should open in a new tab with your message prefilled — just press <b>Send</b>.<br>
+      Our team will get back to you shortly.
+    </div>
+  </form>
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener" class="active">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="index.html">Home</a> · <a href="architecture.html">How It Works</a> · <a href="contact.html">Contact</a></div>
+  </div>
+</footer>
+
+<script>
+  async function handleSubmit(e) {
+    e.preventDefault();
+    var name = document.getElementById('fname').value.trim();
+    var phone = document.getElementById('fphone').value.trim();
+    var store = document.getElementById('fstore').value.trim();
+    var city = document.getElementById('fcity').value.trim();
+    var type = document.getElementById('ftype').value;
+    var msg = document.getElementById('fmsg').value.trim();
+
+    if (!name || !phone || !type || !msg) return false;
+
+    var lines = [
+      '🍕 NEW INQUIRY — FOODHUBBIE WEBSITE',
+      '--------------------------------',
+      'Type: ' + type,
+      'Name: ' + name,
+      'Phone: ' + phone,
+      store ? 'Restaurant: ' + store : null,
+      city ? 'City: ' + city : null,
+      '--------------------------------',
+      'Message:',
+      msg,
+      '--------------------------------',
+      '(From: foodhubbie-web.web.app/book.html)'
+    ];
+    var text = lines.filter(Boolean).join('\n');
+
+    var btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Opening WhatsApp…';
+
+    window.open('https://wa.me/919724649971?text=' + encodeURIComponent(text), '_blank');
+
+    // Save the inquiry to Firebase so the Supreme Admin Notifications page
+    // receives it. Best-effort background write: WhatsApp is the guaranteed
+    // channel and must not wait on the network.
+    try {
+      await fetch('https://foodhubbie-10-default-rtdb.firebaseio.com/inquiries.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name,
+          phone: phone,
+          store: store,
+          city: city,
+          type: type,
+          message: msg,
+          source: 'website',
+          createdAt: Date.now()
+        })
+      });
+    } catch (err) {
+      console.warn('Inquiry save failed (WhatsApp still opened)', err);
+    }
+
+    document.getElementById('successMsg').classList.add('show');
+
+    setTimeout(function () {
+      btn.disabled = false;
+      btn.innerHTML = 'Submit &amp; Send via WhatsApp';
+    }, 3000);
+    return false;
+  }
+</script>
+
+</body>
+</html>

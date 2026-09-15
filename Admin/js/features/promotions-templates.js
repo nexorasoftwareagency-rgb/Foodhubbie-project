@@ -63,7 +63,7 @@ note: 'Replace {festival} with Diwali, Christmas, Eid, etc.'
 },
 {
 title: 'Monsoon Special',
-body: 'Rainy day = pizza day, {name}! ☔🍕 Stay cozy at home with {offer} on your order. Free delivery on orders above ₹{minOrder}!\n\n📲 To grab this offer, just WhatsApp us "Hi" or "Menu" and start ordering!',
+body: 'Rainy day = food day, {name}! ☔🍽️ Stay cozy at home with {offer} on your order. Free delivery on orders above ₹{minOrder}!\n\n📲 To grab this offer, just WhatsApp us "Hi" or "Menu" and start ordering!',
 note: 'Perfect for monsoon months — send on rainy afternoons'
 },
 {
@@ -134,11 +134,11 @@ note: 'Chef recommendations feel exclusive and personal'
 ]
 },
 {
-category: '🎂 Birthday & Special Days',
+category: '🎉 Birthday & Special Days',
 items: [
 {
 title: 'Birthday Offer',
-body: 'HAPPY BIRTHDAY, {name}! 🎂🎉🎈 Treat yourself to {offer} on us! Valid for 3 days. Have the most amazing day! Love, the whole {storeName} team 💛\n\n📲 To grab this offer, just WhatsApp us "Hi" or "Menu" and start ordering!',
+body: 'HAPPY BIRTHDAY, {name}! 🎉🎈 Treat yourself to {offer} on us! Valid for 3 days. Have the most amazing day! Love, the whole {storeName} team 💛\n\n📲 To grab this offer, just WhatsApp us "Hi" or "Menu" and start ordering!',
 note: 'Send on the customer\'s birthday morning for best results'
 },
 {

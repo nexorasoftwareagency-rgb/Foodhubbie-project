@@ -74,6 +74,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260819-105729-174e] Fix rider FCM push notifications (functions dead path) — move rider push into bot + repoint functions triggers
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-08-19 10:57 UTC
+- Files touched: bot/index.js,functions/index.js
+- Verified: node --check bot+functions, 11/11 unit tests, EC2 deploy md5 match, both bots online clean boot
+- NOT verified / open risk: OS push not tested with a live device/order
+- Confidence: HIGH
+- Ended: 2026-08-19 10:59 UTC
+
 ### [20260819-035920-83fc] Design + plan restaurant soft-delete/disable flow (3-step confirm, Disabled tab, data preserved, reactivate)
 - TIER: 3 (high-risk)
 - STATUS: IN PROGRESS

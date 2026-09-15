@@ -78,6 +78,21 @@
         ".write": "auth != null && root.child('admins').child(auth.uid).child('isSuper').val() == true"
       }
     },
+"menuBank": {
+        ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+        "categories": {
+          "$slug": {
+            ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == newData.child('sourceOid').val())",
+            ".validate": "newData.hasChild('sourceOid') && newData.child('sourceOid').val() == root.child('admins').child(auth.uid).child('outlet').val()"
+          }
+        },
+        "dishes": {
+          "$slug": {
+            ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == newData.child('sourceOid').val())",
+            ".validate": "newData.hasChild('sourceOid') && newData.child('sourceOid').val() == root.child('admins').child(auth.uid).child('outlet').val()"
+          }
+        }
+      },
     "businesses": {
       ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
       "$businessId": {
@@ -88,6 +103,7 @@
         },
         "outlets": {
           "$outletId": {
+            "disabled": { ".read": "true" },
             "otpAttempts": {
               "$orderId": {
                 ".read": "auth != null && (root.child('riders').child(auth.uid).exists() || root.child('admins').child(auth.uid).exists())",
@@ -99,7 +115,7 @@
               ".indexOn": ["createdAt", "status", "riderId", "assignedRider", "orderId", "type"],
               "$orderId": {
                 ".read": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('riders').child(auth.uid).exists() && (!data.child('assignedRider').exists() || data.child('assignedRider').val().toLowerCase() == root.child('riders').child(auth.uid).child('email').val().toLowerCase())))) || (data.child('source').val() == 'QR')",
-                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('riders').child(auth.uid).exists() && (!data.child('riderId').exists() || data.child('riderId').val() == auth.uid)))) || (!data.exists() && newData.child('source').val() == 'QR') || (!data.exists() && newData.child('source').val() == 'webview_delivery' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('webviewTokens').child(newData.child('webviewToken').val()).child('used').val() == false) || (data.child('source').val() == 'QR' && data.child('status').val() == 'Pending' && (newData.child('status').val() == 'Placed' || newData.child('status').val() == 'Cancelled'))",
+                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('riders').child(auth.uid).exists() && (!data.child('riderId').exists() || data.child('riderId').val() == auth.uid)))) || (!data.exists() && newData.child('source').val() == 'QR' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true) || (!data.exists() && newData.child('source').val() == 'webview_delivery' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('webviewTokens').child(newData.child('webviewToken').val()).child('used').val() == false && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true) || (data.child('source').val() == 'QR' && data.child('status').val() == 'Pending' && (newData.child('status').val() == 'Placed' || newData.child('status').val() == 'Cancelled') && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true)",
                 ".validate": "newData.hasChildren(['items', 'total', 'status', 'createdAt']) && newData.child('total').isNumber() && newData.child('status').isString() && newData.child('createdAt').isString() && (!newData.hasChild('subtotal') || newData.child('subtotal').isNumber()) && (!newData.hasChild('tax') || newData.child('tax').isNumber()) && (!newData.hasChild('serviceCharge') || newData.child('serviceCharge').isNumber()) && (!newData.hasChild('discountAmount') || newData.child('discountAmount').isNumber()) && (!newData.hasChild('paymentStatus') || newData.child('paymentStatus').isString())"
               }
             },
@@ -228,7 +244,7 @@
               ".read": "true",
               ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
               "$tableId": {
-                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (data.exists() && newData.child('number').val() == data.child('number').val() && newData.child('capacity').val() == data.child('capacity').val() && newData.child('token').val() == data.child('token').val() && newData.child('active').val() == data.child('active').val() && ((data.child('status').val() == 'free' && newData.child('status').val() == 'free' && !data.child('currentSession').exists() && newData.child('currentSession').exists()) || (data.child('status').val() == 'free' && newData.child('status').val() == 'occupied' && newData.child('currentSession').val() == data.child('currentSession').val()) || (data.child('status').val() == 'occupied' && newData.child('status').val() == 'billing' && newData.child('currentSession').val() == data.child('currentSession').val()) || (data.child('status').val() == 'occupied' && newData.child('status').val() == 'free' && !newData.child('currentSession').exists() && (data.parent().parent().child('tableSessions').child(data.child('currentSession').val()).child('status').val() == 'expired' || data.parent().parent().child('tableSessions').child(data.child('currentSession').val()).child('status').val() == 'closed'))))",
+                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (data.exists() && newData.child('number').val() == data.child('number').val() && newData.child('capacity').val() == data.child('capacity').val() && newData.child('token').val() == data.child('token').val() && newData.child('active').val() == data.child('active').val() && ((data.child('status').val() == 'free' && newData.child('status').val() == 'free' && !data.child('currentSession').exists() && newData.child('currentSession').exists()) || (data.child('status').val() == 'free' && newData.child('status').val() == 'occupied' && newData.child('currentSession').val() == data.child('currentSession').val()) || (data.child('status').val() == 'occupied' && newData.child('status').val() == 'billing' && newData.child('currentSession').val() == data.child('currentSession').val()) || (data.child('status').val() == 'occupied' && newData.child('status').val() == 'free' && !newData.child('currentSession').exists() && (data.parent().parent().child('tableSessions').child(data.child('currentSession').val()).child('status').val() == 'expired' || data.parent().parent().child('tableSessions').child(data.child('currentSession').val()).child('status').val() == 'closed')))) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true",
                 ".validate": "newData.hasChildren(['number','capacity','status','token']) && newData.child('number').isString() && newData.child('capacity').isNumber() && newData.child('status').isString() && newData.child('token').isString() && (!newData.hasChild('currentSession') || newData.child('currentSession').isString()) && (!newData.hasChild('active') || newData.child('active').isBoolean())"
               }
             },
@@ -237,18 +253,18 @@
               ".indexOn": ["status", "openedAt", "tableId"],
               "$sessionId": {
                 ".read": "true",
-                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (!data.exists() || (data.child('status').val() != 'closed' && data.child('status').val() != 'expired' && data.child('status').val() != 'billing'))",
+                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true && (!data.exists() || (data.child('status').val() != 'closed' && data.child('status').val() != 'expired' && data.child('status').val() != 'billing')))",
                 "orders": {
-                  ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (data.parent().child('status').val() == 'active')"
+                  ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (data.parent().child('status').val() == 'active' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true)"
                 },
                 "orderGroups": {
                   "$groupId": {
-                    ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (!data.exists() && data.parent().parent().child('status').val() == 'active')",
+                    ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (!data.exists() && data.parent().parent().child('status').val() == 'active' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true)",
                     "orders": {
-                      ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || ((!data.exists() || data.parent().parent().parent().child('status').val() == 'active') && data.parent().parent().parent().child('orderGroups').child($groupId).child('status').val() == 'active')"
+                      ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || ((!data.exists() || data.parent().parent().parent().child('status').val() == 'active') && data.parent().parent().parent().child('orderGroups').child($groupId).child('status').val() == 'active' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true)"
                     },
                     "status": {
-                      ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (newData.val() == 'billing' && data.val() != 'billing' && data.val() != 'paid' && data.parent().parent().parent().child('status').val() != 'closed' && data.parent().parent().parent().child('status').val() != 'expired')"
+                      ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (newData.val() == 'billing' && data.val() != 'billing' && data.val() != 'paid' && data.parent().parent().parent().child('status').val() != 'closed' && data.parent().parent().parent().child('status').val() != 'expired' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true)"
                     }
                   }
                 },
@@ -277,7 +293,7 @@
             "tableRequests": {
               ".read": "auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
               "$reqId": {
-                ".write": "(!data.exists() && newData.hasChildren(['tableId','type','createdAt']) && newData.child('status').val() == 'pending') || (auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true))",
+                ".write": "(!data.exists() && newData.hasChildren(['tableId','type','createdAt']) && newData.child('status').val() == 'pending' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true) || (auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true))",
                 ".validate": "newData.hasChildren(['tableId','type','createdAt'])"
               }
             },
@@ -344,6 +360,23 @@
             }
           }
         }
+      }
+    },
+    "inquiries": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
+      "$inquiryId": {
+        ".write": "(!data.exists() && newData.child('source').val() == 'website') || (auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true))",
+        ".validate": "newData.hasChildren(['name','phone','type','message','createdAt','source']) && newData.child('source').val() == 'website'",
+        "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80" },
+        "phone": { ".validate": "newData.isString() && newData.val().length >= 5 && newData.val().length <= 15" },
+        "store": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 80)" },
+        "city": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 60)" },
+        "type": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 50" },
+        "message": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 2000" },
+        "status": { ".validate": "!newData.exists() || (newData.isString() && newData.val() == 'read')" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "source": { ".validate": "newData.isString() && newData.val() == 'website'" },
+        "$other": { ".validate": "false" }
       }
     }
   }

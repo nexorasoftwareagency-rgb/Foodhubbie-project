@@ -123,7 +123,7 @@ function _renderLostSales(revenueBadge, countBadge) {
             ? `<a href="https://wa.me/91${cleanPhone}" target="_blank" rel="noopener" class="mob-td-link">📱 ${escapeHtml(phoneRaw)}</a>`
             : '<span class="mob-td-sub">—</span>';
         const outlet = (r.outlet || 'pizza').toUpperCase();
-        const outletEmoji = outlet === 'CAKE' ? '🎂' : '🍕';
+        const outletEmoji = '🏪';
         const itemsStr = r.itemsStr || '—';
         const itemsTrunc = itemsStr.length > 35 ? itemsStr.substring(0, 35) + '…' : itemsStr;
         const subtotal = `₹${r.subtotal || 0}`;

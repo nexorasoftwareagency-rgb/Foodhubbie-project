@@ -43,7 +43,7 @@ export function RouteOptimizer({
         <Route size={16} className="text-[#1D4ED8] shrink-0" />
         <div className="min-w-0">
           <b className="block text-[12px] text-[#1D4ED8]">Multi-Order Route &middot; {secondary.length + 1} stops</b>
-          <span className="block text-[10.5px] text-[#3B5FC4]">You have both a pizza and cake order active</span>
+          <span className="block text-[10.5px] text-[#3B5FC4]">You have {secondary.length + 1} active orders across outlets</span>
         </div>
         <button
           onClick={() => setOpen(true)}

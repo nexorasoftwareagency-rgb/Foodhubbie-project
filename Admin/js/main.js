@@ -420,6 +420,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'openTableQr': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Open table QR'); window.__tables?.openQr?.(id); break;
                 case 'closeSessionForTable': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Close session'); window.__tables?.closeSession?.(id); break;
                 case 'cancelSessionForTable': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Cancel session'); window.__tables?.cancelSession?.(id); break;
+                case 'resolveTableRequest': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Resolve table request'); window.__tables?.resolveTableRequest?.(id); break;
                 default:
                     logger.warn('CLICK', `Unhandled action: ${action}`, { el: el.outerHTML.slice(0, 200) });
             }
@@ -474,9 +475,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
-        document.querySelectorAll('.btn-show-dish-modal').forEach(btn => {
+        document.getElementById('btnAddDishChoice')?.addEventListener('click', async () => {
+            const { showAddDishChoice } = await useMod('catalog');
+            showAddDishChoice();
+        });
+        document.querySelectorAll('.btn-open-menu-bank').forEach(btn => {
             btn.addEventListener('click', async () => {
-                (await useMod('catalog')).showDishModal();
+                (await useMod('menu-bank')).openMenuBankBrowser();
             });
         });
         document.getElementById('btnMigrateDishAddons')?.addEventListener('click', async () => {

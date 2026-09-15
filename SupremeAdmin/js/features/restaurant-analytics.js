@@ -8,6 +8,7 @@
  *                        restaurant profile page's "View analytics")
  */
 import { navigate, registerAction } from '/js/main.js';
+import { refreshIcons, escapeHtml, formatDate, formatAge, statusPillHtml } from '/js/utils.js';
 import { subscribe, flattenOutlets, isReadOnly } from '/js/data-store.js';
 
 const mainEl = document.getElementById('app-main');
@@ -62,7 +63,9 @@ function populatePicker(picker, bid, oid) {
 }
 
 function renderPlatformWide(raw) {
-  document.getElementById('analytics-sub').textContent = 'Orders and revenue, platform-wide';
+  const sub = document.getElementById('analytics-sub');
+  if (!sub) return; // page not active (navigated away) — stale live callback
+  sub.textContent = 'Orders and revenue, platform-wide';
   const totals = {};
   Object.values(raw).forEach((biz) => {
     Object.values(biz.outlets || {}).forEach((outlet) => {
@@ -77,15 +80,18 @@ function renderPlatformWide(raw) {
 }
 
 function renderSingleOutlet(raw, bid, oid) {
+  const sub = document.getElementById('analytics-sub');
+  const content = document.getElementById('analytics-content');
+  if (!sub || !content) return; // page not active (navigated away)
   const biz = raw[bid];
   const outlet = biz?.outlets?.[oid];
   if (!outlet) {
-    document.getElementById('analytics-sub').textContent = 'Outlet not found';
-    document.getElementById('analytics-content').innerHTML = `<div class="glass-card table-empty">This outlet could not be found.</div>`;
+    sub.textContent = 'Outlet not found';
+    content.innerHTML = `<div class="glass-card table-empty">This outlet could not be found.</div>`;
     return;
   }
   const store = (outlet.settings && outlet.settings.Store) || {};
-  document.getElementById('analytics-sub').textContent = `${outlet.name || store.storeName || 'Unnamed outlet'} · ${biz.name || store.entityName || biz.businessName || store.storeName || 'Unnamed business'}`;
+  sub.textContent = `${outlet.name || store.storeName || 'Unnamed outlet'} · ${biz.name || store.entityName || biz.businessName || store.storeName || 'Unnamed business'}`;
   const totals = {};
   Object.entries(outlet.dailyStats || {}).forEach(([date, stats]) => {
     totals[date] = { orders: stats.orders || 0, revenue: stats.revenue || 0 };

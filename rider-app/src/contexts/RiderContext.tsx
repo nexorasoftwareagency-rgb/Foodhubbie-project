@@ -8,6 +8,7 @@ import { logRiderError } from "@/services/auditService";
 import { toast } from "@/hooks/use-toast";
 import type { Rider, RiderStats } from "@/types";
 import type { OutletId } from "@/lib/constants";
+import { resolveBusinessIdForOutlet, outletBusinessIdCache } from "@/lib/constants";
 
 type RiderContextValue = {
   rider: Rider | null;
@@ -15,10 +16,11 @@ type RiderContextValue = {
   riderError: Error | null;
   isOnline: boolean;
   toggleOnline: () => Promise<void>;
-  /** Combined totals across both outlets. */
+  /** Combined totals across the rider's assigned outlet. */
   stats: RiderStats;
-  /** Per-outlet breakdown — used on the Earnings page. */
+  /** Per-outlet breakdown — only includes the rider's assigned outlet. */
   statsByOutlet: Record<OutletId, RiderStats>;
+  /** Only the rider's assigned outlet. */
   outlets: OutletInfo[];
   outletsLoading: boolean;
   outletsError: Error | null;
@@ -27,31 +29,37 @@ type RiderContextValue = {
 
 const RiderContext = createContext<RiderContextValue | undefined>(undefined);
 
-const EMPTY_STATS: RiderStats = { totalOrders: 0, totalEarnings: 0 };
-
 export function RiderProvider({ children }: { children: ReactNode }) {
   const { user } = useAuthContext();
   const { rider, loading: riderLoading, error: riderError } = useRiderProfile(user?.uid);
-  const [statsByOutlet, setStatsByOutlet] = useState<Record<OutletId, RiderStats>>({
-    pizza: EMPTY_STATS,
-    cake: EMPTY_STATS,
-  });
+  const [statsByOutlet, setStatsByOutlet] = useState<Record<OutletId, RiderStats>>({} as Record<OutletId, RiderStats>);
   const [outlets, setOutlets] = useState<OutletInfo[]>([]);
   const [outletsLoading, setOutletsLoading] = useState(true);
   const [outletsError, setOutletsError] = useState<Error | null>(null);
   const [retryTick, setRetryTick] = useState(0);
   const [toggling, setToggling] = useState(false);
 
+  // Initialize outlet -> businessId cache at app boot
   useEffect(() => {
-    if (!user?.uid) return;
-    const unsubPizza = subscribeRiderStats("pizza", user.uid, (s) => setStatsByOutlet((prev) => ({ ...prev, pizza: s })));
-    const unsubCake = subscribeRiderStats("cake", user.uid, (s) => setStatsByOutlet((prev) => ({ ...prev, cake: s })));
-    return () => {
-      unsubPizza();
-      unsubCake();
-    };
-  }, [user?.uid]);
+    if (!user?.uid || !rider?.outlet) return;
+    const outlet = rider.outlet;
+    // Pre-populate cache so tenantPath() works synchronously
+    resolveBusinessIdForOutlet(outlet).then(bid => {
+      console.log('[RiderContext] Cached businessId for', outlet, ':', bid);
+    }).catch(err => {
+      console.error('[RiderContext] Failed to resolve businessId:', err);
+    });
+  }, [user?.uid, rider?.outlet]);
 
+  // Subscribe to rider stats for the rider's assigned outlet only
+  useEffect(() => {
+    if (!user?.uid || !rider?.outlet) return;
+    const outlet = rider.outlet;
+    const unsub = subscribeRiderStats(outlet, user.uid, (s) => setStatsByOutlet((prev) => ({ ...prev, [outlet]: s })));
+    return () => { unsub(); };
+  }, [user?.uid, rider?.outlet]);
+
+  // Load only the rider's assigned outlet
   useEffect(() => {
     if (!user?.uid) return;
     let cancelled = false;
@@ -59,7 +67,12 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     setOutletsError(null);
     loadOutlets()
       .then((list) => {
-        if (!cancelled) setOutlets(list);
+        if (!cancelled && rider?.outlet) {
+          const filtered = list.filter(o => o.id === rider.outlet);
+          setOutlets(filtered);
+        } else if (!cancelled) {
+          setOutlets([]);
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -70,10 +83,8 @@ export function RiderProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         if (!cancelled) setOutletsLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.uid, retryTick]);
+    return () => { cancelled = true; };
+  }, [user?.uid, rider?.outlet, retryTick]);
 
   const isOnline = rider?.status === "Online";
 
@@ -95,10 +106,15 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const stats: RiderStats = {
-    totalOrders: (statsByOutlet.pizza?.totalOrders || 0) + (statsByOutlet.cake?.totalOrders || 0),
-    totalEarnings: (statsByOutlet.pizza?.totalEarnings || 0) + (statsByOutlet.cake?.totalEarnings || 0),
-  };
+  // Aggregate stats across the rider's assigned outlet(s)
+  const assignedOutlets = Object.keys(statsByOutlet) as OutletId[];
+  const stats: RiderStats = assignedOutlets.reduce(
+    (acc, oid) => ({
+      totalOrders: acc.totalOrders + (statsByOutlet[oid]?.totalOrders || 0),
+      totalEarnings: acc.totalEarnings + (statsByOutlet[oid]?.totalEarnings || 0),
+    }),
+    { totalOrders: 0, totalEarnings: 0 }
+  );
 
   return (
     <RiderContext.Provider

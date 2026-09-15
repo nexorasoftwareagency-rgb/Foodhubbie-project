@@ -436,7 +436,7 @@ export async function _preview() {
             <div class="modal-content" style="max-width:520px;">
                 <div class="modal-header">
                     <h3>Preview</h3>
-                    <button class="modal-close" data-action="closePromoPreview" aria-label="Close">&times;</button>
+                    <button class="modal-close" data-action="closePromoPreview" aria-label="Close">✕</button>
                 </div>
                 <div class="modal-body" id="promoPreviewBody"></div>
                 <div class="modal-footer">

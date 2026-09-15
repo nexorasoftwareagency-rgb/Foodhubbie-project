@@ -1,5 +1,6 @@
 import { registerAction, navigate } from '/js/main.js';
 import { subscribe, isReadOnly } from '/js/data-store.js';
+import { refreshIcons, escapeHtml, statusPillHtml, statusLabel, formatDate, formatAge, formatUptime, renderOnboardingStepper, formatMemory, transportLabel, renderUptimeSparkline, showToast, showConfirm } from '/js/utils.js';
 
 const mainEl = document.getElementById('app-main');
 let currentBid = null;
@@ -92,6 +93,16 @@ function renderProfile(bid, oid, biz, outlet) {
   currentOutletCreds = creds;
 
   document.getElementById('profile-content').innerHTML = `
+    ${outlet.disabled === true ? `
+    <div class="glass-card" style="border:1px solid var(--status-offline,#f87171);margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <svg data-lucide="pause-circle" style="width:18px;height:18px;color:var(--status-offline,#f87171);flex:none"></svg>
+        <div style="flex:1;min-width:200px">
+          <strong>Restaurant disabled</strong>
+          <div style="color:var(--text-secondary);font-size:12.5px;margin-top:2px">Disabled ${formatDate(outlet.disabledAt)} — ordering, dine-in, staff login, and the WhatsApp bot are all paused. All data is preserved.</div>
+        </div>
+      </div>
+    </div>` : ''}
     <div class="panel-header">
       <div>
         <h1>${escapeHtml(outletName)}</h1>
@@ -141,6 +152,21 @@ function renderProfile(bid, oid, biz, outlet) {
         <div>Outlet ID: <span class="mono">${escapeHtml(oid)}</span></div>
         <div>Created: ${formatDate(biz.createdAt || outlet.createdAt)}</div>
       </div>
+    </div>
+
+    <div class="glass-card" style="font-size:13px;margin-bottom:16px;border:1px solid ${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--glass-border,#2a2f3a)'}">
+      <strong style="display:block;margin-bottom:6px;color:${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--status-offline,#f87171)'}">
+        <svg data-lucide="alert-triangle" style="width:14px;height:14px;vertical-align:-2px"></svg> ${outlet.disabled === true ? 'Restaurant status' : 'Danger Zone'}
+      </strong>
+      ${outlet.disabled === true
+        ? `<div style="color:var(--text-secondary);margin-bottom:12px">This restaurant is currently disabled. Reactivating restores QR ordering, dine-in, staff login, and the WhatsApp bot immediately.</div>
+           <button class="btn btn-primary" data-action="reactivate-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
+             <svg data-lucide="play"></svg> Reactivate restaurant
+           </button>`
+        : `<div style="color:var(--text-secondary);margin-bottom:12px">Disabling pauses everything for this outlet — QR/menu ordering, dine-in sessions, staff login, and the WhatsApp bot. No data is deleted and it can be reactivated anytime.</div>
+           <button class="btn btn-danger" data-action="disable-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
+             <svg data-lucide="pause-circle"></svg> Disable restaurant
+           </button>`}
     </div>
 
     <div class="glass-card accent-edge" style="margin-bottom:16px">
@@ -912,6 +938,173 @@ registerAction('stop-bot', async () => {
     danger: true,
   });
   if (ok) callBotControlApi('stop', currentBid, currentOid);
+});
+
+// ---- Disable / Reactivate (soft-delete) -----------------------------------
+// 3-step typed-confirm modal: Warning → type outlet name + acknowledge →
+// red confirm. Follows the showBulkDeleteConfirm typed-confirm pattern.
+function openDisableModal(bid, oid, outletName) {
+  const root = document.getElementById('modal-root');
+  let step = 1;
+  let typed = '';
+  let acknowledged = false;
+  const expected = (outletName || '').trim().toLowerCase();
+
+  const render = () => {
+    const canConfirm = step === 3 && typed === expected && acknowledged;
+    root.innerHTML = `
+      <div class="modal open" id="disable-modal">
+        <div class="modal-content" style="max-width:460px">
+          <div class="confirm-title"><svg data-lucide="alert-triangle" style="width:16px;height:16px;vertical-align:-3px"></svg> Disable "${escapeHtml(outletName)}"</div>
+          <div class="confirm-body">
+            <div style="display:flex;gap:6px;margin-bottom:14px">
+              ${[1,2,3].map(n => `<span style="flex:1;height:4px;border-radius:2px;background:${step >= n ? 'var(--status-offline,#f87171)' : 'var(--glass-border,#2a2f3a)'}"></span>`).join('')}
+            </div>
+            ${step === 1 ? `
+              <div style="font-size:13.5px;line-height:1.7;color:var(--text-primary)">
+                <p style="margin:0 0 10px">Disabling this restaurant will <b>immediately pause</b>:</p>
+                <ul style="margin:0 0 12px;padding-left:18px;line-height:1.9">
+                  <li>QR / webview menu ordering</li>
+                  <li>Dine-in table sessions &amp; requests</li>
+                  <li>Staff login to the Admin dashboard</li>
+                  <li>The WhatsApp ordering bot</li>
+                </ul>
+                <p style="margin:0 0 4px;color:var(--text-secondary)"><b style="color:var(--status-online,#16a34a)">No data is deleted.</b> Menu, orders, and settings are all preserved. This can be undone anytime by reactivating.</p>
+              </div>
+              <div class="confirm-actions" style="margin-top:16px">
+                <button class="btn btn-ghost" id="disable-step-back">Cancel</button>
+                <button class="btn btn-danger" id="disable-step-next">Continue</button>
+              </div>` : step === 2 ? `
+              <div style="font-size:13.5px;line-height:1.7">
+                <p style="margin:0 0 12px">To confirm, type the outlet name <b>${escapeHtml(outletName)}</b> below, and acknowledge that no data will be deleted.</p>
+                <input type="text" id="disable-typed" class="text-input" placeholder="Type the outlet name" value="${escapeHtml(typed)}" style="width:100%;margin-bottom:10px" autocomplete="off" />
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+                  <input type="checkbox" id="disable-ack" ${acknowledged ? 'checked' : ''} />
+                  I understand no data is deleted and this can be undone.
+                </label>
+              </div>
+              <div class="confirm-actions" style="margin-top:16px">
+                <button class="btn btn-ghost" id="disable-step-back">Back</button>
+                <button class="btn btn-danger" id="disable-step-next" disabled>Continue</button>
+              </div>` : `
+              <div style="font-size:13.5px;line-height:1.7">
+                <p style="margin:0 0 8px"><b>Final step.</b> Pressing the red button disables this restaurant immediately:</p>
+                <ul style="margin:0 0 12px;padding-left:18px;line-height:1.9;color:var(--text-secondary)">
+                  <li>Orders / dine-in / login / bot stop</li>
+                  <li>Data stays intact — reactivatable anytime</li>
+                </ul>
+              </div>
+              <div class="confirm-actions" style="margin-top:16px">
+                <button class="btn btn-ghost" id="disable-step-back">Back</button>
+                <button class="btn btn-danger" id="disable-step-confirm" ${canConfirm ? '' : 'disabled'}>Disable restaurant</button>
+              </div>`}
+          </div>
+        </div>
+      </div>`;
+    refreshIcons(root);
+    root.querySelector('#disable-step-back').addEventListener('click', () => {
+      if (step === 1) closeDisableModal();
+      else { step--; render(); }
+    });
+    const next = root.querySelector('#disable-step-next');
+    if (next) next.addEventListener('click', () => { step++; render(); });
+    const typedEl = root.querySelector('#disable-typed');
+    if (typedEl) typedEl.addEventListener('input', (e) => {
+      typed = e.target.value.trim().toLowerCase();
+      const nxt = root.querySelector('#disable-step-next');
+      if (nxt) nxt.disabled = typed !== expected || !acknowledged;
+    });
+    const ackEl = root.querySelector('#disable-ack');
+    if (ackEl) ackEl.addEventListener('change', (e) => {
+      acknowledged = e.target.checked;
+      const nxt = root.querySelector('#disable-step-next');
+      if (nxt) nxt.disabled = typed !== expected || !acknowledged;
+    });
+    const confirmBtn = root.querySelector('#disable-step-confirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', () => doDisableOutlet(bid, oid));
+  };
+  render();
+}
+
+function closeDisableModal() {
+  const modal = document.getElementById('disable-modal');
+  if (modal) {
+    modal.classList.remove('open');
+    setTimeout(() => { document.getElementById('modal-root').innerHTML = ''; }, 180);
+  }
+}
+
+async function doDisableOutlet(bid, oid) {
+  try {
+    const user = firebase.auth().currentUser;
+    await firebase.database().ref(`businesses/${bid}/outlets/${oid}`).update({
+      disabled: true,
+      disabledAt: firebase.database.ServerValue.TIMESTAMP,
+      disabledBy: user?.uid || 'unknown',
+      suspended: true, // orchestrator stops the worker
+    });
+    closeDisableModal();
+    // Best-effort worker stop — the flag takes effect even if this fails.
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${TUNNEL_URL}/api/bot/stop/${bid}/${oid}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 403) showToast("Your account doesn't have permission to stop the bot.", 'error');
+      else if (!res.ok && res.status !== 404) showToast('Restaurant disabled — bot stop returned ' + res.status + ', retry stop later.', 'warning');
+    } catch (e) {
+      console.warn('bot stop after disable failed', e);
+      showToast('Restaurant disabled — bot stop failed, retry stop later.', 'warning');
+    }
+    showToast('Restaurant disabled. All services paused — data intact.', 'success');
+  } catch (err) {
+    console.error('disable outlet failed', err);
+    showToast('Disable failed — check the console.', 'error');
+  }
+}
+
+registerAction('disable-outlet', () => {
+  const outlet = lastRaw?.[currentBid]?.outlets?.[currentOid];
+  if (!outlet) return;
+  openDisableModal(currentBid, currentOid, outlet.name || outlet.settings?.Store?.storeName || 'this outlet');
+});
+
+registerAction('reactivate-outlet', async () => {
+  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
+  const outlet = lastRaw?.[currentBid]?.outlets?.[currentOid];
+  const name = outlet?.name || outlet?.settings?.Store?.storeName || 'this outlet';
+  const ok = await showConfirm({
+    title: `Reactivate "${name}"?`,
+    body: 'Restores QR ordering, dine-in, staff login, and the WhatsApp bot for this outlet. All data is intact.',
+    confirmLabel: 'Reactivate',
+  });
+  if (!ok) return;
+  try {
+    const user = firebase.auth().currentUser;
+    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}`).update({
+      disabled: false,
+      reactivatedAt: firebase.database.ServerValue.TIMESTAMP,
+      reactivatedBy: user?.uid || 'unknown',
+      suspended: false, // allow the orchestrator to run the worker again
+    });
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${TUNNEL_URL}/api/bot/restart/${currentBid}/${currentOid}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 403) showToast("Your account doesn't have permission to restart the bot.", 'error');
+      else if (!res.ok && res.status !== 404) showToast('Bot restart returned ' + res.status + ' — retry from the agent card.', 'warning');
+    } catch (e) {
+      console.warn('bot restart after reactivate failed', e);
+      showToast('Restaurant reactivated — bot restart failed, retry from the agent card.', 'warning');
+    }
+    showToast('Restaurant reactivated.', 'success');
+  } catch (err) {
+    console.error('reactivate outlet failed', err);
+    showToast('Reactivate failed — check the console.', 'error');
+  }
 });
 
 registerAction('reconnect-whatsapp', async () => {

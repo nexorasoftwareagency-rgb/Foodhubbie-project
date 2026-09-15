@@ -19,7 +19,7 @@ import {
   off,
   serverTimestamp,
 } from "@/lib/firebase";
-import { dbPaths, PROXIMITY, OTP_LIMITS, OUTLETS, type OutletId } from "@/lib/constants";
+import { dbPaths, PROXIMITY, OTP_LIMITS, type OutletId } from "@/lib/constants";
 import { getDistanceKm, isGhostOrder } from "@/lib/utils";
 import { whatsappService } from "@/services/whatsappService";
 import type { AvailableOrder, OtpAttemptRecord, OutletSettings, RiderOrder } from "@/types";
@@ -59,8 +59,7 @@ function assertProximity(riderLat: number, riderLng: number, targetLat: number, 
   }
 }
 
-/** ─── Outlet coordinates + backup code (real Store/Delivery settings, with the
- *  exact fallback coordinates hardcoded in app.js's window.outletCoords) ────── */
+/** ─── Outlet coordinates + backup code (from Store/Delivery settings) ────── */
 
 export type OutletInfo = {
   id: OutletId;
@@ -70,28 +69,42 @@ export type OutletInfo = {
   lat: number;
   lng: number;
   backupCode: string;
+  businessId: string;
 };
 
 export async function loadOutlets(): Promise<OutletInfo[]> {
-  const results = await Promise.all(
-    OUTLETS.map(async (o) => {
+  // Discover all businesses and their outlets dynamically
+  const businessesSnap = await get(ref(db, "businesses"));
+  const businesses = (businessesSnap.val() || {}) as Record<string, any>;
+  
+  const results: OutletInfo[] = [];
+  
+  for (const [bid, business] of Object.entries(businesses)) {
+    const outlets = business.outlets || {};
+    for (const [oid, outlet] of Object.entries(outlets)) {
       const [storeSnap, deliverySnap] = await Promise.all([
-        get(ref(db, `${dbPaths.outletSettings(o.id)}/Store`)),
-        get(ref(db, `${dbPaths.outletSettings(o.id)}/Delivery`)),
+        get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Store`)),
+        get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Delivery`)),
       ]);
       const store = (storeSnap.val() || {}) as OutletSettings["Store"];
       const delivery = (deliverySnap.val() || {}) as OutletSettings["Delivery"];
-      return {
-        id: o.id,
-        name: o.name,
-        icon: o.icon,
-        color: o.color,
-        lat: parseFloat(store.lat as any) || o.fallbackLat,
-        lng: parseFloat(store.lng as any) || o.fallbackLng,
+      const outletData = outlet as Record<string, any>;
+      
+      // Get display name from outlet settings or use outlet ID
+      const displayName = outletData.name || outletData.id || oid;
+      
+      results.push({
+        id: oid,
+        name: displayName,
+        icon: "🏪",
+        color: "#E84908",
+        lat: parseFloat(store.lat as any) || 25.887944,
+        lng: parseFloat(store.lng as any) || 85.026194,
         backupCode: delivery.backupCode || "",
-      };
-    })
-  );
+        businessId: bid,
+      });
+    }
+  }
   return results;
 }
 

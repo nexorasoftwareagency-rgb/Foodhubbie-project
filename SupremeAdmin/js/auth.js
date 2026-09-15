@@ -16,6 +16,7 @@
  */
 
 import { setRole } from '/js/data-store.js';
+import { refreshIcons } from '/js/utils.js';
 
 const authScreen = document.getElementById('auth-screen');
 const appShell = document.getElementById('app-shell');

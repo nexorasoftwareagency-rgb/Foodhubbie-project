@@ -1,9 +1,11 @@
 import { navigate, registerAction } from '/js/main.js';
 import { subscribe, flattenOutlets, isReadOnly } from '/js/data-store.js';
+import { exportXlsx, refreshIcons, debounce, isStale, escapeHtml, transportBadgeHtml, formatDate, formatAge, statusPillHtml, showConfirm } from '/js/utils.js';
 
 const mainEl = document.getElementById('app-main');
 let allRows = [];
 let currentFilteredRows = [];
+let activeTab = 'active'; // 'active' | 'disabled'
 
 export function render() {
   mainEl.innerHTML = `
@@ -13,8 +15,8 @@ export function render() {
         <div class="panel-sub">Every restaurant and outlet across the platform <span class="live-badge"><span class="pulse-dot"></span>Live</span></div>
       </div>
       <div class="panel-header-actions">
-        <button class="btn btn-ghost" data-action="export-restaurants-csv">
-          <svg data-lucide="download"></svg> Export CSV
+        <button class="btn btn-ghost" data-action="export-restaurants-xlsx">
+          <svg data-lucide="download"></svg> Export Excel
         </button>
         ${isReadOnly() ? '' : `
           <button class="btn btn-primary" data-action="go-onboard">
@@ -29,6 +31,10 @@ export function render() {
     </div>
 
     <div class="filters-row">
+      <div class="profile-tabs" role="tablist" aria-label="Restaurant status">
+        <button class="profile-tab ${activeTab === 'active' ? 'active' : ''}" data-action="list-tab" data-tab="active" role="tab" aria-selected="${activeTab === 'active'}"><svg data-lucide="check-circle"></svg> Active</button>
+        <button class="profile-tab ${activeTab === 'disabled' ? 'active' : ''}" data-action="list-tab" data-tab="disabled" role="tab" aria-selected="${activeTab === 'disabled'}"><svg data-lucide="pause-circle"></svg> Disabled</button>
+      </div>
       <div class="search-input-wrap">
         <svg data-lucide="search"></svg>
         <input type="text" id="restaurant-search" placeholder="Search by restaurant or outlet name…" />
@@ -60,7 +66,12 @@ export function render() {
   refreshIcons(mainEl);
 
   registerAction('go-onboard', () => navigate('restaurants/onboard'));
-  registerAction('export-restaurants-csv', () => exportRestaurantsCsv());
+  registerAction('export-restaurants-xlsx', () => exportRestaurantsXlsx());
+  registerAction('list-tab', (btn) => {
+    activeTab = btn.dataset.tab === 'disabled' ? 'disabled' : 'active';
+    allRows = flattenOutlets({ includeDisabled: activeTab === 'disabled' });
+    applyFilters();
+  });
 
   document.getElementById('restaurant-search').addEventListener('input', debounce(applyFilters, 120));
   document.getElementById('plan-filter').addEventListener('change', applyFilters);
@@ -69,7 +80,7 @@ export function render() {
   // Single live listener, shared across the whole app (see data-store.js) —
   // this page just re-renders whenever it fires. No polling, no one-time get().
   const unsubscribe = subscribe((raw) => {
-    allRows = flattenOutlets();
+    allRows = flattenOutlets({ includeDisabled: activeTab === 'disabled' });
     applyFilters();
   });
 
@@ -86,6 +97,7 @@ function applyFilters() {
   const wa = document.getElementById('whatsapp-filter')?.value || 'all';
 
   let rows = allRows;
+  if (activeTab === 'disabled') rows = rows.filter((r) => r.disabled === true);
   if (q) rows = rows.filter((r) => r.outletName.toLowerCase().includes(q) || r.businessName.toLowerCase().includes(q));
   if (plan !== 'all') rows = rows.filter((r) => r.plan === plan);
   if (wa === 'active') rows = rows.filter((r) => r.whatsappStatus === 'active');
@@ -126,7 +138,26 @@ function renderRows(rows) {
         <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
           <span>No restaurants yet — add your first one to get started.</span>
           ${isReadOnly() ? '' : `<button class="btn btn-primary" data-action="go-onboard"><svg data-lucide="plus"></svg> Add your first restaurant</button>`}
-        </div>` : 'No restaurants match your filters.'}</div></td></tr>`;
+        </div>` : activeTab === 'disabled' ? 'No disabled restaurants.' : 'No restaurants match your filters.'}</div></td></tr>`;
+    refreshIcons(tbody);
+    return;
+  }
+  if (activeTab === 'disabled') {
+    tbody.innerHTML = rows.map((r) => `
+    <tr class="row-disabled" data-action="open-profile" data-bid="${escapeHtml(r.bid)}" data-oid="${escapeHtml(r.oid)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(r.outletName)} profile">
+      <td><strong>${escapeHtml(r.outletName)}</strong></td>
+      <td>${escapeHtml(r.businessName)}</td>
+      <td style="text-transform:capitalize">${escapeHtml(r.plan)}</td>
+      <td>${escapeHtml(r.contact)}</td>
+      <td><span class="status-pill offline"><span class="static-dot"></span>Disabled</span><div class="cell-meta">since ${formatDate(r.disabledAt)}</div></td>
+      <td><span class="status-pill offline"><span class="static-dot"></span>Stopped</span></td>
+      <td style="text-align:right">
+        <button class="btn btn-ghost btn-sm" data-action="reactivate-outlet" data-bid="${escapeHtml(r.bid)}" data-oid="${escapeHtml(r.oid)}" data-name="${escapeHtml(r.outletName)}" ${isReadOnly() ? 'disabled' : ''} title="${isReadOnly() ? 'View-only account' : 'Reactivate this restaurant'}">
+          <svg data-lucide="play"></svg> Reactivate
+        </button>
+      </td>
+    </tr>
+  `).join('');
     refreshIcons(tbody);
     return;
   }
@@ -163,8 +194,8 @@ function onboardMiniDots(r) {
   return steps.map((done) => `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:3px;background:${done ? 'var(--accent-whatsapp)' : 'var(--glass-border)'}"></span>`).join('');
 }
 
-function exportRestaurantsCsv() {
-  exportCsv('restaurants', [
+function exportRestaurantsXlsx() {
+  exportXlsx('restaurants', [
     { key: 'outletName', label: 'Outlet' },
     { key: 'businessName', label: 'Business' },
     { key: 'plan', label: 'Plan' },
@@ -178,4 +209,44 @@ function exportRestaurantsCsv() {
 
 registerAction('open-profile', (btn) => {
   navigate(`profile/${btn.dataset.bid}/${btn.dataset.oid}`);
+});
+
+// Reactivate: 1-step confirm (non-destructive) → writes disabled:false with
+// audit trail → row returns to the Active tab via the live listener → bot
+// worker restarted (or provisioned if it never existed).
+registerAction('reactivate-outlet', async (btn) => {
+  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
+  const bid = btn.dataset.bid, oid = btn.dataset.oid, name = btn.dataset.name;
+  const ok = await showConfirm({
+    title: `Reactivate "${name}"?`,
+    body: 'Re-enables QR ordering, dine-in, staff login, and the WhatsApp bot for this restaurant. All data is still intact.',
+    confirmLabel: 'Reactivate',
+  });
+  if (!ok) return;
+  try {
+    const user = firebase.auth().currentUser;
+    await firebase.database().ref(`businesses/${bid}/outlets/${oid}`).update({
+      disabled: false,
+      reactivatedAt: firebase.database.ServerValue.TIMESTAMP,
+      reactivatedBy: user?.uid || 'unknown',
+    });
+    // Best-effort restart; a worker that never existed will be provisioned
+    // on the next orchestrator pass. Failure doesn't undo the reactivation.
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${TUNNEL_URL}/api/bot/restart/${bid}/${oid}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 403) showToast("Your account doesn't have permission to restart the bot.", 'error');
+      else if (!res.ok && res.status !== 404) showToast('Bot restart returned ' + res.status + ' — retry restart later.', 'warning');
+    } catch (e) {
+      console.warn('bot restart after reactivate failed', e);
+      showToast('Restaurant reactivated — bot restart failed, retry from profile.', 'warning');
+    }
+    showToast(`"${name}" is active again.`, 'success');
+  } catch (err) {
+    console.error('reactivate failed', err);
+    showToast('Reactivate failed — check the console.', 'error');
+  }
 });

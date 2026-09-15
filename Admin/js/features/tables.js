@@ -1290,13 +1290,13 @@ function _qrCardMarkup({ storeName, poweredBy, tableNumber, qrSrc, compact }) {
     <div class="qr-frame${compact ? ' qr-frame-compact' : ''}">
         <div class="qr-card">
             <div class="qr-header">
-                <div class="qr-store-name">🍕 ${escapeHtml(storeName)}</div>
+                <div class="qr-store-name">🏪 ${escapeHtml(storeName)}</div>
                 <div class="qr-tagline">DINE-IN MENU</div>
             </div>
             <div class="qr-body">
                 <div class="qr-table-label">TABLE</div>
                 <div class="qr-table-number">${escapeHtml(String(tableNumber))}</div>
-                <div class="qr-scan-cta">📷 Scan &amp; Crave</div>
+                <div class="qr-scan-cta">📷                 <div class="qr-scan-cta">📷 Scan & Crave</div>
                 <div class="qr-img-frame">${qrSrc ? `<img src="${qrSrc}" width="${qrSize}" height="${qrSize}">` : '<p style="font-size:11px;color:#c81d11;">QR failed</p>'}</div>
             </div>
             ${footer}
@@ -1650,5 +1650,6 @@ window.__tables = {
     advanceOrder: _advanceOrder,
     printSessionBill: _printSessionBill,
     printBillForGroup: _printBillForGroup,
+    resolveTableRequest: _resolveTableRequest,
     editTable: _openTableEditor, setTableEnabled: _setTableEnabled
 };

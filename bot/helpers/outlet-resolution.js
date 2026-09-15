@@ -14,12 +14,14 @@
  */
 'use strict';
 
-// Two restaurants = two businesses, each with one outlet.
-// ponytail: legacy fallback for the 2 original restaurants only — provision
-// always sets BUSINESS_ID/OUTLET_ID env for new outlets (see resolveBusinessIdFor
-// below). Keep in sync with menu/js/firebase.js; new outlets must pass env/`?b=`.
+// Legacy map for backward compatibility with existing QR codes (no ?b= param)
+// New outlets MUST pass BUSINESS_ID env var or ?b= in URL
 const DEFAULT_BUSINESS_ID = 'roshani-pizza';
 const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
+
+// In-memory reverse index for O(1) outlet -> businessId lookup
+// Populated at startup and kept in sync via addOutlet/updateOutlet
+const outletToBusinessIdCache = new Map();
 
 function resolveBusinessId() {
     return resolveBusinessIdFor(resolveOutletId());
@@ -53,10 +55,34 @@ function resolvePath(scope, ...rest) {
     return outletPath(businessId, outletId, ...rest);
 }
 
-/** businessId for an outlet — env wins, else the per-outlet map. */
+/** businessId for an outlet — env wins, else reverse index, else legacy map, else throw. */
 function resolveBusinessIdFor(outletId) {
+    // 1. Explicit env var (orchestrator sets per-instance)
     if (process.env.BUSINESS_ID) return process.env.BUSINESS_ID;
-    return BUSINESS_BY_OUTLET[outletId] || DEFAULT_BUSINESS_ID;
+    // 2. Reverse index (O(1) - populated at startup)
+    if (outletToBusinessIdCache.has(outletId)) return outletToBusinessIdCache.get(outletId);
+    // 3. Legacy map (for backward compat with existing QR codes)
+    if (BUSINESS_BY_OUTLET[outletId]) return BUSINESS_BY_OUTLET[outletId];
+    // 4. Default for original pizza outlet
+    if (outletId === 'pizza') return DEFAULT_BUSINESS_ID;
+    // 5. Fallback (should not happen for new outlets with env var)
+    console.warn(`[outlet-resolution] No businessId found for outlet: ${outletId}, using default`);
+    return DEFAULT_BUSINESS_ID;
+}
+
+/** Initialize reverse index from Firebase — call once at startup */
+async function initializeOutletBusinessIndex(db) {
+    const businessesSnap = await db.ref('businesses').once('value');
+    const businesses = businessesSnap.val() || {};
+    for (const [bid, business] of Object.entries(businesses)) {
+        const outlets = business.outlets || {};
+        for (const [oid] of Object.entries(outlets)) {
+            if (!outletToBusinessIdCache.has(oid)) {
+                outletToBusinessIdCache.set(oid, bid);
+            }
+        }
+    }
+    console.log(`[outlet-resolution] Initialized reverse index with ${outletToBusinessIdCache.size} outlets`);
 }
 
 async function getOutlet(db, businessId, outletId) {
@@ -80,6 +106,16 @@ async function addOutlet(db, businessId, outletId, data) {
 async function updateOutlet(db, businessId, outletId, patch) {
     const ref = db.ref(outletPath(businessId, outletId));
     await ref.update(patch);
+    // Keep reverse index in sync
+    outletToBusinessIdCache.set(outletId, businessId);
+    return true;
+}
+
+/** Add outlet and update reverse index */
+async function addOutlet(db, businessId, outletId, data) {
+    const ref = db.ref(outletPath(businessId, outletId));
+    await ref.set(data);
+    outletToBusinessIdCache.set(outletId, businessId);
     return true;
 }
 
@@ -93,5 +129,6 @@ module.exports = {
     getOutlet,
     listOutlets,
     addOutlet,
-    updateOutlet
+    updateOutlet,
+    initializeOutletBusinessIndex
 };
