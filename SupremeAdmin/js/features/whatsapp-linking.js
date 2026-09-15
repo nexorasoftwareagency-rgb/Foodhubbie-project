@@ -14,6 +14,8 @@
  * and a configured Meta app / WhatsApp Embedded Signup config ID.
  */
 
+import { showToast } from '/js/utils.js';
+
 const META_APP_ID = '1894358871543574';           // Meta App ID (from DEPLOYMENT-PROGRESS.md)
 const META_CONFIG_ID = '1624840945941910';        // WhatsApp Embedded Signup configuration ID (created 2026-08-17)
 

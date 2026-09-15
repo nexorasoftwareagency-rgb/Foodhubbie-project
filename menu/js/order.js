@@ -22,8 +22,8 @@
  * for how to change this if you would rather standardize on "DineIn"
  * and update orders.js's STATUS_SEQUENCES key to match.
  */
-import { outletRef, push, set, update } from './firebase.js';
-import { Session, attachOrderToSession, ensureSession } from './session.js';
+import { outletRef, push, set, update, get } from './firebase.js';
+import { Session, attachOrderToSession, ensureSession, assertOutletEnabled } from './session.js';
 import { Cart, clearCart, subtotal as cartSubtotal } from './cart.js';
 
 function round2(n) { return Math.round(n * 100) / 100; }
@@ -42,6 +42,9 @@ function round2(n) { return Math.round(n * 100) / 100; }
  * @param {string} [opts.discount.source] - Source string (e.g. "coupon:WELCOME20")
  * @param {string} [opts.discount.discountId] - Firebase discount ID */
 export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, serviceChargeEnabled = false, serviceChargeRate = 0, customerName = '', customerPhone = '', discount = null } = {}) {
+    // Restaurant-disabled gate — the rules also deny the write, but a clear
+    // error beats a silent permission failure mid-checkout.
+    await assertOutletEnabled();
     const sessResult = await ensureSession();
     if (!sessResult.ok) throw new Error('Session not available');
     if (sessResult.isNewSession) {

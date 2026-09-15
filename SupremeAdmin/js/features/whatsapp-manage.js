@@ -11,6 +11,7 @@
  */
 import { registerAction } from '/js/main.js';
 import { isReadOnly } from '/js/data-store.js';
+import { refreshIcons, escapeHtml, showToast, showConfirm } from '/js/utils.js';
 
 let state = null; // { bid, oid, step, wabas, wabaId, numbers, busy, err }
 

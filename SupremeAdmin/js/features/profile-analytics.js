@@ -21,6 +21,7 @@
 
 import { registerAction } from '/js/main.js';
 import { getRawBusinesses } from '/js/data-store.js';
+import { refreshIcons, escapeHtml } from '/js/utils.js';
 
 const PALETTE = { revenue: '#E84908', orders: '#2563eb', avgOrder: '#9333ea', newCust: '#d97706' };
 const PAY_COLORS = { upi: '#9333ea', cash: '#16a34a', cod: '#d97706' };

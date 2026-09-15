@@ -28,7 +28,12 @@ function start() {
   dbRef.on('value', (snap) => {
     raw = snap.val() || {};
     ready = true;
-    subscribers.forEach((fn) => fn(raw));
+    // One subscriber's exception must not starve the rest of the app of live
+    // updates — forEach stops at the first throw, silently killing delivery
+    // to every subscriber after the broken one. Isolate each call.
+    subscribers.forEach((fn) => {
+      try { fn(raw); } catch (err) { console.error('data-store: subscriber error', err); }
+    });
   }, (err) => {
     console.error('data-store: businesses listener error', err);
     showToast('Lost the live connection — reconnecting…', 'error');
@@ -51,10 +56,12 @@ export function getRawBusinesses() {
 // Flattens businesses -> outlets into the row shape every table/grid
 // feature wants. Single place so filters/CSV/search/sparklines all agree
 // on field names.
-export function flattenOutlets() {
+export function flattenOutlets({ includeDisabled = false } = {}) {
   const rows = [];
   Object.entries(raw).forEach(([bid, biz]) => {
     Object.entries(biz.outlets || {}).forEach(([oid, outlet]) => {
+      const disabled = outlet.disabled === true;
+      if (disabled && !includeDisabled) return; // disabled rows only on the Disabled tab
       const bot = outlet.botStatus || {};
       const transport = outlet.bot?.transport || outlet.transport || 'baileys'; // mirrors bot/transport.js getTransportMode default
       // Display names live under settings/Store/storeName in the real DB,
@@ -65,6 +72,8 @@ export function flattenOutlets() {
       const outletName = outlet.name || store.storeName || outlet.outletName || bizName;
       rows.push({
         bid, oid,
+        disabled,
+        disabledAt: outlet.disabledAt || null,
         outletName,
         businessName: bizName,
         plan: biz.plan || 'starter',

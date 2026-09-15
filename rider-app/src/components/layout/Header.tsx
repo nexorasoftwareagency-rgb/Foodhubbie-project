@@ -9,11 +9,13 @@ import { StatusPill } from "@/components/shared/StatusPill";
 import { CountBadge } from "@/components/shared/CountBadge";
 
 export function Header({ onMenuClick, onNotifClick }: { onMenuClick: () => void; onNotifClick: () => void }) {
-  const { isOnline, toggleOnline } = useRiderContext();
+  const { isOnline, toggleOnline, rider, outlets } = useRiderContext();
   const { locationError } = useLocationContext();
   const { unreadCount } = useNotifications();
   const refresh = useRefreshAction();
   const [spinning, setSpinning] = useState(false);
+
+  const outletName = outlets[0]?.name || rider?.outlet ? outlets[0]?.name || rider?.outlet : "Rider";
 
   async function handleRefresh() {
     setSpinning(true);
@@ -31,10 +33,10 @@ export function Header({ onMenuClick, onNotifClick }: { onMenuClick: () => void;
           <Menu size={18} />
         </button>
 
-        <div className="flex-1 min-w-0">
+<div className="flex-1 min-w-0">
           <b className="block text-[13px] font-extrabold tracking-tight truncate">ROSHANI</b>
           <span className="block text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
-            Pizza &amp; Cake Rider
+            {outletName} Rider
           </span>
         </div>
 

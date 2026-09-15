@@ -20,6 +20,8 @@ export type Rider = {
   lastSeen: number;
   fcmToken: string;
   isAdmin: boolean;
+  /** Outlet this rider is assigned to — used for order filtering and isolation. */
+  outlet: OutletId;
   /** No rating pipeline exists in the real schema — renders as "New" until one exists. */
   rating?: number;
   notifications?: Record<string, RiderNotification>;

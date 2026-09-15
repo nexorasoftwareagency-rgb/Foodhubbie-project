@@ -162,6 +162,7 @@ async function main() {
       minify: true,
       format: 'esm',
       allowOverwrite: true,
+      treeShaking: false,
     });
     console.log(`  JS: ${rel}`);
   }

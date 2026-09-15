@@ -1,6 +1,8 @@
 # Plan: Restaurant Soft-Delete (Disable) + Reactivate
 
-Status: Design approved — pending implementation.
+Status: Implemented + verified (rules + UI + login gate + menu gate deployed). Live on all 3 hosting targets.
+
+Deviations from plan: session.js guard was reverted (returning `{ok:false}` breaks `ensureSession`); covered by the `app.js` boot gate (blocks before session creation) + `order.js` placeOrder guard. Rules `disabled` gates also block table-session creates at the DB level. Verification used live REST against deployed rules + `node --check` + deployed-bundle string checks (Playwright MCP was unavailable this session).
 Scope answers (user): per-outlet flag · **all stops (orders, dining-in, login, bot)** · soft-delete only (no hard erase).
 
 ## Data model

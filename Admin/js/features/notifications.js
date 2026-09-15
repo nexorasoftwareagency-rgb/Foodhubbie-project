@@ -25,7 +25,7 @@ export function showAlert(data, type = 'info') {
     } else {
         const order = data;
         const orderKey = order.orderId || order.id || '----';
-        const outletIcon = order.outlet === 'cake' ? '🎂' : '🍕';
+        const outletIcon = '🏪';
         
         // Calculate item count from any format (cart, items, or single item)
         const cartItems = order.cart ? (Array.isArray(order.cart) ? order.cart : Object.values(order.cart)) : null;
@@ -184,7 +184,7 @@ window.addEventListener('popstate', (e) => {
 });
 
 function renderNotifItem(n, isFull = false) {
-    const outletIcon = n.outlet === 'cake' ? '🎂' : '🍕';
+    const outletIcon = '🏪';
     const typeClass = n.type || 'info';
     
     return `

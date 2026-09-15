@@ -373,7 +373,7 @@ export function initLiveRiderTracker() {
 
         adminTrackerMap = L.map('adminLiveMap').setView([25.887944, 85.026194], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap'
+            attribution: '© OpenStreetMap'
         }).addTo(adminTrackerMap);
 
         bindUi();

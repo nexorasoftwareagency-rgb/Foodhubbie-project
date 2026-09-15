@@ -12,6 +12,7 @@ All 10 audit agents deployed. Key fixes:
 - **Data Integrity**: `_cancelSessionForTable` adjusts totals; KPI from `_effectiveTotal()`; CSV uses `_effectiveTotal()`
 - **Multi-Bill**: Groups remain independent; `requestBill` writes to `orderGroups/$groupId/status`; close rejects mixed status
 - **Deployment**: `firebase deploy --only database,hosting` succeeds — 3 targets (admin, rider, menu) live
+- **Soft-Delete Restaurants (PLAN-SOFT-DELETE-RESTAURANT.md)**: Implemented + verified live. Per-outlet `disabled`/`disabledAt`/`disabledBy` on `businesses/{bid}/outlets/{oid}`; 9 rule gates on unauth order/table/session/group/request writes + public `disabled` read; Supreme tabs (Active|Disabled) + Danger Zone 3-step disable modal + reactivate; Admin login gate (`Admin/js/auth.js`); menu `screenDisabled` boot gate (`menu/js/app.js`) + `placeOrder` guard. Verify: `node --check` + live REST rule tests (active outlet QR write passes, disabled outlet blocked 401, super/own-admin can write flag, cross-outlet admin denied)
 
 ## Relevant Files
 - `menu/js/app.js` — Customer app (QR ordering, cart, customization)

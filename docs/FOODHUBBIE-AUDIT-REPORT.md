@@ -1,6 +1,7 @@
 # Food-Hubbie Platform — Full End-to-End Audit Report
 > Repository: `nexorasoftwareagency-rgb/Foodhubbie-project`
 > Audit date: August 2026 | Auditor: Claude (Anthropic)
+> Status (2026-08-20): critical findings ADDRESSED — orchestrator built (`bot-control-api/orchestrator.js` + `/api/bot/provision`), dead root nodes (`dishes`/`categories`/`sizes`/`addons`) removed from `database.rules.json` (now only under `$businessId/$outletId`), hardcoded two-outlet assumptions resolved via `outlet-resolution.js` + `?b=`/`?o=` links.
 > Scope: `database.rules.json`, `bot/`, `webhook-server/`, `bot-control-api/`, `SupremeAdmin/`, `Admin/`, `menu/`, `functions/`, `shared/`, `tools/`
 > Not deeply re-audited this pass: `rider-app/` (140 files — audited separately, no recent changes detected), `functions/` deployment status (open question, unresolved)
 

@@ -1,5 +1,6 @@
 import { navigate } from '/js/main.js';
 import { flattenOutlets } from '/js/data-store.js';
+import { refreshIcons, escapeHtml, statusPillHtml } from '/js/utils.js';
 
 let activeIndex = 0;
 let currentResults = [];

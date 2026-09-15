@@ -1,4 +1,4 @@
-import { auth, db, Outlet, tenantRef, EmailAuthProvider, ref, get, onAuthStateChanged, signInWithEmailAndPassword, signOut, onChildAdded, reauthenticateWithCredential, serverTimestamp, set, push } from './firebase.js';
+import { auth, db, Outlet, tenantRef, EmailAuthProvider, ref, get, onValue, onAuthStateChanged, signInWithEmailAndPassword, signOut, onChildAdded, reauthenticateWithCredential, serverTimestamp, set, push, BUSINESS_BY_OUTLET } from './firebase.js';
 import { state } from './state.js';
 import { showToast, logAudit } from './utils.js';
 import * as ui from './ui.js';
@@ -13,8 +13,11 @@ const ADMIN_CONFIG = {
     SUPER_ADMIN_EMAIL: "roshanisudha@gmail.com"
 };
 
+let _disabledUnsub = null;
+
 function cleanupSession() {
     if (_newOrderUnsub) { _newOrderUnsub(); _newOrderUnsub = null; }
+    if (_disabledUnsub) { _disabledUnsub(); _disabledUnsub = null; }
     _lastNewOrder = '';
 }
 
@@ -141,35 +144,72 @@ export function initAuth() {
 
         if (!adminData) {
             console.error("[Auth] No admin data found after profile fetch and claims check.");
-            showToast("ACCESS DENIED: Unauthorized Account", "error");
-            
-            const overlay = document.getElementById("authOverlay");
-            if (overlay) {
-                overlay.innerHTML = ''; // Clear previous content
-                const modal = document.createElement('div');
-                modal.className = 'auth-modal';
-                
-                const title = document.createElement('h2');
-                title.className = 'text-danger';
-                title.textContent = 'ACCESS DENIED';
-                
-                const msg = document.createElement('p');
-                msg.textContent = 'No administrative profile found for this account.';
-                
-                const retryBtn = document.createElement('button');
-                retryBtn.className = 'btn-primary mt-20';
-                retryBtn.textContent = 'Try Another Account';
-                retryBtn.addEventListener('click', () => location.reload());
-                
-                modal.append(title, msg, retryBtn);
-                overlay.appendChild(modal);
-            }
-            
-setTimeout(() => signOut(auth), 3000);
-        return;
-    }
+            showAccessDenied('ACCESS DENIED', 'No administrative profile found for this account.');
+            setTimeout(() => signOut(auth), 3000);
+            return;
+        }
 
-    // ponytail: clear seamless-mode on logout so login screen shows
+        // --- Disabled-outlet gate ---
+        // Staff (non-super/non-supreme) of a disabled outlet are denied
+        // login. Super/Supreme admins stay allowed so they can reactivate.
+        if (!adminData.isSuper && !adminData.isSupreme && adminData.outlet) {
+            const oid = String(adminData.outlet).toLowerCase();
+            const bid = adminData.businessId || BUSINESS_BY_OUTLET[oid];
+            if (!bid) {
+                console.error("[Auth] Access Denied: Unknown outlet mapping for", oid);
+                showAccessDenied('ACCESS DENIED', 'Invalid outlet configuration. Please contact support.');
+                setTimeout(() => signOut(auth), 3000);
+                return;
+            }
+            try {
+                const disabledSnap = await Promise.race([
+                    get(ref(db, `businesses/${bid}/outlets/${oid}/disabled`)),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
+                ]);
+                if (disabledSnap.exists() && disabledSnap.val() === true) {
+                    console.warn("[Auth] Access Denied: restaurant disabled", user.email);
+                    showAccessDenied('ACCESS DENIED', 'This restaurant is currently disabled. Please contact the platform owner to reactivate it.');
+                    setTimeout(() => signOut(auth), 3000);
+                    return;
+                }
+            } catch (e) {
+                console.warn("[Auth] Disabled check failed, denying login:", e?.message || e);
+                showAccessDenied('ACCESS DENIED', 'Unable to verify outlet status. Please try again or contact support.');
+                setTimeout(() => signOut(auth), 3000);
+                return;
+            }
+        }
+
+        // --- Realtime disabled listener ---
+        // If the outlet gets disabled while admin is logged in, force sign-out immediately
+let _disabledUnsub = null;
+
+// Force esbuild to keep this by using it in a way that can't be optimized away
+// This creates a getter that esbuild can't optimize away
+const _disabledUnsubHolder = {
+  get value() { return _disabledUnsub; },
+  set value(v) { _disabledUnsub = v; }
+};
+
+// Force reference
+if (typeof window !== 'undefined') {
+  window.__disabledUnsubHolder = _disabledUnsubHolder;
+}
+        if (!adminData.isSuper && !adminData.isSupreme && adminData.outlet) {
+            const oid = String(adminData.outlet).toLowerCase();
+            const bid = adminData.businessId || BUSINESS_BY_OUTLET[oid];
+            if (bid) {
+                _disabledUnsub = onValue(ref(db, `businesses/${bid}/outlets/${oid}/disabled`), (snap) => {
+                    if (snap.exists() && snap.val() === true) {
+                        console.warn("[Auth] Outlet disabled in realtime, signing out:", user.email);
+                        showAccessDenied('ACCESS DENIED', 'This restaurant has been disabled. You have been signed out.');
+                        signOut(auth);
+                    }
+                });
+            }
+        }
+
+        // ponytail: clear seamless-mode on logout so login screen shows
     document.documentElement.classList.remove('seamless-mode');
 
         // Initialize Session
@@ -190,11 +230,15 @@ setTimeout(() => signOut(auth), 3000);
             const switcher = document.getElementById('outletSwitcher');
             const switcherMobile = document.getElementById('outletSwitcherMobile');
             
-            // Build options based on access level
-            let outletOptionsHtml = `
-                <option value="pizza">🍕 Pizza ERP</option>
-                <option value="cake">🎂 Cakes ERP</option>
-            `;
+            // Build options dynamically from available outlets
+            let outletOptionsHtml = '';
+            const outlets = Object.keys(BUSINESS_BY_OUTLET);
+            outlets.forEach(oid => {
+                outletOptionsHtml += `<option value="${oid}">🏪 ${oid.charAt(0).toUpperCase() + oid.slice(1)} ERP</option>`;
+            });
+            if (!outletOptionsHtml) {
+                outletOptionsHtml = `<option value="pizza">🏪 Pizza ERP</option>`;
+            }
             
             // Future-proofing for Supreme Admin
             if (adminData.isSupreme) {
@@ -276,6 +320,34 @@ setTimeout(() => signOut(auth), 3000);
     });
 }
 
+/**
+ * Shows the ACCESS DENIED overlay used for unauthorized accounts and
+ * disabled-outlet logins. Sign-out happens separately in the caller.
+ */
+function showAccessDenied(title, message) {
+    showToast("ACCESS DENIED", "error");
+    const overlay = document.getElementById("authOverlay");
+    if (!overlay) return;
+    overlay.innerHTML = ''; // Clear previous content
+    const modal = document.createElement('div');
+    modal.className = 'auth-modal';
+
+    const titleEl = document.createElement('h2');
+    titleEl.className = 'text-danger';
+    titleEl.textContent = title;
+
+    const msg = document.createElement('p');
+    msg.textContent = message;
+
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn-primary mt-20';
+    retryBtn.textContent = 'Try Another Account';
+    retryBtn.addEventListener('click', () => location.reload());
+
+    modal.append(titleEl, msg, retryBtn);
+    overlay.appendChild(modal);
+}
+
 export async function reauthenticateAdmin(password) {
     const user = auth.currentUser;
     if (!user) throw new Error("No user logged in.");
@@ -324,6 +396,8 @@ export function requireAdminReauth(onSuccess) {
  */
 export function userLogout() {
     logAudit('LOGOUT', { email: auth.currentUser?.email });
+    // Clean up disabled listener before signOut so we don't trigger it
+    if (_disabledUnsub) { _disabledUnsub(); _disabledUnsub = null; }
     cleanupSession();
     signOut(auth);
 }

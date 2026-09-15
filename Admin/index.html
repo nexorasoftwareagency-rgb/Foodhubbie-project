@@ -540,6 +540,16 @@
 
                 </li>
 
+                <li id="menu-menu-browser" title="Browse Menu by Category — Quick Setup">
+
+                    <button data-action="switchTab" data-tab="menu-browser" class="nav-btn">
+
+                        <i data-lucide="layout-grid"></i> <span>Menu Browser</span>
+
+                    </button>
+
+                </li>
+
                 <li id="menu-inventory" title="Manage Stock Levels and Supplies">
 
                     <button data-action="switchTab" data-tab="inventory" class="nav-btn">
@@ -1305,7 +1315,9 @@
 
                             <input type="text" id="menuSearch" placeholder="Search dishes..." class="search-input-group" title="Search menu items" aria-label="Search menu items">
 
-                            <button class="btn-primary btn-small btn-show-dish-modal" title="Add a new dish to the menu" aria-label="Add new dish"><i data-lucide="plus" class="icon-16"></i> Add Dish</button>
+                            <button class="btn-primary btn-small" id="btnAddDishChoice" title="Add a new dish" aria-label="Add new dish"><i data-lucide="plus" class="icon-16"></i> Add Dish</button>
+
+                            <button class="btn-secondary btn-small btn-open-menu-bank" title="Browse the platform-wide menu bank and copy dishes into this menu" aria-label="Browse Menu Bank"><i data-lucide="library" class="icon-16"></i> Menu Bank</button>
 
                         </div>
 
@@ -1466,9 +1478,104 @@
                     </div>
 
                 </div>
+</div>
+
+            
+            
+
+            <!-- MENU BROWSER TAB -->
+
+            <div id="tab-menu-browser" class="tab-content hidden">
+
+                <div class="panel">
+
+                    <div class="panel-header">
+
+                        <h3 class="desktop-only">Menu Browser</h3>
+
+                        <div class="flex-row flex-center flex-gap-10 flex-wrap-mobile">
+
+                            <input type="text" id="menuBrowserSearch" placeholder="Search dishes..." class="search-input-group flex-1" title="Search menu items" aria-label="Search menu items">
+
+                            <button class="btn-primary btn-small" id="btnAddCategoryFromBrowser" title="Add a new category" aria-label="Add Category"><i data-lucide="folder-plus" class="icon-16"></i> Category</button>
+
+                            <button class="btn-primary btn-small" id="btnAddDishFromBrowser" title="Add a new dish to the selected category" aria-label="Add Dish"><i data-lucide="plus" class="icon-16"></i> Dish</button>
+
+                            <button class="btn-secondary btn-small" id="btnOpenMenuBankFromBrowser" title="Browse the platform-wide menu bank" aria-label="Browse Menu Bank"><i data-lucide="library" class="icon-16"></i> Menu Bank</button>
+
+                        </div>
+
+                    </div>
+
+                    <div class="menu-browser-layout">
+
+                        <!-- Categories Sidebar -->
+
+                        <aside class="menu-browser-sidebar">
+
+                            <div class="sidebar-header">
+
+                                <h4>Categories</h4>
+
+                                <input type="text" id="browserCategorySearch" placeholder="Filter categories..." class="search-input-group mt-8" aria-label="Filter categories">
+
+                            </div>
+
+                            <div id="browserCategoryList" class="category-list">
+
+                                <div class="skeleton-row-flex" style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;border:1px solid var(--glass-border);margin-bottom:8px"><div class="skeleton" style="width:36px;height:36px;border-radius:8px;flex-shrink:0"></div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div class="skeleton skeleton-text" style="width:60%;margin:0"></div><div class="skeleton skeleton-text" style="width:35%;margin:0;font-size:10px"></div></div></div>
+
+                                <div class="skeleton-row-flex" style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;border:1px solid var(--glass-border);margin-bottom:8px"><div class="skeleton" style="width:36px;height:36px;border-radius:8px;flex-shrink:0"></div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div class="skeleton skeleton-text" style="width:50%;margin:0"></div><div class="skeleton skeleton-text" style="width:30%;margin:0;font-size:10px"></div></div></div>
+
+                                <div class="skeleton-row-flex" style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;border:1px solid var(--glass-border);margin-bottom:8px"><div class="skeleton" style="width:36px;height:36px;border-radius:8px;flex-shrink:0"></div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div class="skeleton skeleton-text" style="width:55%;margin:0"></div><div class="skeleton skeleton-text" style="width:25%;margin:0;font-size:10px"></div></div></div>
+
+                            </div>
+
+                        </aside>
+
+                        <!-- Dishes Grid -->
+
+                        <main class="menu-browser-main">
+
+                            <div class="browser-main-header">
+
+                                <div class="selected-category-info">
+
+                                    <span id="browserSelectedCategory" class="selected-cat-name">Select a category</span>
+
+                                    <span id="browserDishCount" class="dish-count-badge">0 items</span>
+
+                                </div>
+
+                                <div class="browser-view-toggle" title="Toggle view">
+
+                                    <button type="button" class="btn-icon-v4 active" data-view="grid" aria-label="Grid view"><i data-lucide="grid" style="width:16px;height:16px"></i></button>
+
+                                    <button type="button" class="btn-icon-v4" data-view="list" aria-label="List view"><i data-lucide="list" style="width:16px;height:16px"></i></button>
+
+                                </div>
+
+                            </div>
+
+                            <div id="browserDishGrid" class="browser-dish-grid">
+
+                                <div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:var(--text-muted);">
+
+                                    <i data-lucide="folder-open" style="width:48px;height:48px;margin:0 auto 16px;opacity:0.5"></i>
+
+                                    <p>Select a category on the left to view and manage its dishes</p>
+
+                                </div>
+
+                            </div>
+
+                        </main>
+
+                    </div>
+
+                </div>
 
             </div>
-
 
 
             <!-- RIDERS TAB -->

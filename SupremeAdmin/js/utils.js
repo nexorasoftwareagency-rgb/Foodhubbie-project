@@ -7,7 +7,7 @@
 // ---- escaping --------------------------------------------------------
 // Never trust Firebase-sourced strings (restaurant names, phone numbers,
 // contact emails, etc.) to be safe for innerHTML.
-function escapeHtml(str) {
+export function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)
     .replace(/&/g, '&amp;')
@@ -18,12 +18,12 @@ function escapeHtml(str) {
 }
 
 // ---- icons -------------------------------------------------------------
-function refreshIcons(root) {
+export function refreshIcons(root) {
   if (window.lucide) window.lucide.createIcons({ root: root || document });
 }
 
 // ---- toast ---------------------------------------------------------------
-function showToast(message, type) {
+export function showToast(message, type) {
   const root = document.getElementById('toast-root');
   if (!root) return;
   const el = document.createElement('div');
@@ -43,7 +43,7 @@ function showToast(message, type) {
 }
 
 // ---- confirm (non-native, reuses the shared .modal pattern) --------------
-function showConfirm({ title, body, confirmLabel = 'Confirm', danger = false }) {
+export function showConfirm({ title, body, confirmLabel = 'Confirm', danger = false }) {
   return new Promise((resolve) => {
     const root = document.getElementById('modal-root');
     root.innerHTML = `
@@ -81,28 +81,10 @@ function showConfirm({ title, body, confirmLabel = 'Confirm', danger = false }) 
   });
 }
 
-// ---- drawer helpers --------------------------------------------------
-function openDrawer(html) {
-  const root = document.getElementById('drawer-root');
-  root.innerHTML = `
-    <div class="drawer-overlay" id="active-drawer">
-      <div class="drawer-content">
-        <button class="drawer-close" data-action="close-drawer" aria-label="Close"><svg data-lucide="x"></svg></button>
-        ${html}
-      </div>
-    </div>`;
-  refreshIcons(root);
-  requestAnimationFrame(() => document.getElementById('active-drawer').classList.add('open'));
-}
-function closeDrawer() {
-  const el = document.getElementById('active-drawer');
-  if (!el) return;
-  el.classList.remove('open');
-  setTimeout(() => { document.getElementById('drawer-root').innerHTML = ''; }, 180);
-}
+// ---- CSV export ------------------------------------------------------
 
 // ---- formatting --------------------------------------------------------
-function formatUptime(seconds) {
+export function formatUptime(seconds) {
   if (!seconds || seconds <= 0) return '—';
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
@@ -111,11 +93,11 @@ function formatUptime(seconds) {
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
 }
-function formatMemory(mb) {
+export function formatMemory(mb) {
   if (!mb && mb !== 0) return '—';
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
 }
-function statusLabel(status) {
+export function statusLabel(status) {
   return { online: 'Online', degraded: 'Degraded', offline: 'Offline', errored: 'Errored', unknown: 'Unknown' }[status] || 'Unknown';
 }
 function statusClass(status) {
@@ -124,7 +106,7 @@ function statusClass(status) {
   if (status === 'offline' || status === 'errored') return 'offline';
   return 'unknown';
 }
-function statusPillHtml(status) {
+export function statusPillHtml(status) {
   const cls = statusClass(status);
   return `<span class="status-pill ${cls}"><span class="pulse-dot"></span>${statusLabel(status)}</span>`;
 }
@@ -133,7 +115,7 @@ function statusPillHtml(status) {
 // columns: [{ key, label }]. Values are read off each row by `key` and
 // CSV-escaped (quotes doubled, wrapped in quotes if they contain a
 // comma/quote/newline).
-function exportCsv(filename, columns, rows) {
+export function exportCsv(filename, columns, rows) {
   const escapeCell = (v) => {
     let s = v === null || v === undefined ? '' : String(v);
     // Formula-injection guard: a cell starting with =, +, -, or @ executes
@@ -159,12 +141,68 @@ function exportCsv(filename, columns, rows) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/**
+ * Excel export (.xlsx) — uses SheetJS (xlsx) loaded dynamically from CDN.
+ * columns: [{ key, label }]. rows: array of objects with matching keys.
+ * Returns a Promise that resolves when download starts.
+ */
+export async function exportXlsx(filename, columns, rows) {
+  // Load SheetJS from CDN if not already available (with fallback)
+  if (typeof XLSX === 'undefined') {
+    await new Promise((resolve, reject) => {
+      const tryLoad = (url) => {
+        const script = document.createElement('script');
+        script.src = url;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load SheetJS from ${url}`));
+        document.head.appendChild(script);
+      };
+      // Primary CDN
+      tryLoad('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
+      // Fallback to unpkg
+      setTimeout(() => {
+        if (typeof XLSX === 'undefined') tryLoad('https://unpkg.com/xlsx@0.20.2/dist/xlsx.full.min.js');
+      }, 5000);
+    });
+  }
+
+  // Prepare worksheet data: header row + data rows
+  const header = columns.map(c => c.label);
+  const data = rows.map(row => columns.map(c => row[c.key] ?? ''));
+  const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
+
+  // Auto-size columns (approximate)
+  const colWidths = columns.map((c, i) => {
+    const maxLen = Math.max(
+      c.label.length,
+      ...rows.map(r => String(r[c.key] ?? '').length)
+    );
+    return { wch: Math.min(Math.max(maxLen + 2, 10), 50) };
+  });
+  ws['!cols'] = colWidths;
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inquiries');
+
+  // Generate and download
+  const xlsxBlob = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([xlsxBlob], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // ---- status sparkline ---------------------------------------------------
 // Renders a 24h "uptime bar" (status-page style) from a capped history
 // array [{ status, at }, ...] (chronological). Buckets into `hours`
 // equal segments and carries the last-known status forward into any
 // bucket with no event — gaps read as "still whatever it was."
-function renderUptimeSparkline(history, hours = 24) {
+export function renderUptimeSparkline(history, hours = 24) {
   const now = Date.now();
   const bucketMs = (hours * 3600 * 1000) / hours; // 1h per bucket by default
   // botStatus.history is written via push() server-side, so Firebase hands
@@ -205,13 +243,13 @@ function renderUptimeSparkline(history, hours = 24) {
 // ---- relative time / staleness -------------------------------------------
 // "5m ago" style labels + a staleness check used to dim rows whose last
 // bot-status update is old. Firebase ServerValue.TIMESTAMP is ms.
-function formatDate(ts) {
+export function formatDate(ts) {
   if (!ts) return '—';
   const ms = typeof ts === 'number' ? ts : new Date(ts).getTime();
   if (isNaN(ms)) return '—';
   return new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
-function formatAge(ts) {
+export function formatAge(ts) {
   if (!ts) return '—';
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return 'just now';
@@ -221,32 +259,37 @@ function formatAge(ts) {
   if (h < 48) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
 }
-function isStale(ts, maxMs = 5 * 60 * 1000) {
+export function isStale(ts, maxMs = 5 * 60 * 1000) {
   return !!ts && Date.now() - ts > maxMs;
 }
 
 // ---- transport naming -----------------------------------------------------
 // Two distinct WhatsApp concepts on this platform, deliberately kept apart:
-//   1. OFFICIAL WhatsApp = Meta Cloud API (Embedded Signup, phoneNumberId).
-//      Controlled from this dashboard via whatsapp-linking.js.
-//   2. WhatsApp Web / QR = Baileys transport (the legacy/default bot channel).
-// Naming stays explicit in the UI so the two can never be confused.
-function transportLabel(transport) {
-  if (transport === 'meta') return 'Official API';
-  if (transport === 'baileys') return 'WhatsApp Web (QR)';
-  return 'Not configured';
-}
-function transportBadgeHtml(transport) {
-  const label = transportLabel(transport);
-  const cls = transport === 'meta' ? 'online' : transport === 'baileys' ? 'degraded' : 'unknown';
-  return `<span class="transport-badge ${cls}">${escapeHtml(label)}</span>`;
-}
+ //   1. OFFICIAL WhatsApp = Meta Cloud API (Embedded Signup, phoneNumberId).
+ //      Controlled from this dashboard via whatsapp-linking.js.
+ //   2. WhatsApp Web / QR = Baileys transport (the legacy/default bot channel).
+ // Naming stays explicit in the UI so the two can never be confused.
+ export function transportLabel(transport) {
+   if (transport === 'meta') return 'Official API';
+   if (transport === 'baileys') return 'WhatsApp Web (QR)';
+   return 'Not configured';
+ }
+ function _transportLabelInternal(transport) {
+   if (transport === 'meta') return 'Official API';
+   if (transport === 'baileys') return 'WhatsApp Web (QR)';
+   return 'Not configured';
+ }
+ export function transportBadgeHtml(transport) {
+   const label = _transportLabelInternal(transport);
+   const cls = transport === 'meta' ? 'online' : transport === 'baileys' ? 'degraded' : 'unknown';
+   return `<span class="transport-badge ${cls}">${escapeHtml(label)}</span>`;
+ }
 
 // ---- onboarding stepper --------------------------------------------------
 // Steps 1–2 (business/outlet) read in Restaurant-orange; steps 3–4
 // (WhatsApp/bot) read in WhatsApp-green — a small visual handoff between
 // the two dashboards, same idea as the profile page's .theme-agent scope.
-function renderOnboardingStepper({ businessCreated, outletCreated, whatsappLinked, botOnline }) {
+export function renderOnboardingStepper({ businessCreated, outletCreated, whatsappLinked, botOnline }) {
   const steps = [
     { label: 'Business created', done: businessCreated, theme: 'restaurant' },
     { label: 'Outlet created', done: outletCreated, theme: 'restaurant' },
@@ -272,7 +315,7 @@ function renderOnboardingStepper({ businessCreated, outletCreated, whatsappLinke
 }
 
 // ---- misc ------------------------------------------------------------
-function debounce(fn, ms) {
+export function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
