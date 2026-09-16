@@ -3223,3 +3223,126 @@
     }
 }
 
+/* ================================================================
+   ANALYTICS SUB-TABS + WHATSAPP BOT ANALYTICS PANEL
+   ================================================================ */
+
+.analytics-subtabs {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+}
+.analytics-subtab {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.1);
+    color: rgba(255,255,255,.8);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+}
+.analytics-subtab:hover {
+    background: rgba(255,255,255,.2);
+    color: #fff;
+}
+.analytics-subtab.active {
+    background: rgba(255,255,255,.95);
+    color: #E84908;
+    border-color: transparent;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+
+/* WhatsApp Bot Analytics Panel */
+.wa-bot-analytics-panel .mob-hero {
+    background: linear-gradient(135deg, #075e54 0%, #128c7e 100%) !important;
+}
+.wa-bot-analytics-panel .mob-hero-sub {
+    color: rgba(255,255,255,.8);
+}
+.wa-bot-analytics-panel .mob-kpi-card {
+    border: 1px solid rgba(18,140,126,.15);
+}
+.wa-bot-analytics-panel .mob-kpi-icon {
+    background: rgba(18,140,126,.12);
+    color: #128c7e;
+}
+
+/* Breakdown grid */
+.wa-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+@media (max-width: 600px) {
+    .wa-breakdown-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.wa-breakdown-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+}
+.wa-breakdown-ring {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3px solid var(--ring-color, #2563eb);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--ring-color, #2563eb) 8%, transparent);
+}
+.wa-breakdown-count {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ring-color, #2563eb);
+    font-variant-numeric: tabular-nums;
+}
+.wa-breakdown-label {
+    font-size: 11px;
+    color: var(--text-secondary, #6b7280);
+    line-height: 1.3;
+}
+
+/* 7-day trend chart */
+.wa-trend-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 100px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--glass-border, #2a2f3a);
+}
+.wa-trend-bar {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.wa-trend-bar-val {
+    font-size: 10px;
+    color: var(--text-secondary, #6b7280);
+    font-variant-numeric: tabular-nums;
+}
+.wa-trend-bar-fill {
+    width: 100%;
+    max-width: 32px;
+    min-height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: #128c7e;
+    transition: height .3s;
+}
+.wa-trend-bar-date {
+    font-size: 9px;
+    color: var(--text-tertiary, #9ca3af);
+    white-space: nowrap;
+}
+
