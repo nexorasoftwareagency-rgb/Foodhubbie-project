@@ -5,9 +5,10 @@
  */
 
 const {
-    formatJid, getISTDateInfo, randomBetween, isSocketDead, generateCouponCode
+    formatJid, getISTDateInfo, randomBetween, isSocketDead, generateCouponCode, OutboundTracker
 } = require('./utils');
-const { resolvePath } = require('./firebase');
+const { db, resolvePath } = require('./firebase');
+const outboundTracker = new OutboundTracker(db, resolvePath);
 
 const PROMO_LOG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PROMO_HEARTBEAT_EVERY = 10;
@@ -26,7 +27,7 @@ const PROMO_MENU_MAX_DELAY_MS = 3000;
 let _killSwitchCache = { value: false, ts: 0 };
 let _promoEnabledCache = { value: true, ts: 0 };
 
-async function sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage, sendStopMsg) {
+async function sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage, sendStopMsg, outlet) {
     let finalText = text;
     if (closingMessage) finalText += '\n------------------------\n' + closingMessage;
     if (sendStopMsg && !/stop/i.test(finalText)) finalText += '\n------------------------\n_Reply STOP to unsubscribe._';
@@ -38,6 +39,7 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage,
         if (isMetaSock && typeof sock.sendTemplate === 'function') {
             try {
                 await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'bot_live_update', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
+                outboundTracker.trackSend(outlet || 'pizza', 'promo');
                 return;
             } catch (e) {
                 console.warn(`[Promo] Template send failed for ${jid}, text fallback: ${e.message || e}`);
@@ -55,6 +57,7 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage,
         } else {
             await sock.sendMessage(jid, { text: finalText }, { _logChat: false });
         }
+        outboundTracker.trackSend(outlet || 'pizza', 'promo');
     } catch (err) {
         console.error(`[Promo] sendMessage failed for ${jid}:`, err.message || err);
         throw err;
@@ -160,11 +163,11 @@ async function sleepThroughQuietHours(quietHours, isKillSwitchOnFn) {
     }
 }
 
-async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, closingMessage, sendStopMsg) {
+async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, closingMessage, sendStopMsg, outlet) {
     let lastErr = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            await sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage, sendStopMsg);
+            await sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage, sendStopMsg, outlet);
             return { ok: true, attempts: attempt };
         } catch (err) {
             lastErr = err;
@@ -327,7 +330,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 extraImage = menuImageUrl;
             }
 
-            const result = await sendWithRetry(sock, jid, finalText, mainImage, 2, closingMessage, sendStopMsg);
+            const result = await sendWithRetry(sock, jid, finalText, mainImage, 2, closingMessage, sendStopMsg, OUTLET);
             await logPromoResult(campaignId, phone, jid, result, couponCode, OUTLET, db);
             if (result.ok) {
                 sent++;
@@ -353,6 +356,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                             imgPayload = { image: { url: extraImage } };
                         }
                         await sock.sendMessage(jid, imgPayload, { _logChat: false });
+                        outboundTracker.trackSend(OUTLET, 'promo');
                     } catch (e) {
                         console.warn(`[Promo] Menu image failed for ${jid}:`, e.message || e);
                     }

@@ -45,8 +45,11 @@ const {
     getISTDateInfo, getISTDateString, isShopOpen,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
-    isSocketDead, RateLimiter, isBlockedJid
+    isSocketDead, RateLimiter, isBlockedJid, OutboundTracker
 } = require('./utils');
+
+// ── Outbound tracker (best-effort analytics, never blocks sends) ──────
+const outboundTracker = new OutboundTracker(db, resolvePath);
 const promo = require('./promotions');
 const { sendDailyReport, sendMonthlyReport, sendWeeklyReport } = require('./reports');
 const riderNotify = require('./rider');
@@ -448,7 +451,7 @@ async function appendContactInfo(text, outlet = 'outlet') {
     }
 }
 
-async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact = false) {
+async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact = false, trackType = 'order_notification') {
     // Blocklist check — silently skip sending to blocked numbers
     if (isBlockedJid(to, blockedNumbers)) {
         console.log(`[BLOCKED] Skipping outbound to ${(to || '').replace(/[^0-9]/g, '').slice(-4)}`);
@@ -457,6 +460,7 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
     const finalMsg = skipContact ? text : await appendContactInfo(text, outlet);
     if (!image) {
         await sock.sendMessage(to, { text: finalMsg });
+        outboundTracker.trackSend(outlet, trackType);
         return;
     }
     try {
@@ -468,11 +472,13 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
             payload = { image: { url: image }, caption: finalMsg };
         }
         await sock.sendMessage(to, payload);
+        outboundTracker.trackSend(outlet, trackType);
     } catch (err) {
         console.error("Image Send Error:", err.message || err);
         // Fallback to text ONLY if it wasn't already a text message failure
         try {
             await sock.sendMessage(to, { text: finalMsg });
+            outboundTracker.trackSend(outlet, trackType);
         } catch (textErr) {
             console.error("Critical Send Error:", textErr.message || textErr);
         }
