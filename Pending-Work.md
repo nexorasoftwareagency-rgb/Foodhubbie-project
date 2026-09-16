@@ -339,6 +339,116 @@ These are **real, actionable items** in THIS repo based on the audits.
 
 ---
 
+## Website Upgrade — FoodHubbie Marketing Site
+
+**Goal:** Restructure `website/index.html` from "feature → text → generic image" to "promotional visual → real software proof → benefits → CTA" per `website/Improvements/improvements.md.txt`.
+
+**Assets:**
+- `website/assets/generated/` — 6 AI promotional images (admin-dashboard, admin-login, menu-landing, menu-landing-mobile, rider-login, rider-login-mobile)
+- `website/assets/REal/` — 25 real software screenshots (Analytics x3, Dashboard, Bulk Messaging, Discount, Inventory, Live Orders, Menu Control, Menu Availability, Orders, Orders Update, Payment Tracking, POS, QR Table, Reports, Rider Management, Settings x6, Table Management, WhatsApp Bot)
+
+**Design Rules (from improvements guide):**
+- Do NOT redesign from scratch — improve existing sections
+- Keep existing branding (orange accent, white/light bg, dark navy type, rounded cards)
+- Keep existing pricing, CTAs, links, navigation
+- PROMISE → PRODUCT → PROOF flow for every feature
+- No text over screenshots, no orange boxes on screenshots
+- Use browser frames, device frames, clean white cards, subtle shadows
+- Responsive: 3-col desktop → 2-col tablet → 1-col mobile
+- Lazy loading, proper alt text, no stretch/crop
+
+### ✅ W1: Hero Section — Add Ecosystem Strip
+- **File:** `website/index.html` (hero section)
+- **Stage:** `done`
+- **Task:** Added ecosystem strip below dashboard image: Admin → Customer QR Menu → Rider App with connected labels. Added "LIVE / REAL-TIME" indicator with pulse animation.
+- **CSS:** Added `.ecosystem-strip`, `.eco-item`, `.eco-arrow`, `.live-dot` styles
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W2: "See FoodHubbie in Action" — 5 Feature Cards
+- **File:** `website/index.html` (new section after product tour)
+- **Stage:** `done`
+- **Task:** Added 5 premium feature cards with real screenshots: WhatsApp Ordering, QR Table Ordering, First-Party Delivery, Marketing & Promotions, Real-Time Command Center. Each card: real screenshot → headline → supporting text → CTA link.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W3: WhatsApp Ordering Section
+- **File:** `website/index.html` (new section)
+- **Stage:** `done`
+- **Task:** Added dedicated section with real WhatsApp campaign screenshot + flow diagram: Customer → WhatsApp → Promotion → Menu → Cart → Order → Dashboard. CTA: "Talk to Us on WhatsApp"
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W4: QR Table Ordering Section
+- **File:** `website/index.html` (upgraded from Dine-In section)
+- **Stage:** `done`
+- **Task:** Upgraded Dine-In section with real QR screenshot + process flow diagram: TABLE QR → CUSTOMER ORDER → POS/SYSTEM → KITCHEN → SERVED. Added `id="qr-section"` for navigation.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W5: Delivery Section — Screenshot Sequence
+- **File:** `website/index.html` (upgraded Delivery section)
+- **Stage:** `done`
+- **Task:** Added 3-screenshot sequence: Live Orders (Monitor) → Orders Update (Update) → Orders (Manage). Added `id="delivery-section"` for navigation.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W6: Marketing Section
+- **File:** `website/index.html` (new section)
+- **Stage:** `done`
+- **Task:** Two-column layout: LEFT = WhatsApp Campaigns, RIGHT = Discount & Coupon Control. Added workflow: Create → Target → Promote → Track. Added `id="marketing-section"`.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W7: Command Center Section
+- **File:** `website/index.html` (new section)
+- **Stage:** `done`
+- **Task:** Large dashboard screenshot in browser frame. Added `id="command-section"`.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W8: Analytics Section
+- **File:** `website/index.html` (new section)
+- **Stage:** `done`
+- **Task:** 3-screen dashboard showcase: Analytics Overview, Sales & Highlights, Payment Methods. Added `id="analytics-section"`.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W9: Menu & Inventory Section
+- **File:** `website/index.html` (new section)
+- **Stage:** `done`
+- **Task:** 3-stage layout: Menu Control → Availability & Stock → Inventory Management. Added `id="menu-section"`.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W10: POS & Payments Section
+- **File:** `website/index.html` (new section)
+- **Stage:** `done`
+- **Task:** Split-screen: POS + Payment Tracking. Added `id="pos-section"`.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W11: Orders Section
+- **File:** `website/index.html` (new section)
+- **Stage:** `done`
+- **Task:** Horizontal timeline: Order Received → Preparing → Ready/Delivery with real screenshots. Added `id="orders-section"`.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W12: Final CTA Update
+- **File:** `website/index.html` (final CTA section)
+- **Stage:** `done`
+- **Task:** Added ecosystem visual: QR Order → Dashboard → Kitchen → Rider → Customer. Added "FOODHUBBIE ERP" branding + WhatsApp number.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W13: SEO & Alt Text Pass
+- **File:** `website/index.html`
+- **Stage:** `done`
+- **Task:** Updated all image alt text to descriptive: "FoodHubbie ERP [feature] — [description]". Added smooth scrolling CSS.
+- **Deployed:** Pending Firebase deploy
+
+### ✅ W14: Responsive Design Pass
+- **File:** `website/index.html` (CSS)
+- **Stage:** `done`
+- **Task:** All new sections use responsive grids: `.feature-promo` (auto-fit minmax 300px), `.screenshot-seq` (3→1 col), `.marketing-grid` (2→1 col), `.analytics-grid` (3→2→1 col), `.menu-inv-grid` (3→1 col), `.pos-pay-grid` (2→1 col). Dashboard screenshots in browser frames scale properly.
+- **Deployed:** Pending Firebase deploy
+
+### ⏳ W15: Deploy to Firebase Hosting
+- **File:** `firebase.json` (website hosting target)
+- **Stage:** `reviewing`
+- **Task:** Build and deploy website to `foodhubbie-web.web.app`
+
+---
+
 ## Completed Items (This Session)
 
 | Item | Status |

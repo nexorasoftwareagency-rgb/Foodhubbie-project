@@ -1,0 +1,879 @@
+MASTER PROMPT — FOODHUBBIE RIDER & DELIVERY MANAGEMENT
+UPGRADE THE FOODHUBBIE WEBSITE WITH A DEDICATED, HIGH-IMPACT SECTION FOR:
+
+“FIRST-PARTY RIDER & DELIVERY MANAGEMENT”
+
+This section must clearly communicate that FoodHubbie is not just an ordering/POS system. It provides the restaurant with its own delivery management infrastructure where the restaurant can manage its own riders, dispatch orders, track delivery progress, verify delivery using OTP, and monitor rider settlements.
+
+IMPORTANT:
+Do NOT mention or visually promote Swiggy, Zomato, or any third-party delivery marketplace as an integrated feature.
+
+The message should be:
+
+“YOUR ORDERS. YOUR RIDERS. YOUR DELIVERY. YOUR CONTROL.”
+
+==================================================
+1. SECTION HERO
+==================================================
+
+Create a premium product-showcase section titled:
+
+“Own Your Delivery. Control Every Order.”
+
+Supporting text:
+
+“FoodHubbie gives your restaurant its own first-party delivery management system — from automatic rider assignment to live delivery tracking, OTP verification and rider settlement.”
+
+Add a small feature badge:
+
+“FIRST-PARTY DELIVERY SYSTEM”
+
+Use a visually rich layout with:
+
+LEFT:
+- Large headline
+- Short description
+- Feature highlights
+- CTA buttons
+
+RIGHT:
+- Rider App promotional visual
+- Restaurant Admin Dashboard
+- Live delivery/map concept
+- Order status flow
+
+The visual should show a realistic restaurant order moving through:
+
+ORDER CONFIRMED
+        ↓
+KITCHEN PREPARING
+        ↓
+ORDER PACKED
+        ↓
+RIDER ASSIGNED
+        ↓
+RIDER DISPATCHED
+        ↓
+OUT FOR DELIVERY
+        ↓
+OTP VERIFIED
+        ↓
+DELIVERED
+
+==================================================
+2. SHOW THE RIDER APP AS A REAL PRODUCT
+==================================================
+
+Do NOT represent the rider as simply a generic delivery icon.
+
+Show a realistic smartphone Rider App interface.
+
+The Rider App visual should communicate:
+
+- Rider login/profile
+- Online / Offline availability
+- Assigned orders
+- New delivery notification
+- Customer/order details
+- Pickup information
+- Delivery address
+- Navigation/map
+- Customer contact
+- Delivery OTP
+- Order status updates
+- Cash collected
+- Rider earnings
+- Wallet / settlement information
+- Delivery history
+
+The rider should be shown using a smartphone while the restaurant admin dashboard simultaneously receives live updates.
+
+Headline:
+
+“Everything Your Rider Needs. Nothing They Don't.”
+
+Supporting text:
+
+“Riders receive assigned orders, pickup information, delivery details, navigation, OTP verification and settlement information directly inside their Rider App.”
+
+==================================================
+3. RIDER ONLINE / OFFLINE STATUS
+==================================================
+
+Create a feature subsection:
+
+“Know Which Riders Are Available — In Real Time.”
+
+Show:
+
+RIDER MANAGEMENT DASHBOARD
+
+Example interface elements:
+
+Riders Online: 4
+Riders Offline: 2
+Active Deliveries: 3
+
+Each rider card can show:
+
+Rider Name
+Online Status
+Current Order
+Current Location
+Delivery Status
+
+Use status indicators such as:
+
+ONLINE
+OFFLINE
+ON DELIVERY
+AVAILABLE
+
+Explain:
+
+“Restaurant management can see rider availability and use available riders for delivery assignment.”
+
+Do not invent advanced capabilities that are not already supported by the actual product.
+
+==================================================
+4. AUTOMATIC RIDER ASSIGNMENT
+==================================================
+
+Create a visually strong section:
+
+“From Packed Order to Assigned Rider.”
+
+Show the workflow:
+
+ORDER PACKED
+      ↓
+DELIVERY REQUIRED
+      ↓
+AVAILABLE RIDER DETECTED
+      ↓
+RIDER ASSIGNED
+      ↓
+RIDER NOTIFIED
+      ↓
+DELIVERY STARTED
+
+Explain:
+
+“Once an order is ready for delivery, FoodHubbie can connect the order with an available rider and move the delivery workflow forward.”
+
+Visual concept:
+
+Restaurant Admin Dashboard
+        ↓
+Order Ready
+        ↓
+Rider Assignment
+        ↓
+Rider Smartphone
+        ↓
+Customer
+
+Make this look like one connected real-time ecosystem.
+
+==================================================
+5. LIVE DELIVERY TRACKING
+==================================================
+
+Create a major feature block:
+
+“Track Delivery. Not Just Orders.”
+
+Show a realistic map-style interface containing:
+
+Restaurant
+   ↓
+Rider Location
+   ↓
+Customer Location
+
+Show:
+
+Rider moving toward customer
+Delivery route
+Order number
+Delivery status
+Rider name
+Estimated progress
+
+Supporting text:
+
+“Follow delivery progress from the restaurant side while the rider handles the journey to the customer.”
+
+Use a subtle animated/live-system visual style if technically supported.
+
+IMPORTANT:
+Do not claim a specific ETA, GPS accuracy, or tracking capability unless it already exists in the actual application.
+
+==================================================
+6. RIDER ORDER WORKFLOW
+==================================================
+
+Create a dedicated timeline titled:
+
+“Every Delivery Has a Clear Status.”
+
+Show these statuses:
+
+ASSIGNED
+↓
+ACCEPTED
+↓
+PICKED UP
+↓
+OUT FOR DELIVERY
+↓
+ARRIVED
+↓
+OTP VERIFIED
+↓
+DELIVERED
+
+Each stage should have a simple icon and short explanation.
+
+The timeline should visually connect:
+
+ADMIN → RIDER → CUSTOMER
+
+The objective is to show that the delivery status is synchronized throughout the FoodHubbie ecosystem.
+
+==================================================
+7. CUSTOMER DELIVERY OTP
+==================================================
+
+Make OTP verification one of the major trust/security features.
+
+Headline:
+
+“Secure Delivery With OTP Verification.”
+
+Visual:
+
+Customer receives delivery OTP
+        ↓
+Rider reaches customer
+        ↓
+Customer provides OTP
+        ↓
+Rider enters OTP
+        ↓
+Delivery Verified
+        ↓
+Order Completed
+
+Supporting text:
+
+“FoodHubbie uses delivery OTP verification as part of the handoff process, helping the restaurant confirm that the order has reached the customer.”
+
+Show a realistic Rider App screen:
+
+DELIVERY OTP
+
+Enter Customer OTP
+
+[  •  •  •  •  ]
+
+VERIFY DELIVERY
+
+After verification:
+
+✓ DELIVERY VERIFIED
+
+Do not claim additional security certifications or guarantees.
+
+==================================================
+8. RIDER WALLET & CASH SETTLEMENT
+==================================================
+
+Create a separate feature section:
+
+“Every Rider's Earnings. Clearly Tracked.”
+
+Show a Rider Wallet interface containing:
+
+TOTAL EARNINGS
+DELIVERIES COMPLETED
+CASH COLLECTED
+PAYOUTS
+CURRENT BALANCE
+
+Possible visual structure:
+
+Rider Wallet
+
+Balance
+₹ XXXX
+
+Today's Deliveries
+12
+
+Cash Collected
+₹ XXXX
+
+Delivery Earnings
+₹ XXX
+
+Payout History
+
+Show transaction-style records.
+
+Supporting text:
+
+“FoodHubbie's rider settlement workflow helps restaurants track rider earnings, cash collected and payouts from one place.”
+
+IMPORTANT:
+Do not invent commission percentages, salary calculations, payment gateways or settlement rules unless they are already implemented.
+
+==================================================
+9. CASH COLLECTION
+==================================================
+
+Create a feature block:
+
+“Know How Much Cash Was Collected.”
+
+Show the relationship:
+
+CUSTOMER
+   ↓
+CASH PAYMENT
+   ↓
+RIDER
+   ↓
+RIDER WALLET
+   ↓
+RESTAURANT SETTLEMENT
+
+Show dashboard information such as:
+
+Order Amount
+Cash Collected
+Rider
+Settlement Status
+
+Explain:
+
+“For cash-on-delivery orders, the system can associate collected cash with the rider and maintain settlement records.”
+
+==================================================
+10. RIDER DELIVERY HISTORY
+==================================================
+
+Show a Rider App screen:
+
+DELIVERY HISTORY
+
+Order #1024
+Delivered
+₹450
+
+Order #1023
+Delivered
+₹680
+
+Order #1022
+Delivered
+₹320
+
+Include:
+
+Date
+Order ID
+Delivery Status
+Amount
+Settlement information
+
+Headline:
+
+“Every Delivery Leaves a Record.”
+
+Supporting text:
+
+“Restaurant management can maintain visibility into completed deliveries and rider activity.”
+
+==================================================
+11. ADMIN + RIDER REAL-TIME CONNECTION
+==================================================
+
+This is extremely important.
+
+Create a visual showing TWO devices/screens simultaneously:
+
+LEFT:
+FOODHUBBIE ADMIN DASHBOARD
+
+RIGHT:
+RIDER APP
+
+Connect them with a real-time synchronization line.
+
+Example:
+
+ADMIN:
+Order #1045
+READY FOR DELIVERY
+
+        ↓ REAL-TIME SYNC
+
+RIDER APP:
+New Delivery Assigned
+
+Then:
+
+RIDER:
+OUT FOR DELIVERY
+
+        ↓ REAL-TIME SYNC
+
+ADMIN:
+RIDER DISPATCHED
+
+Then:
+
+RIDER:
+OTP VERIFIED
+
+        ↓ REAL-TIME SYNC
+
+ADMIN:
+ORDER DELIVERED
+
+Headline:
+
+“Admin and Rider. Always in Sync.”
+
+Supporting text:
+
+“When a delivery status changes, the relevant workflow updates across the FoodHubbie system in real time.”
+
+==================================================
+12. COMPLETE DELIVERY ECOSYSTEM VISUAL
+==================================================
+
+Create a large ecosystem diagram near the end of the section.
+
+CENTER:
+
+FOODHUBBIE
+
+Around it:
+
+CUSTOMER
+     ↕
+RIDER APP
+     ↕
+ADMIN DASHBOARD
+     ↕
+KITCHEN / KDS
+     ↕
+ORDER MANAGEMENT
+
+Delivery flow:
+
+CUSTOMER ORDER
+      ↓
+RESTAURANT
+      ↓
+KITCHEN
+      ↓
+ORDER PACKED
+      ↓
+RIDER ASSIGNED
+      ↓
+RIDER APP
+      ↓
+LIVE DELIVERY
+      ↓
+OTP VERIFICATION
+      ↓
+DELIVERED
+
+Use connecting lines and subtle real-time indicators.
+
+Headline:
+
+“One Order. One Connected Delivery Workflow.”
+
+==================================================
+13. REAL SOFTWARE SCREENSHOTS
+==================================================
+
+Where actual FoodHubbie screenshots are available, use REAL PRODUCT SCREENSHOTS rather than fabricated UI.
+
+Prioritize screenshots related to:
+
+- Live Orders
+- Order Management
+- Order Updates
+- Delivery
+- Rider Management
+- Dashboard
+- Payment Tracking
+- Any existing rider-related screens
+
+Display screenshots inside:
+
+- Premium browser frames for desktop dashboards
+- Smartphone frames for Rider App screens
+- Clean device mockups
+- Subtle shadows
+- Rounded corners
+
+IMPORTANT:
+
+Do not stretch screenshots.
+
+Do not crop important UI.
+
+Do not place large text directly over screenshots.
+
+Do not cover the screenshot with colored shapes.
+
+Do not add the orange square/title block that previously covered branding.
+
+The screenshot must remain readable and clearly recognizable as the real FoodHubbie software.
+
+==================================================
+14. “HOW DELIVERY WORKS” VISUAL
+==================================================
+
+Create a simple 6-step horizontal/vertical process:
+
+01
+ORDER RECEIVED
+
+02
+KITCHEN PREPARES
+
+03
+ORDER PACKED
+
+04
+RIDER ASSIGNED
+
+05
+RIDER DELIVERS
+
+06
+OTP VERIFIED
+
+Add a short description below each step.
+
+Keep the design clean and premium.
+
+==================================================
+15. RIDER APP FEATURE GRID
+==================================================
+
+Create a feature grid with cards:
+
+CARD 1
+“Online / Offline”
+Rider availability status.
+
+CARD 2
+“Order Assignment”
+Receive delivery assignments.
+
+CARD 3
+“Pickup Details”
+Know which order to collect.
+
+CARD 4
+“Customer Details”
+Access required delivery information.
+
+CARD 5
+“Navigation”
+Follow the delivery route.
+
+CARD 6
+“Delivery OTP”
+Verify customer handoff.
+
+CARD 7
+“Cash Collection”
+Track collected cash.
+
+CARD 8
+“Rider Wallet”
+Track earnings and settlements.
+
+CARD 9
+“Delivery History”
+Review completed deliveries.
+
+Use icons and concise descriptions.
+
+==================================================
+16. KEY MARKETING MESSAGE
+==================================================
+
+Create a strong statement:
+
+“Stop Treating Delivery Like an Outside Service.”
+
+Supporting copy:
+
+“FoodHubbie brings your restaurant's delivery operation into the same ecosystem as your orders, kitchen and customer experience.”
+
+Then:
+
+“Your Restaurant.
+Your Riders.
+Your Customers.
+Your Data.
+One Connected System.”
+
+==================================================
+17. COMPARISON-STYLE VISUAL — WITHOUT NAMING COMPETITORS
+==================================================
+
+Do NOT create a competitor comparison table.
+
+Instead create:
+
+TRADITIONAL DELIVERY WORKFLOW
+
+Order
+↓
+Restaurant
+↓
+External Delivery Dependency
+↓
+Customer
+
+versus
+
+FOODHUBBIE FIRST-PARTY WORKFLOW
+
+Order
+↓
+Restaurant
+↓
+Kitchen
+↓
+Your Rider
+↓
+Customer
+↓
+OTP Verification
+
+Use this only to illustrate the architecture.
+
+Do not claim that third-party services are universally inferior or make unsupported claims.
+
+==================================================
+18. CTA
+==================================================
+
+End the Rider section with a strong CTA:
+
+“Take Control of Your Delivery Operation.”
+
+Supporting text:
+
+“Manage orders, riders, delivery progress, OTP handoffs and settlements from one connected restaurant system.”
+
+Buttons:
+
+“Start Your Free Trial”
+
+“Book a Demo”
+
+“Talk to Us on WhatsApp”
+
+WhatsApp / Contact Number:
+
+9724649971
+
+Make the WhatsApp CTA clickable using the correct WhatsApp link format.
+
+==================================================
+19. VISUAL DESIGN DIRECTION
+==================================================
+
+The section must feel like a premium SaaS product presentation.
+
+Design language:
+
+- Modern
+- Professional
+- Restaurant technology focused
+- Mobile-first
+- Clean
+- High trust
+- Real-time technology aesthetic
+- Dark/light contrast where appropriate
+- Subtle gradients
+- Soft shadows
+- Rounded cards
+- Connected workflow lines
+- Smartphone + dashboard mockups
+- Real product screenshots
+
+Avoid:
+
+- Cartoon delivery riders
+- Generic stock photography
+- Excessive illustrations
+- Fake statistics
+- Fake customer reviews
+- Fake app screens presented as real functionality
+- Competitor logos
+- Swiggy/Zomato branding
+- Overloaded animations
+- Excessive text
+- Unsupported claims
+
+==================================================
+20. MOST IMPORTANT STORY
+==================================================
+
+The entire Rider section should communicate this story visually:
+
+CUSTOMER PLACES ORDER
+          ↓
+KITCHEN PREPARES ORDER
+          ↓
+ORDER IS PACKED
+          ↓
+AVAILABLE RIDER IS ASSIGNED
+          ↓
+RIDER RECEIVES ORDER
+          ↓
+RIDER PICKS UP ORDER
+          ↓
+CUSTOMER CAN RECEIVE DELIVERY
+          ↓
+OTP VERIFICATION
+          ↓
+ORDER DELIVERED
+          ↓
+RIDER WALLET / SETTLEMENT UPDATED
+          ↓
+ADMIN DASHBOARD UPDATED
+
+Everything should feel like ONE REAL-TIME SYSTEM.
+
+The central message is:
+
+“FOODHUBBIE DOESN'T JUST TAKE THE ORDER.
+
+IT CONNECTS THE RESTAURANT,
+KITCHEN,
+RIDER,
+AND CUSTOMER
+IN ONE DELIVERY WORKFLOW.”
+
+==================================================
+21. RESPONSIVE DESIGN
+==================================================
+
+Desktop:
+
+Use wide dashboard + smartphone + map compositions.
+
+Tablet:
+
+Use two-column layouts where possible.
+
+Mobile:
+
+Stack sections vertically.
+
+Rider smartphone screenshots should remain large enough to read.
+
+For wide admin dashboard screenshots, use horizontal scrolling rather than shrinking the screenshot until the text becomes unreadable.
+
+==================================================
+22. ANIMATION
+==================================================
+
+Use subtle animations only.
+
+Examples:
+
+- Rider status changing Online → Assigned → On Delivery
+- Order moving through delivery timeline
+- Route line drawing between restaurant and customer
+- Real-time synchronization indicator
+- OTP verification transition
+- Wallet balance/status update
+
+Animations must remain fast and professional.
+
+Do NOT make the section look like a gaming website.
+
+==================================================
+23. FINAL PRODUCT POSITIONING
+==================================================
+
+Position FoodHubbie Rider Management as:
+
+“FIRST-PARTY DELIVERY MANAGEMENT”
+
+Not:
+
+“Food Delivery Marketplace”
+
+Not:
+
+“Third-Party Delivery Integration”
+
+Not:
+
+“Delivery Aggregator”
+
+The product story is:
+
+FOODHUBBIE
+=
+RESTAURANT ADMIN
++
+KITCHEN
++
+CUSTOMER ORDERING
++
+FIRST-PARTY RIDER
++
+DELIVERY MANAGEMENT
++
+REAL-TIME OPERATIONS
+
+Maintain the existing FoodHubbie website's branding, typography, navigation, pricing, links and overall visual identity.
+
+Do not redesign the entire website.
+
+Add this Rider & Delivery section as a major product showcase that visually proves how the delivery ecosystem works.
+Recommended visual sequence
+
+For the Rider section, I would structure the page like this:
+
+1. 🛵 Hero — “Own Your Delivery”
+↓
+2. 📱 Actual Rider App
+↓
+3. 🟢 Rider Online/Offline Management
+↓
+4. ⚡ Automatic Rider Assignment
+↓
+5. 🗺️ Live Delivery Tracking
+↓
+6. 🔄 Admin ↔ Rider Real-Time Sync
+↓
+7. 🔐 OTP Delivery Verification
+↓
+8. 💰 Rider Wallet + Cash Settlement
+↓
+9. 📋 Delivery History
+↓
+10. 🔗 Complete Restaurant → Kitchen → Rider → Customer Ecosystem
+↓
+11. 📲 Start Free Trial / Book Demo / WhatsApp
+
+The key is that the website should show the Rider App as a complete operational product, rather than simply saying “we have delivery management.” This makes the delivery capability much easier for a restaurant owner to understand.
