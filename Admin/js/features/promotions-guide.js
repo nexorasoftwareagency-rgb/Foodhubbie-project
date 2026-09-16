@@ -9,7 +9,7 @@ const STEPS = [
     {
         icon: 'edit-3',
         title: 'Compose',
-        body: 'Write your message in the composer. Use tokens like <code>{name}</code>, <code>{phone}</code>, <code>{lastOrderDate}</code>, and <code>{storeName}</code> to personalize automatically. Click the <strong>template picker</strong> button to choose from 24 pre-built message templates.',
+        body: 'Write your message in the composer. Use tokens like <code>{name}</code>, <code>{phone}</code>, <code>{lastOrderDate}</code>, and <code>{storeName}</code> to personalize automatically. Click the <strong>template picker</strong> button to choose from 25 pre-built message templates.',
     },
     {
         icon: 'users',

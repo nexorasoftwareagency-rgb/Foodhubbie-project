@@ -704,7 +704,11 @@ async function _exportCsv(id) {
 
 async function _switchMode(mode) {
     _activeMode = mode;
-    document.querySelectorAll('.promo-mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+    document.querySelectorAll('.promo-mode-tab').forEach(t => {
+        const isActive = t.dataset.mode === mode;
+        t.classList.toggle('active', isActive);
+        t.setAttribute('aria-selected', isActive);
+    });
     document.getElementById('promoComposePane')?.classList.toggle('hidden', mode === 'active' || mode === 'history');
     document.getElementById('promoActivePane')?.classList.toggle('hidden', mode !== 'active');
     document.getElementById('promoHistoryPane')?.classList.toggle('hidden', mode !== 'history');
