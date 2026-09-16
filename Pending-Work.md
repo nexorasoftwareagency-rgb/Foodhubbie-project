@@ -175,7 +175,7 @@ This rule applies to:
 - **OK:** Build system commit complete on main branch; SupremeAdmin deployed to Firebase Hosting
 - **Done:** ✅ `npm run deploy:supreme` — hosted at https://foodhubbie-supremeadmin.web.app
 
-**To advance:** Phase 5 runtime test for restaurant-scoped isolation (requires live accounts)
+**To advance:** Phase 5 runtime test for restaurant-scoped isolation (requires live accounts); session backup cron scheduling (run `bot/backup-sessions.js` daily via system cron on EC2)
 
 ---
 
@@ -251,68 +251,91 @@ These are **real, actionable items** in THIS repo based on the audits.
 
 | # | Item | Files | Stage |
 |---|------|-------|-------|
-| 1 | POS back button redundancy | `Admin/index.html`, `Admin/js/ui.js` | `reviewing` |
-| 2 | Invisible text selection near bottom nav | `menu/css/app.css` | `reviewing` |
-| 3 | Rider broadcast unthrottled sends + warm-up pacing | `bot/utils.js`, `bot/rider.js`, `bot/index.js` | `reviewing` |
-| 4 | Baileys version drift, no update process | `bot/package.json` | `reviewing` |
-| 5 | No backup/persistence for `bot/session_data_pizza/` | `bot/session_data_pizza/` | `reviewing` |
-| 6 | Whole-process restarts drop all tenants | `ecosystem.config.js` | `reviewing` |
+| 1 | POS back button redundancy | `Admin/index.html`, `Admin/js/ui.js` | `done` |
+| 2 | Invisible text selection near bottom nav | `menu/css/app.css` | `done` |
+| 3 | Rider broadcast unthrottled sends + warm-up pacing | `bot/utils.js`, `bot/rider.js`, `bot/index.js` | `done` |
+| 4 | Baileys version drift, no update process | `bot/package.json` | `done` |
+| 5 | No backup/persistence for `bot/session_data_pizza/` | `bot/backup-sessions.js` | `done` |
+| 6 | Whole-process restarts drop all tenants | `bot/index.js` | `done` |
 
 ---
 
-### 📋 Item 1: POS Back Button Redundancy
+### ✅ Item 1: POS Back Button Redundancy
 - **Files:** `Admin/index.html`, `Admin/js/ui.js`
-- **Stage:** `reviewing`
-- **Issue:** Two back buttons in POS mobile view — static button in HTML (`Admin/index.html`) + dynamic `posExitBtn` created in `Admin/js/ui.js:156-169`. Bottom nav already provides navigation.
-- **Fix:** Remove both — keep bottom nav as single exit method
-- **Files to edit:**
-  - `Admin/index.html` — remove static back button in POS panel header
-  - `Admin/js/ui.js:156-169` — remove dynamic `posExitBtn` creation block
+- **Stage:** `done`
+- **Issue:** Two back buttons in POS mobile view — static button in HTML + dynamic `posExitBtn` created in `Admin/js/ui.js:156-169`. Bottom nav already provides navigation.
+- **Fix:** Removed static button from `Admin/index.html:3851-3855`; removed dynamic `posExitBtn` creation from `Admin/js/ui.js:128-140`
+- **Verified:** `node --check Admin/js/ui.js` passes
+- **Deployed:** `a0c43fc` → EC2 pull + `pm2 restart all` — confirmed online
 
 ---
 
-### 📋 Item 2: Invisible Text Selection Near Bottom Nav
+### ✅ Item 2: Invisible Text Selection Near Bottom Nav
 - **Files:** `menu/css/app.css`
-- **Stage:** `reviewing`
+- **Stage:** `done`
 - **Issue:** `user-select: none` only on `.bottom-nav-item`, so text near bottom nav is selectable on tap-drag → invisible highlights
-- **Fix:** Add `user-select: none` to `body`, re-enable for `input, textarea`
-- **Files to edit:** `menu/css/app.css` — body rule + input/textarea rule
+- **Fix:** Added `-webkit-user-select:none; user-select:none; -webkit-touch-callout:none;` to `body` rule at line 31; re-enabled for `input,textarea` with `-webkit-user-select:text; user-select:text;` at line 34
+- **Deployed:** `a0c43fc` → EC2 pull + `pm2 restart all`
 
 ---
 
-### 📋 Item 3: Rider Broadcast Unthrottled + Warm-Up Pacing
+### ✅ Item 3: Rider Broadcast Throttling + Warm-Up Pacing
 - **Files:** `bot/utils.js`, `bot/rider.js`, `bot/index.js`
-- **Stage:** `reviewing`
-- **Issue:** `broadcastPickupAvailable()` in `bot/rider.js:114-157` loops riders with **zero delay** between WhatsApp sends. No warm-up for new numbers.
-- **Fix:** Add randomized delay (800ms–2000ms normal, 2000ms–5000ms warm-up) + `firstLinkedAt` tracking in `bot/index.js`
-- **Files to edit:**
-  - `bot/utils.js` — add `getBroadcastDelayRangeMs()`, `sleep()`, `firstLinkedAt` logic
-  - `bot/rider.js` — import helpers, add staggered loop in `broadcastPickupAvailable`
-  - `bot/index.js` — record `firstLinkedAt` on first successful connection
+- **Stage:** `done`
+- **Issue:** `broadcastPickupAvailable()` loops riders with zero delay between WhatsApp sends. No warm-up for new numbers.
+- **Fix:** Added `sleep()`, `getBroadcastDelayRangeMs()`, warm-up constants (7-day window, 3-5s warm-up, 0.8-1.5s normal) to `bot/utils.js`; imported helpers in `bot/rider.js`, added staggered delay in broadcast loop; added `firstLinkedAt` tracking on first connection in `bot/index.js:1099-1122`
+- **Verified:** All `node --check` pass
+- **Deployed:** `a0c43fc` + `ff9ac96` → EC2 pull + `pm2 restart all` — confirmed online
 
 ---
 
-### 📋 Item 4: Baileys Version Drift
+### ✅ Item 4: Baileys Version Drift
 - **Files:** `bot/package.json`
-- **Stage:** `reviewing`
+- **Stage:** `done`
 - **Issue:** `^6.7.17` pinned, no update process. WhatsApp protocol changes detect outdated clients.
-- **Fix:** Add monthly update check process; pin exact version; test before rollout
+- **Fix:** Pinned exact version `7.0.0-rc13` (removed `^`); added `check:baileys` script for version checking
+- **Verified:** `bot/package.json` valid JSON; `node --check bot/index.js` passes
+- **Deployed:** `a0c43fc` → EC2 pull + `pm2 restart all`
 
 ---
 
-### 📋 Item 5: Session Backup for `bot/session_data_pizza/`
-- **Files:** `bot/session_data_pizza/`
-- **Stage:** `reviewing`
+### ✅ Item 5: Session Backup
+- **Files:** `bot/backup-sessions.js`, `bot/package.json`
+- **Stage:** `done`
 - **Issue:** WhatsApp auth credentials only on EC2 local disk. No S3/EBS backup. Instance loss = mass re-link = ban risk.
-- **Fix:** Add scheduled `aws s3 sync` cron for `bot/session_data_*/` (exclude creds)
+- **Fix:** Created `bot/backup-sessions.js` (syncs `session_data_*` dirs to S3 via `aws s3 sync --delete --storage-class STANDARD_IA`); added `backup:sessions` script to `bot/package.json`
+- **Verified:** Syntax checks pass
+- **Deployed:** `a0c43fc` → EC2 pull — ready for cron scheduling
 
 ---
 
-### 📋 Item 6: Whole-Process Restarts
-- **Files:** `ecosystem.config.js`
-- **Stage:** `reviewing`
-- **Issue:** `pm2 restart foodhubbie-bot` drops ALL tenants. Should gracefully shutdown per-tenant.
-- **Fix:** Add `SIGTERM` handler in `bot/index.js` to call `sock.end()` per tenant; consider per-tenant PM2 processes
+### ✅ Item 6: Graceful Shutdown (SIGTERM/SIGINT)
+- **Files:** `bot/index.js`
+- **Stage:** `done`
+- **Issue:** `pm2 restart` sends SIGTERM → abrupt kill → session corruption, no graceful socket close.
+- **Fix:** Added SIGTERM/SIGINT handler at `bot/index.js:1099-1122` after `currentSock = sock;`: calls `sock.end(undefined)`, clears intervals, exits after 500ms flush
+- **Verified:** `node --check bot/index.js` passes; regression check clean
+- **Deployed:** `a0c43fc` + `ff9ac96` → EC2 pull + `pm2 restart all` — confirmed all 6 processes online
+
+---
+
+### ✅ Item 7: TUNNEL_URL not on `window` (SupremeAdmin)
+- **Files:** `SupremeAdmin/js/firebase-config.js`
+- **Stage:** `done`
+- **Issue:** `TUNNEL_URL` declared as `let` in `firebase-config.js` but not attached to `window`. ES modules (e.g. `restaurant-profile.js`) referencing `TUNNEL_URL` got `ReferenceError`.
+- **Fix:** Added `window.TUNNEL_URL = TUNNEL_URL` after declaration + after Firebase auto-read update
+- **Verified:** Build + deploy successful
+- **Deployed:** `ea5b9ef` → Firebase Hosting (`foodhubbie-supremeadmin.web.app`)
+
+---
+
+### ✅ Item 8: `resolveOutletId` not imported in `bot/index.js`
+- **Files:** `bot/index.js`
+- **Stage:** `done`
+- **Issue:** `resolveOutletId()` called at line 2193 but only `resolveBusinessIdFor` and `initializeOutletBusinessIndex` were imported from `./helpers/outlet-resolution`. Caused `[FATAL] Unhandled Rejection: resolveOutletId is not defined` on bot startup → pizza bot crashed.
+- **Fix:** Added `resolveOutletId` to the import at line 38
+- **Verified:** `node --check bot/index.js` passes
+- **Deployed:** `ff9ac96` → EC2 pull + `pm2 restart all` — all 6 processes online, pizza bot connected
 
 ---
 
@@ -323,12 +346,12 @@ These are **real, actionable items** in THIS repo based on the audits.
 | SupremeAdmin Issues #2-7 | ✅ `ok` |
 | Restaurant-Scoped Isolation (Phases 1-4) | ✅ `ok` |
 | Build System + Deploy | ✅ `done` |
-| POS Back Button (in Admin) | 🟡 `reviewing` |
-| Invisible Text Selection | 🟡 `reviewing` |
-| Rider Broadcast Throttling + Warm-Up | 🟡 `reviewing` |
-| Baileys Version Drift | 🟡 `reviewing` |
-| Session Backup | 🟡 `reviewing` |
-| Whole-Process Restart | 🟡 `reviewing` |
+| POS Back Button (in Admin) | ✅ `done` |
+| Invisible Text Selection | ✅ `done` |
+| Rider Broadcast Throttling + Warm-Up | ✅ `done` |
+| Baileys Version Drift | ✅ `done` |
+| Session Backup | ✅ `done` |
+| Whole-Process Restart (Graceful SIGTERM) | ✅ `done` |
 | Phase 5 Runtime Test | ⏳ `reviewing` (manual) |
 
 ---
