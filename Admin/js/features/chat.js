@@ -30,6 +30,8 @@ let _selectedCustomerId = null;
 let _renderedThreadId = null;
 let _searchTerm = '';
 let _wired = false;
+let _usageUnsub = null;         // bot/usage listener
+let _usageData = null;          // today's usage snapshot
 
 function _chatRef(sub) { return Outlet.ref(`chats${sub ? '/' + sub : ''}`); }
 
@@ -91,6 +93,45 @@ function _updateBadges() {
         headerUnread.textContent = `${totalUnread} unread`;
         headerUnread.classList.toggle('hidden', totalUnread === 0);
     }
+}
+
+// ---------------------------------------------------------------------
+// Daily outbound usage bar
+// ---------------------------------------------------------------------
+function _istDate(ts) {
+    if (!ts) return '';
+    return new Date(ts + 5.5 * 3600000).toISOString().split('T')[0];
+}
+
+function _renderUsage() {
+    const bar = document.getElementById('chatUsageBar');
+    if (!bar) return;
+    if (!_usageData) { bar.classList.add('hidden'); return; }
+    const today = _istDate(Date.now());
+    const todayData = _usageData[today] || {};
+    const total = todayData.total || 0;
+    if (total === 0) { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    const el = (id) => document.getElementById(id);
+    if (el('chatUsageToday')) el('chatUsageToday').textContent = total;
+    if (el('chatUsageOrders')) el('chatUsageOrders').textContent = todayData.order_notification || 0;
+    if (el('chatUsageRiders')) el('chatUsageRiders').textContent = todayData.rider_broadcast || 0;
+    if (el('chatUsagePromos')) el('chatUsagePromos').textContent = todayData.promo || 0;
+}
+
+function _startUsageListener() {
+    if (_usageUnsub) return;
+    _usageUnsub = onValue(Outlet.ref('bot/usage'), (snap) => {
+        _usageData = snap.val();
+        _renderUsage();
+    }, () => {});
+}
+
+function _stopUsageListener() {
+    if (_usageUnsub) { _usageUnsub(); _usageUnsub = null; }
+    _usageData = null;
+    const bar = document.getElementById('chatUsageBar');
+    if (bar) bar.classList.add('hidden');
 }
 
 function _renderThreadList() {
@@ -328,6 +369,7 @@ export function loadChat() {
     // Render immediately on (re)entry even though the listener is persistent.
     _renderThreadList();
     _renderThreadView();
+    _startUsageListener();
 }
 
 export function cleanupChat() {
@@ -335,6 +377,7 @@ export function cleanupChat() {
     // the admin works elsewhere. Only per-visit state is reset.
     _selectedCustomerId = null;
     _searchTerm = '';
+    _stopUsageListener();
     const app = document.getElementById('chatApp');
     if (app) app.classList.remove('chat-conv-open');
 }
