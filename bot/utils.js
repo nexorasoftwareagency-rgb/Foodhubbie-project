@@ -186,6 +186,26 @@ function getFoodFunnyProgress(status, name = "") {
     return `\n------------------------\n*Progress:* [ ${bar} ]\n`;
 }
 
+// ── Warm-up-aware broadcast pacing ──────────────────────────────────────────
+// A freshly-linked WhatsApp number is the most ban-prone state there is.
+// Multi-recipient loops (rider broadcasts) are the one place we can safely
+// slow down without touching customer-facing order replies. This always
+// adds *some* delay between recipients (there was none before), and adds
+// more during a number's first week since its first-ever successful pairing.
+const WARMUP_DAYS = 7;
+const WARMUP_DELAY_RANGE_MS = [3000, 5000];
+const NORMAL_DELAY_RANGE_MS = [800, 1500];
+
+function getBroadcastDelayRangeMs(firstLinkedAt) {
+    if (!firstLinkedAt) return WARMUP_DELAY_RANGE_MS; // unknown age — be conservative
+    const daysSinceLink = (Date.now() - firstLinkedAt) / (24 * 60 * 60 * 1000);
+    return daysSinceLink < WARMUP_DAYS ? WARMUP_DELAY_RANGE_MS : NORMAL_DELAY_RANGE_MS;
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ── Coupon ─────────────────────────────────────────────────────────────────
 
 const _COUPON_WORDS = ['PIZZA', 'DEAL', 'FEAST', 'SAVE', 'YUMMY', 'TREAT', 'SALE', 'FRESH', 'HOT', 'MEGA', 'SUPER', 'LUCKY', 'BOGO', 'FREE', 'WOW', 'YAY'];
@@ -212,5 +232,7 @@ module.exports = {
     getISTDateInfo, getISTDateString, parseTime, isShopOpen, randomBetween,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
-    generateCouponCode, isSocketDead
+    generateCouponCode, isSocketDead,
+    getBroadcastDelayRangeMs, sleep,
+    WARMUP_DAYS, WARMUP_DELAY_RANGE_MS, NORMAL_DELAY_RANGE_MS
 };

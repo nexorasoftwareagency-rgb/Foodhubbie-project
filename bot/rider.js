@@ -3,7 +3,7 @@
  * Requires: formatJid, addInAppNotification, getData.
  */
 
-const { formatJid, isSocketDead } = require('./utils');
+const { formatJid, isSocketDead, getBroadcastDelayRangeMs, sleep, randomBetween } = require('./utils');
 
 function buildRiderOrderMessage(order, { title, footer, id, includeOutlet = false, includeOTP = false } = {}) {
     let itemsText = "";
@@ -140,9 +140,19 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
             includeOutlet: true,
         });
 
+        // Stagger sends instead of firing them all back-to-back — a tight
+        // loop hitting many distinct numbers is a known ban-risk pattern,
+        // and gets extra caution while this number is still in its warm-up
+        // window (see getBroadcastDelayRangeMs).
+        const pair = await getData('bot/pair', outlet).catch(() => null);
+        const [minDelayMs, maxDelayMs] = getBroadcastDelayRangeMs(pair?.firstLinkedAt);
+
+        let isFirstSend = true;
         for (const rider of onlineRiders) {
             const riderJid = formatJid(rider.phone);
             if (riderJid) {
+                if (!isFirstSend) await sleep(randomBetween(minDelayMs, maxDelayMs));
+                isFirstSend = false;
                 try {
                     await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
                     await addInAppNotification(rider.uid, "New Pickup Available!", `Order #${orderId.slice(-5)} is ready for pickup.`, 'success', 'shopping-bag', order.outlet);

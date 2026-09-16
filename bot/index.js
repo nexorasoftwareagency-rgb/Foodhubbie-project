@@ -1096,6 +1096,31 @@ async function startBot() {
     };
     currentSock = sock;
 
+    // Graceful shutdown handlers — allow PM2 to SIGTERM cleanly
+    // so the WhatsApp socket closes gracefully instead of being hard-killed.
+    // This prevents abrupt disconnects that look like client crashes to WhatsApp.
+    let shuttingDown = false;
+    const gracefulShutdown = async (signal) => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        console.log(`[SHUTDOWN] ${signal} received — gracefully closing WhatsApp socket for ${OUTLET}...`);
+        try {
+            if (sock && !isSocketDead(sock)) {
+                await sock.end(undefined);
+                console.log(`[SHUTDOWN] WhatsApp socket closed gracefully for ${OUTLET}`);
+            }
+        } catch (e) {
+            console.error(`[SHUTDOWN] Error during graceful close:`, e.message);
+        }
+        // Clear intervals to prevent callbacks after shutdown
+        if (reportInterval) clearInterval(reportInterval);
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        // Give a moment for any pending writes to flush
+        setTimeout(() => process.exit(0), 500);
+    };
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
     // Meta transport delivers replies via sendTemplate/sendButton (not
     // sendMessage) — patch those too so the chat tab logs the bot's half.
     if (typeof sock.sendTemplate === 'function') {
@@ -1301,6 +1326,14 @@ async function sendDailyReportSafely(dateOverride = null) {
             cryptoErrorCount = 0;
             // Pairing complete — drop the QR, mark connected (dashboard closes its QR modal).
             updateData('bot/pair', { qr: null, status: 'connected', connectedAt: Date.now() }, OUTLET).catch(() => {});
+            // Warm-up tracking: record the FIRST time this number ever
+            // connects, once. Never overwritten on later reconnects
+            // (restarts, network blips) — those must not reset the clock.
+            getData('bot/pair', OUTLET).then((pair) => {
+                if (!pair || !pair.firstLinkedAt) {
+                    updateData('bot/pair', { firstLinkedAt: Date.now() }, OUTLET).catch(() => {});
+                }
+            }).catch(() => {});
         }
         const DISCONNECT_REASON_NAMES = Object.fromEntries(
             Object.entries(DisconnectReason).map(([name, code]) => [code, name])
