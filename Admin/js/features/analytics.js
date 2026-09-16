@@ -51,6 +51,9 @@ export async function loadReports() {
     console.log(`[Reports] Initializing with default range: ${fromVal} to ${toVal}`);
     initMobileAnalyticsUI(generateCustomReport);
     generateCustomReport();
+
+    // Analytics sub-tab switching (Revenue | WhatsApp Bot)
+    _initAnalyticsSubtabs();
 }
 
 export async function generateCustomReport() {
@@ -161,6 +164,8 @@ function renderFromCache() {
 
 export function cleanupReports() {
     cleanupMobileAnalytics();
+    if (_waAnalyticsMod) { _waAnalyticsMod.unmount(); }
+    _currentAnalyticsTab = 'revenue';
 }
 
 export function downloadExcel() {
@@ -239,4 +244,44 @@ function _filteredForExport() {
     // Always exports everything in the selected date range, matching
     // the new Detailed Sales Data table exactly (all statuses).
     return salesData;
+}
+
+// ── Analytics sub-tab switching ────────────────────────────────────────
+let _waAnalyticsMod = null;
+let _currentAnalyticsTab = 'revenue';
+
+function _initAnalyticsSubtabs() {
+    document.querySelectorAll('.analytics-subtab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.analyticsTab;
+            if (tab === _currentAnalyticsTab) return;
+            document.querySelectorAll('.analytics-subtab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _currentAnalyticsTab = tab;
+            _switchAnalyticsPanel(tab);
+        });
+    });
+}
+
+async function _switchAnalyticsPanel(tab) {
+    const revenuePanel = document.getElementById('reportsMobileView');
+    const waPanel = document.getElementById('waBotAnalyticsPanel');
+
+    if (tab === 'whatsapp-bot') {
+        if (revenuePanel) revenuePanel.classList.add('hidden');
+        if (waPanel) {
+            waPanel.classList.remove('hidden');
+            if (!_waAnalyticsMod) {
+                _waAnalyticsMod = await import('./wa-analytics.js');
+            }
+            _waAnalyticsMod.mount();
+        }
+    } else {
+        if (waPanel) waPanel.classList.add('hidden');
+        if (_waAnalyticsMod) { _waAnalyticsMod.unmount(); }
+        if (revenuePanel) revenuePanel.classList.remove('hidden');
+    }
+
+    // Re-render lucide icons for the newly visible panel
+    try { window.lucide?.createIcons(); } catch (_) {}
 }
