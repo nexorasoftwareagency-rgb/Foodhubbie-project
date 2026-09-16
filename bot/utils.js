@@ -206,6 +206,36 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// ── Rate Limiter (order notifications) ──────────────────────────────────────
+// Sliding-window rate limiter: caps sends per minute to prevent WhatsApp
+// rate-limit bans during order bursts (e.g. 100 simultaneous orders).
+const ORDER_RATE_LIMIT = 20; // max sends per window
+const ORDER_RATE_WINDOW_MS = 60_000; // 1 minute window
+
+class RateLimiter {
+    constructor(maxPerWindow = ORDER_RATE_LIMIT, windowMs = ORDER_RATE_WINDOW_MS) {
+        this.maxPerWindow = maxPerWindow;
+        this.windowMs = windowMs;
+        this.timestamps = []; // timestamps of recent sends
+    }
+
+    async wait() {
+        const now = Date.now();
+        // Purge timestamps outside the window
+        this.timestamps = this.timestamps.filter(t => now - t < this.windowMs);
+        if (this.timestamps.length >= this.maxPerWindow) {
+            // Wait until the oldest send expires
+            const oldest = this.timestamps[0];
+            const waitMs = this.windowMs - (now - oldest) + 50; // +50ms buffer
+            console.log(`[RateLimiter] ⏳ Rate limit hit (${this.timestamps.length}/${this.maxPerWindow}). Waiting ${(waitMs / 1000).toFixed(1)}s...`);
+            await sleep(waitMs);
+            // Purge again after wait
+            this.timestamps = this.timestamps.filter(t => Date.now() - t < this.windowMs);
+        }
+        this.timestamps.push(Date.now());
+    }
+}
+
 // ── Coupon ─────────────────────────────────────────────────────────────────
 
 const _COUPON_WORDS = ['PIZZA', 'DEAL', 'FEAST', 'SAVE', 'YUMMY', 'TREAT', 'SALE', 'FRESH', 'HOT', 'MEGA', 'SUPER', 'LUCKY', 'BOGO', 'FREE', 'WOW', 'YAY'];
@@ -234,5 +264,6 @@ module.exports = {
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
     generateCouponCode, isSocketDead,
     getBroadcastDelayRangeMs, sleep,
-    WARMUP_DAYS, WARMUP_DELAY_RANGE_MS, NORMAL_DELAY_RANGE_MS
+    WARMUP_DAYS, WARMUP_DELAY_RANGE_MS, NORMAL_DELAY_RANGE_MS,
+    RateLimiter
 };
