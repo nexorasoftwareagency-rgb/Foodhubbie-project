@@ -168,12 +168,12 @@
               }
             },
             "customers": {
-              ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).exists())",
+              ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
               ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('riders').child(auth.uid).exists())",
               ".indexOn": ["phone"]
             },
             "guests": {
-              ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).exists())",
+              ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
               "$phone": {
                 "orders": {
                   "$orderId": {
@@ -325,6 +325,7 @@
                 ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
               },
               "promotions": {
+                ".write": "auth != null && root.child('admins').child(auth.uid).exists()",
                 ".indexOn": ["status", "runAt"],
                 "campaigns": {
                   ".indexOn": ["status", "runAt"]

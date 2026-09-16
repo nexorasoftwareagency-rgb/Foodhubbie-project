@@ -383,7 +383,9 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                     console.log(`[Promo] Batch pause (${Math.round(pauseMs/1000)}s) after ${i+1} sends`);
                     await new Promise(r => setTimeout(r, pauseMs));
                 } else {
-                    const sendDelay = randomBetween(PROMO_MIN_DELAY_MS, PROMO_MAX_DELAY_MS);
+                    const sendDelay = (delayMs && delayMs > 0)
+                        ? randomBetween(Math.max(delayMs * 1000, 2000), Math.max(delayMs * 1000 + 3000, 5000))
+                        : randomBetween(PROMO_MIN_DELAY_MS, PROMO_MAX_DELAY_MS);
                     await new Promise(r => setTimeout(r, sendDelay));
                 }
             }
@@ -481,14 +483,27 @@ async function pickupScheduledPromotions(sock, ctx) {
 async function expireOldPromoLogs(OUTLET, db) {
     try {
         const snap = await db.ref(resolvePath(`bot/promotions/logs`, OUTLET)).once('value');
-        if (!snap.exists()) return;
-        const campaigns = snap.val();
-        const cutoff = Date.now() - PROMO_LOG_TTL_MS;
-        for (const cid of Object.keys(campaigns)) {
-            const camp = campaigns[cid];
-            const allOld = Object.values(camp).every(r => (r.sentAt || 0) < cutoff);
-            if (allOld && Object.keys(camp).length > 0) {
-                await db.ref(resolvePath(`bot/promotions/logs/${cid}`, OUTLET)).remove();
+        if (snap.exists()) {
+            const campaigns = snap.val();
+            const cutoff = Date.now() - PROMO_LOG_TTL_MS;
+            for (const cid of Object.keys(campaigns)) {
+                const camp = campaigns[cid];
+                const allOld = Object.values(camp).every(r => (r.sentAt || 0) < cutoff);
+                if (allOld && Object.keys(camp).length > 0) {
+                    await db.ref(resolvePath(`bot/promotions/logs/${cid}`, OUTLET)).remove();
+                }
+            }
+        }
+        // ponytail: also clean up completed/stopped/expired campaigns older than 30 days
+        const campSnap = await db.ref(resolvePath(`bot/promotions/campaigns`, OUTLET)).once('value');
+        if (campSnap.exists()) {
+            const camps = campSnap.val();
+            const cutoff = Date.now() - PROMO_LOG_TTL_MS;
+            for (const [cid, c] of Object.entries(camps)) {
+                const terminalStatuses = ['done', 'stopped', 'expired', 'aborted'];
+                if (terminalStatuses.includes(c.status) && (c.completedAt || c.startedAt || 0) < cutoff) {
+                    await db.ref(resolvePath(`bot/promotions/campaigns/${cid}`, OUTLET)).remove();
+                }
             }
         }
     } catch (e) {

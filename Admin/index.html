@@ -4500,7 +4500,7 @@
 
                             <input type="number" id="promoDelay" min="1" max="30" step="1" value="2" class="search-input-group" aria-label="Delay between sends">
 
-                            <span class="text-muted-small" data-i18n="promo.options.delayHint">Default 2s. A 30s pause happens automatically every 50 sends.</span>
+                            <span class="text-muted-small" data-i18n="promo.options.delayHint">Per-message delay in seconds. A 60-120s pause happens automatically every 30 sends.</span>
 
                         </div>
 
@@ -4608,7 +4608,7 @@
 
                     <div class="promo-action-row mt-24 flex-row flex-gap-10 flex-wrap-mobile">
 
-                        <button class="btn-primary" id="btnPromoLaunch" data-action="launchPromoCampaign" disabled>
+                        <button class="btn-primary" id="btnPromoLaunch" disabled>
 
                             <i data-lucide="send"></i> <span data-i18n="promo.actions.launch">Launch campaign</span>
 
@@ -4640,7 +4640,7 @@
 
                         <h3 class="panel-title mb-0" data-i18n="promo.active.heading">Active & recent campaigns</h3>
 
-                        <button class="btn-danger" data-action="killAllCampaigns" id="btnPromoKillAll" disabled>
+                        <button class="btn-danger" id="btnPromoKillAll" disabled>
 
                             <i data-lucide="octagon"></i> <span data-i18n="promo.active.killAll">EMERGENCY STOP ALL</span>
 

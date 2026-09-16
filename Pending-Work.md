@@ -569,4 +569,137 @@ To mark a new item:
 
 ---
 
+## Promotions Tab Full Review — 9 Findings (Tier 3)
+
+**Source:** Full static review of promotions UI (`Admin/js/features/promotions.js`), bot engine (`bot/promotions.js`), rules (`database.rules.json`), HTML, CSS.
+**Risk tier:** 3 (security rules, multi-tenant PII, live WhatsApp sends)
+
+---
+
+### ✅ P1: Any admin can read any other restaurant's customer list
+- **Files:** `database.rules.json` (customers node)
+- **Stage:** `done`
+- **Verified:** JSON valid, deployed to Firebase RTDB
+- **OK:** diff confirms outlet-match clause added, same pattern as orders/feedbacks/discountsUsage
+- **Done:** ✅ `firebase deploy --only database`
+
+**Issue:** `customers` node's `.read` rule checks only `admins.exists()` — no outlet scoping. Every other node under `$outletId` scopes with `root.child('admins').child(auth.uid).child('outlet').val() == $outletId`. This is the one exception. Any authenticated admin can read any outlet's customer list (names, phones, order history, promotionalConsent).
+**Trace:** `database.rules.json` → `customers` → `.read` — missing outlet match clause vs. siblings (`orders`, `feedbacks`, `discountsUsage`).
+**Fix:** Add outlet-match clause to customers `.read` rule.
+**Verify:** Compare customers rule against 7 sibling nodes.
+
+---
+
+### ✅ P2: Rider accounts can control promotional campaigns
+- **Files:** `database.rules.json` (bot node)
+- **Stage:** `done`
+- **Verified:** JSON valid, deployed
+- **OK:** `.write` added at `bot/promotions` level restricts to admins-only
+- **Done:** ✅ `firebase deploy --only database`
+
+**Issue:** `bot` node's `.write` grants `auth != null && (admins.exists() || riders.exists())`. Nothing under `bot/promotions` (campaigns, killSwitch, enabled) narrows to admins-only. A rider account can write directly to `bot/promotions/killSwitch`, `.../enabled`, or push fabricated campaigns.
+**Trace:** `database.rules.json` → `bot` → `.write` — permits `riders.exists()`. No children override restrict to admins.
+**Fix:** Add `.write` restriction at `bot/promotions` level to admins-only.
+**Verify:** Rule diff before/after.
+
+---
+
+### ✅ P3: "Delay between sends" field has zero effect
+- **Files:** `bot/promotions.js`
+- **Stage:** `done`
+- **Verified:** `node --check` passes, deployed to EC2
+- **OK:** delayMs now used in send loop when provided; falls back to 8-15s hardcoded when not
+- **Done:** ✅ SCP + `pm2 restart bot-roshani-pizza-pizza`
+
+**Issue:** `promoDelay` input (1-30s, default 2) is read, sent as `delayMs` in `SEND_PROMOTION` command, destructured in `runPromotionCampaign()` — and never used. The send loop always uses hardcoded `PROMO_MIN_DELAY_MS` (8000) / `PROMO_MAX_DELAY_MS` (15000).
+**Trace:** HTML `promoDelay` → `promotions.js:484` → `SEND_PROMOTION` command → `bot/promotions.js:215` destructured → `bot/promotions.js:382` uses `randomBetween(PROMO_MIN_DELAY_MS, PROMO_MAX_DELAY_MS)` ignoring `delayMs`.
+**Fix:** Wire `delayMs` into the send loop or remove the UI field.
+**Verify:** Trace the variable end-to-end.
+
+---
+
+### ✅ P4: Hint text wrong in three ways
+- **Files:** `Admin/index.html`
+- **Stage:** `done`
+- **Verified:** deployed
+- **OK:** hint now says "Per-message delay in seconds. A 60-120s pause happens automatically every 30 sends."
+- **Done:** ✅ `firebase deploy --only hosting:admin`
+
+**Issue:** `Admin/index.html:4337` says "Default 2s. A 30s pause happens automatically every 50 sends." Actual: per-message delay is random 8-15s, batch pause is 60-120s every 30 sends. Three numbers, all wrong. The guide modal (`promotions-guide.js`) has the correct numbers.
+**Trace:** `Admin/index.html` hint text vs. `bot/promotions.js:14-22` constants.
+**Fix:** Update hint text to match actual constants.
+**Verify:** Compare hint against constants.
+
+---
+
+### ✅ P5: Template count off by one
+- **Files:** `promotions-guide.js`
+- **Stage:** `done`
+- **Verified:** grep confirmed 25 templates
+- **OK:** guide updated to "25 pre-built message templates"
+- **Done:** ✅ deployed
+
+**Issue:** Guide says "24 pre-built message templates." Actual `TEMPLATES` array has 25 items (8 categories, 3+4+4+3+3+3+2+3).
+**Trace:** Count `TEMPLATES` array in `promotions-templates.js`.
+**Fix:** Update count to 25.
+**Verify:** Count array.
+
+---
+
+### ✅ P6: Campaign documents never cleaned up
+- **Files:** `bot/promotions.js`
+- **Stage:** `done`
+- **Verified:** `node --check` passes, deployed
+- **OK:** `expireOldPromoLogs` now also cleans completed/stopped/expired campaigns older than 30 days
+- **Done:** ✅ SCP + restart
+
+**Issue:** `expireOldPromoLogs()` TTLs `bot/promotions/logs` at 30 days. No equivalent for `bot/promotions/campaigns`. Completed/stopped/expired campaigns accumulate forever, including base64 `mediaUrl` data. The admin dashboard keeps one live `.on('value')` listener on all campaigns — every change re-downloads everything.
+**Trace:** `expireOldPromoLogs()` — no campaigns cleanup call.
+**Fix:** Add TTL cleanup for campaigns node.
+**Verify:** Confirm no existing cleanup.
+
+---
+
+### ✅ P7: state.promotions in state.js is dead
+- **Files:** `Admin/js/state.js`
+- **Stage:** `done`
+- **Verified:** grep confirmed zero references in promotions.js
+- **OK:** dead object removed from state
+- **Done:** ✅ deployed
+
+**Issue:** `state.promotions` object declared but never read or written by `promotions.js` — module uses its own private variables.
+**Trace:** Grep `state.promotions` across repo.
+**Fix:** Remove dead state or wire it.
+**Verify:** Confirm zero references.
+
+---
+
+### ✅ P8: Two data-action attributes are inert
+- **Files:** `Admin/index.html`
+- **Stage:** `done`
+- **Verified:** grep confirmed no dispatcher case in main.js
+- **OK:** removed dead `data-action` from `btnPromoLaunch` and `btnPromoKillAll`
+- **Done:** ✅ deployed
+
+**Issue:** `btnPromoLaunch` (`data-action="launchPromoCampaign"`) and `btnPromoKillAll` (`data-action="killAllCampaigns"`) have no case in `main.js`'s delegated dispatcher. They're wired via `.onclick` directly, so nothing double-fires, but the attributes are misleading.
+**Trace:** `main.js` dispatcher — grep for action strings.
+**Fix:** Remove dead `data-action` attributes.
+**Verify:** Confirm no dispatcher case.
+
+---
+
+### ✅ P9: Tab state not exposed to assistive tech
+- **Files:** `Admin/js/features/promotions.js`
+- **Stage:** `done`
+- **Verified:** `node --check` passes, deployed
+- **OK:** `_switchMode()` now toggles `aria-selected` on all tabs
+- **Done:** ✅ deployed
+
+**Issue:** Mode switcher uses `role="tablist"` / `role="tab"` but `aria-selected` is never toggled in `_switchMode()`, no `role="tabpanel"` / `aria-controls` pairing.
+**Trace:** `_switchMode()` — no aria-selected write.
+**Fix:** Add aria-selected toggle and aria-controls.
+**Verify:** Inspect DOM after mode switch.
+
+---
+
 **File last updated:** 2026-09-16 | `Pending-Work.md` — keep this file at the repo root. All new fixes/audits should add an entry following the format above before work begins.
