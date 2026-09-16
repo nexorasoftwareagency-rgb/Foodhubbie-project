@@ -45,7 +45,7 @@ const {
     getISTDateInfo, getISTDateString, isShopOpen,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
-    isSocketDead
+    isSocketDead, RateLimiter
 } = require('./utils');
 const promo = require('./promotions');
 const { sendDailyReport, sendMonthlyReport, sendWeeklyReport } = require('./reports');
@@ -138,6 +138,10 @@ const MAX_CRYPTO_ERRORS = 500; // Triggers session reset if exceeded rapidly
 
 const SESSION_TTL = 30 * 60; // Redis TTL is in seconds (30 mins)
 const STATUS_TTL = 24 * 60 * 60; // 24 hours
+
+// Order notification rate limiter — prevents WhatsApp rate-limit bans
+// during order bursts (e.g. 100 simultaneous orders at dinner rush).
+const orderRateLimiter = new RateLimiter(20, 60_000); // 20 sends per minute
 
 // In-memory dedup fallback used when Redis is offline
 const localStatusCache = new Map();
@@ -900,6 +904,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
 
             if (msg) {
                 console.log(`[BOT] 📧 Sending ${currentStatus} notification to ${maskJid(jid)}...`);
+                await orderRateLimiter.wait();
                 const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'outlet', true);
 
                 // CRITICAL: Preserve ALL fields in processedStatus to avoid duplicate rider pings on next update
