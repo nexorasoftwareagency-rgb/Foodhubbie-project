@@ -21,6 +21,7 @@ const FIREBASE_CONFIG = {
 // workers. NOTE: this is a Quick Tunnel URL (rotates on reboot; cron renews
 // it server-side). Keep in sync with /var/www/foodhubbie/.last-tunnel-url.
 let TUNNEL_URL = 'https://photos-whenever-specifics-internationally.trycloudflare.com';
+window.TUNNEL_URL = TUNNEL_URL;
 
 firebase.initializeApp(FIREBASE_CONFIG);
 
@@ -30,5 +31,6 @@ firebase.database().ref('config/tunnelUrl').once('value').then((snap) => {
   const url = snap.val();
   if (url && typeof url === 'string' && url.startsWith('https://')) {
     TUNNEL_URL = url;
+    window.TUNNEL_URL = url;
   }
 }).catch(() => { console.warn('TUNNEL_URL: failed to read config/tunnelUrl, using fallback'); });
