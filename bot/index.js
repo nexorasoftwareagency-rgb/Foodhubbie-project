@@ -35,7 +35,7 @@ const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const admin = require('firebase-admin');
 const { getData, setData, updateData, db, resolvePath, getUserProfile, saveUserProfile } = require('./firebase');
-const { resolveBusinessIdFor, initializeOutletBusinessIndex } = require('./helpers/outlet-resolution');
+const { resolveOutletId, resolveBusinessIdFor, initializeOutletBusinessIndex } = require('./helpers/outlet-resolution');
 const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
 const discountEngine = require('./discount-engine');
 
