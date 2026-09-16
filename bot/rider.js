@@ -3,7 +3,9 @@
  * Requires: formatJid, addInAppNotification, getData.
  */
 
-const { formatJid, isSocketDead, getBroadcastDelayRangeMs, sleep, randomBetween } = require('./utils');
+const { formatJid, isSocketDead, getBroadcastDelayRangeMs, sleep, randomBetween, OutboundTracker } = require('./utils');
+const { db, resolvePath } = require('./firebase');
+const outboundTracker = new OutboundTracker(db, resolvePath);
 
 function buildRiderOrderMessage(order, { title, footer, id, includeOutlet = false, includeOTP = false } = {}) {
     let itemsText = "";
@@ -101,6 +103,7 @@ async function notifyRiderAssignment(sock, orderId, order, addInAppNotification)
 
         console.log(`[RIDER] 📤 Sending assignment message to rider: ${riderPhone} for #${orderId.slice(-5)}`);
         await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
+        outboundTracker.trackSend(order.outlet || 'pizza', 'rider_broadcast');
         console.log(`[RIDER] ✅ Assignment notification sent to ${riderPhone}`);
 
         if (riderId) {
@@ -155,6 +158,7 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
                 isFirstSend = false;
                 try {
                     await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
+                    outboundTracker.trackSend(outlet, 'rider_broadcast');
                     await addInAppNotification(rider.uid, "New Pickup Available!", `Order #${orderId.slice(-5)} is ready for pickup.`, 'success', 'shopping-bag', order.outlet);
                 } catch (sendErr) {
                     console.error(`[RIDER] ❌ Failed to send broadcast to ${rider.phone}:`, sendErr.message);

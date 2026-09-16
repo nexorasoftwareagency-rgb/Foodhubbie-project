@@ -510,44 +510,18 @@ These are **real, actionable items** in THIS repo based on the audits.
      ```
 - **Verify:** `node --check bot/index.js`
 
-### B3: Volume Dashboard (Daily Outbound Tracking)
-- **Files:** `bot/index.js`, `bot/utils.js`, `SupremeAdmin/js/features/restaurant-profile.js`
-- **Stage:** `reviewing`
+### ✅ B3: Volume Dashboard (Daily Outbound Tracking)
+- **Files:** `bot/index.js`, `bot/utils.js`, `bot/rider.js`, `bot/promotions.js`
+- **Stage:** `done`
 - **Issue:** No visibility into daily outbound volume. Can't tell if approaching Baileys ban threshold (500/day). No historical trend data.
-- **Plan:**
-  1. **`bot/utils.js`** — Add `OutboundTracker` class:
-     - `trackSend(outlet, type, phoneNumber)` — increments daily counter
-     - `getDailyCount(outlet)` — returns today's count
-     - `getWeeklyCounts(outlet)` — returns last 7 days counts
-     - `approachingLimit(outlet)` — returns true if >400/day (80% of 500 limit)
-     - Counter path: `bot/usage/{IST-date}/{outlet}` in Firebase
-     - Types tracked: `order_notification`, `rider_broadcast`, `promo`, `admin_alert`, `other`
-  2. **`bot/index.js`** — Track every outbound:
-     - In `handleOrderStatusUpdate` after successful send: `outboundTracker.trackSend(outlet, 'order_notification', jid)`
-     - In `broadcastPickupAvailable` after each send: `outboundTracker.trackSend(outlet, 'rider_broadcast', riderJid)`
-     - In `promotions.js` after each promo send: `outboundTracker.trackSend(outlet, 'promo', phone)`
-  3. **Firebase Path Structure:**
-     ```
-     bot/usage/{date}/{outlet}: {
-       total: 3247,
-       order_notification: 2400,
-       rider_broadcast: 400,
-       promo: 300,
-       other: 147,
-       updatedAt: timestamp
-     }
-     ```
-  4. **`SupremeAdmin/js/features/restaurant-profile.js`** — Add Volume Card:
-     - Show today's total + breakdown by type
-     - Show 7-day trend bar chart (simple CSS bars)
-     - Show warning indicator when >400/day (yellow) or >500/day (red)
-     - Show "Approaching Baileys limit" warning text
-     - Card title: "Daily Outbound Volume"
-  5. **Alert Thresholds:**
-     - >400/day: Yellow warning in dashboard
-     - >500/day: Red critical + console warning `[VOLUME] 🔴 Approaching Baileys ban threshold`
-     - >600/day: Auto-pause promos + write to `bot/alerts`
-- **Verify:** `node --check bot/index.js && node --check bot/utils.js`
+- **Fix:**
+  1. **`bot/utils.js`** — Added `OutboundTracker` class: `trackSend(outlet, type)` increments daily counter via Firebase transaction at `bot/usage/{IST-date}/{outlet}`; types: `order_notification`, `rider_broadcast`, `promo`, `admin_alert`
+  2. **`bot/index.js`** — Tracker initialized after imports; wired into `sendImage()` with optional `trackType` param (default `order_notification`); tracking on every successful send (image and text fallback paths)
+  3. **`bot/rider.js`** — Tracker initialized; tracking added to `broadcastPickupAvailable()` (rider_broadcast) and `notifyRiderAssignment()` (rider_broadcast)
+  4. **`bot/promotions.js`** — Tracker initialized; tracking added to `sendPromotionalMessage()` (promo) and extra menu image send; outlet param threaded through `sendWithRetry()` → `sendPromotionalMessage()`
+- **Verified:** `node --check` passes for all 4 files; bot restarted successfully on EC2, online and processing messages
+- **Deployed:** SCP'd all files to EC2 `/var/www/foodhubbie/bot/`; `pm2 restart bot-roshani-pizza-pizza` — confirmed online with `outboundTracker` initialized
+- **Commit:** pending
 
 ---
 
@@ -564,6 +538,7 @@ These are **real, actionable items** in THIS repo based on the audits.
 | Baileys Version Drift | ✅ `done` |
 | Session Backup | ✅ `done` |
 | Whole-Process Restart (Graceful SIGTERM) | ✅ `done` |
+| Daily Outbound Tracking (OutboundTracker) | ✅ `done` |
 | Phase 5 Runtime Test | ⏳ `reviewing` (manual) |
 
 ---
@@ -594,4 +569,4 @@ To mark a new item:
 
 ---
 
-**File last updated:** `Pending-Work.md` — keep this file at the repo root. All new fixes/audits should add an entry following the format above before work begins.
+**File last updated:** 2026-09-16 | `Pending-Work.md` — keep this file at the repo root. All new fixes/audits should add an entry following the format above before work begins.

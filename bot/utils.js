@@ -266,6 +266,38 @@ function isSocketDead(sock) {
     return false;
 }
 
+// ── Outbound Tracker ──────────────────────────────────────────────────
+// Tracks daily outbound message counts per outlet in Firebase.
+// Path: businesses/{bid}/outlets/{oid}/bot/usage/{IST-date}
+// { total, order_notification, rider_broadcast, promo, admin_alert, updatedAt }
+
+class OutboundTracker {
+    constructor(dbRef, resolvePath) {
+        this._db = dbRef;
+        this._resolvePath = resolvePath;
+    }
+
+    _istDate() {
+        return new Date(Date.now() + 5.5 * 3600000).toISOString().split('T')[0];
+    }
+
+    async trackSend(outlet, type) {
+        const today = this._istDate();
+        const ref = this._db.ref(this._resolvePath(`bot/usage/${today}`, outlet));
+        try {
+            await ref.transaction((cur) => {
+                cur = cur || {};
+                cur.total = (cur.total || 0) + 1;
+                cur[type] = (cur[type] || 0) + 1;
+                cur.updatedAt = Date.now();
+                return cur;
+            });
+        } catch (e) {
+            // Best-effort — never crash the bot over analytics
+        }
+    }
+}
+
 module.exports = {
     formatJid, maskJid, isBlockedJid,
     getISTDateInfo, getISTDateString, parseTime, isShopOpen, randomBetween,
@@ -274,5 +306,5 @@ module.exports = {
     generateCouponCode, isSocketDead,
     getBroadcastDelayRangeMs, sleep,
     WARMUP_DAYS, WARMUP_DELAY_RANGE_MS, NORMAL_DELAY_RANGE_MS,
-    RateLimiter
+    RateLimiter, OutboundTracker
 };
