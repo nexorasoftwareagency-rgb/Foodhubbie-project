@@ -450,6 +450,107 @@ These are **real, actionable items** in THIS repo based on the audits.
 
 ---
 
+## Baileys Ban-Proofing — Volume, Detection, Dashboard
+
+**Context:** Baileys (unofficial WhatsApp Web API) is ban-prone at high volume. A restaurant with 800 orders/10hrs generates ~3,200 outbound messages/day (order notifications + rider broadcasts + promos). Meta flags accounts at 500+/day. These three items add detection, pacing, and visibility.
+
+### B1: Baileys-Specific Send Delay (2-5s Jitter)
+- **Files:** `bot/utils.js`, `bot/index.js`, `bot/rider.js`, `bot/promotions.js`
+- **Stage:** `reviewing`
+- **Issue:** Current rate limiter (20/min) is a sliding window, not per-recipient jitter. Baileys sends to different numbers need randomized 2-5s gaps between recipients to mimic human behavior. Same-recipient sends (e.g. order update + rider notification to same person) should NOT be delayed.
+- **Plan:**
+  1. **`bot/utils.js`** — Add `BaileysSendTracker` class:
+     - `trackSend(phoneNumber)` — records timestamp per phone number
+     - `waitBeforeSend(phoneNumber)` — if same phone sent within 2s, skip delay; if different phone, add 2-5s random jitter
+     - `shouldDelay(phoneNumber)` — returns true if last send to this phone was <2s ago (don't spam same person)
+     - Constants: `BAILLEYS_SEND_DELAY_MIN_MS = 2000`, `BAILLEYS_SEND_DELAY_MAX_MS = 5000`, `BAILLEYS_SAME_RECIPIENT_MIN_MS = 2000`
+  2. **`bot/index.js`** — In `handleOrderStatusUpdate` (line ~901):
+     - After `orderRateLimiter.wait()`, add `await baileysSendTracker.waitBeforeSend(jid)`
+     - Only apply if `!isMetaTransport` (skip for Meta Cloud API)
+  3. **`bot/rider.js`** — In `broadcastPickupAvailable` (line ~151):
+     - Already has warm-up delays; add Baileys-specific jitter on top
+     - Track each rider's phone to avoid re-delaying same rider
+  4. **`bot/promotions.js`** — Already has 8-15s delays; add Baileys jitter only if transport is Baileys
+  5. **Detection:** `bot/index.js` — detect transport type via `sock.user?.id?.startsWith('meta:')` or `isMetaTransport` flag
+- **Estimated impact:** Adds 2-5s per unique recipient; 800 orders to ~600 unique customers = ~30-50 minutes additional latency (acceptable for order notifications)
+- **Verify:** `node --check bot/index.js && node --check bot/utils.js && node --check bot/rider.js && node --check bot/promotions.js`
+
+### B2: Ban Detection + Admin Alert
+- **Files:** `bot/index.js`
+- **Stage:** `reviewing`
+- **Issue:** No visibility when Baileys session is banned/expired. Bot silently fails or reconnection loops. Admin doesn't know until customers complain.
+- **Plan:**
+  1. **Ban Detection Signals:**
+     - Signal 1: `qr` event in `connection.update` after `connection === 'open'` (session expired → re-pair needed)
+     - Signal 2: `connection === 'close'` with `DisconnectReason.loggedOut` (code 401) = ban
+     - Signal 3: Consecutive send failures >10 in 5 minutes (possible ban)
+     - Signal 4: `cryptoErrorCount` spike (>50 in 1 minute)
+  2. **Alert Mechanism:**
+     - Write to Firebase: `bot/alerts/{outlet}/{timestamp}` with `{ type, message, severity, createdAt }`
+     - Severity levels: `warning` (send failures), `critical` (ban detected), `info` (session expired)
+     - Console log: `[BAN-DETECT] 🔴 CRITICAL: ...`
+  3. **Auto-Response:**
+     - On ban detected: pause all promo campaigns (`killSwitch = true`)
+     - On session expired: write `bot/pair/status = 'banned'` so SupremeAdmin shows red indicator
+     - On send failure spike: log to `bot/alerts` but don't auto-pause (might be transient)
+  4. **Implementation in `bot/index.js`:**
+     - Add `let consecutiveSendFailures = 0` counter
+     - In `sendImage` catch block: increment counter; if >10, trigger alert
+     - In `sendImage` success: reset counter
+     - In `connection.update` handler (Baileys): detect `qr` after `open` = session expired
+     - In `connection.update` handler: detect `DisconnectReason.loggedOut` = ban
+  5. **Firebase Path Structure:**
+     ```
+     bot/alerts/{outlet}/{timestamp}: {
+       type: 'ban_detected' | 'session_expired' | 'send_failure_spike',
+       severity: 'critical' | 'warning' | 'info',
+       message: 'Description',
+       createdAt: timestamp
+     }
+     ```
+- **Verify:** `node --check bot/index.js`
+
+### B3: Volume Dashboard (Daily Outbound Tracking)
+- **Files:** `bot/index.js`, `bot/utils.js`, `SupremeAdmin/js/features/restaurant-profile.js`
+- **Stage:** `reviewing`
+- **Issue:** No visibility into daily outbound volume. Can't tell if approaching Baileys ban threshold (500/day). No historical trend data.
+- **Plan:**
+  1. **`bot/utils.js`** — Add `OutboundTracker` class:
+     - `trackSend(outlet, type, phoneNumber)` — increments daily counter
+     - `getDailyCount(outlet)` — returns today's count
+     - `getWeeklyCounts(outlet)` — returns last 7 days counts
+     - `approachingLimit(outlet)` — returns true if >400/day (80% of 500 limit)
+     - Counter path: `bot/usage/{IST-date}/{outlet}` in Firebase
+     - Types tracked: `order_notification`, `rider_broadcast`, `promo`, `admin_alert`, `other`
+  2. **`bot/index.js`** — Track every outbound:
+     - In `handleOrderStatusUpdate` after successful send: `outboundTracker.trackSend(outlet, 'order_notification', jid)`
+     - In `broadcastPickupAvailable` after each send: `outboundTracker.trackSend(outlet, 'rider_broadcast', riderJid)`
+     - In `promotions.js` after each promo send: `outboundTracker.trackSend(outlet, 'promo', phone)`
+  3. **Firebase Path Structure:**
+     ```
+     bot/usage/{date}/{outlet}: {
+       total: 3247,
+       order_notification: 2400,
+       rider_broadcast: 400,
+       promo: 300,
+       other: 147,
+       updatedAt: timestamp
+     }
+     ```
+  4. **`SupremeAdmin/js/features/restaurant-profile.js`** — Add Volume Card:
+     - Show today's total + breakdown by type
+     - Show 7-day trend bar chart (simple CSS bars)
+     - Show warning indicator when >400/day (yellow) or >500/day (red)
+     - Show "Approaching Baileys limit" warning text
+     - Card title: "Daily Outbound Volume"
+  5. **Alert Thresholds:**
+     - >400/day: Yellow warning in dashboard
+     - >500/day: Red critical + console warning `[VOLUME] 🔴 Approaching Baileys ban threshold`
+     - >600/day: Auto-pause promos + write to `bot/alerts`
+- **Verify:** `node --check bot/index.js && node --check bot/utils.js`
+
+---
+
 ## Completed Items (This Session)
 
 | Item | Status |
