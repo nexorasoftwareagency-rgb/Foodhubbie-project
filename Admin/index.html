@@ -2333,9 +2333,24 @@
 
                                         </div>
 
-                                    </div>
+                </div>
 
+                <!-- Blocked Contacts Modal -->
+                <div id="blockedContactsModal" class="modal" role="dialog" aria-modal="true" aria-label="Blocked Contacts" aria-hidden="true">
+                    <div class="modal-content" style="max-width:480px">
+                        <div class="modal-header">
+                            <h3 id="blockedContactsTitle"><i data-lucide="shield-off" class="icon-18"></i> Blocked Contacts</h3>
+                            <button class="modal-close" data-close-modal="blockedContactsModal" aria-label="Close"><i data-lucide="x"></i></button>
                         </div>
+                        <div class="modal-body" style="padding:16px">
+                            <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px">These contacts cannot send messages to your WhatsApp bot. Unblock to allow them to message again.</p>
+                            <div id="blockedContactsList" class="blocked-contacts-list"></div>
+                            <div id="blockedContactsEmpty" class="chat-list-empty" style="display:none">No blocked contacts.</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
 
                         <div class="glass-card p-20 grid-full" data-settings-section="receipt-dev">
 
@@ -3103,7 +3118,15 @@
                         <aside class="chat-list-pane" aria-label="Conversation list">
                             <div class="chat-list-header">
                                 <h3><i data-lucide="messages-square" class="icon-18"></i> Chats</h3>
-                                <span id="chatTotalUnread" class="chat-total-unread hidden">0 unread</span>
+                                <div class="chat-list-header-actions">
+                                    <span id="chatTotalUnread" class="chat-total-unread hidden">0 unread</span>
+                                    <div class="chat-menu-wrap">
+                                        <button class="chat-menu-btn" id="chatMenuBtn" aria-label="Chat options" title="More options"><i data-lucide="more-vertical"></i></button>
+                                        <div class="chat-menu-dropdown hidden" id="chatMenuDropdown">
+                                            <button class="chat-menu-item" id="btnBlockedContacts"><i data-lucide="shield-off"></i> Blocked Contacts</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div id="chatUsageBar" class="chat-usage-bar hidden">
                                 <div class="chat-usage-tile">
@@ -3145,6 +3168,14 @@
                                     <div class="chat-thread-meta">
                                         <strong id="chatThreadName"></strong>
                                         <span id="chatThreadPhone"></span>
+                                    </div>
+                                    <div class="chat-thread-actions">
+                                        <div class="chat-menu-wrap">
+                                            <button class="chat-menu-btn" id="chatThreadMenuBtn" aria-label="More options" title="More options"><i data-lucide="more-vertical"></i></button>
+                                            <div class="chat-menu-dropdown hidden" id="chatThreadMenuDropdown">
+                                                <button class="chat-menu-item chat-menu-danger" id="btnBlockContact"><i data-lucide="shield-off"></i> Block Contact</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </header>
                                 <div id="chatMessageList" class="chat-message-list" role="log" aria-live="polite"></div>

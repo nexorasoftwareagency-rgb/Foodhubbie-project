@@ -202,6 +202,7 @@ function _renderThreadView() {
     if (nameEl) nameEl.textContent = name;
     const phoneEl = document.getElementById('chatThreadPhone');
     if (phoneEl) phoneEl.textContent = '+' + (meta.phone || _selectedCustomerId).replace(/[^0-9]/g, '');
+    _currentChatPhone = meta.phone || null; // ponytail: track for block/unblock
 
     const msgs = Object.entries(t.messages || {}).sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
     const listEl = document.getElementById('chatMessageList');
@@ -341,6 +342,7 @@ function _wire() {
 export function loadChat() {
     console.log('[Chat] Loading tab…');
     _wire();
+    _wireBlockedMenus(); // ponytail: WhatsApp-style 3-dot menus
 
     // Single persistent listener. Keeps the sidebar badge alive across tabs
     // (WhatsApp-like) AND renders the thread list while this tab is visible.
@@ -373,11 +375,126 @@ export function loadChat() {
 }
 
 export function cleanupChat() {
-    // The listener stays attached — the sidebar badge must keep counting while
-    // the admin works elsewhere. Only per-visit state is reset.
     _selectedCustomerId = null;
     _searchTerm = '';
     _stopUsageListener();
     const app = document.getElementById('chatApp');
     if (app) app.classList.remove('chat-conv-open');
+}
+
+// ── WhatsApp-style blocked contacts (3-dot menu) ─────────────────────
+let _currentChatPhone = null; // phone of currently open conversation
+
+function _getBlocked() { return window.__blockedNumbers?.list || []; }
+async function _blockNumber(phone) {
+    const list = _getBlocked();
+    if (list.includes(phone)) return showToast('Already blocked', 'error');
+    list.push(phone);
+    window.__blockedNumbers.list = list;
+    await window.__blockedNumbers.save();
+    showToast('Contact blocked', 'success');
+}
+async function _unblockNumber(phone) {
+    const list = _getBlocked();
+    const idx = list.indexOf(phone);
+    if (idx === -1) return;
+    list.splice(idx, 1);
+    window.__blockedNumbers.list = list;
+    await window.__blockedNumbers.save();
+    showToast('Contact unblocked', 'success');
+    _renderBlockedList();
+}
+
+function _renderBlockedList() {
+    const list = document.getElementById('blockedContactsList');
+    const empty = document.getElementById('blockedContactsEmpty');
+    if (!list) return;
+    const blocked = _getBlocked();
+    if (blocked.length === 0) {
+        list.innerHTML = '';
+        if (empty) empty.style.display = '';
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+    list.innerHTML = blocked.map(num => {
+        // Try to find a name from chat data
+        let name = '';
+        for (const [, thread] of Object.entries(_chatData)) {
+            if (thread.meta?.phone === num) { name = thread.meta?.name || ''; break; }
+        }
+        return `<div class="blocked-contact-row">
+            <span class="blocked-contact-phone">${num}</span>
+            ${name ? `<span class="blocked-contact-label">${escapeHtml(name)}</span>` : ''}
+            <button class="blocked-contact-unblock" data-phone="${num}">Unblock</button>
+        </div>`;
+    }).join('');
+}
+
+function _updateBlockBtnText() {
+    const btn = document.getElementById('btnBlockContact');
+    if (!btn || !_currentChatPhone) return;
+    const isBlocked = _getBlocked().includes(_currentChatPhone);
+    btn.innerHTML = isBlocked
+        ? '<i data-lucide="shield-check"></i> Unblock Contact'
+        : '<i data-lucide="shield-off"></i> Block Contact';
+    btn.classList.toggle('chat-menu-danger', !isBlocked);
+    loadLucide(btn);
+}
+
+// ── Wire up menu click handlers ───────────────────────────────────────
+function _wireBlockedMenus() {
+    if (_wired) return;
+    _wired = true;
+
+    // Chat list 3-dot → Blocked Contacts
+    document.getElementById('chatMenuBtn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dd = document.getElementById('chatMenuDropdown');
+        if (dd) dd.classList.toggle('hidden');
+    });
+    document.getElementById('btnBlockedContacts')?.addEventListener('click', () => {
+        document.getElementById('chatMenuDropdown')?.classList.add('hidden');
+        _renderBlockedList();
+        const modal = document.getElementById('blockedContactsModal');
+        if (modal) { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden', 'false'); }
+    });
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.chat-menu-wrap')) {
+            document.getElementById('chatMenuDropdown')?.classList.add('hidden');
+            document.getElementById('chatThreadMenuDropdown')?.classList.add('hidden');
+        }
+    });
+
+    // Thread 3-dot → Block/Unblock
+    document.getElementById('chatThreadMenuBtn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _updateBlockBtnText();
+        const dd = document.getElementById('chatThreadMenuDropdown');
+        if (dd) dd.classList.toggle('hidden');
+    });
+    document.getElementById('btnBlockContact')?.addEventListener('click', async () => {
+        document.getElementById('chatThreadMenuDropdown')?.classList.add('hidden');
+        if (!_currentChatPhone) return;
+        const list = _getBlocked();
+        if (list.includes(_currentChatPhone)) {
+            await _unblockNumber(_currentChatPhone);
+        } else {
+            await _blockNumber(_currentChatPhone);
+        }
+        _updateBlockBtnText();
+    });
+
+    // Unblock from modal list
+    document.getElementById('blockedContactsList')?.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.blocked-contact-unblock');
+        if (btn) await _unblockNumber(btn.dataset.phone);
+    });
+
+    // Close modal
+    document.querySelectorAll('[data-close-modal="blockedContactsModal"]').forEach(el => {
+        el.addEventListener('click', () => {
+            const m = document.getElementById('blockedContactsModal');
+            if (m) { m.classList.add('hidden'); m.setAttribute('aria-hidden', 'true'); }
+        });
+    });
 }
