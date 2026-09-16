@@ -442,10 +442,11 @@ These are **real, actionable items** in THIS repo based on the audits.
 - **Task:** All new sections use responsive grids: `.feature-promo` (auto-fit minmax 300px), `.screenshot-seq` (3→1 col), `.marketing-grid` (2→1 col), `.analytics-grid` (3→2→1 col), `.menu-inv-grid` (3→1 col), `.pos-pay-grid` (2→1 col). Dashboard screenshots in browser frames scale properly.
 - **Deployed:** Pending Firebase deploy
 
-### ⏳ W15: Deploy to Firebase Hosting
+### ✅ W15: Deploy to Firebase Hosting
 - **File:** `firebase.json` (website hosting target)
-- **Stage:** `reviewing`
-- **Task:** Build and deploy website to `foodhubbie-web.web.app`
+- **Stage:** `done`
+- **Task:** Deployed website to `foodhubbie-web.web.app`
+- **Deployed:** https://foodhubbie-web.web.app
 
 ---
 
