@@ -81,8 +81,6 @@ export function showConfirm({ title, body, confirmLabel = 'Confirm', danger = fa
   });
 }
 
-// ---- CSV export ------------------------------------------------------
-
 // ---- formatting --------------------------------------------------------
 export function formatUptime(seconds) {
   if (!seconds || seconds <= 0) return '—';
@@ -274,13 +272,8 @@ export function isStale(ts, maxMs = 5 * 60 * 1000) {
    if (transport === 'baileys') return 'WhatsApp Web (QR)';
    return 'Not configured';
  }
- function _transportLabelInternal(transport) {
-   if (transport === 'meta') return 'Official API';
-   if (transport === 'baileys') return 'WhatsApp Web (QR)';
-   return 'Not configured';
- }
  export function transportBadgeHtml(transport) {
-   const label = _transportLabelInternal(transport);
+   const label = transportLabel(transport);
    const cls = transport === 'meta' ? 'online' : transport === 'baileys' ? 'degraded' : 'unknown';
    return `<span class="transport-badge ${cls}">${escapeHtml(label)}</span>`;
  }

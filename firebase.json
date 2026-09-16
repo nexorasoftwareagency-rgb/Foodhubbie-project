@@ -352,7 +352,7 @@
     },
     {
       "target": "supreme",
-      "public": "SupremeAdmin",
+      "public": "SupremeAdmin/dist",
       "ignore": [
         "firebase.json",
         "**/.*",

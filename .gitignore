@@ -33,6 +33,7 @@ Skill Set/
 
 # Build output
 Admin/dist/
+SupremeAdmin/dist/
 
 # OpenCode config
 .opencode/

@@ -1,0 +1,885 @@
+The main improvement I would make is not simply adding all screenshots into one gallery. Instead, the promotional images should sell the feature first, and the real software screenshots should immediately prove that the feature actually exists.
+
+Recommended image structure
+
+Hero
+
+Keep your current Admin Dashboard hero.
+Add a subtle strip/visual showing the 3-app ecosystem rather than another large screenshot.
+
+Feature 1 — WhatsApp Ordering
+
+AI-created Image 1 → promotional feature visual
+Then your real WhatsApp Promotional Campaign screenshot
+Explain: campaign → customer → order.
+
+Feature 2 — QR Table Ordering
+
+AI-created Image 2 → promotional visual
+Then QR Table No. 1 screenshot
+Then POS screenshot showing the order being handled.
+
+Feature 3 — First-Party Delivery
+
+AI-created Image 3
+Then Live Orders
+Then Order Update & Management
+Then Orders
+This creates a visual story from order → preparation → delivery.
+
+Feature 4 — Marketing
+
+AI-created Image 4
+Then Bulk Messaging / WhatsApp Promotion
+Then Discount Tab
+
+Feature 5 — Command Center
+
+AI-created Image 5
+Then Dashboard
+Then Analytics 1, 2, 3
+Then Payment Tracking
+
+Operations / Product proof
+
+Menu Management
+Menu Availability & Stock
+Inventory Management
+POS
+Orders
+
+That gives the website a much stronger “What we promise → here is the actual software” flow.
+
+MASTER PROMPT — FoodHubbie Website Upgrade
+
+Use the following as the complete prompt for your website/AI coding system:
+
+UPGRADE THE EXISTING FOODHUBBIE ERP WEBSITE.
+
+WEBSITE:
+https://foodhubbie-web.web.app/
+
+IMPORTANT:
+Do NOT redesign the website from scratch.
+Do NOT remove the existing sections, navigation, pricing, CTAs, working links, or existing functionality.
+
+Keep the existing FoodHubbie visual identity:
+- Orange as the primary brand/accent color
+- White/light backgrounds
+- Dark navy typography
+- Rounded cards
+- Clean modern SaaS/ERP appearance
+- Premium restaurant technology feeling
+- Mobile-first responsive design
+
+The existing website already communicates:
+“3 Apps in One System”
+“Run your pizzeria on autopilot”
+QR Menu + Ordering
+Kitchen Display System
+Rider App
+POS
+Analytics
+Inventory
+Marketing
+Multi-outlet
+0% per-order commission
+Your data / own Firebase project
+
+Preserve this positioning and improve the visual storytelling.
+
+==================================================
+1. CORE WEBSITE STORY
+==================================================
+
+Change the visual storytelling from:
+
+FEATURE → TEXT → GENERIC IMAGE
+
+to:
+
+FEATURE → PROMOTIONAL VISUAL → REAL SOFTWARE PROOF → BENEFITS → CTA
+
+Every major FoodHubbie feature should visually demonstrate:
+1. What the feature does.
+2. What the customer/restaurant owner experiences.
+3. What the actual FoodHubbie software looks like.
+
+Do not dump all screenshots into a generic gallery.
+
+Each screenshot must appear beside the feature it proves.
+
+==================================================
+2. HERO SECTION
+==================================================
+
+KEEP THE EXISTING HERO MESSAGE:
+
+“Run your pizzeria on autopilot — orders, kitchen, and riders in one app.”
+
+Keep the existing CTA buttons.
+
+Keep the existing Admin Dashboard visual in the hero.
+
+Improve the hero visual composition by adding a small visual ecosystem underneath or beside the dashboard:
+
+ADMIN DASHBOARD
+       ↓
+CUSTOMER QR MENU
+       ↓
+RIDER APP
+
+Use small connected labels:
+
+Admin
+Customer
+Rider
+
+Add a subtle “LIVE / REAL-TIME” indicator.
+
+Do NOT overcrowd the hero.
+
+The hero should communicate:
+
+ONE RESTAURANT
+ONE SYSTEM
+EVERYTHING CONNECTED
+
+==================================================
+3. NEW SECTION — “SEE FOODHUBBIE IN ACTION”
+==================================================
+
+Place this section immediately after the hero/product introduction.
+
+Heading:
+
+“See FoodHubbie in Action”
+
+Subheading:
+
+“From customer ordering to kitchen operations, delivery, marketing and analytics — everything works inside one connected restaurant system.”
+
+Create 5 premium feature cards.
+
+Each card must use one of the AI-created promotional images.
+
+CARD 1:
+Automated WhatsApp Ordering
+
+IMAGE:
+AI-created Promotional Image 1
+
+Headline:
+“Turn WhatsApp Conversations Into Orders”
+
+Supporting text:
+“Customers can discover your menu, place orders and receive updates through a connected ordering workflow.”
+
+CTA:
+“See How WhatsApp Ordering Works →”
+
+CARD 2:
+Zero-Waiter QR Ordering
+
+IMAGE:
+AI-created Promotional Image 2
+
+Headline:
+“Let Customers Order From Their Table”
+
+Supporting text:
+“Customers scan the table QR code, browse the menu and place orders directly from their phone.”
+
+CTA:
+“Explore QR Ordering →”
+
+CARD 3:
+First-Party Delivery
+
+IMAGE:
+AI-created Promotional Image 3
+
+Headline:
+“Control Your Own Delivery”
+
+Supporting text:
+“Manage riders, assignments, delivery status, OTP handoff and delivery operations from your own system.”
+
+CTA:
+“Explore Delivery Management →”
+
+CARD 4:
+Marketing & Promotions
+
+IMAGE:
+AI-created Promotional Image 4
+
+Headline:
+“Bring Customers Back With Your Own Marketing Engine”
+
+Supporting text:
+“Create promotions, discounts, coupons and WhatsApp campaigns from the same restaurant system.”
+
+CTA:
+“Explore Marketing →”
+
+CARD 5:
+Real-Time Command Center
+
+IMAGE:
+AI-created Promotional Image 5
+
+Headline:
+“Your Entire Restaurant. One Command Center.”
+
+Supporting text:
+“Monitor orders, revenue, customers, riders, inventory, payments and analytics from one dashboard.”
+
+CTA:
+“Explore the Dashboard →”
+
+==================================================
+4. WHATSAPP ORDERING SECTION
+==================================================
+
+Create a dedicated section after the 5-feature overview.
+
+Heading:
+
+“Your WhatsApp Can Become Your Ordering Channel”
+
+Use AI-created Image 1 prominently.
+
+Then place the REAL SOFTWARE SCREENSHOT:
+
+Bulk Messageing Promotion Tab..Whatsapp Based.PNG
+
+Place the screenshot inside a premium browser/device frame.
+
+Beside it show a simple flow:
+
+CUSTOMER
+↓
+WhatsApp
+↓
+Promotion / Message
+↓
+Menu
+↓
+Cart
+↓
+Order
+↓
+Restaurant Dashboard
+
+Use small orange numbered circles.
+
+Add another small screenshot if appropriate:
+Dashboard.PNG
+
+Do not claim features that are not actually demonstrated.
+
+CTA:
+“Talk to FoodHubbie on WhatsApp”
+
+Phone / WhatsApp:
+9724649971
+
+==================================================
+5. QR TABLE ORDERING SECTION
+==================================================
+
+Heading:
+
+“Zero-Waiter QR Table Ordering”
+
+Use AI-created Image 2 as the promotional visual.
+
+Immediately below/alongside it place:
+
+QR Table no - 1.PNG
+
+Show the QR image prominently.
+
+Add:
+
+“Scan → Browse → Order”
+
+Then demonstrate the restaurant-side workflow using:
+
+POS.PNG
+
+and/or
+
+Orders.PNG
+
+Create a visual connection:
+
+TABLE QR
+↓
+CUSTOMER ORDER
+↓
+POS / ORDER SYSTEM
+↓
+KITCHEN
+↓
+SERVED
+
+Use a clean horizontal process diagram.
+
+Mention only documented capabilities:
+- Table QR
+- Browser ordering
+- Running table session
+- Order management
+- Kitchen/order workflow
+
+==================================================
+6. DELIVERY SECTION
+==================================================
+
+Heading:
+
+“From Kitchen to Doorstep — Tracked Live”
+
+Use AI-created Image 3.
+
+Then create a real-software proof sequence.
+
+SCREENSHOT 1:
+Live Orders.PNG
+
+SCREENSHOT 2:
+Orders Update and Management.PNG
+
+SCREENSHOT 3:
+Orders.PNG
+
+Display them as:
+
+LIVE ORDER
+→
+ORDER STATUS
+→
+DELIVERY / COMPLETION
+
+Use captions:
+
+“Monitor”
+“Update”
+“Manage”
+
+Highlight the relevant UI areas using subtle orange outlines, NOT large arrows covering the screenshot.
+
+Do not alter the screenshots.
+
+CTA:
+“Explore Delivery Management”
+
+==================================================
+7. MARKETING SECTION
+==================================================
+
+Heading:
+
+“Marketing Built Into Your Restaurant ERP”
+
+Use AI-created Image 4.
+
+Then display:
+
+Bulk Messageing Promotion Tab..Whatsapp Based.PNG
+
+and:
+
+Discount Tab.PNG
+
+Create a two-column layout.
+
+LEFT:
+WhatsApp Campaigns
+
+RIGHT:
+Discount & Coupon Control
+
+Below them add:
+
+“Create → Target → Promote → Track”
+
+Use a small marketing workflow.
+
+Do not claim advanced marketing capabilities unless they are visible or already stated on the website.
+
+==================================================
+8. COMMAND CENTER SECTION
+==================================================
+
+Heading:
+
+“One Dashboard. The Whole Restaurant.”
+
+Use AI-created Image 5 as the large promotional visual.
+
+Immediately follow it with:
+
+Dashboard.PNG
+
+Make the real dashboard screenshot larger than the promotional image.
+
+Add small feature labels around the screenshot:
+
+ORDERS
+REVENUE
+RIDERS
+CUSTOMERS
+OPERATIONS
+MARKETING
+
+Do NOT cover the screenshot with labels.
+
+Use a clean annotation style.
+
+==================================================
+9. ANALYTICS SECTION
+==================================================
+
+Create a dedicated:
+
+“Know What Is Happening In Your Business”
+
+section.
+
+Use the following screenshots:
+
+Analytics TAb -1.PNG
+Analytics TAb -2.PNG
+Analytics TAb -3.PNG
+
+Create a 3-screen dashboard showcase.
+
+Screen 1:
+Analytics Overview
+
+Screen 2:
+Sales & Highlights
+
+Screen 3:
+Payment Methods
+
+Add supporting text:
+
+“Track revenue, orders, average order value, customer activity, sales performance and payment distribution.”
+
+The website already describes Analytics & Reports with live KPIs, top items, top customers, lost-sales reports and rider performance, so visually connect the screenshots to those capabilities.
+
+==================================================
+10. MENU & INVENTORY SECTION
+==================================================
+
+Heading:
+
+“Your Menu and Inventory Stay Connected”
+
+Use:
+
+Menu Control Tab.PNG
+
+Menu Availability and Menu Stock Tracking.PNG
+
+inventory Management -1.PNG
+
+Create a 3-stage layout:
+
+MENU
+↓
+AVAILABILITY
+↓
+INVENTORY
+
+Use the real screenshots as the proof.
+
+Add:
+
+“Update your menu, control availability and track stock from one system.”
+
+Keep this section visually clean.
+
+==================================================
+11. POS & PAYMENTS SECTION
+==================================================
+
+Heading:
+
+“POS and Payments Without the Paperwork”
+
+Use:
+
+POS.PNG
+
+and:
+
+Payment Tracking Tab.PNG
+
+Create a split-screen layout.
+
+Left:
+POS
+
+Right:
+Payment Tracking
+
+Add small labels:
+
+Orders
+Payments
+Transaction History
+Status
+
+Only use claims already supported by the existing website/product UI.
+
+==================================================
+12. ORDERS SECTION
+==================================================
+
+Heading:
+
+“Every Order. One Live Workflow.”
+
+Use:
+
+Orders.PNG
+Live Orders.PNG
+Orders Update and Management.PNG
+
+Create a horizontally connected visual timeline:
+
+ORDER RECEIVED
+→
+CONFIRMED
+→
+PREPARING
+→
+READY
+→
+DELIVERY / SERVED
+
+Use the real interface screenshots as evidence of the workflow.
+
+==================================================
+13. COMPLETE PRODUCT SHOWCASE
+==================================================
+
+Near the lower part of the website, create:
+
+“Everything Inside FoodHubbie”
+
+Keep the existing feature list but improve it visually.
+
+Use the uploaded screenshots as expandable cards.
+
+Categories:
+
+OPERATIONS
+- Dashboard
+- Orders
+- Live Operations
+- POS
+
+MARKETING
+- Promotions
+- Discounts
+- WhatsApp Campaigns
+
+CATALOGUE
+- Menu
+- Categories
+- Menu Browser
+- Inventory
+
+INSIGHTS
+- Analytics
+- Payments
+- Rider Insights
+- Lost Sales
+
+CUSTOMER EXPERIENCE
+- QR Ordering
+- Table Ordering
+
+Each card should have:
+- Feature name
+- One short sentence
+- Relevant screenshot thumbnail
+
+Clicking the card should open a larger image/lightbox.
+
+==================================================
+14. IMAGE BEHAVIOR
+==================================================
+
+IMPORTANT IMAGE RULES:
+
+Do NOT stretch screenshots.
+
+Do NOT crop important UI.
+
+Do NOT place text directly over screenshots.
+
+Do NOT put orange title boxes in the top-left corner of screenshots.
+
+Do NOT hide FoodHubbie branding inside screenshots.
+
+Use:
+- browser frames
+- device frames
+- clean white cards
+- subtle shadows
+- rounded corners
+
+The original screenshots must remain readable.
+
+On desktop:
+Use large screenshots.
+
+On mobile:
+Stack screenshots vertically and allow horizontal scrolling for wide dashboard screenshots when necessary.
+
+==================================================
+15. IMAGE LABEL SYSTEM
+==================================================
+
+Use a small orange category label above screenshots.
+
+Example:
+
+REAL SOFTWARE
+
+Then:
+
+Dashboard Overview
+
+or:
+
+LIVE ORDER SCREEN
+
+Do not place labels over the screenshot itself.
+
+==================================================
+16. CONTACT / CTA
+==================================================
+
+Use:
+
+WhatsApp & Contact:
+9724649971
+
+Add WhatsApp CTA buttons at logical locations:
+
+“Talk to Us on WhatsApp”
+
+“Book a Demo”
+
+“Start Your Free Trial”
+
+Do not add fake contact information.
+
+==================================================
+17. FINAL CTA
+==================================================
+
+Keep the existing final CTA:
+
+“Run it. Sell it. Deliver it.”
+
+Improve the visual below it by showing a compact ecosystem:
+
+QR ORDER
+→
+DASHBOARD
+→
+KITCHEN
+→
+RIDER
+→
+CUSTOMER
+
+Then:
+
+FOODHUBBIE ERP
+
+“Restaurant Management. Direct Ordering. Dine-In QR. Delivery. Marketing. One Unified System.”
+
+WhatsApp:
+9724649971
+
+==================================================
+18. NAVIGATION
+==================================================
+
+Keep the existing navigation:
+
+Product
+Features
+Pricing
+How It Works
+Contact
+Start Free Trial
+
+Add smooth scrolling to each new feature section.
+
+Do not break existing anchors.
+
+==================================================
+19. RESPONSIVE DESIGN
+==================================================
+
+Desktop:
+Use 2-column and 3-column layouts where appropriate.
+
+Tablet:
+Reduce to 2 columns.
+
+Mobile:
+Use 1-column layouts.
+
+Promotional AI images should remain visually prominent.
+
+Software screenshots should become horizontally scrollable where their dashboard width makes normal scaling unreadable.
+
+Do not shrink screenshots so much that the text becomes impossible to read.
+
+==================================================
+20. PERFORMANCE
+==================================================
+
+Optimize all screenshots.
+
+Use:
+- WebP where appropriate
+- lazy loading
+- responsive image sizes
+- proper alt text
+- no unnecessary duplicate image downloads
+
+Do not sacrifice screenshot readability.
+
+==================================================
+21. SEO / ACCESSIBILITY
+==================================================
+
+Give every important image descriptive alt text.
+
+Examples:
+
+“FoodHubbie ERP WhatsApp ordering promotional interface”
+
+“FoodHubbie ERP QR table ordering”
+
+“FoodHubbie ERP live order dashboard”
+
+“FoodHubbie ERP analytics dashboard”
+
+“FoodHubbie ERP inventory management”
+
+Do not use generic alt text like:
+“image1”
+“screenshot”
+“photo”
+
+==================================================
+22. MOST IMPORTANT DESIGN PRINCIPLE
+==================================================
+
+The website must visually communicate:
+
+PROMISE
+↓
+PRODUCT
+↓
+PROOF
+
+For example:
+
+“Control Your Own Delivery”
+[AI promotional image]
+↓
+[Real Live Orders screenshot]
+↓
+[Real Order Management screenshot]
+↓
+“See how FoodHubbie manages delivery.”
+
+Do this for every major feature.
+
+The visitor should never wonder:
+
+“Is this just a marketing concept?”
+
+The real screenshots should immediately prove:
+
+“This is actual FoodHubbie ERP software.”
+
+==================================================
+23. DO NOT CHANGE
+==================================================
+
+Do NOT remove:
+- existing pricing
+- existing working buttons
+- existing app links
+- existing product sections
+- existing WhatsApp links
+- existing Admin/Menu/Rider app links
+- existing Firebase/data ownership messaging
+
+Do not invent new product capabilities.
+
+Use the existing website content as the source of truth and use the provided screenshots as visual proof.
+
+FINAL RESULT:
+
+Create a premium SaaS product website that feels like a real restaurant technology company.
+
+The visual sequence should be:
+
+HERO
+↓
+3-APP ECOSYSTEM
+↓
+5 FEATURE PROMOTIONAL IMAGES
+↓
+REAL SOFTWARE PROOF
+↓
+QR ORDERING
+↓
+WHATSAPP ORDERING
+↓
+DELIVERY
+↓
+MARKETING
+↓
+COMMAND CENTER
+↓
+ANALYTICS
+↓
+MENU + INVENTORY
+↓
+POS + PAYMENTS
+↓
+ORDERS
+↓
+PRICING
+↓
+FINAL CTA
+
+The result should feel polished, trustworthy, modern and product-focused — not like a screenshot gallery.
+One important change from your current website
+
+Your current page already has generic visuals for Admin Dashboard, Customer Menu and Rider App and then later repeats those concepts in the feature sections. The new approach should use your AI-created 5 promotional images as the marketing layer, while your 15 actual screenshots become the proof layer.
+
+That distinction will make the website much more convincing:
+
+AI image = “What FoodHubbie can do”
+Real screenshot = “This is what FoodHubbie actually looks like.”
+
+Also, your existing site already describes POS, analytics, menu/inventory, marketing, QR ordering and multi-outlet functionality, so the uploaded screenshots can be distributed naturally across those existing sections rather than creating a completely separate “Screenshots” page.
