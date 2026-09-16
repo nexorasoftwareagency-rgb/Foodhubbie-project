@@ -124,20 +124,6 @@ export const switchTab = async (tabId, skipHistory = false) => {
             if (mobileHeader) mobileHeader.style.setProperty('display', 'none', 'important');
         }
         if (posTab) posTab.classList.add('pos-fullscreen');
-
-        if (!document.getElementById('posExitBtn') && posTab) {
-            const backBtn = document.createElement('button');
-            backBtn.id = 'posExitBtn';
-            backBtn.className = 'pos-back-btn mobile-only';
-            backBtn.innerHTML = '<i data-lucide="chevron-left"></i>';
-            backBtn.onclick = (e) => {
-                e.stopPropagation();
-                switchTab('dashboard');
-            };
-            posTab.prepend(backBtn);
-            await loadLucide();
-            window.lucide.createIcons({ root: posTab });
-        }
     } else {
         body.classList.remove('pos-immersion-active');
         if (mobileHeader) mobileHeader.style.display = '';
