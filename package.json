@@ -1,7 +1,10 @@
 {
   "scripts": {
     "build": "node tools/build.mjs",
-    "deploy:admin": "npm run build && firebase deploy --only hosting:admin"
+    "build:admin": "node tools/build.mjs --admin",
+    "build:supreme": "node tools/build.mjs --supreme",
+    "deploy:admin": "npm run build:admin && firebase deploy --only hosting:admin",
+    "deploy:supreme": "npm run build:supreme && firebase deploy --only hosting:supreme"
   },
   "dependencies": {
     "playwright": "^1.61.0"
