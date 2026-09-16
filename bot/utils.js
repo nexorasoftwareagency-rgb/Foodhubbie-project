@@ -20,6 +20,15 @@ function maskJid(jid) {
     return `${phone.substring(0, 2)}****${phone.slice(-4)}@${domain}`;
 }
 
+// ── Blocklist check ──────────────────────────────────────────────────────
+
+function isBlockedJid(jid, blockedSet) {
+    if (!blockedSet || blockedSet.size === 0) return false;
+    const phone = (jid || '').replace(/[^0-9]/g, '');
+    return blockedSet.has(jid) || blockedSet.has(phone) ||
+        [...blockedSet].some(bn => phone.endsWith(bn) || bn.endsWith(phone));
+}
+
 // ── Date / IST helpers ─────────────────────────────────────────────────────
 
 function getISTDateInfo(customDate = null) {
@@ -258,7 +267,7 @@ function isSocketDead(sock) {
 }
 
 module.exports = {
-    formatJid, maskJid,
+    formatJid, maskJid, isBlockedJid,
     getISTDateInfo, getISTDateString, parseTime, isShopOpen, randomBetween,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
