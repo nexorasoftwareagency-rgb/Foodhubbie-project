@@ -308,7 +308,7 @@ export async function saveStoreSettings() {
         const updates = {};
         updates[tenantPath(Outlet.current, 'settings/Store')] = storeData;
         updates[tenantPath(Outlet.current, 'settings/Delivery')] = deliveryData;
-        updates[tenantPath(Outlet.current, 'settings/Bot')] = botData;
+        updates[tenantPath(Outlet.current, 'settings/Bot')] = { ...botData, blockedNumbers: _blockedNumbersCache.length > 0 ? _blockedNumbersCache : null };
         updates[tenantPath(Outlet.current, 'settings/Display')] = displayData;
         const taxRates = _readTaxRates();
         updates[tenantPath(Outlet.current, 'dineinSettings')] = {
