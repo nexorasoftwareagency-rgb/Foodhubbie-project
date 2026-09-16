@@ -3096,6 +3096,27 @@
                                 <h3><i data-lucide="messages-square" class="icon-18"></i> Chats</h3>
                                 <span id="chatTotalUnread" class="chat-total-unread hidden">0 unread</span>
                             </div>
+                            <div id="chatUsageBar" class="chat-usage-bar hidden">
+                                <div class="chat-usage-tile">
+                                    <span class="chat-usage-value" id="chatUsageToday">0</span>
+                                    <span class="chat-usage-label">Sent today</span>
+                                </div>
+                                <div class="chat-usage-divider"></div>
+                                <div class="chat-usage-tile">
+                                    <span class="chat-usage-value" id="chatUsageOrders">0</span>
+                                    <span class="chat-usage-label">Orders</span>
+                                </div>
+                                <div class="chat-usage-divider"></div>
+                                <div class="chat-usage-tile">
+                                    <span class="chat-usage-value" id="chatUsageRiders">0</span>
+                                    <span class="chat-usage-label">Riders</span>
+                                </div>
+                                <div class="chat-usage-divider"></div>
+                                <div class="chat-usage-tile">
+                                    <span class="chat-usage-value" id="chatUsagePromos">0</span>
+                                    <span class="chat-usage-label">Promos</span>
+                                </div>
+                            </div>
                             <div class="chat-search-wrap">
                                 <i data-lucide="search" class="icon-16"></i>
                                 <input type="text" id="chatSearch" placeholder="Search chats..." aria-label="Search chats" autocomplete="off">
