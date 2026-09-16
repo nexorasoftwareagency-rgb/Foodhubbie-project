@@ -668,3 +668,107 @@ document.getElementById('btnAddTaxRate')?.addEventListener('click', () => {
     const lastInput = container?.querySelector('.tax-rate-name:last-of-type');
     if (lastInput) lastInput.focus();
 });
+
+// -------------------------------------------------------------------
+// BLOCKED NUMBERS MANAGEMENT
+// -------------------------------------------------------------------
+
+let _blockedNumbersCache = [];
+
+async function _loadBlockedNumbers() {
+    try {
+        const snap = await get(Outlet.ref('settings/Bot/blockedNumbers'));
+        const val = snap.val();
+        _blockedNumbersCache = Array.isArray(val) ? val.filter(Boolean) : [];
+    } catch (_) {
+        _blockedNumbersCache = [];
+    }
+    _renderBlockedNumbers();
+}
+
+function _renderBlockedNumbers() {
+    const list = document.getElementById('blockedList');
+    const emptyMsg = document.getElementById('blockedEmptyMsg');
+    if (!list) return;
+
+    if (_blockedNumbersCache.length === 0) {
+        list.innerHTML = '';
+        if (emptyMsg) emptyMsg.classList.remove('hidden');
+        return;
+    }
+    if (emptyMsg) emptyMsg.classList.add('hidden');
+
+    list.innerHTML = _blockedNumbersCache.map((num, i) => `
+        <div class="blocked-number-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(239,68,68,.04);border:1px solid rgba(239,68,68,.15);border-radius:8px;margin-bottom:6px">
+            <i data-lucide="shield-off" style="width:14px;height:14px;color:#ef4444;flex:none"></i>
+            <span style="flex:1;font-size:13px;font-family:monospace">${escapeHtml(num)}</span>
+            <button class="btn-icon-danger" data-action="remove-blocked-number" data-idx="${i}" title="Remove from blocklist" style="flex:none">
+                <i data-lucide="x" style="width:14px;height:14px"></i>
+            </button>
+        </div>`).join('');
+    refreshIcons(list);
+}
+
+async function _saveBlockedNumbers() {
+    try {
+        await set(Outlet.ref('settings/Bot/blockedNumbers'), _blockedNumbersCache.length > 0 ? _blockedNumbersCache : null);
+        showToast('Blocked numbers updated', 'success');
+    } catch (e) {
+        console.error('[Settings] Failed to save blocked numbers', e);
+        showToast('Failed to save blocked numbers', 'error');
+    }
+}
+
+document.addEventListener('click', async (e) => {
+    const addBtn = e.target.closest('[data-action="add-blocked-number"]');
+    if (addBtn) {
+        const input = document.getElementById('blockedNumberInput');
+        if (!input) return;
+        let raw = input.value.replace(/\D/g, '');
+        if (raw.length === 10) raw = '91' + raw;
+        if (raw.length !== 12 || !raw.startsWith('91')) {
+            showToast('Enter a valid 10-digit Indian number', 'error');
+            return;
+        }
+        if (_blockedNumbersCache.includes(raw)) {
+            showToast('Number already blocked', 'error');
+            return;
+        }
+        _blockedNumbersCache.push(raw);
+        await _saveBlockedNumbers();
+        _renderBlockedNumbers();
+        input.value = '';
+        state.settingsDirty = true;
+    }
+
+    const removeBtn = e.target.closest('[data-action="remove-blocked-number"]');
+    if (removeBtn) {
+        const idx = Number(removeBtn.dataset.idx);
+        _blockedNumbersCache.splice(idx, 1);
+        await _saveBlockedNumbers();
+        _renderBlockedNumbers();
+        state.settingsDirty = true;
+    }
+});
+
+document.getElementById('blockedNumberInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btnAddBlockedNumber')?.click();
+    }
+});
+
+// Load blocked numbers when settings tab is shown
+const _origShowTab = window._showTab;
+if (typeof _origShowTab === 'function') {
+    window._showTab = function(...args) {
+        _origShowTab.apply(this, args);
+        if (args[0] === 'settings') _loadBlockedNumbers();
+    };
+} else {
+    // Fallback: load on DOMContentLoaded if tab system not yet initialized
+    document.addEventListener('DOMContentLoaded', () => {
+        const settingsTab = document.getElementById('tab-settings');
+        if (settingsTab && !settingsTab.classList.contains('hidden')) _loadBlockedNumbers();
+    });
+}

@@ -2885,11 +2885,20 @@
 
                             </div>
 
+                            <div class="divider-dashed mb-20"></div>
+
+                            <h5 class="mb-12 text-muted-small text-upper ls-sm"><i data-lucide="shield-off" class="icon-14"></i> Blocked Numbers</h5>
+                            <p class="text-secondary-small mb-14">Numbers added here will be completely blocked from the WhatsApp bot — they cannot send messages and will not receive any notifications.</p>
+
+                            <div class="flex-row flex-gap-8 mb-14">
+                                <input type="text" id="blockedNumberInput" class="form-input" placeholder="Enter 10-digit phone number" maxlength="12" style="flex:1">
+                                <button id="btnAddBlockedNumber" class="btn-secondary btn-small" data-action="add-blocked-number"><i data-lucide="plus" class="icon-14"></i> Block</button>
+                            </div>
+
+                            <div id="blockedList" class="blocked-number-list"></div>
+                            <div id="blockedEmptyMsg" class="text-secondary-small text-center p-10">No numbers blocked yet.</div>
+
                         </div>
-
-
-
-                        <!-- Dine-In Charges (Tax & Service Charge) -->
 
                         <div class="glass-card p-20" data-settings-section="tax-services">
 

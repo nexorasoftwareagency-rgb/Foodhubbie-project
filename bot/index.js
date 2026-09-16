@@ -45,7 +45,7 @@ const {
     getISTDateInfo, getISTDateString, isShopOpen,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
-    isSocketDead, RateLimiter
+    isSocketDead, RateLimiter, isBlockedJid
 } = require('./utils');
 const promo = require('./promotions');
 const { sendDailyReport, sendMonthlyReport, sendWeeklyReport } = require('./reports');
@@ -58,6 +58,9 @@ let redisClient;
 let cachedAdminJids = null;
 let cachedAdminJidsExpiry = 0;
 const ADMIN_CACHE_TTL = 300000;
+
+// Blocked numbers cache — loaded from settings/Bot/blockedNumbers
+let blockedNumbers = new Set();
 const redisUrl = process.env.REDIS_URL || '';
 
 if (!redisUrl) {
@@ -446,6 +449,11 @@ async function appendContactInfo(text, outlet = 'outlet') {
 }
 
 async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact = false) {
+    // Blocklist check — silently skip sending to blocked numbers
+    if (isBlockedJid(to, blockedNumbers)) {
+        console.log(`[BLOCKED] Skipping outbound to ${(to || '').replace(/[^0-9]/g, '').slice(-4)}`);
+        return;
+    }
     const finalMsg = skipContact ? text : await appendContactInfo(text, outlet);
     if (!image) {
         await sock.sendMessage(to, { text: finalMsg });
@@ -1308,7 +1316,16 @@ async function sendDailyReportSafely(dateOverride = null) {
             await saveProcessedStatus(snap.key, { status: order.status, timestamp: Date.now() });
         }
     });
-        firebaseListenersInitialized = true;
+
+    // Blocked numbers listener — keep cache in sync
+    const blockedRef = db.ref(resolvePath('settings/Bot/blockedNumbers', OUTLET));
+    blockedRef.on('value', (snap) => {
+        const arr = snap.val();
+        blockedNumbers = new Set(Array.isArray(arr) ? arr.filter(Boolean) : []);
+        if (blockedNumbers.size > 0) console.log(`[BLOCKED] ${blockedNumbers.size} numbers blocked`);
+    });
+
+    firebaseListenersInitialized = true;
     }
 
     sock.ev.on('connection.update', (update) => {
@@ -1401,6 +1418,13 @@ async function sendDailyReportSafely(dateOverride = null) {
             }
             if (msg.key.fromMe) return;
 
+            let sender = msg.key.remoteJid;
+            // Blocklist check — silently ignore messages from blocked numbers
+            if (isBlockedJid(sender, blockedNumbers)) {
+                console.log(`[BLOCKED] Ignoring message from ${(sender || '').replace(/[^0-9]/g, '').slice(-4)}`);
+                return;
+            }
+
             // Deduplication to prevent double responses
             const msgId = msg.key?.id || Math.random().toString(36).slice(2);
             if (await getProcessedStatus(msgId)) return;
@@ -1409,7 +1433,7 @@ async function sendDailyReportSafely(dateOverride = null) {
             // Mark as read (fire-and-forget — don't block processing)
             sock.readMessages([msg.key]).catch(() => {});
 
-            let sender = msg.key.remoteJid;
+            // sender already declared above for blocklist check
             // Baileys 6.x supports @lid natively — keep the JID as-is from WhatsApp
             // for consistent session keys and correct routing via relayMessage's isLid path.
             // Prevents session fragmentation between @lid and @s.whatsapp.net formats.
