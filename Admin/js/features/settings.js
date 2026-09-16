@@ -674,6 +674,13 @@ document.getElementById('btnAddTaxRate')?.addEventListener('click', () => {
 // -------------------------------------------------------------------
 
 let _blockedNumbersCache = [];
+// ponytail: expose for Chats tab block/unblock — cache + persist
+window.__blockedNumbers = {
+    get list() { return _blockedNumbersCache; },
+    set list(v) { _blockedNumbersCache = v; },
+    save: _saveBlockedNumbers,
+    reload: _loadBlockedNumbers
+};
 
 async function _loadBlockedNumbers() {
     try {
@@ -758,7 +765,8 @@ document.getElementById('blockedNumberInput')?.addEventListener('keydown', (e) =
     }
 });
 
-// Load blocked numbers when settings tab is shown
+// Load blocked numbers eagerly on init AND when settings tab is shown
+_loadBlockedNumbers(); // ponytail: cache must exist before any settings save
 const _origShowTab = window._showTab;
 if (typeof _origShowTab === 'function') {
     window._showTab = function(...args) {
@@ -766,9 +774,5 @@ if (typeof _origShowTab === 'function') {
         if (args[0] === 'settings') _loadBlockedNumbers();
     };
 } else {
-    // Fallback: load on DOMContentLoaded if tab system not yet initialized
-    document.addEventListener('DOMContentLoaded', () => {
-        const settingsTab = document.getElementById('tab-settings');
-        if (settingsTab && !settingsTab.classList.contains('hidden')) _loadBlockedNumbers();
-    });
+    document.addEventListener('DOMContentLoaded', () => _loadBlockedNumbers());
 }
