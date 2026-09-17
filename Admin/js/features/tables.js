@@ -307,10 +307,9 @@ function _tableCard(t) {
                      <div class="table-card-meta-row">${orderCount} Order${orderCount !== 1 ? 's' : ''} · ${mins} min</div>`;
         }
     }
-    const disabledAttr = t.status === 'disabled' ? 'disabled' : '';
     const disabledSuffix = t.status === 'disabled' ? ' (Disabled)' : '';
     return `
-    <button type="button" class="table-grid-card ${meta.cls}" data-action="openTableDrawer" data-id="${escapeHtml(t.id)}" ${disabledAttr} title="Table ${escapeHtml(t.number)} — ${meta.label}${disabledSuffix}">
+    <button type="button" class="table-grid-card ${meta.cls}" data-action="openTableDrawer" data-id="${escapeHtml(t.id)}" title="Table ${escapeHtml(t.number)} — ${meta.label}${disabledSuffix}">
         <div class="table-card-top">
             <span class="table-card-number">${escapeHtml(t.number)}</span>
         </div>
@@ -1466,11 +1465,12 @@ async function _bulkQrPrint() {
         _qrCardMarkup({ storeName, poweredBy, tableNumber: t.number, qrSrc: dataUri, compact: true })
     ).join('');
     w.document.write(`<html><head><title>Bulk QR Print — ${escapeHtml(storeName)}</title><style>
+        @page{size:A4 landscape;margin:10mm;}
         *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;padding:20px;}
-        .qr-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;justify-items:center;}
+        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;padding:15px;}
+        .qr-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;justify-items:center;max-width:277mm;margin:0 auto;}
         ${QR_CARD_CSS}
-        @media print{ body{background:#fff;} }
+        @media print{ body{background:#fff;padding:0;} .qr-grid{gap:10px;} }
         </style></head><body><div class="qr-grid">${cardsHtml}</div>
         <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script></body></html>`);
     w.document.close();
