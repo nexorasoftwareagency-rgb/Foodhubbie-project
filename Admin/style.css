@@ -9227,7 +9227,7 @@ body.pos-selection-mode .walkin-picker {
     margin-bottom: 20px;
 }
 .reports-mobile-view .mob-hero {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important;
     padding: 20px 24px 16px;
     border-radius: 16px 16px 0 0;
     color: #fff;
