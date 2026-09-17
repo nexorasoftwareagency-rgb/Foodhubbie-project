@@ -259,11 +259,6 @@ export async function printReceiptById(orderId) {
             return;
         }
 
-        // Auto-complete counter (Dine-in) orders to Served on print
-        if ((order.type || '').toLowerCase() === 'dine-in' && order.status !== 'Served') {
-            await updateStatus(orderId, 'Served');
-        }
-
         printOrderReceipt(order, true);
 
     } catch (e) {

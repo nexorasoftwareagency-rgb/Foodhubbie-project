@@ -639,7 +639,7 @@ export function renderSessionBillCard(session, ordersMap, taxName, taxPercent, t
     if (el('sessionBillTotal')) el('sessionBillTotal').textContent = fmtMoney(grandTotal || session.grandTotal || session.runningTotal || 0);
 }
 
-const HISTORY_STATUS_LABEL = { Placed: 'Placed', Confirmed: 'Confirmed', Preparing: 'Preparing', Ready: 'Ready', Delivered: 'Delivered', Cancelled: 'Cancelled' };
+const HISTORY_STATUS_LABEL = { Placed: 'Placed', Confirmed: 'Confirmed', Preparing: 'Preparing', Ready: 'Ready', Served: 'Served', Delivered: 'Delivered', Cancelled: 'Cancelled' };
 
 export function renderHistoryList(orderIds, ordersMap) {
     const list = document.getElementById('historyListContainer');

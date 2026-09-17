@@ -28,7 +28,7 @@ function isRiderFresh(r) {
  */
 export const STATUS_SEQUENCES = {
     'Online': ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Delivered"],
-    'Dine-in': ["Placed", "Confirmed", "Ready", "Served", "Delivered"],
+    'Dine-in': ["Placed", "Confirmed", "Ready", "Served"],
     'Default': ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Delivered"]
 };
 const LIVE_STATUSES = ["Placed", "Confirmed", "Ready", "Pending", "New", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Dispatched"];
@@ -967,10 +967,6 @@ export async function updateStatus(id, status) {
     const currentLevel = sequence.indexOf(currentStatus);
     const nextLevel = sequence.indexOf(status);
 
-    // Rule 0: Counter (Dine-in) orders can skip "Ready" and go directly to "Served" on print
-    const isPosSale = (type || '').toLowerCase() === 'dine-in';
-    const isPosSkipReady = isPosSale && currentStatus === "Confirmed" && status === "Served";
-
     // Rule 1: Allow cancellation from any state EXCEPT Delivered or Served
     const isCancelling = status === "Cancelled";
     const canCancel = isCancelling && !["Delivered", "Served"].includes(currentStatus);
@@ -981,7 +977,7 @@ export async function updateStatus(id, status) {
     // Rule 3: Allow "Resurrection" from Cancelled to Placed
     const isResurrecting = currentStatus === "Cancelled" && status === "Placed";
 
-    if (!isNextStep && !canCancel && !isResurrecting && !isPosSkipReady && status !== currentStatus) {
+    if (!isNextStep && !canCancel && !isResurrecting && status !== currentStatus) {
         if (nextLevel <= currentLevel && nextLevel !== -1 && !isCancelling) {
             showToast(`⚠️ Status Reversal Blocked: Cannot go from ${currentStatus} to ${status}`, "error");
         } else if (isCancelling && ["Delivered", "Served"].includes(currentStatus)) {
@@ -1018,7 +1014,7 @@ export async function updateStatus(id, status) {
     if (status === "Delivered") {
         let method = order.paymentMethod || "Cash";
         // For non-POS orders without a preset method, ask the admin/rider
-        if (!isPosSale && !order.paymentMethod) {
+        if (order.tableNo && !order.paymentMethod) {
             const picked = await showPaymentPicker(order.total);
             if (!picked) {
                 renderOrders(state.lastOrdersSnap);
