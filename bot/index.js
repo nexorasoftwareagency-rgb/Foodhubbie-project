@@ -411,7 +411,7 @@ async function sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl) {
             footer: `Freshly made • ${OUTLET_NAME}`
         });
     }
-    return sendImage(sock, sender, menuImg, `${ctaText}\n--------------------------\n${menuUrl}`, OUTLET, true);
+    return sendImage(sock, sender, menuImg, `${ctaText}\n--------------------------\n${menuUrl}`, OUTLET, true, 'menu_display');
 }
 
 // Full greeting flow: greeting image + menu + order button. Token reused within 30 min.
@@ -429,7 +429,7 @@ async function sendOrderFlow(sock, sender, pushName, user) {
     welcome += `\n------------------------`;
     welcome += `\nDelicious food, delivered fast to your doorstep! 🚀`;
     const greetingImg = bot?.greetingImage || store?.bannerImage;
-    await sendImage(sock, sender, greetingImg, welcome);
+    await sendImage(sock, sender, greetingImg, welcome, undefined, false, 'greeting');
 
     // Wait 2 seconds for WhatsApp to prepare preview rendering
     await new Promise(r => setTimeout(r, 2000));
@@ -682,7 +682,7 @@ async function sendCategories(sock, sender, user) {
 
     user.step = "CATEGORY";
     const menuImg = botSettings.menuImage || storeSettings.bannerImage;
-    await sendImage(sock, sender, menuImg, msg);
+    await sendImage(sock, sender, menuImg, msg, undefined, false, 'menu_browse');
 }
 
 async function sendCartView(sock, sender, user, isAdded = false) {
@@ -935,7 +935,8 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             if (msg) {
                 console.log(`[BOT] 📧 Sending ${currentStatus} notification to ${maskJid(jid)}...`);
                 await orderRateLimiter.wait();
-                const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'outlet', true);
+                const orderTrackType = (statusLower === 'placed' || statusLower === 'confirmed') ? 'order_notification' : 'order_update';
+                const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'outlet', true, orderTrackType);
 
                 // CRITICAL: Preserve ALL fields in processedStatus to avoid duplicate rider pings on next update
                 await saveProcessedStatus(id, {
@@ -1763,7 +1764,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         user.dishList.forEach((d, i) => { dMsg += `${i + 1}️⃣  *${d.name}*\n`; });
                         dMsg += `🛒 *9* View Cart\n0️⃣ *Take one step Back* 🔙`;
                         user.step = "DISH";
-                        return await sendImage(sock, sender, cat.image, dMsg);
+                        return await sendImage(sock, sender, cat.image, dMsg, undefined, false, 'menu_browse');
                     } catch (catErr) {
                         console.error("[CATEGORY ERR]", catErr);
                         return sock.sendMessage(sender, { text: "❌ Something went wrong. Please try again." });
@@ -1850,7 +1851,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         user.sizeList.forEach(([s, p], i) => { sMsg += `${i + 1}️⃣  ${s} — ₹${p}\n`; });
                         sMsg += `0️⃣ *Take one step Back* 🔙`;
                         user.step = "SIZE";
-                        return await sendImage(sock, sender, dish.image, sMsg);
+                    return await sendImage(sock, sender, dish.image, sMsg, undefined, false, 'menu_browse');
                     }
                     return sock.sendMessage(sender, { text: "⚠️ Reply *1* to add more, *2* to view cart or *0* to go back." });
                 }
