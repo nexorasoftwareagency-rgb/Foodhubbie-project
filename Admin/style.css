@@ -9220,11 +9220,16 @@ body.pos-selection-mode .walkin-picker {
 }
 
 /* Analytics sub-tabs — desktop (mobile-overrides.css covers ≤1024px) */
+#reportsMobileView {
+    background: var(--card-bg, #fff);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
 .reports-mobile-view .mob-hero {
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-    border-radius: 16px;
     padding: 20px 24px 16px;
-    margin-bottom: 16px;
+    border-radius: 16px 16px 0 0;
     color: #fff;
 }
 .reports-mobile-view .mob-hero-sub {
