@@ -1036,7 +1036,7 @@ async function _advanceOrder(orderId, nextStatus) {
             'Placed': ['Confirmed', 'Cancelled'],
             'Confirmed': ['Ready', 'Cancelled'],
             'Preparing': ['Ready', 'Cancelled'],
-            'Ready': ['Served', 'Delivered', 'Cancelled'],
+            'Ready': ['Served', 'Cancelled'],
             'Served': [], 'Delivered': [], 'Cancelled': []
         };
         let orderData, tableId;

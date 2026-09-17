@@ -846,7 +846,7 @@ export async function submitWalkinSale() {
             customerName: name,
             customerNote: combinedNote,
             tableNo: tableNo,
-            status: "Confirmed",
+            status: "Delivered",
             type: "Dine-in",
             stockDeducted: true,
             timestamp: serverTimestamp(),
