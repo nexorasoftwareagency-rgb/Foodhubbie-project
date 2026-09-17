@@ -1458,38 +1458,47 @@ async function _bulkQrPrint() {
     const cards = [];
     for (const t of tables) {
         const url = await _qrUrlForTable(t);
-        const dataUri = await _qrDataUri(url, 150);
+        const dataUri = await _qrDataUri(url, 300);
         cards.push({ t, dataUri });
     }
-    // Build inline-styled cards — no CSS class conflicts, guaranteed side-by-side
+    // 2 BIG cards per A4 landscape page — inline styles, no CSS class conflicts
     const cardHtml = ({ num, src }) => {
-        const footer = poweredByClean ? `<div style="border-top:2px dashed #f3cba8;margin:6px 10px 0;"></div><div style="padding:4px 10px 7px;font-size:7px;color:#b97a4e;font-weight:600;">Powered by <b style="color:#E84908;">${escapeHtml(poweredByClean)}</b></div>` : '';
-        return `<div style="display:inline-block;vertical-align:top;width:200px;margin:5px;background:linear-gradient(135deg,#FFB347,#E84908 55%,#C81D11);border-radius:20px;padding:4px;page-break-inside:avoid;">
-            <div style="background:#fff;border-radius:17px;overflow:hidden;width:192px;text-align:center;font-family:-apple-system,'Segoe UI',sans-serif;">
-                <div style="background:linear-gradient(135deg,#FF8A3D,#E84908);color:#fff;padding:7px 7px 6px;">
-                    <div style="font-size:10px;font-weight:900;text-transform:uppercase;line-height:1.2;">${escapeHtml(storeName)}</div>
-                    <div style="font-size:7px;opacity:.92;margin-top:2px;font-weight:700;letter-spacing:.08em;">DINE-IN MENU</div>
+        const footer = poweredByClean
+            ? `<div style="border-top:2px dashed #f3cba8;margin:12px 20px 0;"></div><div style="padding:8px 20px 14px;font-size:11px;color:#b97a4e;font-weight:600;">Powered by <b style="color:#E84908;">${escapeHtml(poweredByClean)}</b></div>`
+            : '';
+        return `<div style="display:inline-block;vertical-align:top;width:48%;margin:1%;background:linear-gradient(135deg,#FFB347,#E84908 55%,#C81D11);border-radius:26px;padding:6px;page-break-inside:avoid;">
+            <div style="background:#fff;border-radius:22px;overflow:hidden;text-align:center;font-family:-apple-system,'Segoe UI',sans-serif;">
+                <div style="background:linear-gradient(135deg,#FF8A3D,#E84908);color:#fff;padding:20px 18px 18px;">
+                    <div style="font-size:22px;font-weight:900;text-transform:uppercase;line-height:1.2;">${escapeHtml(storeName)}</div>
+                    <div style="font-size:11px;opacity:.92;margin-top:4px;font-weight:700;letter-spacing:.12em;">DINE-IN MENU</div>
                 </div>
-                <div style="padding:6px 7px 5px;">
-                    <div style="font-size:8px;font-weight:800;color:#E84908;letter-spacing:.14em;">TABLE</div>
-                    <div style="font-size:22px;font-weight:900;color:#1a1a1a;line-height:1;margin:2px 0 5px;">${escapeHtml(String(num))}</div>
-                    <div style="font-size:8px;font-weight:800;color:#C81D11;margin-bottom:5px;">Scan & Crave</div>
-                    <div style="display:inline-block;padding:5px;background:#fff7ed;border:2px solid #FFB347;border-radius:11px;">
-                        <img src="${src}" width="100" height="100" style="display:block;">
+                <div style="padding:24px 20px 20px;">
+                    <div style="font-size:13px;font-weight:800;color:#E84908;letter-spacing:.14em;">TABLE</div>
+                    <div style="font-size:52px;font-weight:900;color:#1a1a1a;line-height:1;margin:4px 0 16px;">${escapeHtml(String(num))}</div>
+                    <div style="font-size:14px;font-weight:800;color:#C81D11;margin-bottom:16px;">Scan & Crave</div>
+                    <div style="display:inline-block;padding:12px;background:#fff7ed;border:3px solid #FFB347;border-radius:16px;">
+                        <img src="${src}" width="260" height="260" style="display:block;">
                     </div>
                 </div>
                 ${footer}
             </div>
         </div>`;
     };
-    const cardsHtml = cards.map(c => cardHtml({ num: c.t.number, src: c.dataUri })).join('');
+    // Pair cards into rows of 2, page-break between rows
+    let rowsHtml = '';
+    for (let i = 0; i < cards.length; i += 2) {
+        const pair = cards.slice(i, i + 2);
+        const rowCards = pair.map(c => cardHtml({ num: c.t.number, src: c.dataUri })).join('');
+        const pageBreak = i + 2 < cards.length ? 'page-break-after:always;' : '';
+        rowsHtml += `<div style="text-align:center;${pageBreak}">${rowCards}</div>`;
+    }
     const w = window.open('', '_blank', 'width=960,height=700');
     w.document.write(`<html><head><title>Bulk QR Print — ${escapeHtml(storeName)}</title><style>
         @page{size:A4 landscape;margin:8mm;}
         *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;text-align:center;}
+        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;}
         @media print{body{background:#fff;}}
-        </style></head><body>${cardsHtml}
+        </style></head><body>${rowsHtml}
         <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script></body></html>`);
     w.document.close();
 }
