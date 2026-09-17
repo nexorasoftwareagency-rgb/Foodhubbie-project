@@ -5,7 +5,19 @@
 
 const { formatJid, isSocketDead, getBroadcastDelayRangeMs, sleep, randomBetween, OutboundTracker } = require('./utils');
 const { db, resolvePath } = require('./firebase');
+const { paceBurstSend } = require('./send-pacer');
 const outboundTracker = new OutboundTracker(db, resolvePath);
+
+async function _sendToRiderWithRetry(sock, riderJid, msg) {
+    try {
+        await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
+    } catch (firstErr) {
+        if (isSocketDead(sock)) throw firstErr;
+        console.warn(`[RIDER] Send hiccup for ${riderJid}, retrying once in 4s: ${firstErr.message}`);
+        await sleep(4000);
+        await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
+    }
+}
 
 function buildRiderOrderMessage(order, { title, footer, id, includeOutlet = false, includeOTP = false } = {}) {
     let itemsText = "";
@@ -157,7 +169,8 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
                 if (!isFirstSend) await sleep(randomBetween(minDelayMs, maxDelayMs));
                 isFirstSend = false;
                 try {
-                    await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
+                    await paceBurstSend();
+                    await _sendToRiderWithRetry(sock, riderJid, msg);
                     outboundTracker.trackSend(outlet, 'rider_broadcast');
                     await addInAppNotification(rider.uid, "New Pickup Available!", `Order #${orderId.slice(-5)} is ready for pickup.`, 'success', 'shopping-bag', order.outlet);
                 } catch (sendErr) {

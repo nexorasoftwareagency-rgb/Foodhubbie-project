@@ -155,6 +155,22 @@ const LOCAL_CACHE_TTL = 3600000; // 1 hour
 // In-memory session fallback when Redis is unavailable
 const localSessionCache = new Map();
 
+// SAFEST-FIRST: per-sender processing lock. One outlet = one Node process
+// owns every session for that outlet (see orchestrator), so a plain
+// in-process promise chain is enough — no Redis round-trip needed, and it
+// adds ZERO delay for the normal case (one message at a time per sender).
+const _senderLocks = new Map();
+function withSenderLock(sender, fn) {
+    const previous = _senderLocks.get(sender) || Promise.resolve();
+    const current = previous.then(fn, fn);
+    const tracked = current.catch(() => {});
+    _senderLocks.set(sender, tracked);
+    tracked.finally(() => {
+        if (_senderLocks.get(sender) === tracked) _senderLocks.delete(sender);
+    });
+    return current;
+}
+
 // ── Auto-cleanup stale session files (prevents Bad MAC errors) ──────────────
 // Baileys stores Signal Protocol session files in session_data_{OUTLET}/.
 // When contacts rebuild sessions (reinstall WhatsApp, new phone), old files
@@ -1495,6 +1511,10 @@ async function sendDailyReportSafely(dateOverride = null) {
             // Show typing indicator (fire-and-forget — don't block processing)
             sock.sendPresenceUpdate('composing', sender).catch(() => {});
 
+            // SAFEST-FIRST: everything from session read through save runs
+            // inside a per-sender lock — prevents duplicate orders from
+            // rapid double-taps (see withSenderLock above).
+            await withSenderLock(sender, async () => {
             let user = await getSession(sender);
             if (!user) {
                 const profile = await getUserProfile(sender, OUTLET);
@@ -2110,6 +2130,7 @@ async function sendDailyReportSafely(dateOverride = null) {
 
             // Final Session Save
             await saveSession(sender, user);
+            }); // <-- End of per-sender lock (withSenderLock)
 
         } catch (err) { console.error("Message Handler Error:", err); }
     });

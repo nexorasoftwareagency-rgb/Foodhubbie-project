@@ -5,9 +5,10 @@
  */
 
 const {
-    formatJid, getISTDateInfo, randomBetween, isSocketDead, generateCouponCode, OutboundTracker
+    formatJid, getISTDateInfo, randomBetween, isSocketDead, OutboundTracker
 } = require('./utils');
 const { db, resolvePath } = require('./firebase');
+const { paceBurstSend } = require('./send-pacer');
 const outboundTracker = new OutboundTracker(db, resolvePath);
 
 const PROMO_LOG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -16,6 +17,7 @@ const PROMO_PAUSE_EVERY = 30;
 const PROMO_PAUSE_MS = 30_000;
 const PROMO_SOCKET_DEAD_GRACE_MS = 5_000;
 const PROMO_SCHEDULE_MISSED_GRACE_MS = 15 * 60 * 1000;
+const PROMO_WARMUP_DAILY_LIMITS = [20, 40, 60, 100, 150, 200, 250];
 const PROMO_DAILY_LIMIT = 300;
 const PROMO_MIN_DELAY_MS = 8000;
 const PROMO_MAX_DELAY_MS = 15000;
@@ -23,13 +25,16 @@ const PROMO_BATCH_MIN_PAUSE_MS = 60000;
 const PROMO_BATCH_MAX_PAUSE_MS = 120000;
 const PROMO_MENU_MIN_DELAY_MS = 1500;
 const PROMO_MENU_MAX_DELAY_MS = 3000;
+const PROMO_FAILURE_WINDOW = 20;
+const PROMO_FAILURE_MIN_SAMPLE = 10;
+const PROMO_MAX_FAILURE_RATE = 0.35;
 
 let _killSwitchCache = { value: false, ts: 0 };
 let _promoEnabledCache = { value: true, ts: 0 };
+let _dailyLimitCache = { value: PROMO_WARMUP_DAILY_LIMITS[0], ts: 0 };
 
-async function sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage, sendStopMsg, outlet) {
+async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet) {
     let finalText = text;
-    if (closingMessage) finalText += '\n------------------------\n' + closingMessage;
     if (sendStopMsg && !/stop/i.test(finalText)) finalText += '\n------------------------\n_Reply STOP to unsubscribe._';
     try {
         // Meta transport: promotional sends are biz-initiated — plain text is
@@ -115,6 +120,24 @@ async function isPromoEnabled(OUTLET, db) {
     }
 }
 
+async function getSafeDailyLimit(OUTLET, db) {
+    const now = Date.now();
+    if (now - _dailyLimitCache.ts < 5 * 60 * 1000) return _dailyLimitCache.value;
+    let value = PROMO_WARMUP_DAILY_LIMITS[0];
+    try {
+        const snap = await db.ref(resolvePath('bot/pair', OUTLET)).once('value');
+        const firstLinkedAt = snap.val()?.firstLinkedAt;
+        if (firstLinkedAt) {
+            const daysSinceLink = Math.floor((now - firstLinkedAt) / (24 * 60 * 60 * 1000));
+            value = daysSinceLink < PROMO_WARMUP_DAILY_LIMITS.length
+                ? PROMO_WARMUP_DAILY_LIMITS[daysSinceLink]
+                : PROMO_DAILY_LIMIT;
+        }
+    } catch (_) {}
+    _dailyLimitCache = { value, ts: now };
+    return value;
+}
+
 async function isOptedOut(phone, OUTLET, db) {
     try {
         const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
@@ -163,11 +186,11 @@ async function sleepThroughQuietHours(quietHours, isKillSwitchOnFn) {
     }
 }
 
-async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, closingMessage, sendStopMsg, outlet) {
+async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, sendStopMsg, outlet) {
     let lastErr = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            await sendPromotionalMessage(sock, jid, text, mediaUrl, closingMessage, sendStopMsg, outlet);
+            await sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet);
             return { ok: true, attempts: attempt };
         } catch (err) {
             lastErr = err;
@@ -215,14 +238,15 @@ async function logPromoSkip(campaignId, phone, reason, OUTLET, db) {
 
 async function runPromotionCampaign(sock, cmd, ctx) {
     const { OUTLET, db, getData, cryptoErrorCount } = ctx;
-    const { campaignId, template, mediaUrl, recipients = [], delayMs = 2000, generateCoupons = false, quietHours, requestedBy, greeting = false, menuText = null, menuImageUrl = null, closingMessage = null, sendStopMsg = true, isTest = false } = cmd;
+    const { campaignId, template, mediaUrl, recipients = [], quietHours, requestedBy, greeting = false, menuText = null, menuImageUrl = null, sendStopMsg = true, isTest = false } = cmd;
     if (!campaignId || !Array.isArray(recipients) || recipients.length === 0) {
         console.warn(`[Promo] Invalid campaign command: ${campaignId}`);
         return;
     }
     const list = recipients.slice(0, PROMO_DAILY_LIMIT);
+    const recentResults = [];
 
-    console.log(`[Promo] ▶️ Campaign ${campaignId} starting/resuming (${list.length} recipients, ${delayMs}ms delay)`);
+    console.log(`[Promo] ▶️ Campaign ${campaignId} starting/resuming (${list.length} recipients, fixed safe pacing)`);
 
     try {
         await db.ref('logs/audit').push({
@@ -253,10 +277,11 @@ async function runPromotionCampaign(sock, cmd, ctx) {
 
     const todayStr = getISTDateInfo().dateStr;
     let dailySentToday = 0;
+    let safeDailyLimit = await getSafeDailyLimit(OUTLET, db);
     try {
         const dailySnap = await db.ref(resolvePath(`bot/promotions/dailyCount/${todayStr}`, OUTLET)).once('value');
         dailySentToday = Number(dailySnap.val() || 0);
-        console.log(`[Promo] Daily promo count today: ${dailySentToday}/${PROMO_DAILY_LIMIT}`);
+        console.log(`[Promo] Daily promo count today: ${dailySentToday}/${safeDailyLimit}`);
     } catch (_) {}
 
     let sent = 0, failed = 0;
@@ -289,9 +314,9 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 return;
             }
 
-            if (!isTest && dailySentToday >= PROMO_DAILY_LIMIT) {
-                console.log(`[Promo] Daily limit (${PROMO_DAILY_LIMIT}) reached. Pausing ${campaignId}.`);
-                await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'daily-limit', currentIndex: i });
+            if (!isTest && dailySentToday >= safeDailyLimit) {
+                console.log(`[Promo] Daily limit (${safeDailyLimit}) reached. Pausing ${campaignId}.`);
+                await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'daily-limit', currentIndex: i, dailyLimitApplied: safeDailyLimit });
                 return;
             }
 
@@ -301,8 +326,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
             if (!isTest && await isOptedOut(phone, OUTLET, db)) { await logPromoSkip(campaignId, phone, 'opted-out', OUTLET, db); continue; }
             if (!isTest && !await hasPromoConsent(phone, OUTLET, db)) { await logPromoSkip(campaignId, phone, 'no-consent', OUTLET, db); continue; }
 
-            const couponCode = (generateCoupons && !isTest) ? generateCouponCode() : null;
-            let text = await personalizeTemplate(template, phone, campaignId, couponCode, OUTLET, getData);
+            let text = await personalizeTemplate(template, phone, campaignId, null, OUTLET, getData);
             if (greeting) {
                 try {
                     const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
@@ -314,10 +338,6 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 }
             }
 
-            // Combine menu footer + closing into the main text so everything
-            // text goes out in ONE message. Pick a single image: the promo image
-            // wins; else the menu image. Only when BOTH images exist does the
-            // menu image go as a separate message (WhatsApp = 1 image/message).
             let finalText = text;
             if (menuText && String(menuText).trim().length > 0) {
                 finalText += '\n------------------------\n' + String(menuText);
@@ -330,20 +350,28 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 extraImage = menuImageUrl;
             }
 
-            const result = await sendWithRetry(sock, jid, finalText, mainImage, 2, closingMessage, sendStopMsg, OUTLET);
-            await logPromoResult(campaignId, phone, jid, result, couponCode, OUTLET, db);
+            await paceBurstSend();
+            const result = await sendWithRetry(sock, jid, finalText, mainImage, 2, sendStopMsg, OUTLET);
+            await logPromoResult(campaignId, phone, jid, result, null, OUTLET, db);
+
+            recentResults.push(result.ok);
+            if (recentResults.length > PROMO_FAILURE_WINDOW) recentResults.shift();
+            if (recentResults.length >= PROMO_FAILURE_MIN_SAMPLE) {
+                const failRate = recentResults.filter((ok) => !ok).length / recentResults.length;
+                if (failRate > PROMO_MAX_FAILURE_RATE) {
+                    console.warn(`[Promo] Circuit breaker: ${(failRate * 100).toFixed(0)}% failures over last ${recentResults.length} sends. Pausing ${campaignId}.`);
+                    await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({
+                        status: 'paused', pauseReason: 'high-failure-rate', currentIndex: i + 1, totalSent: sent, totalFailed: failed
+                    });
+                    return;
+                }
+            }
+
             if (result.ok) {
                 sent++;
                 if (!isTest) {
                     dailySentToday++;
                     try { await db.ref(resolvePath(`bot/promotions/dailyCount/${todayStr}`, OUTLET)).set(dailySentToday); } catch (_) {}
-                }
-                if (couponCode) {
-                    try {
-                        await db.ref(resolvePath(`bot/promotions/coupons/${couponCode}`, OUTLET)).set({
-                            campaignId, recipientPhone: phone, generatedAt: Date.now()
-                        });
-                    } catch (_) {}
                 }
                 if (extraImage) {
                     try {
@@ -383,10 +411,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                     console.log(`[Promo] Batch pause (${Math.round(pauseMs/1000)}s) after ${i+1} sends`);
                     await new Promise(r => setTimeout(r, pauseMs));
                 } else {
-                    const sendDelay = (delayMs && delayMs > 0)
-                        ? randomBetween(Math.max(delayMs * 1000, 2000), Math.max(delayMs * 1000 + 3000, 5000))
-                        : randomBetween(PROMO_MIN_DELAY_MS, PROMO_MAX_DELAY_MS);
-                    await new Promise(r => setTimeout(r, sendDelay));
+                    await new Promise(r => setTimeout(r, randomBetween(PROMO_MIN_DELAY_MS, PROMO_MAX_DELAY_MS)));
                 }
             }
         }
@@ -421,11 +446,8 @@ async function resumeStuckPromotions(sock, ctx) {
                 greeting: c.greeting === true,
                 menuText: c.menuText || null,
                 menuImageUrl: c.menuImageUrl || null,
-                closingMessage: c.closingMessage || null,
                 sendStopMsg: c.sendStopMsg !== false,
                 recipients: c.recipients || [],
-                delayMs: c.delayMs || 2000,
-                generateCoupons: !!c.generateCoupons,
                 quietHours: c.quietHours || null,
                 requestedBy: c.requestedBy || 'admin-resume',
             };
@@ -466,11 +488,8 @@ async function pickupScheduledPromotions(sock, ctx) {
                 greeting: c.greeting === true,
                 menuText: c.menuText || null,
                 menuImageUrl: c.menuImageUrl || null,
-                closingMessage: c.closingMessage || null,
                 sendStopMsg: c.sendStopMsg !== false,
                 recipients: c.recipients || [],
-                delayMs: c.delayMs || 2000,
-                generateCoupons: !!c.generateCoupons,
                 quietHours: c.quietHours || null,
                 requestedBy: c.requestedBy || 'admin'
             });
@@ -517,5 +536,6 @@ module.exports = {
     sleepThroughQuietHours, sendWithRetry,
     acquirePromoLock, releasePromoLock, logPromoResult, logPromoSkip,
     runPromotionCampaign, resumeStuckPromotions, pickupScheduledPromotions, expireOldPromoLogs,
-    PROMO_DAILY_LIMIT
+    getSafeDailyLimit,
+    PROMO_DAILY_LIMIT, PROMO_WARMUP_DAILY_LIMITS
 };
