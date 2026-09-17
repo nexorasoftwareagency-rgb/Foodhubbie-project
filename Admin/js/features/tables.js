@@ -1468,7 +1468,8 @@ async function _bulkQrPrint() {
         @page{size:A4 landscape;margin:10mm;}
         *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
         body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;padding:15px;}
-        .qr-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;justify-items:center;max-width:277mm;margin:0 auto;}
+        .qr-grid{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;}
+        .qr-grid .qr-frame{display:block !important;width:240px;flex:none;}
         ${QR_CARD_CSS}
         @media print{ body{background:#fff;padding:0;} .qr-grid{gap:10px;} }
         </style></head><body><div class="qr-grid">${cardsHtml}</div>
