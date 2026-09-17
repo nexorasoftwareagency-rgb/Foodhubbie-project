@@ -1460,18 +1460,27 @@ async function _bulkQrPrint() {
         const dataUri = await _qrDataUri(url, 150);
         cards.push({ t, dataUri });
     }
-    const w = window.open('', '_blank');
+    const w = window.open('', '_blank', 'width=900,height=700');
     const cardsHtml = cards.map(({ t, dataUri }) =>
         _qrCardMarkup({ storeName, poweredBy, tableNumber: t.number, qrSrc: dataUri, compact: true })
     ).join('');
     w.document.write(`<html><head><title>Bulk QR Print — ${escapeHtml(storeName)}</title><style>
-        @page{size:A4 landscape;margin:10mm;}
+        @page{size:A4 landscape;margin:8mm;}
         *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;padding:15px;}
-        .qr-grid{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;}
-        .qr-grid .qr-frame{display:block !important;width:240px;flex:none;}
+        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;padding:10px;}
+        .qr-grid{display:inline-block;text-align:center;width:100%;}
+        .qr-grid .qr-frame{display:inline-block !important;vertical-align:top;margin:5px;width:220px;}
+        .qr-grid .qr-card{width:212px !important;}
+        .qr-grid .qr-img-frame img{width:110px;height:110px;}
+        .qr-grid .qr-table-number{font-size:22px !important;margin:2px 0 6px !important;}
+        .qr-grid .qr-header{padding:8px 8px 7px !important;}
+        .qr-grid .qr-store-name{font-size:11px !important;}
+        .qr-grid .qr-tagline{font-size:8px !important;}
+        .qr-grid .qr-body{padding:8px 8px 6px !important;}
+        .qr-grid .qr-scan-cta{font-size:9px !important;margin-bottom:6px !important;}
+        .qr-grid .qr-footer{padding:5px 8px 8px !important;font-size:7px !important;}
         ${QR_CARD_CSS}
-        @media print{ body{background:#fff;padding:0;} .qr-grid{gap:10px;} }
+        @media print{ body{background:#fff;padding:0;} .qr-grid .qr-frame{margin:4px;} }
         </style></head><body><div class="qr-grid">${cardsHtml}</div>
         <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script></body></html>`);
     w.document.close();
