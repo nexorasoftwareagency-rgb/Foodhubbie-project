@@ -217,6 +217,11 @@ export const switchTab = async (tabId, skipHistory = false) => {
                     loadMenu();
                     break;
                 }
+                case 'menu-browser': {
+                    const { initMenuBrowser } = await mod('menu-browser');
+                    initMenuBrowser();
+                    break;
+                }
                 case 'riders': {
                     const { loadRiders } = await mod('riders');
                     loadRiders();

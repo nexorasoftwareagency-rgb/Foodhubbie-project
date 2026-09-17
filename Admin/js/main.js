@@ -653,6 +653,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             (await useMod('catalog')).filterCategories(val);
         } else if (el.id === 'inventorySearch') {
             (await useMod('inventory')).setInventorySearch(val);
+        } else if (el.id === 'menuBrowserSearch') {
+            (await useMod('menu-browser')).filterBrowserDishes(val);
+        } else if (el.id === 'browserCategorySearch') {
+            (await useMod('menu-browser')).filterBrowserCategories(val);
         }
     });
 
