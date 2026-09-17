@@ -1454,35 +1454,42 @@ async function _bulkQrPrint() {
 
     showToast('Generating QR codes…', 'info');
     const { storeName, poweredBy } = await _fetchStoreBranding();
+    const poweredByClean = (poweredBy || '').replace(/^powered\s+by\s+/i, '').trim();
     const cards = [];
     for (const t of tables) {
         const url = await _qrUrlForTable(t);
         const dataUri = await _qrDataUri(url, 150);
         cards.push({ t, dataUri });
     }
+    // Build inline-styled cards — no CSS class conflicts, guaranteed side-by-side
+    const cardHtml = ({ num, src }) => {
+        const footer = poweredByClean ? `<div style="border-top:2px dashed #f3cba8;margin:6px 10px 0;"></div><div style="padding:4px 10px 7px;font-size:7px;color:#b97a4e;font-weight:600;">Powered by <b style="color:#E84908;">${escapeHtml(poweredByClean)}</b></div>` : '';
+        return `<div style="display:inline-block;vertical-align:top;width:200px;margin:5px;background:linear-gradient(135deg,#FFB347,#E84908 55%,#C81D11);border-radius:20px;padding:4px;page-break-inside:avoid;">
+            <div style="background:#fff;border-radius:17px;overflow:hidden;width:192px;text-align:center;font-family:-apple-system,'Segoe UI',sans-serif;">
+                <div style="background:linear-gradient(135deg,#FF8A3D,#E84908);color:#fff;padding:7px 7px 6px;">
+                    <div style="font-size:10px;font-weight:900;text-transform:uppercase;line-height:1.2;">${escapeHtml(storeName)}</div>
+                    <div style="font-size:7px;opacity:.92;margin-top:2px;font-weight:700;letter-spacing:.08em;">DINE-IN MENU</div>
+                </div>
+                <div style="padding:6px 7px 5px;">
+                    <div style="font-size:8px;font-weight:800;color:#E84908;letter-spacing:.14em;">TABLE</div>
+                    <div style="font-size:22px;font-weight:900;color:#1a1a1a;line-height:1;margin:2px 0 5px;">${escapeHtml(String(num))}</div>
+                    <div style="font-size:8px;font-weight:800;color:#C81D11;margin-bottom:5px;">Scan & Crave</div>
+                    <div style="display:inline-block;padding:5px;background:#fff7ed;border:2px solid #FFB347;border-radius:11px;">
+                        <img src="${src}" width="100" height="100" style="display:block;">
+                    </div>
+                </div>
+                ${footer}
+            </div>
+        </div>`;
+    };
+    const cardsHtml = cards.map(c => cardHtml({ num: c.t.number, src: c.dataUri })).join('');
     const w = window.open('', '_blank', 'width=960,height=700');
-    const cardsHtml = cards.map(({ t, dataUri }) =>
-        _qrCardMarkup({ storeName, poweredBy, tableNumber: t.number, qrSrc: dataUri, compact: true })
-    ).join('');
     w.document.write(`<html><head><title>Bulk QR Print — ${escapeHtml(storeName)}</title><style>
         @page{size:A4 landscape;margin:8mm;}
         *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;}
-        .qr-grid{white-space:nowrap;text-align:center;padding:5px;}
-        .qr-grid .qr-frame{display:inline-block !important;vertical-align:top;margin:5px;white-space:normal;width:200px;}
-        .qr-grid .qr-card{width:192px !important;}
-        .qr-grid .qr-img-frame img{width:100px;height:100px;}
-        .qr-grid .qr-table-number{font-size:20px !important;margin:2px 0 5px !important;}
-        .qr-grid .qr-header{padding:7px 7px 6px !important;}
-        .qr-grid .qr-store-name{font-size:10px !important;}
-        .qr-grid .qr-tagline{font-size:7px !important;letter-spacing:.08em !important;}
-        .qr-grid .qr-body{padding:6px 7px 5px !important;}
-        .qr-grid .qr-scan-cta{font-size:8px !important;margin-bottom:5px !important;}
-        .qr-grid .qr-divider{margin:6px 8px 0 !important;}
-        .qr-grid .qr-footer{padding:4px 7px 7px !important;font-size:7px !important;}
-        ${QR_CARD_CSS}
-        @media print{ body{background:#fff;} .qr-grid .qr-frame{margin:4px;} }
-        </style></head><body><div class="qr-grid">${cardsHtml}</div>
+        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;text-align:center;}
+        @media print{body{background:#fff;}}
+        </style></head><body>${cardsHtml}
         <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script></body></html>`);
     w.document.close();
 }
