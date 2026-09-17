@@ -1503,6 +1503,28 @@ async function sendDailyReportSafely(dateOverride = null) {
                             return;
                         }
                     }
+
+                    // SAFEST-FIRST: a first-time contact (no existing order session)
+                    // whose message reads as confusion or rejection ("who is this",
+                    // "not interested", "wrong number", etc.) must NOT receive the
+                    // full greeting-image + menu + order-button blast. Sending more
+                    // promotional content in reply to a rejection is exactly the
+                    // pattern WhatsApp's spam classifier flags — this short-circuits
+                    // it with one plain line instead, and quietly opts them out so a
+                    // later promo campaign doesn't re-contact them either.
+                    const isRejectionReply = /^(who( is)?( this| dis)?\??|what('?s| is)?( this)?\??|why( me)?\??|not interested\.?|no,?\s*thanks?\.?|wrong number\.?|leave me alone\.?|don'?t (message|text|contact) me\.?|who dis\??)$/i.test(text.trim());
+                    if (isRejectionReply) {
+                        const existingSession = await getSession(sender);
+                        if (!existingSession) {
+                            await updateData(`bot/promotions/optout/${optOutKey}`, {
+                                jid: sender, optedOutAt: Date.now(), reason: 'auto-rejection-reply'
+                            }, OUTLET);
+                            await sock.sendMessage(sender, {
+                                text: "Sorry to bother you — this is " + OUTLET_NAME + "'s WhatsApp order line. No further messages will be sent. Reply START if you'd ever like to order."
+                            });
+                            return;
+                        }
+                    }
                 }
             } catch (optOutErr) {
                 console.error("[Promo] Opt-out handler error:", optOutErr.message);
@@ -1606,12 +1628,43 @@ async function sendDailyReportSafely(dateOverride = null) {
                         return sock.sendMessage(sender, { text: `🌙 *${OUTLET_NAME.toUpperCase()} IS CLOSED*\n------------------------\nHours: ${store.shopOpenTime || 'N/A'} - ${store.shopCloseTime || 'N/A'}\n------------------------\nSee you later! 👋` });
                     }
 
-                    // Full flow: greeting + menu image + order button (token reused within 30 min)
-                    await sendOrderFlow(sock, sender, pushName, user);
+                    // SAFEST-FIRST: never blast the order-link/menu-image CTA at a
+                    // first-time contact on spec. If their first message already
+                    // shows order intent, go straight to the full flow (no added
+                    // friction for a customer who's ready to order). Otherwise send
+                    // ONLY a plain greeting + an explicit ask, and wait for them to
+                    // say the word before any promotional content goes out.
+                    if (/^(menu|order|food|start|hi|hello|hey)$/i.test(text.trim())) {
+                        await sendOrderFlow(sock, sender, pushName, user);
+                        user.step = "WEBVIEW";
+                        return;
+                    }
 
-                    // Set user step to WEBVIEW so bot knows they're ordering via webview
-                    user.step = "WEBVIEW";
+                    let plainWelcome = (user?.hasProfile && user?.name)
+                        ? `Hi *${user.name}*! 👋 Welcome back to *${OUTLET_NAME}*.`
+                        : `Hi *${pushName}*! 👋 This is *${OUTLET_NAME}*'s WhatsApp order line.`;
+                    plainWelcome += `\n\nTo order food, reply with *Menu*, *Order*, or *Food* and I'll send the link right away.`;
+                    await sock.sendMessage(sender, { text: plainWelcome });
+                    user.step = "AWAITING_ORDER_INTENT";
                     return;
+                }
+
+                // AWAITING_ORDER_INTENT: greeted, but hasn't confirmed they want to
+                // order yet. Only an explicit trigger word escalates to the full
+                // menu/order-link flow — anything else gets at most a quiet repeat
+                // of the same ask, never the promotional CTA. This is the gate that
+                // stops a confused/annoyed reply ("who is this", "not interested")
+                // from ever reaching the order-link send.
+                if (user.step === "AWAITING_ORDER_INTENT") {
+                    if (/^(menu|order|food|start)$/i.test(text.trim())) {
+                        const store = await getData("settings/Store", OUTLET);
+                        await resendMenuCTA(sock, sender, user, store, null);
+                        user.step = "WEBVIEW";
+                        return;
+                    }
+                    // Already handled by the opt-out/rejection block above for exact
+                    // matches; anything else just gets one quiet nudge, no CTA.
+                    return sock.sendMessage(sender, { text: `Reply *Menu* whenever you'd like to order — no rush!` });
                 }
 
                 // WEBVIEW STEP: User is ordering via webview link
