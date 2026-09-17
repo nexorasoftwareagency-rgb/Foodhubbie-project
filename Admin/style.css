@@ -8862,9 +8862,9 @@ body.pos-selection-mode .walkin-picker {
 .browser-category-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px;
-    border-radius: 10px;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 8px;
     cursor: pointer;
     transition: all var(--transition-fast);
     border: 1px solid transparent;
@@ -8886,8 +8886,8 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .browser-category-item .cat-thumb {
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     border-radius: 6px;
     object-fit: cover;
     flex-shrink: 0;
@@ -8900,7 +8900,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .browser-category-item .cat-name {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
@@ -8909,7 +8909,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .browser-category-item .cat-count {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-muted);
 }
 
