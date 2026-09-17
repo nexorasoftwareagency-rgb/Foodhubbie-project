@@ -1559,13 +1559,13 @@
 
                             <div id="browserDishGrid" class="browser-dish-grid">
 
-                                <div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:var(--text-muted);">
+                                <div class="skeleton" style="aspect-ratio:1/1;border-radius:10px;margin-bottom:8px"></div>
 
-                                    <i data-lucide="folder-open" style="width:48px;height:48px;margin:0 auto 16px;opacity:0.5"></i>
+                                <div class="skeleton" style="aspect-ratio:1/1;border-radius:10px;margin-bottom:8px"></div>
 
-                                    <p>Select a category on the left to view and manage its dishes</p>
+                                <div class="skeleton" style="aspect-ratio:1/1;border-radius:10px;margin-bottom:8px"></div>
 
-                                </div>
+                                <div class="skeleton" style="aspect-ratio:1/1;border-radius:10px;margin-bottom:8px"></div>
 
                             </div>
 
@@ -4490,25 +4490,16 @@
 
         
 
-                    <h3 class="panel-title mt-24" data-i18n="promo.options.heading">3. Delivery options</h3>
+                    <!-- MESSAGE OPTIONS -->
+                    <h3 class="panel-title mt-24">3. Message options</h3>
 
                     <div class="promo-options-grid">
 
                         <div class="form-group">
 
-                            <label for="promoDelay" data-i18n="promo.options.delay">Delay between sends (seconds)</label>
-
-                            <input type="number" id="promoDelay" min="1" max="30" step="1" value="2" class="search-input-group" aria-label="Delay between sends">
-
-                            <span class="text-muted-small" data-i18n="promo.options.delayHint">Per-message delay in seconds. A 60-120s pause happens automatically every 30 sends.</span>
-
-                        </div>
-
-                        <div class="form-group">
-
                             <label class="checkbox-label">
 
-                                <input type="checkbox" id="promoGenerateCoupons"> <span data-i18n="promo.options.coupons">Generate a unique coupon code per recipient</span>
+                                <input type="checkbox" id="promoSendStopMsg"> <span>Append "Reply STOP to unsubscribe" footer</span>
 
                             </label>
 
@@ -4526,35 +4517,8 @@
 
                     </div>
 
-                    <!-- MESSAGE OPTIONS -->
-                    <h3 class="panel-title mt-24">4. Message options</h3>
-
-                    <div class="promo-options-grid">
-
-                        <div class="form-group">
-
-                            <label class="checkbox-label">
-
-                                <input type="checkbox" id="promoSendStopMsg"> <span>Append "Reply STOP to unsubscribe" footer</span>
-
-                            </label>
-
-                        </div>
-
-                        <div class="form-group">
-
-                            <label for="promoClosingMsg">Closing message (optional)</label>
-
-                            <textarea id="promoClosingMsg" rows="3" maxlength="500" class="search-input-group" placeholder="Thank you for being a valued customer!"></textarea>
-
-                            <span class="text-muted-small">Appended after the template, before the STOP footer.</span>
-
-                        </div>
-
-                    </div>
-
                     <!-- MENU IMAGE -->
-                    <h3 class="panel-title mt-24">5. Menu image (optional)</h3>
+                    <h3 class="panel-title mt-24">4. Menu image (optional)</h3>
 
                     <div class="form-group">
 

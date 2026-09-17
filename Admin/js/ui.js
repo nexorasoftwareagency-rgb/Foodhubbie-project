@@ -186,6 +186,7 @@ export const switchTab = async (tabId, skipHistory = false) => {
         if (tabId !== 'discounts') cleanupTasks.push(mod('discountsReports').then(m => m.closeDiscountsReports?.()));
         if (tabId !== 'tables') cleanupTasks.push(mod('tables').then(m => m.cleanupTables?.()));
         if (tabId !== 'chat') cleanupTasks.push(mod('chat').then(m => m.cleanupChat?.()));
+        if (tabId !== 'menu-browser') cleanupTasks.push(mod('menu-browser').then(m => m.cleanupMenuBrowser?.()));
         await Promise.allSettled(cleanupTasks);
         console.log(`[SWITCH] cleanup done for ${tabId}`);
 

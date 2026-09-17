@@ -85,36 +85,38 @@ function _renderCategorySidebar() {
     // "All" item
     const allDiv = document.createElement('div');
     allDiv.className = `browser-category-item${_selectedCat === null ? ' active' : ''}`;
+    allDiv.setAttribute('role', 'button');
+    allDiv.setAttribute('tabindex', '0');
+    allDiv.setAttribute('aria-pressed', _selectedCat === null ? 'true' : 'false');
     allDiv.innerHTML = `
-        <div style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#FFB347,#E84908);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <div class="cat-thumb" style="background:linear-gradient(135deg,#FFB347,#E84908);display:flex;align-items:center;justify-content:center;">
             <i data-lucide="layout-grid" style="width:18px;height:18px;color:#fff;"></i>
         </div>
-        <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:var(--text-main);">All Categories</div>
-            <div style="font-size:11px;color:var(--text-muted);">${(state.dishes || []).length} items</div>
+        <div class="cat-info">
+            <div class="cat-name" title="All Categories">All Categories</div>
+            <div class="cat-count">${(state.dishes || []).length} items</div>
         </div>`;
-    allDiv.addEventListener('click', () => {
-        _selectedCat = null;
-        _renderCategorySidebar();
-        _renderDishes();
-    });
+    const selectAll = () => { _selectedCat = null; _renderCategorySidebar(); _renderDishes(); };
+    allDiv.addEventListener('click', selectAll);
+    allDiv.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectAll(); } });
     container.appendChild(allDiv);
 
     filtered.forEach(cat => {
         const dishCount = (state.dishes || []).filter(d => d.category === cat.name).length;
         const div = document.createElement('div');
         div.className = `browser-category-item${_selectedCat === cat.name ? ' active' : ''}`;
+        div.setAttribute('role', 'button');
+        div.setAttribute('tabindex', '0');
+        div.setAttribute('aria-pressed', _selectedCat === cat.name ? 'true' : 'false');
         div.innerHTML = `
-            <img src="${cat.image || 'https://placehold.co/100/orange/white?text=C'}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;flex-shrink:0;">
-            <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:600;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(cat.name)}</div>
-                <div style="font-size:11px;color:var(--text-muted);">${dishCount} item${dishCount !== 1 ? 's' : ''}</div>
+            <img src="${escapeHtml(cat.image || 'https://placehold.co/100/orange/white?text=C')}" class="cat-thumb">
+            <div class="cat-info">
+                <div class="cat-name" title="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</div>
+                <div class="cat-count">${dishCount} item${dishCount !== 1 ? 's' : ''}</div>
             </div>`;
-        div.addEventListener('click', () => {
-            _selectedCat = cat.name;
-            _renderCategorySidebar();
-            _renderDishes();
-        });
+        const select = () => { _selectedCat = cat.name; _renderCategorySidebar(); _renderDishes(); };
+        div.addEventListener('click', select);
+        div.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(); } });
         container.appendChild(div);
     });
 
@@ -166,11 +168,11 @@ function _renderDishes() {
         card.setAttribute('data-dish-id', d.id);
         card.innerHTML = `
             <div class="browser-dish-img">
-                <img src="${d.image || 'https://placehold.co/200/orange/white?text=Dish'}" alt="${escapeHtml(d.name)}">
+                <img src="${escapeHtml(d.image || 'https://placehold.co/200/orange/white?text=Dish')}" alt="${escapeHtml(d.name)}">
                 <div class="browser-dish-stock ${d.stock ? 'available' : 'out'}">${d.stock ? 'Available' : 'Out of Stock'}</div>
             </div>
             <div class="browser-dish-info">
-                <div class="browser-dish-name">${escapeHtml(d.name)}</div>
+                <div class="browser-dish-name" title="${escapeHtml(d.name)}">${escapeHtml(d.name)}</div>
                 <div class="browser-dish-category">${escapeHtml(d.category || 'General')}</div>
                 <div class="browser-dish-pricing">
                     ${d.sizes
