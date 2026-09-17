@@ -1278,6 +1278,64 @@ async function sendDailyReportSafely(dateOverride = null) {
             // before the "Order Placed" message goes out below.
             if (order.source === "webview_delivery" && !order.stockDeducted) {
                 try {
+                    // --- SAFEST-FIRST: server-side discount re-validation ---
+                    // This order was written directly by the customer's browser
+                    // (menu/js/delivery-order.js), which computed discount/total
+                    // client-side with nothing re-checking it server-side. Re-run
+                    // the SAME evaluation the bot already trusts for WhatsApp
+                    // orders, and overwrite whatever the client sent with the
+                    // server-computed truth before anything (admin notification,
+                    // stats, invoice) treats it as final.
+                    try {
+                        const cleanPhoneForDiscount = order.phone ? String(order.phone).replace(/\D/g, "").slice(-10) : null;
+                        const customerForDiscount = cleanPhoneForDiscount ? await getData(`customers/${cleanPhoneForDiscount}`, order.outlet) : null;
+                        const claimedCouponCode = (order.discountSource || '').startsWith('coupon:')
+                            ? order.discountSource.slice('coupon:'.length)
+                            : null;
+                        // channel: 'website' — matches the "Website/App only" option
+                        // in the discount editor; a discount scoped to 'whatsapp' or
+                        // 'pos' only will correctly NOT apply here even if the
+                        // client-side check let it through before this fix.
+                        const verified = await discountEngine.evaluateDiscount({
+                            OUTLET: order.outlet,
+                            customer: customerForDiscount,
+                            subtotal: order.subtotal,
+                            couponCode: claimedCouponCode,
+                            cart: order.items,
+                            channel: 'website'
+                        });
+                        const correctedDiscount = verified ? verified.amount : 0;
+                        const correctedTotal = Math.max(0, Math.round((order.subtotal || 0) + (order.deliveryFee || 0) - correctedDiscount));
+                        if (correctedDiscount !== (order.discount || 0) || correctedTotal !== (order.total || 0)) {
+                            console.warn(`[WebOrder] Discount mismatch on ${snap.key}: client claimed ₹${order.discount || 0} (total ₹${order.total}), server verified ₹${correctedDiscount} (total ₹${correctedTotal}). Correcting.`);
+                        }
+                        const correction = verified ? {
+                            discount: correctedDiscount,
+                            discountId: verified.discount.id,
+                            discountLabel: verified.label,
+                            discountSource: verified.source,
+                            discountMode: verified.discount.mode || 'fixed',
+                            discountValue: verified.discount.value || 0,
+                            discountGlobalLimit: verified.discount.globalLimit || 0,
+                            total: correctedTotal
+                        } : {
+                            discount: 0, discountId: null, discountLabel: null, discountSource: null,
+                            discountMode: null, discountValue: 0, discountGlobalLimit: 0,
+                            total: correctedTotal
+                        };
+                        await updateData(`orders/${snap.key}`, correction, order.outlet);
+                        Object.assign(order, correction); // keep everything below consistent with the verified truth
+                    } catch (discErr) {
+                        console.error("[WebOrder] Discount re-validation failed:", discErr);
+                        // Fail safe: if verification itself breaks, don't honor an
+                        // unverified client-supplied discount — zero it out rather
+                        // than risk giving away money on a check we couldn't run.
+                        const safeTotal = Math.round((order.subtotal || 0) + (order.deliveryFee || 0));
+                        const correction = { discount: 0, discountId: null, discountLabel: null, discountSource: null, discountMode: null, discountValue: 0, discountGlobalLimit: 0, total: safeTotal };
+                        await updateData(`orders/${snap.key}`, correction, order.outlet).catch(() => {});
+                        Object.assign(order, correction);
+                    }
+
                     deductInventoryStock(currentSock, order.items, order.outlet).catch(e =>
                         console.error("[WebOrder] Stock deduction failed:", e));
                     await updateData(`orders/${snap.key}`, { stockDeducted: true }, order.outlet);
