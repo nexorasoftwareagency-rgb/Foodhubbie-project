@@ -399,7 +399,7 @@ export async function attachOrderToSession(orderId, orderTotals, groupId) {
         sess.tax = (sess.tax || 0) + (orderTotals.tax || 0);
         sess.serviceCharge = (sess.serviceCharge || 0) + (orderTotals.serviceCharge || 0);
         // Apply discount per order onto session discount
-        sess.discount = (sess.discount || 0) + (orderTotals.discountAmount || 0);
+        sess.discount = (sess.discount || 0) + (orderTotals.discount || 0);
         sess.grandTotal = (sess.grandTotal || 0) + (orderTotals.total || 0);
         sess.lastActivityAt = now;
         sess.expiresAt = now + 7200000;

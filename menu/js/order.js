@@ -96,7 +96,7 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
     };
     // --- Discount (if applied) ---
     if (discountAmount > 0) {
-        orderPayload.discountAmount = discountAmount;
+        orderPayload.discount = discountAmount;
         orderPayload.discountLabel = discount.label || '';
         orderPayload.discountSource = discount.source || '';
         orderPayload.discountId = discount.discountId || '';
@@ -112,7 +112,7 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
     await set(newOrderRef, writeData);
 
     // Fold this order's totals into the session's running bill
-    const attached = await attachOrderToSession(newOrderRef.key, { subtotal, tax, serviceCharge, total, discountAmount }, Session.currentGroupId);
+    const attached = await attachOrderToSession(newOrderRef.key, { subtotal, tax, serviceCharge, total, discount: discountAmount }, Session.currentGroupId);
     if (!attached) {
         // Transaction aborted: session/group is no longer active. Order is orphaned in /orders.
         update(newOrderRef, { status: 'Cancelled', cancelledReason: 'Session inactive at placement' }).catch(() => {});
