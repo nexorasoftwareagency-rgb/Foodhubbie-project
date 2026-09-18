@@ -3470,6 +3470,7 @@ body {
         top: 0;
         height: 100vh;
         overflow-y: auto;
+        overflow-x: hidden;
         width: var(--sidebar-width) !important;
         min-width: var(--sidebar-width) !important;
         transition: width var(--transition-normal);
