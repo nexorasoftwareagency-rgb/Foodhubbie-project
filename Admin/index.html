@@ -4262,399 +4262,231 @@
             </div>
 
             <!-- PROMOTIONS TAB (must live inside .main, alongside other tab-content) -->
-
             <div id="tab-promotions" class="tab-content hidden">
 
                 <div id="promotionsOfflineBanner" class="offline-banner hidden" role="alert" aria-live="polite">
-
                     <i data-lucide="wifi-off" class="icon-16"></i>
-
                     <span data-i18n="promo.offlineBanner">Bot is offline — campaigns cannot start. Messages already queued will resume automatically once the bot reconnects.</span>
-
                 </div>
 
-        
-
-                <div class="promo-page-header">
-
-                    <div>
-
+                <!-- STATUS BAR -->
+                <div class="promo-status-bar">
+                    <div class="promo-status-left">
                         <h2 class="panel-title mb-0" data-i18n="promo.title">Promotional Campaigns</h2>
-
-                        <p class="text-muted-small mt-4" data-i18n="promo.subtitle">Compose, schedule and monitor WhatsApp campaigns to your customers.</p>
-
+                        <p class="text-muted-small mt-4" data-i18n="promo.subtitle">Compose, schedule and monitor WhatsApp campaigns.</p>
                     </div>
-
-                    <button class="btn-text" data-action="openPromotionsGuide" title="How to use the Promotions page" aria-label="How to use the Promotions page">
-
-                        <i data-lucide="help-circle"></i> <span data-i18n="promo.howToUse">How to use</span>
-
-                    </button>
-
+                    <div class="promo-status-right">
+                        <div id="promoKillWidget" class="promo-kill-widget">
+                            <span class="promo-kill-label" data-i18n="promo.status.sending">Sending</span>
+                            <label class="promo-switch">
+                                <input type="checkbox" id="promoKillWidgetToggle" checked>
+                                <span class="promo-slider"></span>
+                            </label>
+                            <span id="promoKillWidgetStatus" class="promo-kill-status">ON</span>
+                        </div>
+                        <button class="btn-text" data-action="openPromotionsGuide" title="How to use" aria-label="How to use promotions">
+                            <i data-lucide="help-circle"></i>
+                        </button>
+                    </div>
                 </div>
 
-        
+                <!-- COMPOSE SECTION — two-column on desktop -->
+                <div class="promo-compose-section">
 
-                <div class="promo-mode-tabs" role="tablist">
+                    <!-- LEFT: Message -->
+                    <div class="promo-compose-msg">
+                        <div class="promo-section-label">
+                            <i data-lucide="message-square" class="icon-16"></i>
+                            <span>Message</span>
+                        </div>
 
-                    <button class="promo-mode-tab active" role="tab" data-mode="now" data-i18n="promo.tab.sendNow">Send Now</button>
-
-                    <button class="promo-mode-tab" role="tab" data-mode="schedule" data-i18n="promo.tab.schedule">Schedule</button>
-
-                    <button class="promo-mode-tab" role="tab" data-mode="active" data-i18n="promo.tab.active">Active</button>
-
-                    <button class="promo-mode-tab" role="tab" data-mode="history" data-i18n="promo.tab.history">History</button>
-
-                </div>
-
-        
-
-                <!-- COMPOSE PANE -->
-
-                <div id="promoComposePane" class="panel mt-16">
-
-                    <h3 class="panel-title" data-i18n="promo.compose.heading">1. Compose your message</h3>
-
-        
-
-                    <div class="promo-options-grid">
-
-                        <div class="form-group">
-
+                        <div class="promo-inline-toggles">
                             <label class="checkbox-label">
-
-                                <input type="checkbox" id="promoGreeting"> <span data-i18n="promo.compose.greeting">Start with "Hi {name}," greeting</span>
-
+                                <input type="checkbox" id="promoGreeting"> <span data-i18n="promo.compose.greeting">Hi {name} greeting</span>
                             </label>
-
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="promoAttachMenu"> <span data-i18n="promo.compose.attachMenu">Menu footer</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="promoSendStopMsg"> <span>STOP opt-out</span>
+                            </label>
                         </div>
 
                         <div class="form-group">
-
-                            <label class="checkbox-label">
-
-                                <input type="checkbox" id="promoAttachMenu"> <span data-i18n="promo.compose.attachMenu">Attach menu footer (appended to your message)</span>
-
-                            </label>
-
-                        </div>
-
-                    </div>
-
-        
-
-                    <div class="form-group">
-
-                        <label for="promoTemplate" data-i18n="promo.compose.template">Message template</label>
-
-                        <div class="flex-between mb-4">
-                            <span></span>
-                            <button type="button" class="btn-secondary btn-sm" data-action="pickPromoTemplate"><i data-lucide="layout-template"></i> Choose Template</button>
-                        </div>
-
-                        <textarea id="promoTemplate" rows="6" class="search-input-group" maxlength="1500"
-
-                            placeholder="Hey {name}! 🎉 Enjoy 20% off on your first order! 🍕✨"
-
-                            data-i18n-placeholder="promo.compose.templatePlaceholder"
-
-                            aria-label="Message template"></textarea>
-
-                        <div class="flex-between mt-4">
-
-                            <span class="text-muted-small" data-i18n="promo.compose.tokensHint">Tokens: {name} {phone} {lastOrderDate} {storeName}</span>
-
-                            <span id="promoCharCount" class="text-muted-small">0 / 1500</span>
-
-                        </div>
-
-                    </div>
-
-        
-
-                    <div id="promoMenuBox" class="form-group hidden">
-
-                        <label for="promoMenuText" data-i18n="promo.compose.menuText">Menu footer (appended to your message when "Attach menu" is on)</label>
-
-                        <textarea id="promoMenuText" rows="6" class="search-input-group" maxlength="1200"
-
-                            placeholder="🍕 *Our Bestsellers* — Margherita ₹199, Farmhouse ₹299, Veggie Supreme ₹349&#10;🥤 *Drinks* — Coke ₹40, Lime Soda ₹60"
-
-                            aria-label="Menu footer text"></textarea>
-
-                        <span class="text-muted-small" data-i18n="promo.compose.menuHint">Tip: keep it short — it's appended to your message.</span>
-
-                    </div>
-
-        
-
-                    <div class="form-group">
-
-                        <label data-i18n="promo.compose.media">Attach image (optional)</label>
-
-                        <div class="flex-row flex-gap-10 flex-center flex-wrap-mobile">
-
-                            <input type="file" id="promoMediaInput" accept="image/*" class="hidden" aria-hidden="true">
-
-                            <button class="btn-secondary" data-action="pickPromoMedia">
-
-                                <i data-lucide="image"></i> <span data-i18n="promo.compose.chooseImage">Choose Image</span>
-
-                            </button>
-
-                            <div id="promoMediaPreview" class="promo-media-preview hidden">
-
-                                <img id="promoMediaImg" alt="Selected image preview"
-                                     src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23f1f5f9' width='100' height='100' rx='8'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='%2394a3b8' font-size='10' font-family='sans-serif'%3EPreview%3C/text%3E%3C/svg%3E">
-
-                                <button class="btn-text text-danger" data-action="clearPromoMedia" aria-label="Remove image">
-
-                                    <i data-lucide="x"></i>
-
-                                </button>
-
+                            <div class="flex-between mb-4">
+                                <label for="promoTemplate" class="text-muted-small" data-i18n="promo.compose.template">Message template</label>
+                                <button type="button" class="btn-secondary btn-sm" data-action="pickPromoTemplate"><i data-lucide="layout-template"></i> Templates</button>
                             </div>
-
-                        </div>
-
-                    </div>
-
-        
-
-                    <h3 class="panel-title mt-24" data-i18n="promo.recipients.heading">2. Choose recipients</h3>
-
-                    <div class="form-group">
-
-                        <label for="promoRecipientFilter" data-i18n="promo.recipients.filter">Audience</label>
-
-                        <select id="promoRecipientFilter" class="search-input-group" aria-label="Recipient audience">
-
-                            <option value="all_customers" data-i18n="promo.recipients.all">All customers with promotional consent</option>
-
-                            <option value="recent_30d" data-i18n="promo.recipients.recent30">Active in last 30 days</option>
-
-                            <option value="upload" data-i18n="promo.recipients.upload">Custom list (Excel/CSV upload)</option>
-
-                        </select>
-
-                    </div>
-
-        
-
-                    <div id="promoCsvBox" class="form-group hidden">
-
-                        <label for="promoCsvInput" data-i18n="promo.recipients.csvLabel">Upload Excel (.xlsx) or CSV — one phone per row, header optional. Auto-detects the phone column.</label>
-
-                        <div class="flex-row flex-gap-10 flex-center flex-wrap-mobile">
-
-                            <input type="file" id="promoCsvInput" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" class="hidden" aria-hidden="true">
-
-                            <button class="btn-secondary" data-action="pickPromoCsv">
-
-                                <i data-lucide="file-spreadsheet"></i> <span data-i18n="promo.recipients.chooseCsv">Choose Excel/CSV</span>
-
-                            </button>
-
-                            <button class="btn-secondary" data-action="downloadPromoCsv" title="Download sample CSV template">
-
-                                <i data-lucide="download"></i> <span>Sample CSV</span>
-
-                            </button>
-
-                            <button class="btn-secondary" data-action="downloadPromoXlsx" title="Download sample XLSX template">
-
-                                <i data-lucide="file-spreadsheet"></i> <span>Sample XLSX</span>
-
-                            </button>
-
-                            <span id="promoCsvName" class="text-muted-small">—</span>
-
-                            <span id="promoCsvCount" class="text-muted-small"></span>
-
-                        </div>
-
-                    </div>
-
-        
-
-                    <div class="flex-between flex-center flex-wrap-mobile mt-8">
-
-                        <span class="text-muted-small">
-
-                            <strong id="promoRecipientCount">0</strong> <span data-i18n="promo.recipients.count">recipients selected</span>
-
-                            <span id="promoRecipientCap" class="text-warning ml-8 hidden" data-i18n="promo.recipients.capWarn">Capped at 300</span>
-
-                        </span>
-
-                        <span class="text-muted-small" data-i18n="promo.recipients.consentNote">Only customers with promotional consent will receive the message.</span>
-
-                    </div>
-
-        
-
-                    <!-- MESSAGE OPTIONS -->
-                    <h3 class="panel-title mt-24">3. Message options</h3>
-
-                    <div class="promo-options-grid">
-
-                        <div class="form-group">
-
-                            <label class="checkbox-label">
-
-                                <input type="checkbox" id="promoSendStopMsg"> <span>Append "Reply STOP to unsubscribe" footer</span>
-
-                            </label>
-
-                        </div>
-
-                        <div class="form-group">
-
-                            <label for="promoTestPhone" data-i18n="promo.options.testPhone">Send-test phone (your WhatsApp, 10 digits)</label>
-
-                            <input type="tel" id="promoTestPhone" maxlength="10" inputmode="numeric" pattern="[0-9]{10}" placeholder="9876543210" class="search-input-group" aria-label="Send-test phone number">
-
-                            <span class="text-muted-small" data-i18n="promo.options.testPhoneHint">Used by "Send test to me". Falls back to admins/{uid}/phone if blank.</span>
-
-                        </div>
-
-                    </div>
-
-                    <!-- MENU IMAGE -->
-                    <h3 class="panel-title mt-24">4. Menu image (optional)</h3>
-
-                    <div class="form-group">
-
-                        <label class="checkbox-label">
-
-                            <input type="checkbox" id="promoAttachMenuImage"> <span>Attach the outlet menu image (sent with your message from Settings → Bot Aesthetics)</span>
-
-                        </label>
-
-                        <div id="promoMenuImageBox" class="hidden mt-8">
-
-                            <div id="promoMenuImagePreview" style="position:relative;display:inline-block;">
-
-                                <img id="promoMenuImageImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='120'%3E%3Crect fill='%23f1f5f9' width='180' height='120'/%3E%3Ctext x='90' y='65' text-anchor='middle' fill='%2394a3b8' font-size='12'%3ENo image%3C/text%3E%3C/svg%3E" alt="Menu image preview" style="max-width:180px;max-height:120px;border-radius:8px;object-fit:cover;border:1px solid var(--border-color);">
-
+                            <textarea id="promoTemplate" rows="7" class="search-input-group" maxlength="1500"
+                                placeholder="Hey {name}! 🎉 Enjoy 20% off on your first order! 🍕✨"
+                                data-i18n-placeholder="promo.compose.templatePlaceholder"
+                                aria-label="Message template"></textarea>
+                            <div class="flex-between mt-4">
+                                <span class="text-muted-small" data-i18n="promo.compose.tokensHint">Tokens: {name} {phone} {lastOrderDate} {storeName}</span>
+                                <span id="promoCharCount" class="text-muted-small">0 / 1500</span>
                             </div>
-
-                            <p class="text-muted-small mt-4">Uses the menu image uploaded in <strong>Settings → Bot Aesthetics → Menu Image</strong>.</p>
-
                         </div>
 
-                    </div>
+                        <div id="promoMenuBox" class="form-group hidden">
+                            <label for="promoMenuText" class="text-muted-small" data-i18n="promo.compose.menuText">Menu footer text</label>
+                            <textarea id="promoMenuText" rows="4" class="search-input-group" maxlength="1200"
+                                placeholder="🍕 *Bestsellers* — Margherita ₹199, Farmhouse ₹299"
+                                aria-label="Menu footer text"></textarea>
+                        </div>
 
-                    <!-- SCHEDULE SUB-PANE -->
-
-                    <div id="promoScheduleBox" class="form-group hidden mt-8">
-
-                        <label for="promoRunAt" data-i18n="promo.options.scheduleLabel">Run at</label>
-
-                        <input type="datetime-local" id="promoRunAt" class="search-input-group" aria-label="Schedule date and time">
-
-                        <div class="form-group mt-8">
-
-                            <label data-i18n="promo.options.quietHours">Quiet hours (no sends)</label>
-
+                        <div class="form-group">
+                            <label class="text-muted-small" data-i18n="promo.compose.media">Attach image</label>
                             <div class="flex-row flex-gap-10 flex-center">
-
-                                <input type="number" id="promoQuietStart" min="0" max="23" placeholder="Start hour" class="search-input-group" aria-label="Quiet hours start">
-
-                                <span>—</span>
-
-                                <input type="number" id="promoQuietEnd" min="0" max="23" placeholder="End hour" class="search-input-group" aria-label="Quiet hours end">
-
+                                <input type="file" id="promoMediaInput" accept="image/*" class="hidden" aria-hidden="true">
+                                <button class="btn-secondary btn-sm" data-action="pickPromoMedia">
+                                    <i data-lucide="image"></i> <span data-i18n="promo.compose.chooseImage">Choose Image</span>
+                                </button>
+                                <div id="promoMediaPreview" class="promo-media-preview hidden">
+                                    <img id="promoMediaImg" alt="Preview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect fill='%23f1f5f9' width='60' height='60' rx='6'/%3E%3C/svg%3E">
+                                    <button class="btn-text text-danger" data-action="clearPromoMedia" aria-label="Remove"><i data-lucide="x"></i></button>
+                                </div>
                             </div>
-
                         </div>
 
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="promoAttachMenuImage"> <span>Attach outlet menu image</span>
+                            </label>
+                            <div id="promoMenuImageBox" class="hidden mt-8">
+                                <img id="promoMenuImageImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='80'%3E%3Crect fill='%23f1f5f9' width='120' height='80'/%3E%3C/svg%3E" alt="Menu image" style="max-width:120px;max-height:80px;border-radius:8px;object-fit:cover;border:1px solid var(--border-color);">
+                            </div>
+                        </div>
                     </div>
 
-        
+                    <!-- RIGHT: Recipients & Schedule -->
+                    <div class="promo-compose-rcpt">
+                        <div class="promo-section-label">
+                            <i data-lucide="users" class="icon-16"></i>
+                            <span>Recipients</span>
+                        </div>
 
-                    <div class="promo-action-row mt-24 flex-row flex-gap-10 flex-wrap-mobile">
+                        <div class="form-group">
+                            <label for="promoRecipientFilter" class="text-muted-small" data-i18n="promo.recipients.filter">Audience</label>
+                            <select id="promoRecipientFilter" class="search-input-group" aria-label="Recipient audience">
+                                <option value="all_customers" data-i18n="promo.recipients.all">All customers with consent</option>
+                                <option value="recent_30d" data-i18n="promo.recipients.recent30">Active in last 30 days</option>
+                                <option value="upload" data-i18n="promo.recipients.upload">Custom list (Excel/CSV)</option>
+                            </select>
+                        </div>
 
+                        <div id="promoCsvBox" class="form-group hidden">
+                            <div class="flex-row flex-gap-8 flex-center flex-wrap-mobile">
+                                <input type="file" id="promoCsvInput" accept=".xlsx,.xls,.csv" class="hidden" aria-hidden="true">
+                                <button class="btn-secondary btn-sm" data-action="pickPromoCsv"><i data-lucide="file-spreadsheet"></i> Upload</button>
+                                <button class="btn-text btn-sm" data-action="downloadPromoCsv" title="Sample CSV">CSV</button>
+                                <button class="btn-text btn-sm" data-action="downloadPromoXlsx" title="Sample XLSX">XLSX</button>
+                            </div>
+                            <div class="flex-between mt-8">
+                                <span id="promoCsvName" class="text-muted-small">—</span>
+                                <span id="promoCsvCount" class="text-muted-small"></span>
+                            </div>
+                        </div>
+
+                        <div class="promo-recipient-count">
+                            <strong id="promoRecipientCount">0</strong>
+                            <span class="text-muted-small"> recipients</span>
+                            <span id="promoRecipientCap" class="text-warning ml-8 hidden">Capped at 300</span>
+                        </div>
+
+                        <hr class="promo-divider">
+
+                        <div class="promo-section-label">
+                            <i data-lucide="settings" class="icon-16"></i>
+                            <span>Options</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="promoTestPhone" class="text-muted-small">Test phone (10 digits)</label>
+                            <input type="tel" id="promoTestPhone" maxlength="10" inputmode="numeric" pattern="[0-9]{10}" placeholder="9876543210" class="search-input-group" aria-label="Test phone">
+                            <span class="text-muted-small" style="font-size:11px;">Falls back to admin phone if blank.</span>
+                        </div>
+
+                        <!-- Schedule (hidden by default) -->
+                        <div id="promoScheduleBox" class="hidden">
+                            <hr class="promo-divider">
+                            <div class="promo-section-label">
+                                <i data-lucide="calendar" class="icon-16"></i>
+                                <span>Schedule</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="promoRunAt" class="text-muted-small">Run at</label>
+                                <input type="datetime-local" id="promoRunAt" class="search-input-group" aria-label="Schedule date and time">
+                            </div>
+                            <div class="form-group">
+                                <label class="text-muted-small">Quiet hours (no sends)</label>
+                                <div class="flex-row flex-gap-10 flex-center">
+                                    <input type="number" id="promoQuietStart" min="0" max="23" placeholder="Start" class="search-input-group" aria-label="Quiet start">
+                                    <span>—</span>
+                                    <input type="number" id="promoQuietEnd" min="0" max="23" placeholder="End" class="search-input-group" aria-label="Quiet end">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACTION BAR -->
+                <div class="promo-action-bar">
+                    <div class="promo-action-left">
+                        <div class="promo-mode-switcher" role="tablist">
+                            <button class="promo-mode-pill active" role="tab" data-mode="now">Send Now</button>
+                            <button class="promo-mode-pill" role="tab" data-mode="schedule">Schedule</button>
+                        </div>
                         <button class="btn-primary" id="btnPromoLaunch" disabled>
-
                             <i data-lucide="send"></i> <span data-i18n="promo.actions.launch">Launch campaign</span>
-
                         </button>
-
+                    </div>
+                    <div class="promo-action-right">
                         <button class="btn-secondary" data-action="sendTestPromo">
-
-                            <i data-lucide="message-circle"></i> <span data-i18n="promo.actions.sendTest">Send test to me</span>
-
+                            <i data-lucide="message-circle"></i> <span>Send test</span>
                         </button>
-
                         <button class="btn-secondary" data-action="previewPromo">
-
-                            <i data-lucide="eye"></i> <span data-i18n="promo.actions.preview">Preview</span>
-
+                            <i data-lucide="eye"></i> <span>Preview</span>
                         </button>
-
                     </div>
-
                 </div>
 
-        
-
-                <!-- ACTIVE PANE -->
-
-                <div id="promoActivePane" class="panel mt-16 hidden">
-
-                    <div class="flex-between flex-center flex-wrap-mobile">
-
-                        <h3 class="panel-title mb-0" data-i18n="promo.active.heading">Active & recent campaigns</h3>
-
-                        <button class="btn-danger" id="btnPromoKillAll" disabled>
-
-                            <i data-lucide="octagon"></i> <span data-i18n="promo.active.killAll">EMERGENCY STOP ALL</span>
-
-                        </button>
-
+                <!-- CAMPAIGNS DASHBOARD -->
+                <div class="promo-campaigns-section">
+                    <div class="promo-campaigns-header">
+                        <div class="promo-campaigns-tabs" role="tablist">
+                            <button class="promo-campaign-tab active" data-panel="active">Active</button>
+                            <button class="promo-campaign-tab" data-panel="history">History</button>
+                        </div>
+                        <div class="promo-campaigns-actions">
+                            <button class="btn-danger btn-sm" id="btnPromoKillAll" disabled>
+                                <i data-lucide="octagon"></i> <span>EMERGENCY STOP</span>
+                            </button>
+                            <button class="btn-secondary btn-sm" data-action="exportPromoCSV">
+                                <i data-lucide="download"></i> <span>Export</span>
+                            </button>
+                        </div>
                     </div>
 
-                    <div id="promoKillSwitchNote" class="text-muted-small mt-8" data-i18n="promo.active.killNote">When enabled, the bot will pause every active campaign before its next send.</div>
-
-                    <div id="promoCampaignList" class="promo-campaign-list mt-16">
-
-                        <p class="text-muted-small" data-i18n="promo.active.empty">No campaigns yet. Compose your first one above.</p>
-
+                    <div id="promoActivePane" class="promo-campaign-panel">
+                        <div id="promoCampaignList" class="promo-campaign-list">
+                            <div class="promo-empty-state">
+                                <i data-lucide="megaphone" class="promo-empty-icon"></i>
+                                <p>No active campaigns. Compose and launch one above.</p>
+                            </div>
+                        </div>
                     </div>
 
-                </div>
-
-        
-
-                <!-- HISTORY PANE -->
-
-                <div id="promoHistoryPane" class="panel mt-16 hidden">
-
-                    <div class="flex-between flex-center flex-wrap-mobile">
-
-                        <h3 class="panel-title mb-0" data-i18n="promo.history.heading">Campaign history</h3>
-
-                        <button class="btn-secondary" data-action="exportPromoCSV">
-
-                            <i data-lucide="download"></i> <span data-i18n="promo.history.export">Export last campaign log</span>
-
-                        </button>
-
+                    <div id="promoHistoryPane" class="promo-campaign-panel hidden">
+                        <div id="promoHistoryList" class="promo-campaign-list">
+                            <div class="promo-empty-state">
+                                <i data-lucide="archive" class="promo-empty-icon"></i>
+                                <p>Past campaigns will appear here.</p>
+                            </div>
+                        </div>
                     </div>
-
-                    <div id="promoHistoryList" class="promo-campaign-list mt-16">
-
-                        <p class="text-muted-small" data-i18n="promo.history.empty">Past campaigns will appear here once completed.</p>
-
-                    </div>
-
                 </div>
 
             </div>
-
-        
-
             <!-- DISCOUNTS TAB (inside .main, after tab-promotions) -->
 
             <div id="tab-discounts" class="tab-content hidden">

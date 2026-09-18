@@ -30,6 +30,7 @@ let _mediaDataUrl = null;
 let _mediaFile = null;
 let _menuImageDataUrl = null;
 let _activeMode = 'now';
+let _activeCampaignPanel = 'active';
 let _killSwitchLocal = false;
 let _promoEnabledLocal = true;
 let _botOnline = true;
@@ -687,14 +688,9 @@ async function _exportCsv(id) {
 
 async function _switchMode(mode) {
     _activeMode = mode;
-    document.querySelectorAll('.promo-mode-tab').forEach(t => {
-        const isActive = t.dataset.mode === mode;
-        t.classList.toggle('active', isActive);
-        t.setAttribute('aria-selected', isActive);
+    document.querySelectorAll('.promo-mode-pill').forEach(t => {
+        t.classList.toggle('active', t.dataset.mode === mode);
     });
-    document.getElementById('promoComposePane')?.classList.toggle('hidden', mode === 'active' || mode === 'history');
-    document.getElementById('promoActivePane')?.classList.toggle('hidden', mode !== 'active');
-    document.getElementById('promoHistoryPane')?.classList.toggle('hidden', mode !== 'history');
     document.getElementById('promoScheduleBox')?.classList.toggle('hidden', mode !== 'schedule');
     const btn = document.getElementById('btnPromoLaunch');
     if (btn) {
@@ -706,6 +702,15 @@ async function _switchMode(mode) {
     }
 }
 
+function _switchCampaignPanel(panel) {
+    _activeCampaignPanel = panel;
+    document.querySelectorAll('.promo-campaign-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.panel === panel);
+    });
+    document.getElementById('promoActivePane')?.classList.toggle('hidden', panel !== 'active');
+    document.getElementById('promoHistoryPane')?.classList.toggle('hidden', panel !== 'history');
+}
+
 /* ============ BOOT ============ */
 
 export function loadPromotions() {
@@ -714,8 +719,11 @@ export function loadPromotions() {
     _setOfflineBanner(false);
     _refreshLaunchButton();
 
-    document.querySelectorAll('.promo-mode-tab').forEach(tab => {
+    document.querySelectorAll('.promo-mode-pill').forEach(tab => {
         tab.addEventListener('click', () => _switchMode(tab.dataset.mode));
+    });
+    document.querySelectorAll('.promo-campaign-tab').forEach(tab => {
+        tab.addEventListener('click', () => _switchCampaignPanel(tab.dataset.panel));
     });
 
     const tpl = document.getElementById('promoTemplate');
