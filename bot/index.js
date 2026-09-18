@@ -45,11 +45,12 @@ const {
     getISTDateInfo, getISTDateString, isShopOpen,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
-    isSocketDead, RateLimiter, isBlockedJid, OutboundTracker
+    isSocketDead, RateLimiter, isBlockedJid, OutboundTracker, BaileysSendTracker
 } = require('./utils');
 
 // ── Outbound tracker (best-effort analytics, never blocks sends) ──────
 const outboundTracker = new OutboundTracker(db, resolvePath);
+const baileysSendTracker = new BaileysSendTracker();
 const promo = require('./promotions');
 const { sendDailyReport, sendMonthlyReport, sendWeeklyReport } = require('./reports');
 const riderNotify = require('./rider');
@@ -64,6 +65,42 @@ const ADMIN_CACHE_TTL = 300000;
 
 // Blocked numbers cache — loaded from settings/Bot/blockedNumbers
 let blockedNumbers = new Set();
+
+// ── Ban Detection ──────────────────────────────────────────────────────
+let consecutiveSendFailures = 0;
+const BAN_DETECT_FAILURE_THRESHOLD = 10;
+const BAN_DETECT_FAILURE_WINDOW_MS = 5 * 60 * 1000; // 5 min window
+let _failureWindowStart = Date.now();
+
+async function _writeBanAlert(type, severity, message) {
+    try {
+        const alertPath = `bot/alerts/${OUTLET}`;
+        const ref = db.ref(resolvePath(alertPath));
+        await ref.push({ type, severity, message, createdAt: Date.now() });
+        console.log(`[BAN-DETECT] ${severity === 'critical' ? '🔴' : '🟡'} ${type}: ${message}`);
+    } catch (e) {
+        console.error('[BAN-DETECT] Failed to write alert:', e.message);
+    }
+}
+
+function _onSendSuccess() {
+    consecutiveSendFailures = 0;
+}
+
+function _onSendFailure() {
+    const now = Date.now();
+    if (now - _failureWindowStart > BAN_DETECT_FAILURE_WINDOW_MS) {
+        consecutiveSendFailures = 0;
+        _failureWindowStart = now;
+    }
+    consecutiveSendFailures++;
+    if (consecutiveSendFailures >= BAN_DETECT_FAILURE_THRESHOLD) {
+        _writeBanAlert('send_failure_spike', 'warning',
+            `${consecutiveSendFailures} consecutive send failures in ${((now - _failureWindowStart) / 60000).toFixed(1)} min`);
+        consecutiveSendFailures = 0;
+        _failureWindowStart = now;
+    }
+}
 const redisUrl = process.env.REDIS_URL || '';
 
 if (!redisUrl) {
@@ -473,10 +510,23 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
         console.log(`[BLOCKED] Skipping outbound to ${(to || '').replace(/[^0-9]/g, '').slice(-4)}`);
         return;
     }
+    // Baileys-specific per-recipient jitter (skip for Meta transport)
+    const _isBaileys = !sock.user?.id?.startsWith('meta:');
+    if (_isBaileys) {
+        const phone = (to || '').replace(/[^0-9]/g, '');
+        await baileysSendTracker.waitBeforeSend(phone);
+        baileysSendTracker.trackSend(phone);
+    }
     const finalMsg = skipContact ? text : await appendContactInfo(text, outlet);
     if (!image) {
-        await sock.sendMessage(to, { text: finalMsg });
-        outboundTracker.trackSend(outlet, trackType);
+        try {
+            await sock.sendMessage(to, { text: finalMsg });
+            outboundTracker.trackSend(outlet, trackType);
+            _onSendSuccess();
+        } catch (e) {
+            console.error("Text Send Error:", e.message || e);
+            _onSendFailure();
+        }
         return;
     }
     try {
@@ -489,14 +539,18 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
         }
         await sock.sendMessage(to, payload);
         outboundTracker.trackSend(outlet, trackType);
+        _onSendSuccess();
     } catch (err) {
         console.error("Image Send Error:", err.message || err);
+        _onSendFailure();
         // Fallback to text ONLY if it wasn't already a text message failure
         try {
             await sock.sendMessage(to, { text: finalMsg });
             outboundTracker.trackSend(outlet, trackType);
+            _onSendSuccess();
         } catch (textErr) {
             console.error("Critical Send Error:", textErr.message || textErr);
+            _onSendFailure();
         }
     }
 }
@@ -1409,29 +1463,31 @@ async function sendDailyReportSafely(dateOverride = null) {
     firebaseListenersInitialized = true;
     }
 
+    let _wasConnected = false;
+
     sock.ev.on('connection.update', (update) => {
         if (isMetaTransport) return; // Meta transport registers its own connection.update handler
         if (sock !== currentSock) return;
         const { connection, lastDisconnect, qr } = update;
+        if (qr && _wasConnected) {
+            // QR after connection was open = session expired (ban or re-pair needed)
+            _writeBanAlert('session_expired', 'critical',
+                'QR code received after connection was open — session expired or banned');
+            updateData('bot/pair', { qr, status: 'banned', updatedAt: Date.now() }, OUTLET).catch(() => {});
+        }
         if (qr) {
             qrcode.generate(qr, { small: true });
-            // Stream the QR to Firebase so the Supreme Admin dashboard can
-            // render it live (its data-store already subscribes to
-            // businesses/{bid}/outlets/{oid}/bot/*). Writing on every QR
-            // refresh is fine — Baileys re-emits ~every 20-30s while unpaired.
             updateData('bot/pair', { qr, status: 'waiting', updatedAt: Date.now() }, OUTLET).catch(() => {});
         }
         if (connection === 'open') {
+            _wasConnected = true;
             initFCMWatcher();
     console.log(`✅ ${OUTLET_NAME.toUpperCase()} BOT IS ONLINE`);
             console.log(`[AUTH] user=${JSON.stringify(sock.user)}`);
             reconnectAttempts = 0;
             cryptoErrorCount = 0;
-            // Pairing complete — drop the QR, mark connected (dashboard closes its QR modal).
+            consecutiveSendFailures = 0;
             updateData('bot/pair', { qr: null, status: 'connected', connectedAt: Date.now() }, OUTLET).catch(() => {});
-            // Warm-up tracking: record the FIRST time this number ever
-            // connects, once. Never overwritten on later reconnects
-            // (restarts, network blips) — those must not reset the clock.
             getData('bot/pair', OUTLET).then((pair) => {
                 if (!pair || !pair.firstLinkedAt) {
                     updateData('bot/pair', { firstLinkedAt: Date.now() }, OUTLET).catch(() => {});
@@ -1443,17 +1499,25 @@ async function sendDailyReportSafely(dateOverride = null) {
         );
 
         if (connection === 'close') {
+            _wasConnected = false;
             const code = lastDisconnect?.error?.output?.statusCode;
             const reasonName = DISCONNECT_REASON_NAMES[code] || `unknown(${code})`;
-            if (code !== DisconnectReason.loggedOut) {
+            if (code === DisconnectReason.loggedOut) {
+                _writeBanAlert('ban_detected', 'critical',
+                    `Logged out (DisconnectReason.loggedOut, code=${code}) — session banned or revoked`);
+                updateData('bot/pair', { qr: null, status: 'logged_out', updatedAt: Date.now() }, OUTLET).catch(() => {});
+                // Pause all promo campaigns on ban
+                getData('bot/promotions', OUTLET).then((promos) => {
+                    if (promos?.enabled) {
+                        updateData('bot/promotions', { enabled: false, killSwitch: true, bannedAt: Date.now() }, OUTLET).catch(() => {});
+                        console.log(`[BAN-DETECT] Auto-paused promotions for ${OUTLET}`);
+                    }
+                }).catch(() => {});
+            } else {
                 reconnectAttempts++;
-                // Exponential backoff: 5s, 15s, 45s, 120s max
                 const delay = Math.min(5000 * Math.pow(3, Math.min(reconnectAttempts - 1, 3)), 120000);
                 console.log(`🔌 Disconnected [${reasonName}, code=${code}] (attempt ${reconnectAttempts}). Reconnecting in ${(delay / 1000).toFixed(0)}s...`);
                 if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; startBot(); }, delay);
-            } else {
-                console.log(`❌ Logged out [${reasonName}]. Delete session folder and restart.`);
-                updateData('bot/pair', { qr: null, status: 'logged_out', updatedAt: Date.now() }, OUTLET).catch(() => {});
             }
         }
     });

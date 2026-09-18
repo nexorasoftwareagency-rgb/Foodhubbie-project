@@ -1458,7 +1458,7 @@ async function _bulkQrPrint() {
     const cards = [];
     for (const t of tables) {
         const url = await _qrUrlForTable(t);
-        const dataUri = await _qrDataUri(url, 300);
+        const dataUri = await _qrDataUri(url, 250);
         cards.push({ t, dataUri });
     }
     // 2 BIG cards per A4 landscape page — inline styles, no CSS class conflicts
@@ -1466,7 +1466,7 @@ async function _bulkQrPrint() {
         const footer = poweredByClean
             ? `<div style="border-top:2px dashed #f3cba8;margin:12px 20px 0;"></div><div style="padding:8px 20px 14px;font-size:11px;color:#b97a4e;font-weight:600;">Powered by <b style="color:#E84908;">${escapeHtml(poweredByClean)}</b></div>`
             : '';
-        return `<div style="display:inline-block;vertical-align:top;width:48%;margin:1%;background:linear-gradient(135deg,#FFB347,#E84908 55%,#C81D11);border-radius:26px;padding:6px;page-break-inside:avoid;">
+        return `<div style="display:inline-block;vertical-align:top;width:38%;margin:3%;background:linear-gradient(135deg,#FFB347,#E84908 55%,#C81D11);border-radius:26px;padding:6px;page-break-inside:avoid;">
             <div style="background:#fff;border-radius:22px;overflow:hidden;text-align:center;font-family:-apple-system,'Segoe UI',sans-serif;">
                 <div style="background:linear-gradient(135deg,#FF8A3D,#E84908);color:#fff;padding:20px 18px 18px;">
                     <div style="font-size:22px;font-weight:900;text-transform:uppercase;line-height:1.2;">${escapeHtml(storeName)}</div>
@@ -1477,7 +1477,7 @@ async function _bulkQrPrint() {
                     <div style="font-size:52px;font-weight:900;color:#1a1a1a;line-height:1;margin:4px 0 16px;">${escapeHtml(String(num))}</div>
                     <div style="font-size:14px;font-weight:800;color:#C81D11;margin-bottom:16px;">Scan & Crave</div>
                     <div style="display:inline-block;padding:12px;background:#fff7ed;border:3px solid #FFB347;border-radius:16px;">
-                        <img src="${src}" width="260" height="260" style="display:block;">
+                        <img src="${src}" width="250" height="250" style="display:block;">
                     </div>
                 </div>
                 ${footer}

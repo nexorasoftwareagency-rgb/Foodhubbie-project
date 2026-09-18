@@ -455,60 +455,18 @@ These are **real, actionable items** in THIS repo based on the audits.
 **Context:** Baileys (unofficial WhatsApp Web API) is ban-prone at high volume. A restaurant with 800 orders/10hrs generates ~3,200 outbound messages/day (order notifications + rider broadcasts + promos). Meta flags accounts at 500+/day. These three items add detection, pacing, and visibility.
 
 ### B1: Baileys-Specific Send Delay (2-5s Jitter)
-- **Files:** `bot/utils.js`, `bot/index.js`, `bot/rider.js`, `bot/promotions.js`
-- **Stage:** `reviewing`
-- **Issue:** Current rate limiter (20/min) is a sliding window, not per-recipient jitter. Baileys sends to different numbers need randomized 2-5s gaps between recipients to mimic human behavior. Same-recipient sends (e.g. order update + rider notification to same person) should NOT be delayed.
-- **Plan:**
-  1. **`bot/utils.js`** — Add `BaileysSendTracker` class:
-     - `trackSend(phoneNumber)` — records timestamp per phone number
-     - `waitBeforeSend(phoneNumber)` — if same phone sent within 2s, skip delay; if different phone, add 2-5s random jitter
-     - `shouldDelay(phoneNumber)` — returns true if last send to this phone was <2s ago (don't spam same person)
-     - Constants: `BAILLEYS_SEND_DELAY_MIN_MS = 2000`, `BAILLEYS_SEND_DELAY_MAX_MS = 5000`, `BAILLEYS_SAME_RECIPIENT_MIN_MS = 2000`
-  2. **`bot/index.js`** — In `handleOrderStatusUpdate` (line ~901):
-     - After `orderRateLimiter.wait()`, add `await baileysSendTracker.waitBeforeSend(jid)`
-     - Only apply if `!isMetaTransport` (skip for Meta Cloud API)
-  3. **`bot/rider.js`** — In `broadcastPickupAvailable` (line ~151):
-     - Already has warm-up delays; add Baileys-specific jitter on top
-     - Track each rider's phone to avoid re-delaying same rider
-  4. **`bot/promotions.js`** — Already has 8-15s delays; add Baileys jitter only if transport is Baileys
-  5. **Detection:** `bot/index.js` — detect transport type via `sock.user?.id?.startsWith('meta:')` or `isMetaTransport` flag
-- **Estimated impact:** Adds 2-5s per unique recipient; 800 orders to ~600 unique customers = ~30-50 minutes additional latency (acceptable for order notifications)
-- **Verify:** `node --check bot/index.js && node --check bot/utils.js && node --check bot/rider.js && node --check bot/promotions.js`
+- **Files:** `bot/utils.js`, `bot/index.js`
+- **Stage:** `done`
+- **Verified:** `node --check bot/utils.js` + `node --check bot/index.js` pass; deployed to EC2; `pm2 restart all` — all 4 processes online
+- **Done:** SCP + restart — `BaileysSendTracker` class in utils.js, wired into `sendImage()` in index.js. 2-5s jitter between distinct recipients, no delay for same-recipient sends. Skipped for Meta transport.
+- **Commit:** pending
 
 ### B2: Ban Detection + Admin Alert
 - **Files:** `bot/index.js`
-- **Stage:** `reviewing`
-- **Issue:** No visibility when Baileys session is banned/expired. Bot silently fails or reconnection loops. Admin doesn't know until customers complain.
-- **Plan:**
-  1. **Ban Detection Signals:**
-     - Signal 1: `qr` event in `connection.update` after `connection === 'open'` (session expired → re-pair needed)
-     - Signal 2: `connection === 'close'` with `DisconnectReason.loggedOut` (code 401) = ban
-     - Signal 3: Consecutive send failures >10 in 5 minutes (possible ban)
-     - Signal 4: `cryptoErrorCount` spike (>50 in 1 minute)
-  2. **Alert Mechanism:**
-     - Write to Firebase: `bot/alerts/{outlet}/{timestamp}` with `{ type, message, severity, createdAt }`
-     - Severity levels: `warning` (send failures), `critical` (ban detected), `info` (session expired)
-     - Console log: `[BAN-DETECT] 🔴 CRITICAL: ...`
-  3. **Auto-Response:**
-     - On ban detected: pause all promo campaigns (`killSwitch = true`)
-     - On session expired: write `bot/pair/status = 'banned'` so SupremeAdmin shows red indicator
-     - On send failure spike: log to `bot/alerts` but don't auto-pause (might be transient)
-  4. **Implementation in `bot/index.js`:**
-     - Add `let consecutiveSendFailures = 0` counter
-     - In `sendImage` catch block: increment counter; if >10, trigger alert
-     - In `sendImage` success: reset counter
-     - In `connection.update` handler (Baileys): detect `qr` after `open` = session expired
-     - In `connection.update` handler: detect `DisconnectReason.loggedOut` = ban
-  5. **Firebase Path Structure:**
-     ```
-     bot/alerts/{outlet}/{timestamp}: {
-       type: 'ban_detected' | 'session_expired' | 'send_failure_spike',
-       severity: 'critical' | 'warning' | 'info',
-       message: 'Description',
-       createdAt: timestamp
-     }
-     ```
-- **Verify:** `node --check bot/index.js`
+- **Stage:** `done`
+- **Verified:** `node --check bot/index.js` pass; deployed to EC2; `pm2 restart all` — all 4 processes online. Ban detection immediately triggered on restart (pizza bot was already in `logged_out` state) — wrote alert to `bot/alerts/pizza/`, auto-paused promotions.
+- **Done:** SCP + restart — consecutive send failure tracking (10 failures in 5min = warning alert), session expiry detection (QR after open = banned), `loggedOut` disconnect = critical alert + auto-pause promos. Alerts written to `bot/alerts/{outlet}` in Firebase.
+- **Commit:** pending
 
 ### ✅ B3: Volume Dashboard (Daily Outbound Tracking)
 - **Files:** `bot/index.js`, `bot/utils.js`, `bot/rider.js`, `bot/promotions.js`
@@ -702,4 +660,31 @@ To mark a new item:
 
 ---
 
-**File last updated:** 2026-09-16 | `Pending-Work.md` — keep this file at the repo root. All new fixes/audits should add an entry following the format above before work begins.
+**File last updated:** 2026-09-18 | `Pending-Work.md` — keep this file at the repo root. All new fixes/audits should add an entry following the format above before work begins.
+
+---
+
+## Admin Dashboard — UI Structure + Promotions UX Review
+
+Source: `admin-structure-and-promotions-ux-review.md`
+
+### ✅ Promo Badge Color Collision (RED)
+- **Files:** `Admin/style.css`, `Admin/js/features/promotions.js`
+- **Stage:** `done`
+- **Verified:** Deployed to Firebase (`foodhubbie-admins.web.app`)
+- **Issue:** `.badge-scheduled` and `.badge-expired` defined twice — once in Promotions section (amber/red, line 7654) and once in Discounts section (blue/gray, line 7703). Discounts wins by source order, so scheduled campaigns render blue instead of amber, expired renders gray instead of red.
+- **Fix:** Namespaced Promotions badges to `.promo-badge-*` in both CSS and promotions.js (2 occurrences at lines 342, 384).
+- **Done:** ✅ `firebase deploy --only hosting:admin`
+
+### ✅ Message Preview Inline Styles (YELLOW)
+- **Files:** `Admin/style.css`, `Admin/js/features/promotions.js`
+- **Stage:** `done`
+- **Verified:** Deployed to Firebase
+- **Issue:** Preview modal hardcoded 6 CSS properties inline (`white-space:pre-wrap; background:#0b1220; ...`). Not dynamic — same every render.
+- **Fix:** Extracted to `.promo-message-preview` class in CSS; updated promotions.js line 455.
+- **Done:** ✅ `firebase deploy --only hosting:admin`
+
+### 🟢 Noted (no fix needed now)
+- **Inline styles drift:** 27 in orders.js, 26 in tables.js, 13 in settings.js — app-wide pattern, not a single-fix item
+- **`.promo-switch`/`.promo-slider` naming:** Used generically across features but named after Promotions — future shared component extraction
+- **`aria-selected` on mode tabs:** Same fix shape as Menu Browser — `role="tab"` + `aria-selected` toggle

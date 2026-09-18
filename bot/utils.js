@@ -255,6 +255,44 @@ function generateCouponCode(prefix = '') {
     return `${word}${num}`;
 }
 
+// ── Baileys Send Tracker (per-recipient jitter) ────────────────────────────
+// Mimics human sending patterns: 2-5s gap between distinct recipients,
+// no delay for same-recipient (likely order updates to same customer).
+const BAILLEYS_SEND_DELAY_MIN_MS = 2000;
+const BAILLEYS_SEND_DELAY_MAX_MS = 5000;
+const BAILLEYS_SAME_RECIPIENT_MIN_MS = 2000;
+
+class BaileysSendTracker {
+    constructor() {
+        this._lastSendByPhone = new Map(); // phone → timestamp
+    }
+
+    async waitBeforeSend(phoneNumber) {
+        if (!phoneNumber) return;
+        const phone = String(phoneNumber).replace(/\D/g, '');
+        const lastSend = this._lastSendByPhone.get(phone);
+        if (lastSend) {
+            const elapsed = Date.now() - lastSend;
+            if (elapsed < BAILLEYS_SAME_RECIPIENT_MIN_MS) {
+                return; // same recipient, skip delay
+            }
+        }
+        // Different recipient or first send — add jitter
+        await sleep(randomBetween(BAILLEYS_SEND_DELAY_MIN_MS, BAILLEYS_SEND_DELAY_MAX_MS));
+    }
+
+    trackSend(phoneNumber) {
+        if (!phoneNumber) return;
+        const phone = String(phoneNumber).replace(/\D/g, '');
+        this._lastSendByPhone.set(phone, Date.now());
+        // Evict entries older than 5 minutes to prevent memory leak
+        const cutoff = Date.now() - 5 * 60 * 1000;
+        for (const [p, ts] of this._lastSendByPhone) {
+            if (ts < cutoff) this._lastSendByPhone.delete(p);
+        }
+    }
+}
+
 // ── Socket health ──────────────────────────────────────────────────────────
 
 function isSocketDead(sock) {
@@ -306,5 +344,5 @@ module.exports = {
     generateCouponCode, isSocketDead,
     getBroadcastDelayRangeMs, sleep,
     WARMUP_DAYS, WARMUP_DELAY_RANGE_MS, NORMAL_DELAY_RANGE_MS,
-    RateLimiter, OutboundTracker
+    RateLimiter, OutboundTracker, BaileysSendTracker
 };

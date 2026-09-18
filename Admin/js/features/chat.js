@@ -30,6 +30,7 @@ let _selectedCustomerId = null;
 let _renderedThreadId = null;
 let _searchTerm = '';
 let _wired = false;
+let _blockedMenusWired = false;
 let _usageUnsub = null;         // bot/usage listener
 let _usageData = null;          // today's usage snapshot
 
@@ -443,14 +444,23 @@ function _updateBlockBtnText() {
 
 // ── Wire up menu click handlers ───────────────────────────────────────
 function _wireBlockedMenus() {
-    if (_wired) return;
-    _wired = true;
+    if (_blockedMenusWired) return;
+    _blockedMenusWired = true;
 
     // Chat list 3-dot → Blocked Contacts
     document.getElementById('chatMenuBtn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         const dd = document.getElementById('chatMenuDropdown');
-        if (dd) dd.classList.toggle('hidden');
+        if (!dd) return;
+        const wasHidden = dd.classList.contains('hidden');
+        dd.classList.add('hidden');
+        if (wasHidden) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            dd.style.top = (rect.bottom + 4) + 'px';
+            dd.style.right = (window.innerWidth - rect.right) + 'px';
+            dd.style.left = 'auto';
+            dd.classList.remove('hidden');
+        }
     });
     document.getElementById('btnBlockedContacts')?.addEventListener('click', () => {
         document.getElementById('chatMenuDropdown')?.classList.add('hidden');
@@ -470,7 +480,16 @@ function _wireBlockedMenus() {
         e.stopPropagation();
         _updateBlockBtnText();
         const dd = document.getElementById('chatThreadMenuDropdown');
-        if (dd) dd.classList.toggle('hidden');
+        if (!dd) return;
+        const wasHidden = dd.classList.contains('hidden');
+        dd.classList.add('hidden');
+        if (wasHidden) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            dd.style.top = (rect.bottom + 4) + 'px';
+            dd.style.right = (window.innerWidth - rect.right) + 'px';
+            dd.style.left = 'auto';
+            dd.classList.remove('hidden');
+        }
     });
     document.getElementById('btnBlockContact')?.addEventListener('click', async () => {
         document.getElementById('chatThreadMenuDropdown')?.classList.add('hidden');

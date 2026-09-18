@@ -7645,18 +7645,19 @@ body.pos-selection-mode .walkin-picker {
 .checkbox-label { display:flex; align-items:center; gap:8px; cursor:pointer; }
 .promo-media-preview { display:flex; align-items:center; gap:8px; }
 .promo-media-preview img { max-width:80px; max-height:80px; border-radius:6px; border:1px solid var(--border-color, #e5e7eb); }
+.promo-message-preview { white-space:pre-wrap; background:#0b1220; color:#e5e7eb; padding:12px; border-radius:8px; font-family:monospace; font-size:13px; }
 .promo-action-row { justify-content:flex-end; }
 .offline-banner { display:flex; align-items:center; gap:8px; background:#fef2f2; color:#991b1b; padding:10px 14px; border-radius:8px; margin-bottom:16px; border:1px solid #fecaca; }
 .promo-campaign-list { display:flex; flex-direction:column; gap:12px; }
 .promo-campaign-card { background:var(--bg-card, #fff); border:1px solid var(--border-color, #e5e7eb); border-radius:10px; padding:14px; }
 .progress-bar { height:6px; background:var(--bg-subtle, #f3f4f6); border-radius:99px; overflow:hidden; }
 .progress-bar-fill { height:100%; background:var(--primary, #E84908); transition:width .3s ease; }
-.badge-running, .badge-scheduled, .badge-paused, .badge-done, .badge-stopped, .badge-aborted, .badge-expired { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:500; margin-left:6px; }
-.badge-running { background:#dbeafe; color:#1d4ed8; }
-.badge-scheduled { background:#fef3c7; color:#92400e; }
-.badge-paused { background:#fde68a; color:#92400e; }
-.badge-done { background:#d1fae5; color:#065f46; }
-.badge-stopped, .badge-aborted, .badge-expired { background:#fee2e2; color:#991b1b; }
+.promo-badge-running, .promo-badge-scheduled, .promo-badge-paused, .promo-badge-done, .promo-badge-stopped, .promo-badge-aborted, .promo-badge-expired { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:500; margin-left:6px; }
+.promo-badge-running { background:#dbeafe; color:#1d4ed8; }
+.promo-badge-scheduled { background:#fef3c7; color:#92400e; }
+.promo-badge-paused { background:#fde68a; color:#92400e; }
+.promo-badge-done { background:#d1fae5; color:#065f46; }
+.promo-badge-stopped, .promo-badge-aborted, .promo-badge-expired { background:#fee2e2; color:#991b1b; }
 .promo-guide-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:14px; }
 .promo-guide-item { display:flex; gap:12px; align-items:flex-start; }
 .promo-guide-num { flex:0 0 28px; height:28px; border-radius:50%; background:var(--primary, #E84908); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; }
