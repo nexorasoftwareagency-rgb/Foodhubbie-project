@@ -339,7 +339,7 @@ async function _renderActivePane() {
             <div class="flex-between flex-center flex-wrap-mobile">
                 <div>
                     <strong>${escapeHtml(c.id)}</strong>
-                    <span class="badge badge-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span>
+                    <span class="promo-badge-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span>
                     ${c.runAt ? `<span class="text-muted-small">scheduled ${escapeHtml(formatDate(c.runAt))}</span>` : ''}
                     ${c.menuText ? `<span class="text-muted-small" title="Has menu footer">• 🍴 menu</span>` : ''}
                 </div>
@@ -381,7 +381,7 @@ async function _renderHistoryPane() {
             <div class="flex-between flex-center flex-wrap-mobile">
                 <div>
                     <strong>${escapeHtml(c.id)}</strong>
-                    <span class="badge badge-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span>
+                    <span class="promo-badge-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span>
                     ${c.reason ? `<span class="text-muted-small">${escapeHtml(c.reason)}</span>` : ''}
                 </div>
                 <div class="flex-row flex-gap-6">
@@ -407,7 +407,6 @@ export async function _preview() {
     const greeting = !!document.getElementById('promoGreeting')?.checked;
     const attachMenu = !!document.getElementById('promoAttachMenu')?.checked;
     const menuText = (document.getElementById('promoMenuText')?.value || '').trim();
-    const closingMsg = (document.getElementById('promoClosingMsg')?.value || '').trim();
     const sendStop = !!document.getElementById('promoSendStopMsg')?.checked;
     if (!template) { showToast('Nothing to preview', 'warning'); return; }
     const storeSnap = await get(_ref('settings/Store'));
@@ -423,7 +422,6 @@ export async function _preview() {
     for (const [k, v] of Object.entries(tokens)) body = body.split(k).join(v);
     if (greeting) body = `Hi ${sampleName},\n\n${body}`;
     if (attachMenu && menuText) body += '\n\n' + menuText;
-    if (closingMsg) body += '\n\n' + closingMsg;
     if (sendStop) body += '\n\n_Reply STOP to unsubscribe._';
 
     // Build a custom preview modal so we can render an image
@@ -454,7 +452,7 @@ export async function _preview() {
     const attachMenuImg = !!document.getElementById('promoAttachMenuImage')?.checked;
     bodyEl.innerHTML = `
         ${_mediaDataUrl ? `<div style="margin-bottom:12px;"><img src="${escapeHtml(_mediaDataUrl)}" alt="Attached media" style="max-width:100%; border-radius:8px; display:block;"></div>` : ''}
-        <div style="white-space:pre-wrap; background:#0b1220; color:#e5e7eb; padding:12px; border-radius:8px; font-family:monospace; font-size:13px;">${escapeHtml(body)}</div>
+        <div class="promo-message-preview">${escapeHtml(body)}</div>
         ${sendStop ? '' : '<div class="text-muted-small mt-8" style="font-size:11px;">ℹ️ STOP footer is OFF — no opt-out message will be sent.</div>'}
         ${attachMenuImg && _menuImageDataUrl ? `
             <div style="margin-top:12px; padding-top:12px; border-top:1px dashed #cbd5e1;">
@@ -481,8 +479,6 @@ async function _launchCampaign() {
         await set(_promoRef('enabled'), true);
     }
 
-    const delaySec = Math.max(1, Math.min(30, Number(document.getElementById('promoDelay')?.value) || 2));
-    const generateCoupons = !!document.getElementById('promoGenerateCoupons')?.checked;
     const greeting = !!document.getElementById('promoGreeting')?.checked;
     const attachMenu = !!document.getElementById('promoAttachMenu')?.checked;
     const menuText = attachMenu ? (document.getElementById('promoMenuText')?.value || '').trim() : '';
@@ -490,7 +486,6 @@ async function _launchCampaign() {
         showToast('Menu footer is empty — turning off menu attachment', 'warning');
     }
     const attachMenuImg = !!document.getElementById('promoAttachMenuImage')?.checked;
-    const closingMsg = (document.getElementById('promoClosingMsg')?.value || '').trim();
     const sendStop = !!document.getElementById('promoSendStopMsg')?.checked;
     const mode = _activeMode;
     const runAt = mode === 'schedule'
@@ -511,9 +506,8 @@ async function _launchCampaign() {
         template, mediaUrl: _mediaDataUrl || null,
         greeting, menuText: menuText || null,
         menuImageUrl: _menuImageDataUrl || null,
-        closingMessage: closingMsg || null,
         sendStopMsg: sendStop,
-        recipients, delayMs: delaySec * 1000, generateCoupons,
+        recipients,
         runAt, quietHours, requestedBy: window.currentAdmin?.uid || 'admin',
         createdAt: new Date().toISOString(),
     };
@@ -538,9 +532,8 @@ async function _launchCampaign() {
             template, mediaUrl: _mediaDataUrl || null,
             greeting, menuText: menuText || null,
             menuImageUrl: _menuImageDataUrl || null,
-            closingMessage: closingMsg || null,
             sendStopMsg: sendStop,
-            recipients, delayMs: delaySec * 1000, generateCoupons,
+            recipients,
             quietHours, requestedBy: campaignDoc.requestedBy
         });
         showToast(`Campaign ${campaignId} launched`, 'success');
@@ -556,12 +549,10 @@ export async function _sendTest() {
     if (!template) { showToast('Write a template first', 'warning'); return; }
     const phone = await _resolveTestPhone();
     if (!phone) { showToast('Could not resolve test phone number', 'error'); return; }
-    const delaySec = Math.max(1, Math.min(30, Number(document.getElementById('promoDelay')?.value) || 2));
     const greeting = !!document.getElementById('promoGreeting')?.checked;
     const attachMenu = !!document.getElementById('promoAttachMenu')?.checked;
     const menuText = attachMenu ? (document.getElementById('promoMenuText')?.value || '').trim() : '';
     const attachMenuImg = !!document.getElementById('promoAttachMenuImage')?.checked;
-    const closingMsg = (document.getElementById('promoClosingMsg')?.value || '').trim();
     const sendStop = !!document.getElementById('promoSendStopMsg')?.checked;
     const campaignId = 'test_' + Date.now().toString(36);
     const cmdRef = push(tenantRef(_outlet(), 'bot/commands'));
@@ -571,11 +562,8 @@ export async function _sendTest() {
         template, mediaUrl: _mediaDataUrl || null,
         greeting, menuText: menuText || null,
         menuImageUrl: (attachMenuImg && _menuImageDataUrl) ? _menuImageDataUrl : null,
-        closingMessage: closingMsg || null,
         sendStopMsg: sendStop,
         recipients: [phone],
-        delayMs: delaySec * 1000,
-        generateCoupons: false,
         quietHours: null,
         requestedBy: 'self-test',
         isTest: true
@@ -659,16 +647,11 @@ async function _cloneCampaign(id) {
     if (document.getElementById('promoMenuText') && c.menuText) {
         document.getElementById('promoMenuText').value = c.menuText;
     }
-    if (document.getElementById('promoDelay')) document.getElementById('promoDelay').value = Math.round((c.delayMs || 2000) / 1000);
-    if (document.getElementById('promoGenerateCoupons')) document.getElementById('promoGenerateCoupons').checked = !!c.generateCoupons;
     if (c.mediaUrl) {
         _mediaDataUrl = c.mediaUrl;
         const img = document.getElementById('promoMediaImg');
         if (img) img.src = c.mediaUrl;
         document.getElementById('promoMediaPreview')?.classList.remove('hidden');
-    }
-    if (document.getElementById('promoClosingMsg') && c.closingMessage) {
-        document.getElementById('promoClosingMsg').value = c.closingMessage;
     }
     if (document.getElementById('promoSendStopMsg')) {
         document.getElementById('promoSendStopMsg').checked = c.sendStopMsg !== false;
@@ -688,10 +671,10 @@ async function _cloneCampaign(id) {
 async function _exportCsv(id) {
     const snap = await get(_promoRef(`logs/${id}`));
     if (!snap.exists()) { showToast('No log found for that campaign', 'warning'); return; }
-    const rows = [['phone', 'status', 'sentAt', 'error', 'couponCode', 'reason']];
+    const rows = [['phone', 'status', 'sentAt', 'error', 'reason']];
     const log = snap.val();
     for (const [phone, r] of Object.entries(log)) {
-        rows.push([phone, r.status || '', r.sentAt ? new Date(r.sentAt).toISOString() : '', r.error || '', r.couponCode || '', r.reason || '']);
+        rows.push([phone, r.status || '', r.sentAt ? new Date(r.sentAt).toISOString() : '', r.error || '', r.reason || '']);
     }
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });

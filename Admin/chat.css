@@ -43,6 +43,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px 10px;
+    position: relative;
+    z-index: 101;
 }
 
 .chat-list-header h3 {
@@ -531,7 +533,7 @@
 .chat-menu-btn:hover { background:rgba(0,0,0,.06); }
 .chat-menu-btn svg { width:18px; height:18px; }
 .chat-menu-dropdown {
-    position:absolute; right:0; top:100%; z-index:100; min-width:180px;
+    position:fixed; z-index:9999; min-width:180px;
     background:var(--bg-primary); border:1px solid var(--border-color);
     border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.12); padding:4px 0;
     animation:chatMenuIn .12s ease;
