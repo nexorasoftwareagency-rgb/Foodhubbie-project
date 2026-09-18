@@ -2930,20 +2930,15 @@
         white-space: nowrap;
     }
 
-    /* Mode tabs: allow wrapping + tighter padding */
-    .promo-mode-tabs {
+    /* Mode switcher: allow wrapping + tighter padding */
+    .promo-mode-switcher {
         flex-wrap: wrap;
         gap: 4px;
     }
-    .promo-mode-tab {
-        padding: 8px 10px;
+    .promo-mode-pill {
+        padding: 6px 10px;
         font-size: 12px;
-        flex: 1 0 auto;
-        text-align: center;
-        min-width: 0;
     }
-    .promo-mode-tab i { width: 14px; height: 14px; }
-    .promo-mode-tab .badge { font-size: 10px; padding: 1px 6px; }
 
     /* Discount card: stack content + actions vertically */
     .discount-card {
