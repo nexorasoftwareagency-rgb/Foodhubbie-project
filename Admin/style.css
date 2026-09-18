@@ -60,7 +60,7 @@
     --danger: var(--error);
 
     /* Layout */
-    --sidebar-width: 182px;
+    --sidebar-width: 220px;
     --sidebar-collapsed-width: 56px;
     --header-height: 80px;
     --header-offset: var(--header-height);
