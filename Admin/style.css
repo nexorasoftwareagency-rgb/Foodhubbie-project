@@ -7790,6 +7790,49 @@ body.pos-selection-mode .walkin-picker {
 }
 .btn-walkin-coupon-clear:hover { background:#f1f5f9; color:#0f172a; }
 
+/* Active Offers panel (POS quick-apply) */
+.btn-walkin-offers {
+    display:inline-flex; align-items:center; gap:6px;
+    background:#fff; color:#1d4ed8; border:1px solid #bfdbfe;
+    padding:7px 14px; border-radius:8px; font-weight:600;
+    cursor:pointer; transition: all .12s; font-size:12px;
+}
+.btn-walkin-offers:hover { background:#eff6ff; }
+.btn-walkin-offers[aria-expanded="true"] { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
+.btn-walkin-offers i { width:14px; height:14px; }
+.walkin-offers-panel {
+    background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+    margin-bottom:10px; max-height:280px; overflow-y:auto;
+}
+.walkin-offer-item {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 12px; border-bottom:1px solid #f1f5f9;
+}
+.walkin-offer-item:last-child { border-bottom:0; }
+.walkin-offer-item.walkin-offer-disabled { opacity:.6; }
+.walkin-offer-item.walkin-offer-auto { background:#fafafa; }
+.walkin-offer-info { flex:1; min-width:0; }
+.walkin-offer-name { font-size:13px; font-weight:600; color:#0f172a; }
+.walkin-offer-name code {
+    background:#f1f5f9; color:#0f172a; padding:1px 6px; border-radius:4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:12px;
+}
+.walkin-offer-meta { font-size:11px; color:#64748b; margin-top:2px; }
+.walkin-offer-auto-badge { font-size:9px; padding:1px 6px; text-transform:uppercase; letter-spacing:.4px; }
+.walkin-offer-apply-btn {
+    background:#1d4ed8; color:#fff; border:0;
+    padding:6px 12px; border-radius:8px; font-weight:600;
+    cursor:pointer; transition: all .12s; font-size:11px; white-space:nowrap;
+}
+.walkin-offer-apply-btn:hover { background:#1e40af; }
+.walkin-offer-apply-btn:disabled { background:#e2e8f0; color:#94a3b8; cursor:not-allowed; }
+.walkin-offers-manage-row { padding:8px 12px; text-align:center; border-top:1px solid #f1f5f9; }
+.walkin-offers-manage-link {
+    background:none; border:0; color:#1d4ed8; font-size:12px; font-weight:600;
+    cursor:pointer; padding:4px;
+}
+.walkin-offers-manage-link:hover { text-decoration:underline; }
+
 /* Discounts Reports Modal */
 .discount-kpi-grid {
     display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
