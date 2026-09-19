@@ -388,6 +388,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                     (await useMod('pos')).clearWalkinCoupon();
                     break;
                 }
+                case 'toggleWalkinOffersPanel': {
+                    logger.info('POS', 'Toggle active offers panel');
+                    (await useMod('pos')).toggleWalkinOffersPanel();
+                    break;
+                }
+                case 'applyOfferFromPanel': {
+                    const code = el.getAttribute('data-code');
+                    logger.info('POS', `Apply offer from panel: ${code}`);
+                    (await useMod('pos')).applyOfferFromPanel(code);
+                    break;
+                }
                 case 'loadMoreOrders': logger.info('ORDERS', 'Load more orders'); (await useMod('orders')).loadMoreOrders(); break;
                 case 'selectWalkinPayment': {
                     const method = el.getAttribute('data-method');

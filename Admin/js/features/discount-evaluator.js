@@ -34,6 +34,27 @@ export function clearDiscountCache() {
     _cache.fetchedAt = 0;
 }
 
+/**
+ * True if a discount is enabled and within its active window right now.
+ * Shared home for this check — POS's offers panel uses it directly;
+ * discounts.js and discountsReports.js each still keep their own local
+ * copy of the same logic (pre-existing, not touched here to avoid
+ * risking a regression in already-reviewed code) but could be pointed
+ * at this one in a future pass.
+ */
+export function isDiscountActiveNow(d, now = Date.now()) {
+    if (!d || d.enabled === false) return false;
+    if (d.startsAt && now < d.startsAt) return false;
+    if (d.endsAt && d.endsAt !== 0 && now > d.endsAt) return false;
+    return true;
+}
+
+/** True if a discount's `channel` field permits it to apply on this channel. */
+export function discountAllowsChannel(d, channel) {
+    return !d.channel || d.channel === 'all' || d.channel === channel
+        || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos'));
+}
+
 async function _isFeatureEnabled() {
     try {
         const snap = await get(Outlet.ref(FEATURE_FLAG_PATH));
@@ -91,7 +112,7 @@ export async function evaluateDiscount(ctx = {}) {
         && (d.endsAt === 0 || d.endsAt == null || now <= d.endsAt)
         && (!d.minSubtotal || subtotal >= d.minSubtotal)
         && (!d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
-        && (!d.channel || d.channel === 'all' || d.channel === channel || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos')))
+        && discountAllowsChannel(d, channel)
         && (!d.perCustomerLimit || !customerPhone || (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit)
     );
 

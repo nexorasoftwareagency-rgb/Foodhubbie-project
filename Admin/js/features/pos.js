@@ -10,7 +10,7 @@ import { autoDeductStock } from './inventory.js';
 import { ui, loadLucide } from '../ui.js';
 import { printOrderReceipt } from './printing.js';
 import { t } from '../l10n.js';
-import { evaluateDiscount, recordDiscountUsage, clearDiscountCache } from './discount-evaluator.js';
+import { evaluateDiscount, recordDiscountUsage, clearDiscountCache, getAllDiscounts, isDiscountActiveNow, discountAllowsChannel } from './discount-evaluator.js';
 import { logger } from '../utils/logger.js';
 
 let _connUnsub = null;
@@ -679,6 +679,111 @@ export function clearWalkinCoupon() {
     if (hint)  hint.classList.add('hidden');
     if (clear) clear.classList.add('hidden');
     renderWalkinCart();
+}
+
+/**
+ * Active Offers panel — lets staff see every currently-running,
+ * POS-eligible discount/coupon at a glance and apply a coupon in one
+ * tap, instead of needing the customer to already know (or the staff to
+ * remember) the exact code. "You ran a promotion so we came" → staff
+ * opens this, finds it, taps Apply.
+ *
+ * Reuses applyWalkinCoupon()'s existing validated flow for coupon-type
+ * discounts (manual-discount conflict check, cart-empty check, customer
+ * lookup, evaluateDiscount, usage recording on checkout) rather than
+ * duplicating any of it — this panel is just a friendlier way to fill
+ * in the same coupon-code input.
+ */
+function _walkinSubtotal() {
+    return Object.values(state.walkinCart).reduce((s, i) => s + (Number(i.price) * Number(i.qty)), 0);
+}
+
+export async function toggleWalkinOffersPanel() {
+    const panel = document.getElementById('walkinOffersPanel');
+    const btn = document.getElementById('walkinOffersBtn');
+    if (!panel) return;
+    const opening = panel.classList.contains('hidden');
+    if (!opening) {
+        panel.classList.add('hidden');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        return;
+    }
+    panel.classList.remove('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+    panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">Loading offers…</div>';
+    await _renderWalkinOffers();
+}
+
+async function _renderWalkinOffers() {
+    const panel = document.getElementById('walkinOffersPanel');
+    if (!panel) return;
+
+    let all;
+    try {
+        all = await getAllDiscounts();
+    } catch (e) {
+        panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">Could not load offers. Try again.</div>';
+        return;
+    }
+
+    const now = Date.now();
+    const subtotal = _walkinSubtotal();
+    const list = Object.entries(all || {})
+        .map(([id, d]) => ({ id, ...d }))
+        .filter(d => d && d.type && d.value != null)
+        .filter(d => isDiscountActiveNow(d, now))
+        .filter(d => discountAllowsChannel(d, 'pos'))
+        .filter(d => !d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
+        .sort((a, b) => (a.type === 'coupon' ? 0 : 1) - (b.type === 'coupon' ? 0 : 1));
+
+    if (list.length === 0) {
+        panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
+        return;
+    }
+
+    panel.innerHTML = list.map(d => {
+        const valueLabel = d.mode === 'percent'
+            ? `${Number(d.value).toFixed(d.value % 1 === 0 ? 0 : 1)}% off`
+            : `₹${Number(d.value).toFixed(0)} off`;
+        const capLabel = d.maxCap ? ` (cap ₹${Number(d.maxCap).toFixed(0)})` : '';
+        const minLabel = d.minSubtotal ? ` · min ₹${Number(d.minSubtotal).toFixed(0)}` : '';
+        const used = d.stats?.usedCount || 0;
+        const usedLabel = used > 0 ? ` · used ${used}${d.globalLimit ? `/${d.globalLimit}` : ''}×` : '';
+
+        if (d.type === 'coupon') {
+            const meetsMin = !d.minSubtotal || subtotal >= d.minSubtotal;
+            const shortfall = meetsMin ? 0 : Math.ceil(d.minSubtotal - subtotal);
+            return `
+                <div class="walkin-offer-item${meetsMin ? '' : ' walkin-offer-disabled'}">
+                    <div class="walkin-offer-info">
+                        <div class="walkin-offer-name"><code>${escapeHtml(d.couponCode)}</code> — ${escapeHtml(d.name || '')}</div>
+                        <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel}</div>
+                    </div>
+                    <button type="button" class="chip walkin-offer-apply-btn" data-action="applyOfferFromPanel" data-code="${escapeHtml(d.couponCode)}" ${meetsMin ? '' : 'disabled'} title="${meetsMin ? 'Apply this code' : `Add ₹${shortfall} more to qualify`}">
+                        ${meetsMin ? 'Apply' : `+₹${shortfall} to use`}
+                    </button>
+                </div>`;
+        }
+
+        // global / category / firstOrder discounts auto-apply at checkout —
+        // shown for visibility only, no Apply button (there's nothing to click).
+        const typeLabel = d.type === 'firstOrder' ? 'New customer' : d.type === 'category' ? 'Category' : 'Storewide';
+        return `
+            <div class="walkin-offer-item walkin-offer-auto">
+                <div class="walkin-offer-info">
+                    <div class="walkin-offer-name">${escapeHtml(d.name || typeLabel)} <span class="badge badge-info walkin-offer-auto-badge">auto</span></div>
+                    <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel} · applies automatically if eligible</div>
+                </div>
+            </div>`;
+    }).join('') + '<div class="walkin-offers-manage-row"><button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
+}
+
+export function applyOfferFromPanel(code) {
+    const input = document.getElementById('walkinCouponCode');
+    if (input) input.value = code;
+    document.getElementById('walkinOffersPanel')?.classList.add('hidden');
+    document.getElementById('walkinOffersBtn')?.setAttribute('aria-expanded', 'false');
+    applyWalkinCoupon();
 }
 
 export function selectWalkinPayment(method, el) {
