@@ -559,13 +559,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             (await useMod('printing')).reprintLastPosReceipt();
         });
 
-        document.getElementById('btnPosQtyDec')?.addEventListener('click', async () => {
-            (await useMod('pos')).adjustPOSModalQty(-1);
-        });
-        document.getElementById('btnPosQtyInc')?.addEventListener('click', async () => {
-            (await useMod('pos')).adjustPOSModalQty(1);
-        });
-
         bindClickTo('btnUpdateDishPhoto', 'dishFile');
         document.getElementById('dishFile')?.addEventListener('change', (e) => {
             previewImage(e.target, 'dishPreview');
