@@ -39,6 +39,24 @@ const { resolveOutletId, resolveBusinessIdFor, initializeOutletBusinessIndex } =
 const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
 const discountEngine = require('./discount-engine');
 
+// ── Suppress noisy libsignal session-state dumps ────────────────────────
+// Baileys' underlying libsignal fork writes raw `console.log("Closing
+// session:", SessionEntry {...})` calls directly — these bypass the pino
+// `logger` option passed to makeWASocket entirely (it's not gated by any
+// log level), so setting logger level to 'warn' does NOT suppress it.
+// This dumps full cryptographic session/ratchet state to stdout on every
+// message send — a real security concern for anything reading PM2 logs,
+// not just noise. Filtering at the console.log call site is the only
+// place this can actually be stopped.
+const _origConsoleLog = console.log;
+console.log = function (...args) {
+    const first = args[0];
+    if (typeof first === 'string' && /^(Closing session|Opening session|Closing open session)/i.test(first)) {
+        return; // drop — this is a libsignal session-state dump, not app output
+    }
+    return _origConsoleLog.apply(console, args);
+};
+
 // ── Extracted modules ──────────────────────────────────────────────────────
 const {
     formatJid, maskJid,
@@ -516,10 +534,14 @@ async function appendContactInfo(text, outlet = 'outlet') {
 }
 
 async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact = false, trackType = 'order_notification') {
-    // Blocklist check — silently skip sending to blocked numbers
+    // Blocklist check — silently skip sending to blocked numbers.
+    // Returns true (not false) because this is a PERMANENT, intentional
+    // non-send, not a transient failure — the caller uses this return
+    // value to decide whether to retry, and retrying a blocked number
+    // would just loop forever for no reason.
     if (isBlockedJid(to, blockedNumbers)) {
         console.log(`[BLOCKED] Skipping outbound to ${(to || '').replace(/[^0-9]/g, '').slice(-4)}`);
-        return;
+        return true;
     }
     // Baileys-specific per-recipient jitter (skip for Meta transport)
     const _isBaileys = !sock.user?.id?.startsWith('meta:');
@@ -534,11 +556,14 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
             await sock.sendMessage(to, { text: finalMsg });
             outboundTracker.trackSend(outlet, trackType);
             _onSendSuccess();
+            console.log(`[SEND OK] to ${maskJid(to)} type=text trackType=${trackType}`);
+            return true;
         } catch (e) {
             console.error("Text Send Error:", e.message || e);
             _onSendFailure();
+            console.log(`[SEND FAIL] to ${maskJid(to)} type=text trackType=${trackType}`);
         }
-        return;
+        return false;
     }
     try {
         let payload;
@@ -551,6 +576,8 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
         await sock.sendMessage(to, payload);
         outboundTracker.trackSend(outlet, trackType);
         _onSendSuccess();
+        console.log(`[SEND OK] to ${maskJid(to)} type=image trackType=${trackType}`);
+        return true;
     } catch (err) {
         console.error("Image Send Error:", err.message || err);
         _onSendFailure();
@@ -559,9 +586,13 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
             await sock.sendMessage(to, { text: finalMsg });
             outboundTracker.trackSend(outlet, trackType);
             _onSendSuccess();
+            console.log(`[SEND OK] to ${maskJid(to)} type=text-fallback trackType=${trackType} (image failed: ${err.message || err})`);
+            return true;
         } catch (textErr) {
             console.error("Critical Send Error:", textErr.message || textErr);
             _onSendFailure();
+            console.log(`[SEND FAIL] to ${maskJid(to)} trackType=${trackType} — both image and text-fallback failed`);
+            return false;
         }
     }
 }
@@ -778,9 +809,17 @@ async function sendFCMToAdmins(orderId, order) {
         const snap = await db.ref('admins').once('value');
         const admins = snap.val();
         if (!admins) return;
-        const tokens = Object.values(admins).map(a => a.fcmToken).filter(Boolean);
-        if (tokens.length === 0) return;
-        const unique = [...new Set(tokens)];
+        // Keep uid alongside each token so a dead token can be traced back
+        // to the admin record it belongs to and cleaned up below.
+        const entries = Object.entries(admins)
+            .filter(([, a]) => !!a.fcmToken)
+            .map(([uid, a]) => ({ uid, token: a.fcmToken }));
+        if (entries.length === 0) return;
+        // De-dupe by token (two admin records could share a token on a
+        // shared device) while keeping one uid per token for cleanup.
+        const seen = new Map();
+        entries.forEach(e => { if (!seen.has(e.token)) seen.set(e.token, e.uid); });
+        const unique = [...seen.keys()];
         const title = `🆕 New Order #${orderId.slice(-5)}`;
         const body = `${order.customerName || 'Customer'} · ₹${order.total || 0} · ${outlet.toUpperCase()}`;
         const results = await admin.messaging().sendEachForMulticast({
@@ -791,7 +830,34 @@ async function sendFCMToAdmins(orderId, order) {
             webpush: { headers: { TTL: "86400", Urgency: "high" } }
         });
         const failed = results.responses.filter(r => !r.success).length;
-        if (failed > 0) console.warn(`[FCM] ${failed}/${unique.length} admin notifications failed`);
+        if (failed > 0) {
+            console.warn(`[FCM] ${failed}/${unique.length} admin notifications failed`);
+            // Log WHY each one failed — without this, "4/4 failed" tells us
+            // nothing (stale token vs bad credentials vs quota vs something
+            // else). Also auto-clean genuinely dead tokens so they stop
+            // being retried forever and silently eating the whole batch.
+            const deadCodes = new Set([
+                'messaging/registration-token-not-registered',
+                'messaging/invalid-argument',
+                'messaging/invalid-registration-token'
+            ]);
+            await Promise.all(results.responses.map(async (r, i) => {
+                if (r.success) return;
+                const token = unique[i];
+                const code = r.error?.code || 'unknown';
+                const uidForToken = seen.get(token);
+                console.warn(`[FCM] Admin token failed (uid=${uidForToken}): ${code} — ${r.error?.message || 'no message'}`);
+                if (deadCodes.has(code) && uidForToken) {
+                    try {
+                        await db.ref(`admins/${uidForToken}/fcmToken`).remove();
+                        await db.ref(`admins/${uidForToken}/fcmTokenInvalidAt`).set(Date.now());
+                        console.warn(`[FCM] Removed dead token for uid=${uidForToken} (${code}) — they'll need to re-open the admin panel to re-register.`);
+                    } catch (cleanupErr) {
+                        console.error(`[FCM] Token cleanup failed for uid=${uidForToken}:`, cleanupErr.message);
+                    }
+                }
+            }));
+        }
     } catch (e) {
         console.error('[FCM] sendFCMToAdmins error:', e.message);
     }
@@ -908,14 +974,26 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             const lastRider = currentProcessedStatus?.riderId || "";
             const isRiderChanged = currentRider && currentRider !== lastRider;
 
+            // IMPORTANT: do NOT write `status: currentStatus` here yet. This
+            // used to mark the status "processed" before the notification
+            // was actually sent — sendImage() never threw on failure (it
+            // swallows errors internally), so a transient send failure
+            // (network blip, socket mid-reconnect, image-format crash
+            // cascading into a failed text-fallback too) would leave this
+            // status permanently marked as done in Redis with the customer
+            // never having received it, and no retry would ever happen.
+            // `status` is now only written after send is confirmed to have
+            // actually succeeded, further down. Only bookkeeping fields
+            // that don't gate re-sends (rider/OTP tracking) are safe to
+            // write early.
             await saveProcessedStatus(id, {
-                status: currentStatus,
+                ...(currentProcessedStatus || {}),
                 timestamp: Date.now(),
                 lastOtp: storedOTP,
                 riderId: currentRider
             });
 
-            console.log(`[Status Update] 🔔 State Updated for #${id.slice(-5)}: Status=${currentStatus}, Rider=${currentRider || 'None'}`);
+            console.log(`[Status Update] 🔔 Processing #${id.slice(-5)}: Status=${currentStatus}, Rider=${currentRider || 'None'}`);
 
             // NEW: Notify Rider on Assignment
             if (isRiderChanged) {
@@ -1004,20 +1082,49 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 const orderTrackType = (statusLower === 'placed' || statusLower === 'confirmed') ? 'order_notification' : 'order_update';
                 const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'outlet', true, orderTrackType);
 
-                // CRITICAL: Preserve ALL fields in processedStatus to avoid duplicate rider pings on next update
-                await saveProcessedStatus(id, {
-                    ...(currentProcessedStatus || {}),
-                    status: currentStatus,
-                    lastOtp: storedOTP,
-                    timestamp: Date.now()
-                });
+                if (sendResult) {
+                    // Only NOW is this status considered "processed" — the
+                    // customer actually received it (or it was a permanent,
+                    // non-retryable skip like a blocked number).
+                    await saveProcessedStatus(id, {
+                        ...(currentProcessedStatus || {}),
+                        status: currentStatus,
+                        lastOtp: storedOTP,
+                        timestamp: Date.now()
+                    });
 
-                updateData(`bot/logs/${id}`, {
-                    lastSent: currentStatus,
-                    jid: maskJid(jid),
-                    success: true,
-                    timestamp: Date.now()
-                }, order.outlet || OUTLET).catch(() => { });
+                    updateData(`bot/logs/${id}`, {
+                        lastSent: currentStatus,
+                        jid: maskJid(jid),
+                        success: true,
+                        timestamp: Date.now()
+                    }, order.outlet || OUTLET).catch(() => { });
+                } else {
+                    // Send genuinely failed. Deliberately leave `status`
+                    // un-advanced in the cache so the next child_changed
+                    // event for this order (or a bot restart) re-enters this
+                    // branch and retries — instead of silently losing this
+                    // notification forever. Surface it in bot/alerts so it's
+                    // visible in the Admin panel without pinging anyone on
+                    // WhatsApp for what may just be a transient blip.
+                    console.error(`[Status Update] ❌ Notification FAILED for #${id.slice(-5)} (${currentStatus}) — will retry on next order update.`);
+                    db.ref(resolvePath(`bot/alerts/${order.outlet || OUTLET}`))
+                        .push({
+                            type: 'status_notification_failed',
+                            severity: 'warning',
+                            message: `Order #${id.slice(-5)} — "${currentStatus}" notification failed to send to customer.`,
+                            orderId: id,
+                            status: currentStatus,
+                            createdAt: Date.now()
+                        }).catch(() => { });
+
+                    updateData(`bot/logs/${id}`, {
+                        lastSent: currentStatus,
+                        jid: maskJid(jid),
+                        success: false,
+                        timestamp: Date.now()
+                    }, order.outlet || OUTLET).catch(() => { });
+                }
             } else {
                 // If no message defined for this status, still mark as processed
                 await saveProcessedStatus(id, {
@@ -1398,8 +1505,31 @@ async function sendDailyReportSafely(dateOverride = null) {
     if (!firebaseListenersInitialized) {
         const orderRef = db.ref(resolvePath('orders', OUTLET));
 
+        // In-memory (not Redis) short-window debounce: a single order update
+        // from the app often writes several fields in quick succession
+        // (status, otp, discountVerified, stockDeducted, _fcmSent, ...),
+        // and each write fires its own child_changed event. Key on
+        // orderId+status (not just orderId) so this only ever collapses
+        // truly redundant re-fires of the SAME status — a genuine rapid
+        // status transition (different status value) always goes through
+        // immediately, regardless of timing. The real send-dedup lives in
+        // getProcessedStatus/saveProcessedStatus and is unaffected either way;
+        // this purely cuts redundant Redis lookups/logging for same-status noise.
+        const _recentChildChanged = new Map(); // orderId -> { status, ts }
+        const CHILD_CHANGED_DEBOUNCE_MS = 2000;
+
         orderRef.on("child_changed", (snap) => {
             const order = snap.val();
+            const now = Date.now();
+            const last = _recentChildChanged.get(snap.key);
+            const sameStatusRecently = last && last.status === order?.status && (now - last.ts) < CHILD_CHANGED_DEBOUNCE_MS;
+            _recentChildChanged.set(snap.key, { status: order?.status, ts: now });
+            // Evict old entries so this map doesn't grow unbounded over a long-running process.
+            if (_recentChildChanged.size > 500) {
+                const cutoff = now - CHILD_CHANGED_DEBOUNCE_MS * 5;
+                for (const [k, v] of _recentChildChanged) { if (v.ts < cutoff) _recentChildChanged.delete(k); }
+            }
+            if (sameStatusRecently) return;
             if (order && currentSock) handleOrderStatusUpdate(currentSock, snap.key, order);
             // Dine-in QR orders (tableSessions flow) get discount/total
             // computed client-side in menu/js/order.js, same unverified
