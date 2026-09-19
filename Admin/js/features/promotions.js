@@ -244,19 +244,22 @@ async function _setKillSwitchUi(on) {
 
 function _setPromoEnabledUi(enabled) {
     _promoEnabledLocal = !!enabled;
-    const widget = document.getElementById('promoKillWidget');
-    const toggle = document.getElementById('promoKillWidgetToggle');
-    const status = document.getElementById('promoKillWidgetStatus');
-    const slider = toggle?.nextElementSibling;
-    if (!widget || !toggle) return;
-    toggle.checked = !!enabled;
-    if (slider) slider.style.background = enabled ? '#22c55e' : '#94a3b8';
-    if (status) {
-        status.textContent = enabled
-            ? 'Sending is ON — all campaigns running normally.'
-            : 'Sending is OFF — all outgoing promo messages are blocked.';
-        status.classList.toggle('text-danger', !enabled);
-    }
+    // Update both Dashboard widget and Promotions page widget
+    ['promoKillWidget', 'promoPageKillWidget'].forEach(id => {
+        const widget = document.getElementById(id);
+        const toggle = document.getElementById(id + 'Toggle');
+        const status = document.getElementById(id + 'Status');
+        const slider = toggle?.nextElementSibling;
+        if (!widget || !toggle) return;
+        toggle.checked = !!enabled;
+        if (slider) slider.style.background = enabled ? '#22c55e' : '#94a3b8';
+        if (status) {
+            status.textContent = enabled
+                ? 'Sending is ON — all campaigns running normally.'
+                : 'Sending is OFF — all outgoing promo messages are blocked.';
+            status.classList.toggle('text-danger', !enabled);
+        }
+    });
     _refreshLaunchButton();
 }
 
@@ -844,10 +847,23 @@ export function loadPromotions() {
     if (widgetToggle) {
         widgetToggle.addEventListener('change', (e) => _togglePromoEnabled(e.target.checked));
     }
-    // Make the whole widget clickable
     document.getElementById('promoKillWidget')?.addEventListener('click', (e) => {
         if (e.target.closest('label, input, button')) return;
         const t = document.getElementById('promoKillWidgetToggle');
+        if (t) {
+            t.checked = !t.checked;
+            _togglePromoEnabled(t.checked);
+        }
+    });
+
+    // Promotions page kill-switch widget
+    const pageWidgetToggle = document.getElementById('promoPageKillWidgetToggle');
+    if (pageWidgetToggle) {
+        pageWidgetToggle.addEventListener('change', (e) => _togglePromoEnabled(e.target.checked));
+    }
+    document.getElementById('promoPageKillWidget')?.addEventListener('click', (e) => {
+        if (e.target.closest('label, input, button')) return;
+        const t = document.getElementById('promoPageKillWidgetToggle');
         if (t) {
             t.checked = !t.checked;
             _togglePromoEnabled(t.checked);

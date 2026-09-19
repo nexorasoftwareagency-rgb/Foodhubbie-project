@@ -8,7 +8,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 // OUTLET CONFIGURATION (UNIFIED CORE)
 // =============================
 const OUTLET = (process.env.OUTLET || 'outlet').trim();
-const OUTLET_NAME = 'Our Restaurant';
+const OUTLET_NAME = 'Hamare Restaurant';
 const OUTLET_EMOJI = '🏪';
 let OTHER_OUTLET_NAME = 'Our Other Store';
 const OTHER_OUTLET_EMOJI = '🏪';
@@ -68,18 +68,29 @@ let blockedNumbers = new Set();
 
 // ── Ban Detection ──────────────────────────────────────────────────────
 let consecutiveSendFailures = 0;
-const BAN_DETECT_FAILURE_THRESHOLD = 10;
+const BAN_DETECT_FAILURE_THRESHOLD = 3;
 const BAN_DETECT_FAILURE_WINDOW_MS = 5 * 60 * 1000; // 5 min window
 let _failureWindowStart = Date.now();
 
+let _sessionAlertSock = null;
 async function _writeBanAlert(type, severity, message) {
     try {
         const alertPath = `bot/alerts/${OUTLET}`;
         const ref = db.ref(resolvePath(alertPath));
         await ref.push({ type, severity, message, createdAt: Date.now() });
-        console.log(`[BAN-DETECT] ${severity === 'critical' ? '🔴' : '🟡'} ${type}: ${message}`);
+        console.log(`[SESSION-INVALIDATION] ${severity === 'critical' ? '🔴' : '🟡'} ${type}: ${message}`);
+        if (_sessionAlertSock) {
+            try {
+                const adminJids = await getCachedAdminJids();
+                if (adminJids && adminJids.length > 0) {
+                    const banMsg = '⚠️ *SESSION DISCONNECTED \u2014 ' + OUTLET_NAME + '* 🚨\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u26a0\ufe0f Severity: ' + severity.toUpperCase() + '\n💬 ' + message + '\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\nRe-pair from Admin Dashboard.';
+                    await Promise.all(adminJids.map(j => _sessionAlertSock.sendMessage(j, { text: banMsg }).catch(() => {})));
+                    console.log('[SESSION-INVALIDATION] WhatsApp alert sent to admin');
+                }
+            } catch (e) { console.error('[SESSION-INVALIDATION] WhatsApp admin failed:', e.message); }
+        }
     } catch (e) {
-        console.error('[BAN-DETECT] Failed to write alert:', e.message);
+        console.error('[SESSION-INVALIDATION] Failed to write alert:', e.message);
     }
 }
 
@@ -95,8 +106,8 @@ function _onSendFailure() {
     }
     consecutiveSendFailures++;
     if (consecutiveSendFailures >= BAN_DETECT_FAILURE_THRESHOLD) {
-        _writeBanAlert('send_failure_spike', 'warning',
-            `${consecutiveSendFailures} consecutive send failures in ${((now - _failureWindowStart) / 60000).toFixed(1)} min`);
+        const msg = consecutiveSendFailures + ' consecutive send failures in ' + ((now - _failureWindowStart) / 60000).toFixed(1) + ' min — possible ban';
+        _writeBanAlert('send_failure_spike', 'warning', msg);
         consecutiveSendFailures = 0;
         _failureWindowStart = now;
     }
@@ -448,7 +459,7 @@ async function sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl) {
             footer: `Freshly made • ${OUTLET_NAME}`
         });
     }
-    return sendImage(sock, sender, menuImg, `${ctaText}\n--------------------------\n${menuUrl}`, OUTLET, true, 'menu_display');
+    return sendImage(sock, sender, menuImg, `${ctaText}\n════════════════════════--\n${menuUrl}`, OUTLET, true, 'menu_display');
 }
 
 // Full greeting flow: greeting image + menu + order button. Token reused within 30 min.
@@ -459,12 +470,12 @@ async function sendOrderFlow(sock, sender, pushName, user) {
     ]);
 
     let welcome = (user?.hasProfile && user?.name)
-        ? `Welcome back, *${user.name}*! 👋\nYour favorite items are ready for you. ${OUTLET_EMOJI}`
-        : `Hello *${pushName}*! 👋`;
-    welcome += `\n------------------------`;
-    welcome += `\n✨ *WELCOME TO ${OUTLET_NAME.toUpperCase()}* ${OUTLET_EMOJI}`;
-    welcome += `\n------------------------`;
-    welcome += `\nDelicious food, delivered fast to your doorstep! 🚀`;
+        ? `Namaste *${user.name}* ji! 👋\nAapke favorite items taiyar hain! ${OUTLET_EMOJI}`
+        : `Namaste *${pushName}* ji! 👋`;
+    welcome += `\n════════════════════════`;
+    welcome += `\n✨ *${OUTLET_NAME} mein aapka swagat hai!* ${OUTLET_EMOJI}`;
+    welcome += `\n════════════════════════`;
+    welcome += `\nMazedar khana, fatafat aapke darwaze tak! 🚀`;
     const greetingImg = bot?.greetingImage || store?.bannerImage;
     await sendImage(sock, sender, greetingImg, welcome, undefined, false, 'greeting');
 
@@ -487,7 +498,7 @@ async function resendMenuCTA(sock, sender, user, store, bot, ctaText) {
     const token = await getOrCreateWebviewToken(OUTLET, phone, user);
     const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
     const menuImg = bot?.menuImage || store?.bannerImage;
-    if (!ctaText) ctaText = `🛒 *Ready to order?*\n👇 *TAP THE LINK BELOW TO ORDER NOW* 👇`;
+        if (!ctaText) ctaText = `👇 *niche link pe Click karke abhi order Karen* 👇`;
     return sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl);
 }
 
@@ -583,7 +594,7 @@ async function deductInventoryStock(sock, items, outlet = 'outlet') {
                     const alertMsg = `⚠️ *LOW STOCK ALERT* ⚠️\n━━━━━━━━━━━━━━━━━━━━\n` +
                         `📦 Item: *${data.name}*\n` +
                         `📉 Current Stock: *${newStock}*\n` +
-                        `🚩 Threshold: *${threshold}*\n------------------------\n` +
+                        `🚩 Threshold: *${threshold}*\n════════════════════════\n` +
                         `_Please refill stock from Admin Panel immediately!_`;
 
                     const jid = formatJid(notifyPhone);
@@ -662,10 +673,10 @@ async function sendInvalidInputHelp(sock, sender, user) {
     let helpMsg = "⚠️ *Invalid Selection.* ";
     switch (user.step) {
         case "CATEGORY":
-            helpMsg += "Please reply with a *Category Number* from the list above.\n------------------------\n🛒 *9* View Cart\n🏠 *0* Main Menu";
+            helpMsg += "Please reply with a *Category Number* from the list above.\n════════════════════════\n🛒 *9* View Cart\n🏠 *0* Main Menu";
             break;
         case "DISH":
-            helpMsg += "Please reply with an *Item Number* from the list above.\n------------------------\n🛒 *9* View Cart\n🔙 *0* Back to Categories";
+            helpMsg += "Please reply with an *Item Number* from the list above.\n════════════════════════\n🛒 *9* View Cart\n🔙 *0* Back to Categories";
             break;
         case "SIZE":
             helpMsg += "Please select a *Size Number* (1, 2, etc.) from the options above.";
@@ -821,14 +832,15 @@ async function notifyAdmin(sock, orderId, order, type = 'NEW') {
             msg = `🛵 *RIDER ARRIVED AT RESTAURANT* 🛵\n━━━━━━━━━━━━━━━━━━━━\n🆔 ID: #${orderId.slice(-5)}\n🛵 Rider: ${riderName}\n━━━━━━━━━━━━━━━━━━━━\n_Hand over the order for pickup._`;
         } else {
             let itemsText = (order.items || []).map(i => `• ${i.name} (${i.size}) x${i.quantity}`).join('\n');
-            let adminMsg = type === 'NEW' ? `🔔 *NEW ORDER RECEIVED!* 🔔\n------------------------\n` : `📦 *ORDER UPDATE* 📦\n------------------------\n`;
-            adminMsg += `🆔 ID: #${orderId.slice(-5)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n------------------------\n📦 Items:\n${itemsText}\n------------------------\n💰 Total: ₹${order.total || 0}\n💳 Method: ${order.paymentMethod}`;
+            let adminMsg = type === 'NEW' ? `🔔 *NEW ORDER RECEIVED!* 🔔\n════════════════════════\n` : `📦 *ORDER UPDATE* 📦\n════════════════════════\n`;
+            adminMsg += `🆔 ID: #${orderId.slice(-5)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n════════════════════════\n📦 Items:\n${itemsText}\n════════════════════════\n💰 Total: ₹${order.total || 0}\n💳 Method: ${order.paymentMethod}`;
             msg = adminMsg;
         }
 
         await Promise.all(jids.map(jid => sock.sendMessage(jid, { text: msg }).catch(() => {})));
     } catch (err) { console.error("Admin Notify Error:", err); }
 }
+
 
 async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
     try {
@@ -841,12 +853,12 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
         // PRIORITIZE: whatsappNumber if it's a standard JID. 
         // If it's a @lid (Linked ID), we prefer formatting the phone for a standard @s.whatsapp.net JID
         const storedJid = String(order.whatsappNumber || "");
-        if (storedJid.includes('@') && !storedJid.endsWith('@lid')) {
+        if (storedJid.includes('@')) {
             jid = storedJid;
         } else {
-            // Fallback to phone field (POS orders, incomplete profiles, or @lid cases)
+            // Fallback to phone field (POS orders, incomplete profiles)
             const rawPhone = order.phone || order.whatsappNumber;
-            if (rawPhone && rawPhone !== "Walk-in" && !String(rawPhone).endsWith('@lid')) {
+            if (rawPhone && rawPhone !== "Walk-in") {
                 jid = formatJid(rawPhone);
             }
         }
@@ -974,13 +986,13 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     otp = Math.floor(1000 + Math.random() * 9000).toString();
                     await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
-                msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${id.slice(-5)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nPlease be ready to receive your order. Thank you! 🙏`;
+                msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${id.slice(-5)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nKripya order lene ke liye taiyar rahein. Shukriya! 🙏`;
                 img = botSettings.imgOut;
             } else if (statusLower === "delivered" || statusLower === "served") {
                 msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
                 img = botSettings.imgDelivered;
             } else if (statusLower === "cancelled") {
-                msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nWe're sorry, your order #${id.slice(-5)} has been cancelled.\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nIf you have any questions, please contact us. 🙏`;
+                msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nAapka order #${id.slice(-5)} cancel ho gaya hai. 😔\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nKoi sawaal ho toh humse baat karein. 🙏`;
             }
 
             const prevStatus = currentProcessedStatus?.status || "None";
@@ -1026,6 +1038,86 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
     } catch (err) {
         console.error("Status Update Error:", err);
         updateData(`bot/logs/${id}`, { error: err.message, timestamp: Date.now() }, order.outlet || OUTLET).catch(() => { });
+    }
+}
+
+
+// SAFEST-FIRST: sibling fix to the webview_delivery discount re-validation.
+// Dine-in QR orders (menu/js/order.js, tableSessions running-bill flow)
+// compute discount/total client-side the same unverified way delivery
+// orders used to. This re-runs the server-side evaluation and, critically,
+// also corrects the per-table running bill in tableSessions/{sessionId} —
+// attachOrderToSession() already folded the client's (unverified) numbers
+// into that running total before the order was ever promoted to 'Placed',
+// so a discount fix limited to the order document alone would leave the
+// table's bill wrong even after the order record itself was corrected.
+async function verifyQrOrderDiscount(orderId, order, OUTLET) {
+    // Dine-in orders don't carry a phone on the order record itself (kept
+    // out deliberately — see order.js's PII comment), so per-customer
+    // limits (perCustomerLimit, firstOrder) can't be tied to a returning
+    // guest here the way WhatsApp/webview orders can. customer stays null;
+    // evaluateDiscount() still enforces global/date/minSubtotal/channel
+    // gating correctly, it just can't personalize per-guest limits for an
+    // anonymous dine-in order. Known limitation, not something this fix
+    // can close without collecting guest identity at the table.
+    let verified = null;
+    let correctedDiscount = 0;
+    try {
+        const claimedCouponCode = (order.discountSource || '').startsWith('coupon:')
+            ? order.discountSource.slice('coupon:'.length)
+            : null;
+        verified = await discountEngine.evaluateDiscount({
+            OUTLET, customer: null, subtotal: order.subtotal,
+            couponCode: claimedCouponCode, cart: order.items, channel: 'website'
+        });
+        correctedDiscount = verified ? verified.amount : 0;
+    } catch (discErr) {
+        console.error(`[QROrder] Discount re-validation failed for ${orderId}, zeroing out:`, discErr);
+        correctedDiscount = 0; // fail safe — never honor an unverified amount
+    }
+    const correctedTotal = Math.max(0, Math.round(((order.subtotal || 0) + (order.tax || 0) + (order.serviceCharge || 0) - correctedDiscount) * 100) / 100);
+    const claimedDiscount = order.discount || 0;
+    const claimedTotal = order.total || 0;
+    if (correctedDiscount !== claimedDiscount || correctedTotal !== claimedTotal) {
+        console.warn(`[QROrder] Discount mismatch on ${orderId}: client claimed ₹${claimedDiscount} (total ₹${claimedTotal}), server verified ₹${correctedDiscount} (total ₹${correctedTotal}). Correcting order + session.`);
+    }
+    const orderCorrection = verified ? {
+        discount: correctedDiscount, discountId: verified.discount.id,
+        discountLabel: verified.label, discountSource: verified.source,
+        discountMode: verified.discount.mode || 'fixed', discountValue: verified.discount.value || 0,
+        total: correctedTotal, discountVerified: true
+    } : {
+        discount: 0, discountId: null, discountLabel: null, discountSource: null,
+        discountMode: null, discountValue: 0, total: correctedTotal, discountVerified: true
+    };
+    await updateData(`orders/${orderId}`, orderCorrection, OUTLET);
+
+    // Fold the SAME correction into the table's running bill. This must be
+    // a delta applied via transaction, not an overwrite — the session
+    // aggregates totals across every order at the table, and other orders
+    // (or this same table adding more items) can be writing to it
+    // concurrently.
+    if (order.sessionId) {
+        const discountDelta = correctedDiscount - claimedDiscount;
+        const totalDelta = correctedTotal - claimedTotal;
+        if (discountDelta !== 0 || totalDelta !== 0) {
+            try {
+                const sessRef = db.ref(resolvePath(`tableSessions/${order.sessionId}`, OUTLET));
+                await sessRef.transaction((sess) => {
+                    if (!sess) return sess; // session gone — nothing to correct
+                    // Session already closed/billed: don't retroactively
+                    // change a bill that's already been settled with the
+                    // customer. The order record itself is still corrected
+                    // above, for accurate reporting.
+                    if (sess.status === 'billing' || sess.status === 'closed' || sess.status === 'paid') return undefined;
+                    sess.discount = Math.round(((sess.discount || 0) + discountDelta) * 100) / 100;
+                    sess.grandTotal = Math.round(((sess.grandTotal || 0) + totalDelta) * 100) / 100;
+                    return sess;
+                });
+            } catch (sessErr) {
+                console.error(`[QROrder] Session correction failed for ${order.sessionId} (order ${orderId}):`, sessErr);
+            }
+        }
     }
 }
 
@@ -1081,6 +1173,7 @@ async function startBot() {
             if (sock !== currentSock) return;
             const { connection } = update;
             if (connection === 'open') {
+            _sessionAlertSock = currentSock;
                 initFCMWatcher();
                 console.log(`✅ ${OUTLET_NAME.toUpperCase()} BOT IS ONLINE (Meta API)`);
                 reconnectAttempts = 0;
@@ -1308,6 +1401,14 @@ async function sendDailyReportSafely(dateOverride = null) {
         orderRef.on("child_changed", (snap) => {
             const order = snap.val();
             if (order && currentSock) handleOrderStatusUpdate(currentSock, snap.key, order);
+            // Dine-in QR orders (tableSessions flow) get discount/total
+            // computed client-side in menu/js/order.js, same unverified
+            // pattern the webview_delivery fix already closed. This is
+            // the sibling fix for that channel — see verifyQrOrderDiscount.
+            if (order && order.source === 'QR' && order.status === 'Placed' && !order.discountVerified) {
+                verifyQrOrderDiscount(snap.key, order, OUTLET).catch(e =>
+                    console.error(`[QROrder] Discount verification error for ${snap.key}:`, e));
+            }
         });
         orderRef.on("child_added", async (snap) => {
             const order = snap.val();
@@ -1322,7 +1423,8 @@ async function sendDailyReportSafely(dateOverride = null) {
         const timeBuffer = isDineIn ? 1800000 : 10000;
 
         const currentProcessedStatus = await getProcessedStatus(snap.key);
-        if (!currentProcessedStatus && orderTime > startupTime - timeBuffer) {
+        const isNewOrder = orderTime > startupTime - timeBuffer;
+        if (!currentProcessedStatus && isNewOrder) {
             // --- WEBVIEW DELIVERY ORDER: server-side finalization ---
             // The delivery webview (menu/delivery.html) writes the order
             // straight to Firebase (no chat round-trip). The bot never ran
@@ -1445,10 +1547,13 @@ async function sendDailyReportSafely(dateOverride = null) {
                 }
             }
 
-            handleOrderStatusUpdate(currentSock, snap.key, order, true);
-        } else {
-            // Just mark as processed without sending message
-            await saveProcessedStatus(snap.key, { status: order.status, timestamp: Date.now() });
+        }
+        // ALWAYS call handleOrderStatusUpdate with isNew=true for new orders.
+        // initFCMWatcher's _fcmSent write triggers child_changed which can
+        // pre-cache status before child_added finishes, so we must not gate
+        // the status notification on !currentProcessedStatus.
+        if (isNewOrder) {
+            await handleOrderStatusUpdate(currentSock, snap.key, order, true).catch(e => console.error("[CHILD-ADDED] handleOrderStatusUpdate error:", e));
         }
     });
 
@@ -1480,6 +1585,7 @@ async function sendDailyReportSafely(dateOverride = null) {
             updateData('bot/pair', { qr, status: 'waiting', updatedAt: Date.now() }, OUTLET).catch(() => {});
         }
         if (connection === 'open') {
+            _sessionAlertSock = currentSock;
             _wasConnected = true;
             initFCMWatcher();
     console.log(`✅ ${OUTLET_NAME.toUpperCase()} BOT IS ONLINE`);
@@ -1503,14 +1609,14 @@ async function sendDailyReportSafely(dateOverride = null) {
             const code = lastDisconnect?.error?.output?.statusCode;
             const reasonName = DISCONNECT_REASON_NAMES[code] || `unknown(${code})`;
             if (code === DisconnectReason.loggedOut) {
-                _writeBanAlert('ban_detected', 'critical',
+                _writeBanAlert('session_invalidated', 'critical',
                     `Logged out (DisconnectReason.loggedOut, code=${code}) — session banned or revoked`);
                 updateData('bot/pair', { qr: null, status: 'logged_out', updatedAt: Date.now() }, OUTLET).catch(() => {});
                 // Pause all promo campaigns on ban
                 getData('bot/promotions', OUTLET).then((promos) => {
                     if (promos?.enabled) {
                         updateData('bot/promotions', { enabled: false, killSwitch: true, bannedAt: Date.now() }, OUTLET).catch(() => {});
-                        console.log(`[BAN-DETECT] Auto-paused promotions for ${OUTLET}`);
+                        console.log(`[SESSION-INVALIDATION] Auto-paused promotions for ${OUTLET}`);
                     }
                 }).catch(() => {});
             } else {
@@ -1643,7 +1749,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                                 jid: sender, optedOutAt: Date.now(), reason: 'auto-rejection-reply'
                             }, OUTLET);
                             await sock.sendMessage(sender, {
-                                text: "Sorry to bother you — this is " + OUTLET_NAME + "'s WhatsApp order line. No further messages will be sent. Reply START if you'd ever like to order."
+                                text: "Maaf kijiye disturb karne ke liye — yeh " + OUTLET_NAME + " ka WhatsApp order line hai. Aapko aage koi message nahi bheja jayega. Jab bhi order karna ho, *START* type kar dena."
                             });
                             return;
                         }
@@ -1748,7 +1854,7 @@ async function sendDailyReportSafely(dateOverride = null) {
 
                     // Check if shop is open before showing menu
                     if (store && !isShopOpen(store.shopOpenTime, store.shopCloseTime, store.shopStatus)) {
-                        return sock.sendMessage(sender, { text: `🌙 *${OUTLET_NAME.toUpperCase()} IS CLOSED*\n------------------------\nHours: ${store.shopOpenTime || 'N/A'} - ${store.shopCloseTime || 'N/A'}\n------------------------\nSee you later! 👋` });
+                        return sock.sendMessage(sender, { text: `🌙 *${OUTLET_NAME.toUpperCase()} IS CLOSED*\n════════════════════════\nHours: ${store.shopOpenTime || 'N/A'} - ${store.shopCloseTime || 'N/A'}\n════════════════════════\nSee you later! 👋` });
                     }
 
                     // SAFEST-FIRST: never blast the order-link/menu-image CTA at a
@@ -1757,16 +1863,16 @@ async function sendDailyReportSafely(dateOverride = null) {
                     // friction for a customer who's ready to order). Otherwise send
                     // ONLY a plain greeting + an explicit ask, and wait for them to
                     // say the word before any promotional content goes out.
-                    if (/^(menu|order|food|start|hi|hello|hey)$/i.test(text.trim())) {
+                    if (/^(menu|order|food|khana|start|hi|hello|hey)$/i.test(text.trim())) {
                         await sendOrderFlow(sock, sender, pushName, user);
                         user.step = "WEBVIEW";
                         return;
                     }
 
                     let plainWelcome = (user?.hasProfile && user?.name)
-                        ? `Hi *${user.name}*! 👋 Welcome back to *${OUTLET_NAME}*.`
-                        : `Hi *${pushName}*! 👋 This is *${OUTLET_NAME}*'s WhatsApp order line.`;
-                    plainWelcome += `\n\nTo order food, reply with *Menu*, *Order*, or *Food* and I'll send the link right away.`;
+                        ? `Namaste *${user.name}* ji! 👋 *${OUTLET_NAME}* mein wapas aane ke liye shukriya.`
+                        : `Namaste *${pushName}*! 👋 Yeh *${OUTLET_NAME}* ka WhatsApp ordering bot hai.\nJab bhi order karna ho, *menu* type kar dena — koi jhanjhat nahi! 🙏`;
+                    plainWelcome += `\n\nKhana order karne ke liye *Menu*, *Order*, ya *Food* type karein — link turant bhej denge.`;
                     await sock.sendMessage(sender, { text: plainWelcome });
                     user.step = "AWAITING_ORDER_INTENT";
                     return;
@@ -1779,7 +1885,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                 // stops a confused/annoyed reply ("who is this", "not interested")
                 // from ever reaching the order-link send.
                 if (user.step === "AWAITING_ORDER_INTENT") {
-                    if (/^(menu|order|food|start)$/i.test(text.trim())) {
+                    if (/^(menu|order|food|khana|start)$/i.test(text.trim())) {
                         const store = await getData("settings/Store", OUTLET);
                         await resendMenuCTA(sock, sender, user, store, null);
                         user.step = "WEBVIEW";
@@ -1787,7 +1893,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     }
                     // Already handled by the opt-out/rejection block above for exact
                     // matches; anything else just gets one quiet nudge, no CTA.
-                    return sock.sendMessage(sender, { text: `Reply *Menu* whenever you'd like to order — no rush!` });
+                    return sock.sendMessage(sender, { text: `Jab bhi order karna ho, *Menu* type kar dena — koi jhanjhat nahi! 🙏` });
                 }
 
                 // WEBVIEW STEP: User is ordering via webview link
@@ -1847,7 +1953,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     user.sizeList.forEach(([s, p], i) => { sMsg += `${i + 1}️⃣  ${s} — ₹${p}\n`; });
                     sMsg += `0️⃣ *Take one step Back* 🔙`;
                     user.step = "SIZE";
-                    return await sendImage(sock, sender, dish.image, sMsg);
+                    return await sendImage(sock, sender, dish.image, sMsg, undefined, false, 'menu_browse');
                 }
 
                 if (user.step === "SIZE") {
