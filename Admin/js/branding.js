@@ -107,8 +107,11 @@ export function switchOutlet(val) {
     document.dispatchEvent(new CustomEvent('switchOutlet', { detail: { outlet: val } }));
 }
 
-export function openOutletInNewTab() {
-    const brand = state.currentOutlet === 'cake' ? 'pizza' : 'cake';
+export async function openOutletInNewTab() {
+    // Dynamically pick the other outlet from the registry (no hardcoded ternary)
+    const { BUSINESS_BY_OUTLET } = await import('./firebase.js');
+    const allOutlets = Object.keys(BUSINESS_BY_OUTLET);
+    const brand = allOutlets.find(o => o !== state.currentOutlet) || allOutlets[0];
     const url = new URL(window.location.origin + window.location.pathname);
     url.searchParams.set('brand', brand);
     window.open(url.toString(), '_blank');
