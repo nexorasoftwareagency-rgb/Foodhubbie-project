@@ -10,12 +10,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const OUTLET = (process.env.OUTLET || 'outlet').trim();
 const OUTLET_NAME = 'Hamare Restaurant';
 const OUTLET_EMOJI = '🏪';
-let OTHER_OUTLET_NAME = 'Our Other Store';
-const OTHER_OUTLET_EMOJI = '🏪';
-const OTHER_OUTLET_NUMBER = '';
-// Fixed developer number (mirrors getReportRecipients). Used by promo opt-out
-// filter to recognize admin senders and let them continue ordering.
-const DEVELOPER_NUMBER_FALLBACK = "9724649971";
+// Fixed developer number — used by promo opt-out filter and report recipients.
+const DEVELOPER_NUMBER = "9724649971";
 
 // WhatsApp delivery webview — served from the QR menu hosting target.
 const WEBVIEW_DELIVERY_HOST = "https://foodhubbie-qrmenu.web.app";
@@ -73,6 +69,9 @@ const promo = require('./promotions');
 const { sendDailyReport, sendMonthlyReport, sendWeeklyReport } = require('./reports');
 const riderNotify = require('./rider');
 const { logChatMessage } = require('./chat-log');
+
+let sharpLib;
+try { sharpLib = require('sharp'); } catch (_) { console.warn('⚠️ sharp not installed — image format conversion disabled'); }
 
 let redisClient;
 
@@ -160,9 +159,20 @@ if (redisUrl) {
     redisClient.on('error', (err) => console.log('Redis Client Error', err));
     redisClient.on('ready', () => { redisReady = true; });
     redisClient.on('end', () => { redisReady = false; });
-    redisClient.connect().then(() => {
+    redisClient.connect().then(async () => {
         redisReady = true;
         console.log('✅ Connected to Redis');
+        // Clean stale status:* keys from previous sessions
+        try {
+            let cleaned = 0;
+            for await (const key of redisClient.scanIterator({ MATCH: 'status:*' })) {
+                await redisClient.del(key);
+                cleaned++;
+            }
+            if (cleaned > 0) console.log(`♻️ Cleared ${cleaned} stale status key(s) from previous session`);
+        } catch (e) {
+            console.warn('[Redis] Stale status key cleanup failed:', e.message);
+        }
     }).catch(console.error);
 }
 
@@ -335,7 +345,6 @@ async function saveProcessedStatus(id, data) {
 
 async function getReportRecipients() {
     const recipients = new Set();
-    const DEVELOPER_NUMBER = "9724649971"; // Fixed Developer
 
     try {
         // Add Fixed Developer
@@ -534,7 +543,6 @@ async function appendContactInfo(text, outlet = 'outlet') {
     try {
         const storeSettings = await getData("settings/Store", outlet) || {};
         const deliverySettings = await getData("settings/Delivery", outlet) || {};
-        const DEVELOPER_NUMBER = "9724649971";
         const adminNum = storeSettings.phone || deliverySettings.reportPhone || DEVELOPER_NUMBER;
         return `${text}\n${'-'.repeat(32)}\nIf you have any Doubt Contact Admin: *${adminNum}*`;
     } catch (e) {
@@ -576,11 +584,26 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
     }
     try {
         let payload;
-        if (typeof image === 'string' && image.startsWith('data:image')) {
-            const base64Data = image.split(',')[1];
-            payload = { image: Buffer.from(base64Data, 'base64'), caption: finalMsg };
+        // Pre-convert ANY image to JPEG buffer via Sharp so Baileys'
+        // extractImageThumb never chokes on WebP/corrupt/broken formats.
+        if (typeof image === 'string') {
+            let inputBuf;
+            if (image.startsWith('data:image')) {
+                inputBuf = Buffer.from(image.split(',')[1], 'base64');
+            } else {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 15000);
+                const resp = await fetch(image, { signal: ctrl.signal });
+                clearTimeout(timer);
+                if (!resp.ok) throw new Error(`Image fetch ${resp.status}`);
+                inputBuf = Buffer.from(await resp.arrayBuffer());
+            }
+            if (sharpLib) {
+                try { inputBuf = await sharpLib(inputBuf).jpeg({ quality: 85 }).toBuffer(); } catch (e) { console.warn(`[SEND IMAGE] Sharp conversion failed, sending raw: ${e.message}`); }
+            }
+            payload = { image: inputBuf, caption: finalMsg };
         } else {
-            payload = { image: { url: image }, caption: finalMsg };
+            payload = { image: image, caption: finalMsg };
         }
         await sock.sendMessage(to, payload);
         outboundTracker.trackSend(outlet, trackType);
@@ -835,8 +858,8 @@ async function sendFCMToAdmins(orderId, order) {
             tokens: unique,
             notification: { title, body },
             data: { orderId, outlet, type: 'new_order', title, body },
-            android: { priority: "high", ttl: "86400000" },
-            webpush: { headers: { TTL: "86400", Urgency: "high" } }
+            android: { priority: "high" },
+            webpush: { headers: { Urgency: "high" } }
         });
         const failed = results.responses.filter(r => !r.success).length;
         if (failed > 0) {
@@ -881,8 +904,8 @@ async function sendFCMToRider(riderId, title, body, data = {}) {
             token,
             notification: { title, body },
             data,
-            android: { priority: 'high', ttl: '86400s' },
-            webpush: { headers: { TTL: '86400', Urgency: 'high' } }
+            android: { priority: 'high' },
+            webpush: { headers: { Urgency: 'high' } }
         });
     } catch (e) {
         console.error(`[FCM] sendFCMToRider error (rider ${riderId}):`, e.message);
@@ -1412,27 +1435,38 @@ async function startBot() {
     // Graceful shutdown handlers — allow PM2 to SIGTERM cleanly
     // so the WhatsApp socket closes gracefully instead of being hard-killed.
     // This prevents abrupt disconnects that look like client crashes to WhatsApp.
-    let shuttingDown = false;
-    const gracefulShutdown = async (signal) => {
-        if (shuttingDown) return;
-        shuttingDown = true;
-        console.log(`[SHUTDOWN] ${signal} received — gracefully closing WhatsApp socket for ${OUTLET}...`);
-        try {
-            if (sock && !isSocketDead(sock)) {
-                await sock.end(undefined);
-                console.log(`[SHUTDOWN] WhatsApp socket closed gracefully for ${OUTLET}`);
+    if (!globalThis._shutdownHandlerInstalled) {
+        globalThis._shutdownHandlerInstalled = true;
+        let shuttingDown = false;
+        process.on('SIGTERM', async () => {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            console.log(`[SHUTDOWN] SIGTERM received — gracefully closing WhatsApp socket...`);
+            try {
+                if (currentSock && !isSocketDead(currentSock)) {
+                    await currentSock.end(undefined);
+                    console.log(`[SHUTDOWN] WhatsApp socket closed gracefully`);
+                }
+            } catch (e) {
+                console.error(`[SHUTDOWN] Error during graceful close:`, e.message);
             }
-        } catch (e) {
-            console.error(`[SHUTDOWN] Error during graceful close:`, e.message);
-        }
-        // Clear intervals to prevent callbacks after shutdown
-        if (reportInterval) clearInterval(reportInterval);
-        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-        // Give a moment for any pending writes to flush
-        setTimeout(() => process.exit(0), 500);
-    };
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+            setTimeout(() => process.exit(0), 500);
+        });
+        process.on('SIGINT', async () => {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            console.log(`[SHUTDOWN] SIGINT received — gracefully closing WhatsApp socket...`);
+            try {
+                if (currentSock && !isSocketDead(currentSock)) {
+                    await currentSock.end(undefined);
+                    console.log(`[SHUTDOWN] WhatsApp socket closed gracefully`);
+                }
+            } catch (e) {
+                console.error(`[SHUTDOWN] Error during graceful close:`, e.message);
+            }
+            setTimeout(() => process.exit(0), 500);
+        });
+    }
 
     // Meta transport delivers replies via sendTemplate/sendButton (not
     // sendMessage) — patch those too so the chat tab logs the bot's half.
@@ -1865,7 +1899,7 @@ async function sendDailyReportSafely(dateOverride = null) {
             // set-membership check.
             try {
                 const adminNumbers = await getCachedAdminJids();
-                const isAuthorized = adminNumbers.includes(sender) || sender.startsWith(DEVELOPER_NUMBER_FALLBACK);
+                const isAuthorized = adminNumbers.includes(sender) || sender.startsWith(DEVELOPER_NUMBER);
                 if (!isAuthorized && text) {
                     const optOutKey = sender.replace(/[^0-9]/g, '').slice(-10);
                     if (/^(stop|unsubscribe|opt[\s-]?out)$/i.test(text)) {
@@ -1957,7 +1991,6 @@ async function sendDailyReportSafely(dateOverride = null) {
                 user.msgCount++;
 
                 // --- ADMIN COMMANDS ---
-                const DEVELOPER_NUMBER = "9724649971";
                 const adminNumbers = await getCachedAdminJids();
                 const isAuthorized = adminNumbers.includes(sender) || sender.startsWith(DEVELOPER_NUMBER);
 

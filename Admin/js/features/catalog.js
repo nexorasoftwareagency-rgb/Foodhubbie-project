@@ -587,43 +587,29 @@ export function addSizeField(name = "", price = "") {
     container.appendChild(div);
 }
 
-export function addDishAddonField(name = "", price = "") {
-    const container = document.getElementById('addonsContainer');
+function _addAddonField(containerId, cls, name = "", price = "") {
+    const container = document.getElementById(containerId);
     if (!container) return;
     const div = document.createElement('div');
-    div.className = "addon-row flex-row flex-gap-10 mb-8";
+    div.className = cls + " flex-row flex-gap-10 mb-8";
     div.innerHTML = `
-        <input placeholder="Addon (e.g. Extra Cheese)" value="${escapeHtml(name)}" class="form-input mb-0" style="flex:2">
+        <input placeholder="Addon Name" value="${escapeHtml(name)}" class="form-input mb-0" style="flex:2">
         <input type="number" placeholder="Price" value="${escapeHtml(String(price))}" class="form-input mb-0" style="flex:1">
-        <button data-action="removeParent" class="btn-text-danger" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:18px;">✕</button>
+        <button data-action="removeParent" class="btn-text-danger">✕</button>
     `;
     container.appendChild(div);
+}
+
+export function addDishAddonField(name = "", price = "") {
+    _addAddonField('addonsContainer', 'addon-row', name, price);
 }
 
 export function addCategoryAddonField(name = "", price = "") {
-    const container = document.getElementById('categoryAddonsList');
-    if (!container) return;
-    const div = document.createElement('div');
-    div.className = "addon-row-small flex-row flex-gap-10 mb-8";
-    div.innerHTML = `
-        <input placeholder="Addon Name" value="${escapeHtml(name)}" class="form-input mb-0" style="flex:2">
-        <input type="number" placeholder="Price" value="${escapeHtml(String(price))}" class="form-input mb-0" style="flex:1">
-        <button data-action="removeParent" class="btn-text-danger">✕</button>
-    `;
-    container.appendChild(div);
+    _addAddonField('categoryAddonsList', 'addon-row-small', name, price);
 }
 
 export function addCategoryEditAddonField(name = "", price = "") {
-    const container = document.getElementById('catEditAddonsList');
-    if (!container) return;
-    const div = document.createElement('div');
-    div.className = "addon-row-small flex-row flex-gap-10 mb-8";
-    div.innerHTML = `
-        <input placeholder="Addon Name" value="${escapeHtml(name)}" class="form-input mb-0" style="flex:2">
-        <input type="number" placeholder="Price" value="${escapeHtml(String(price))}" class="form-input mb-0" style="flex:1">
-        <button data-action="removeParent" class="btn-text-danger">✕</button>
-    `;
-    container.appendChild(div);
+    _addAddonField('catEditAddonsList', 'addon-row-small', name, price);
 }
 
 /**

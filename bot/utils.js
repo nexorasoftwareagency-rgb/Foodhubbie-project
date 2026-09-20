@@ -247,14 +247,6 @@ class RateLimiter {
 
 // ── Coupon ─────────────────────────────────────────────────────────────────
 
-const _COUPON_WORDS = ['PIZZA', 'DEAL', 'FEAST', 'SAVE', 'YUMMY', 'TREAT', 'SALE', 'FRESH', 'HOT', 'MEGA', 'SUPER', 'LUCKY', 'BOGO', 'FREE', 'WOW', 'YAY'];
-
-function generateCouponCode(prefix = '') {
-    const word = prefix || _COUPON_WORDS[Math.floor(Math.random() * _COUPON_WORDS.length)];
-    const num = Math.floor(Math.random() * 90 + 10);
-    return `${word}${num}`;
-}
-
 // ── Baileys Send Tracker (per-recipient jitter) ────────────────────────────
 // Mimics human sending patterns: 2-5s gap between distinct recipients,
 // no delay for same-recipient (likely order updates to same customer).
@@ -338,11 +330,10 @@ class OutboundTracker {
 
 module.exports = {
     formatJid, maskJid, isBlockedJid,
-    getISTDateInfo, getISTDateString, parseTime, isShopOpen, randomBetween,
+    getISTDateInfo, getISTDateString, isShopOpen, randomBetween,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
-    generateCouponCode, isSocketDead,
+    isSocketDead,
     getBroadcastDelayRangeMs, sleep,
-    WARMUP_DAYS, WARMUP_DELAY_RANGE_MS, NORMAL_DELAY_RANGE_MS,
     RateLimiter, OutboundTracker, BaileysSendTracker
 };

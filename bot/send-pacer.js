@@ -8,4 +8,4 @@ async function paceBurstSend() {
     _lastBurstSendAt = Date.now();
 }
 
-module.exports = { paceBurstSend, MIN_GAP_MS };
+module.exports = { paceBurstSend };
