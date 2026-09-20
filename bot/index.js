@@ -315,8 +315,9 @@ async function getProcessedStatus(id) {
             const raw = await redisClient.get(`status:${id}`);
             if (raw) {
                 const data = JSON.parse(raw);
-                // Option B: ignore entries from previous bot sessions
-                if (data.restartEpoch && data.restartEpoch < restartEpoch) return null;
+// Option B: ignore entries from previous bot sessions
+            // If no restartEpoch (old format), treat as stale and ignore
+            if (!data.restartEpoch || data.restartEpoch < restartEpoch) return null;
                 return data;
             }
         }
@@ -1043,12 +1044,15 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             }
 
             const botSettings = await getData("settings/Bot", order.outlet) || {};
+            const storeSettings = await getData("settings/Store", order.outlet) || {};
+            // Fallback chain: specific status image -> menu image -> banner image -> generic food image
+            const fallbackImg = botSettings.menuImage || storeSettings.bannerImage || 'https://firebasestorage.googleapis.com/v0/b/foodhubbie-10.appspot.com/o/images%2Fdefault-food.jpg?alt=media';
             let msg = "";
             let img = null;
 
             if (statusLower === "placed") {
                 msg = `🎉 *ORDER PLACED!* ${OUTLET_EMOJI}\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}We've received your order and our team is reviewing it now. ⏳\nYou'll get an update as soon as it's confirmed! ❤️`;
-                img = botSettings.imgPlaced || botSettings.imgConfirmed;
+                img = botSettings.imgPlaced || botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "confirmed") {
                 if (isDineIn && isNew) {
                     const outletName = order.outlet?.toUpperCase() || 'OUR RESTAURANT';
@@ -1056,10 +1060,10 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 } else {
                     msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}Your order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")}`;
                 }
-                img = botSettings.imgConfirmed;
+                img = botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "ready" || statusLower === "packed") {
                 msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${id.slice(-5)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")}`;
-                img = botSettings.imgReady;
+                img = botSettings.imgReady || fallbackImg;
 
                 if (!isDineIn) {
                     if (order.riderPhone) {
@@ -1098,7 +1102,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 } else {
                     msg = `🛵 *OUT FOR DELIVERY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nOur rider is on the way to your location! 🛵💨\n🆔 Order: #${id.slice(-5)}\n🔑 *OTP:* ${otp} (Share with rider only)${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n${getFoodFunnyProgress("Out for Delivery")}`;
                 }
-                img = botSettings.imgOut;
+                img = botSettings.imgOut || fallbackImg;
             } else if (statusLower === "reached drop location") {
                 let otp = storedOTP;
                 if (!otp) {
@@ -1106,10 +1110,10 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
                 msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${id.slice(-5)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nKripya order lene ke liye taiyar rahein. Shukriya! 🙏`;
-                img = botSettings.imgOut;
+                img = botSettings.imgOut || fallbackImg;
             } else if (statusLower === "delivered" || statusLower === "served") {
                 msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
-                img = botSettings.imgDelivered;
+                img = botSettings.imgDelivered || fallbackImg;
             } else if (statusLower === "cancelled") {
                 msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nAapka order #${id.slice(-5)} cancel ho gaya hai. 😔\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nKoi sawaal ho toh humse baat karein. 🙏`;
             }
