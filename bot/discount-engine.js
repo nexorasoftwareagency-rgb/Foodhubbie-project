@@ -179,13 +179,4 @@ async function recordDiscountUsage({ OUTLET, discountId, orderId, customerPhone,
     }
 }
 
-/**
- * Format the discount line that appears on the invoice / receipt.
- */
-function formatDiscountLine(discount) {
-    if (!discount || !discount.discount) return '';
-    const label = discount.discount.name ? ` (${discount.discount.name})` : '';
-    return `🎁 Discount${label}: -₹${Number(discount.amount).toFixed(0)}\n`;
-}
-
-module.exports = { evaluateDiscount, validateCouponCode, recordDiscountUsage, formatDiscountLine, getAllDiscounts };
+module.exports = { evaluateDiscount, validateCouponCode, recordDiscountUsage };

@@ -531,11 +531,5 @@ async function expireOldPromoLogs(OUTLET, db) {
 }
 
 module.exports = {
-    sendPromotionalMessage, personalizeTemplate,
-    isKillSwitchOn, isPromoEnabled, isOptedOut, hasPromoConsent,
-    sleepThroughQuietHours, sendWithRetry,
-    acquirePromoLock, releasePromoLock, logPromoResult, logPromoSkip,
-    runPromotionCampaign, resumeStuckPromotions, pickupScheduledPromotions, expireOldPromoLogs,
-    getSafeDailyLimit,
-    PROMO_DAILY_LIMIT, PROMO_WARMUP_DAILY_LIMITS
+    runPromotionCampaign, resumeStuckPromotions, pickupScheduledPromotions, expireOldPromoLogs
 };

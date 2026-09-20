@@ -1,8 +1,8 @@
 /**
- * SHARED GEO UTILITIES — Haversine, delivery fee, radius check.
+ * SHARED GEO UTILITIES — Haversine, delivery fee.
  *
  * Usage:
- *   import { calculateDistance, getFeeFromSlabs, isWithinRadius } from '../shared/geo/geo.js';
+ *   import { calculateDistance, getFeeFromSlabs } from '../shared/geo/geo.js';
  */
 
 const EARTH_RADIUS_KM = 6371;
@@ -30,11 +30,4 @@ export function getFeeFromSlabs(distance, slabs) {
         if (distance <= slab.km) return slab.fee;
     }
     return slabs[slabs.length - 1].fee;
-}
-
-/**
- * Returns true if (lat1, lon1) is within `radiusKm` of (lat2, lon2).
- */
-export function isWithinRadius(lat1, lon1, lat2, lon2, radiusKm = 0.5) {
-    return calculateDistance(lat1, lon1, lat2, lon2) <= radiusKm;
 }

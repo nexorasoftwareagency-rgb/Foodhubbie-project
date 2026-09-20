@@ -6,7 +6,7 @@
  *   import { escapeHtml } from '../shared/dom/escape.js';
  *
  * Usage (CJS):
- *   const { escapeHtml } = require('../shared/dom/escape.cjs');
+ *   import { escapeHtml } from '../shared/dom/escape.js';
  */
 export const escapeHtml = (str) => {
     if (str === null || str === undefined) return '';

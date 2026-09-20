@@ -14,6 +14,15 @@ import { renderPayments } from './payments.js';
 import { loadLucide } from '../ui.js';
 
 const RIDER_STALE_MS = 5 * 60 * 1000;
+
+function _normalizeItems(o) {
+    if (o.normalizedItems) return o.normalizedItems;
+    if (Array.isArray(o.cart)) return o.cart;
+    if (o.items) return Array.isArray(o.items) ? o.items : Object.values(o.items);
+    if (o.item) return [{ name: o.item, size: o.size || 'Regular', addon: o.addon || 'None', qty: o.quantity || 1, price: o.price || o.total || 0 }];
+    return [];
+}
+
 function isRiderFresh(r) {
     if (!r) return false;
     if (r.status === "On Delivery") return true;
@@ -479,21 +488,7 @@ export async function renderOrders(snap) {
     let liveCount = 0;
     sortedOrders.forEach(o => {
         const id = o.id;
-        let items = [];
-        if (Array.isArray(o.cart)) {
-            items = o.cart;
-        } else if (o.items) {
-            items = Array.isArray(o.items) ? o.items : Object.values(o.items);
-        } else if (o.item) {
-            // Legacy single-item format
-            items = [{
-                name: o.item,
-                size: o.size || 'Regular',
-                addon: o.addon || 'None',
-                qty: 1,
-                price: o.total || 0
-            }];
-        }
+        let items = _normalizeItems(o);
         o.normalizedItems = items;
 
         const status = (o.status || "Unknown").trim();
@@ -830,10 +825,7 @@ async function renderPriorityOrders(orders) {
         const timeStr = o.createdAt ? new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : 'Recently';
         
         // Extract items summary
-        let items = [];
-        if (Array.isArray(o.cart)) items = o.cart;
-        else if (o.items) items = Array.isArray(o.items) ? o.items : Object.values(o.items);
-        else if (o.item) items = [{ name: o.item, size: o.size || 'Regular', qty: 1, price: o.total || 0 }];
+        const items = _normalizeItems(o);
         const itemsSummary = items.length > 0 ? items.map(i => `${i.qty}x ${i.name || i.item}`).join(', ') : "No items";
 
         return `
@@ -867,7 +859,7 @@ async function renderTopItems(orders) {
 
     const itemCounts = {};
     orders.forEach(o => {
-        const items = o.normalizedItems || (Array.isArray(o.cart) ? o.cart : (o.items ? Object.values(o.items) : []));
+        const items = _normalizeItems(o);
         items.forEach(item => {
             const name = (item.name && String(item.name).trim()) || (item.item && String(item.item).trim()) || item.sku || item.id;
             if (name) {

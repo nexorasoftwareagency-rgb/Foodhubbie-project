@@ -128,25 +128,6 @@ async function updateData(path, data, outlet = 'pizza') {
     }
 }
 
-async function pushData(path, data, outlet = 'pizza') {
-    try {
-        const resolved = resolvePath(path, outlet);
-        _cache.delete(resolved);
-        await db.ref(resolved).push(stripUndefined(data));
-    } catch (err) {
-        console.error("PUSH ERROR:", err, "Path:", path);
-    }
-}
-async function deleteData(path, outlet = 'pizza') {
-    try {
-        const resolved = resolvePath(path, outlet);
-        _cache.delete(resolved); // Invalidate cache
-        await db.ref(resolved).remove();
-    } catch (err) {
-        console.error("DELETE ERROR:", err, "Path:", path);
-    }
-}
-
 async function getUserProfile(jid, outlet = 'pizza') {
     const cleanJid = jid.replace(/[^0-9]/g, '');
     const path = `profiles/${cleanJid}`;
@@ -169,8 +150,6 @@ module.exports = {
     getData,
     setData,
     updateData,
-    deleteData,
-    pushData,
     getUserProfile,
     saveUserProfile,
     stripUndefined

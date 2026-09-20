@@ -20,7 +20,7 @@ const DEFAULT_BUSINESS_ID = 'roshani-pizza';
 const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
 
 // In-memory reverse index for O(1) outlet -> businessId lookup
-// Populated at startup and kept in sync via addOutlet/updateOutlet
+// Populated at startup via initializeOutletBusinessIndex
 const outletToBusinessIdCache = new Map();
 
 function resolveBusinessId() {
@@ -85,40 +85,6 @@ async function initializeOutletBusinessIndex(db) {
     console.log(`[outlet-resolution] Initialized reverse index with ${outletToBusinessIdCache.size} outlets`);
 }
 
-async function getOutlet(db, businessId, outletId) {
-    const ref = db.ref(outletPath(businessId, outletId));
-    const snap = await ref.once('value');
-    return snap.exists() ? snap.val() : null;
-}
-
-async function listOutlets(db, businessId) {
-    const ref = db.ref(`businesses/${businessId || resolveBusinessId()}/outlets`);
-    const snap = await ref.once('value');
-    return snap.exists() ? snap.val() : {};
-}
-
-async function addOutlet(db, businessId, outletId, data) {
-    const ref = db.ref(outletPath(businessId, outletId));
-    await ref.set(data);
-    return true;
-}
-
-async function updateOutlet(db, businessId, outletId, patch) {
-    const ref = db.ref(outletPath(businessId, outletId));
-    await ref.update(patch);
-    // Keep reverse index in sync
-    outletToBusinessIdCache.set(outletId, businessId);
-    return true;
-}
-
-/** Add outlet and update reverse index */
-async function addOutlet(db, businessId, outletId, data) {
-    const ref = db.ref(outletPath(businessId, outletId));
-    await ref.set(data);
-    outletToBusinessIdCache.set(outletId, businessId);
-    return true;
-}
-
 module.exports = {
     DEFAULT_BUSINESS_ID,
     resolveBusinessId,
@@ -126,9 +92,5 @@ module.exports = {
     resolveOutletId,
     outletPath,
     resolvePath,
-    getOutlet,
-    listOutlets,
-    addOutlet,
-    updateOutlet,
     initializeOutletBusinessIndex
 };
