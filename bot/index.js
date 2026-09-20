@@ -162,17 +162,16 @@ if (redisUrl) {
     redisClient.connect().then(async () => {
         redisReady = true;
         console.log('✅ Connected to Redis');
-        // Clean stale status:* keys from previous sessions
-        try {
-            let cleaned = 0;
-            for await (const key of redisClient.scanIterator({ MATCH: 'status:*' })) {
-                await redisClient.del(key);
-                cleaned++;
-            }
-            if (cleaned > 0) console.log(`♻️ Cleared ${cleaned} stale status key(s) from previous session`);
-        } catch (e) {
-            console.warn('[Redis] Stale status key cleanup failed:', e.message);
-        }
+        // NOTE: deliberately NOT bulk-deleting status:* keys here. That was
+        // tried and reverted — see restartEpoch below (Option B). Deleting
+        // every processed-status entry on each connect wipes the bot's
+        // memory of what it already sent for every in-flight order, so the
+        // very next event for each of them re-enters handleOrderStatusUpdate
+        // with a clean slate and re-sends every status from scratch. That's
+        // the exact "duplicate notifications after bot restart" bug
+        // restartEpoch exists to prevent — reintroducing a delete here
+        // defeats it completely. If old keys ever need trimming, rely on
+        // their existing STATUS_TTL expiry, not a manual sweep on connect.
     }).catch(console.error);
 }
 
