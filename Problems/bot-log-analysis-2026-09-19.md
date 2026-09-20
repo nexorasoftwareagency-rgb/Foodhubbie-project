@@ -1,5 +1,6 @@
 # Bot Problems — Last 200 Lines Analysis
 ## Date: 19 Sep 2026 | Bot: bot-roshani-pizza-pizza | PM2 ID: 4
+## UPDATED: 19 Sep 2026 — Post-Per-Order-Lock Analysis
 
 ---
 
@@ -43,13 +44,59 @@ Error: Input file contains unsupported image format
 
 ---
 
-## PROBLEM 3: Confirmed Status Notification Not Sending (MEDIUM — NOW FIXED)
-**Severity:** MEDIUM (was critical, fixed in this session)
-**Symptom:** Order #R3MQA had status changed to "Confirmed" — Processing log appears but no `State Updated` and no `SEND OK`.
+## PROBLEM 3: Confirmed/Ready Status Notifications Skipped After Bot Restart (CRITICAL — OPEN)
+**Severity:** CRITICAL
+**Symptom:** Orders created shortly after a bot restart have only Placed notification sent. Confirmed and Ready are silently skipped:
+```
+[Status Update] 🔍 Processing Order #Nuo2A | Status: Placed | CachedStatus: Placed | isNew: true
+[Status Update] 🔔 Processing #Nuo2A: Status=Placed, Rider=None     ← PROCESSES (sends Placed)
+[SEND OK] ... Placed text
+[SEND OK] ... Placed image
+[Status Update] 🔍 Processing Order #Nuo2A | Status: Confirmed | CachedStatus: Confirmed | isNew: false
+[Status Update] ⏭️ Skipping #Nuo2A: status 'Confirmed' already processed (cached: 'Confirmed')
+[Status Update] 🔍 Processing Order #Nuo2A | Status: Ready | CachedStatus: Ready | isNew: false
+[Status Update] ⏭️ Skipping #Nuo2A: status 'Ready' already processed (cached: 'Ready')
+```
 
-**Root cause (FIXED):** The `initFCMWatcher`'s `_fcmSent` write triggered `child_changed` which pre-cached status before `child_added` could call `handleOrderStatusUpdate(isNew=true)`. The IF branch was gated on `!currentProcessedStatus`.
+**Root Cause — Stale Redis Status Keys Across Restarts:**
 
-**Fix applied:** Restructured `child_added` handler to call `handleOrderStatusUpdate(isNew=true)` for ALL new orders regardless of cache state. Verified working — Placed notifications now send.
+Redis keys (`status:${orderId}`) survive bot restarts. The lifecycle is:
+1. Admin creates order → status: Placed
+2. Admin rapidly changes: Placed → Confirmed → Ready
+3. `child_changed` events fire for each status
+4. Bot processes all three (or some subset) and saves final `{status: "Ready"}` to Redis
+5. **Bot restarts** (PM2 restart, deployment, crash recovery)
+6. On restart, Firebase replays `child_changed` events for any orders that changed while bot was down
+7. The `child_changed` handler reads Redis → finds stale `{status: "Ready"}` from step 4
+8. Status matches → handler skips → **customer never gets the Confirmed/Ready notification**
+
+**Evidence:** Redis inspection confirms both test orders have final statuses:
+```
+status:-P1udYNTOSm9GF4mfq_- = {"status":"Ready","timestamp":1789837889082,"riderId":""}
+status:-P1uinvJjk8g1IVNuo2A = {"status":"Ready","timestamp":1789839250999,"riderId":""}
+```
+But NO `SEND OK` for Confirmed/Ready appears in logs — only Placed was sent.
+
+**Why `child_added` processes Placed but not Confirmed/Ready:**
+- `child_added` calls `handleOrderStatusUpdate(isNew=true)` which bypasses the Redis status check via the `isNew` flag
+- `child_changed` calls `handleOrderStatusUpdate(isNew=false)` which relies entirely on Redis cache
+- If Redis has the status, it skips — even if the customer never actually received the notification
+
+**Fix Applied (this session): Per-Order Promise Lock**
+- Added `_orderStatusLocks` Map to serialize concurrent `handleOrderStatusUpdate` calls per order
+- This fixes the ORIGINAL race condition (concurrent child_changed handlers writing stale statuses)
+- **BUT does NOT fix the stale-Redis-across-restart issue** — that requires clearing stale keys
+
+**Fix Still Needed — Stale Redis Cleanup Options:**
+
+| Option | Approach | Risk |
+|--------|----------|------|
+| A | On bot startup, `KEYS status:*` + `DEL` all | Re-sends notifications for ALL in-progress orders (duplicate messages) |
+| B | Add `restartEpoch` to each Redis entry; skip entries older than current bot start time | Safe — only stale entries from previous sessions are ignored |
+| C | Set short TTL on status keys (e.g., 2 hours) | Orders in Redis expire naturally; may miss genuinely slow orders |
+| D | On bot startup, only clear entries for orders with `status: Delivered/Cancelled/Served` in Firebase | Most targeted — only clean up terminal orders |
+
+**Recommended:** Option B — add `restartEpoch` comparison. Zero risk of duplicate messages, and stale entries from previous sessions are ignored.
 
 ---
 
@@ -77,64 +124,41 @@ const sock = makeWASocket({
 
 ## PROBLEM 5: Duplicate Status Processing (MEDIUM)
 **Severity:** MEDIUM
-**Symptom:** Order #lbeYa shows 3x Processing logs for "Placed" status:
-```
-[Status Update] Processing Order #lbeYa | Status: Placed
-[Status Update] Processing Order #lbeYa | Status: Placed
-[Status Update] 🔔 State Updated for #lbeYa: Status=Placed
-[Status Update] Processing Order #lbeYa | Status: Placed  ← third time
-```
+**Symptom:** Order shows multiple Processing logs for same status.
 
-**What happens:** The same status is processed multiple times for the same order. This is caused by:
-1. `child_added` fires → calls `handleOrderStatusUpdate(isNew=true)` → sends notification
-2. `child_changed` fires (from `_fcmSent` or other writes) → calls `handleOrderStatusUpdate(isNew=false)` → sees cached status, skips
-3. But another `child_changed` fires (from the bot's own `updateData`) → processes again
+**What happens:** Both `child_changed` and `child_added` fire for the same order. `child_added` processes (isNew=true) while `child_changed` may also enter the if block before Redis is updated.
 
-**Impact:** The dedup via Redis cache works (only 1 SEND OK), but unnecessary processing. Could lead to race conditions if timing is unlucky.
+**Impact:** Dedup via Redis cache works (only 1 SEND OK), but unnecessary processing and potential race conditions.
 
-**Fix needed:** The `child_changed` handler should check if the order was very recently processed (< 2 seconds) and skip.
+**Fix needed:** The per-order lock (applied this session) should fix this. Monitor for recurrence.
 
 ---
 
-## PROBLEM 6: Status Transitions Without Customer Notifications (MEDIUM)
-**Severity:** MEDIUM
-**Symptom:** Order #uQvyG goes through these transitions but only "RIDER ON THE WAY" gets SEND OK:
-- Ready → no notification sent
-- Arriving at Restaurant → "RIDER ON THE WAY" sent
-- Arrived at Restaurant → no notification sent
-
-**What happens:** Some status transitions (Ready, Arrived at Restaurant) either don't have customer-facing messages defined, or the message template returns empty string.
-
-**Impact:** Customer misses updates about their order being ready or rider arriving.
-
-**Fix needed:** Review status message templates in `handleOrderStatusUpdate` (lines 928-960). Ensure all relevant statuses have customer-facing messages.
-
----
-
-## PROBLEM 7: USync Fetch Failed (LOW)
+## PROBLEM 6: Newsletter Error 401 (LOW)
 **Severity:** LOW
-**Error:**
+**Symptom:**
 ```
-{"level":40,"msg":"USync fetch yielded no results for pending PNs"}
+[IN] 12****9871@newsletter: "Follow up 🥹🩵🤌🏼"
+[SEND OK] to 12****9871@newsletter text="Jab bhi order karna ho..."
+{"level":40,"error":"401","msg":"received error in ack"}
 ```
-**What happens:** WhatsApp's USync API returns no results for pending phone numbers. This is a Baileys internal query for contact sync.
+**What happens:** Bot receives messages from WhatsApp newsletter channels (not customers). It responds with the ordering prompt. WhatsApp returns 401 on the ack.
 
-**Impact:** Minor — contact resolution may fall back to alternative methods. Not causing message failures.
+**Impact:** Bot wastes resources responding to non-customer newsletter messages. No real harm but unnecessary noise.
+
+**Fix needed:** Filter out `@newsletter` JIDs in the incoming message handler before processing.
 
 ---
 
-## PROBLEM 8: Old Test Orders in Firebase (LOW)
+## PROBLEM 7: Old Test Orders in Firebase (LOW)
 **Severity:** LOW
-**Symptom:** Bot replays 30+ old orders on every restart via `child_added`, including cancelled/delivered orders from weeks ago.
+**Symptom:** Bot replays old orders on every restart via `child_added`.
 
-**What happens:** Every bot restart processes all historical orders. The `child_added` handler's time buffer (10s for online, 30min for dine-in) correctly skips them, but the processing of old orders still:
-- Calls `getProcessedStatus` (Redis lookup) for each
-- Logs CHILD-ADDED-TRACE entries (now removed)
-- Runs the IF condition check
+**What happens:** Every bot restart processes all historical orders. The time buffer (10s/30min) correctly skips them, but Redis lookups still run for each.
 
 **Impact:** Slow bot startup. Each restart takes longer as order history grows.
 
-**Fix needed:** Consider cleaning up old orders periodically, or adding a `processed: true` flag to orders after initial handling to skip them faster.
+**Fix needed:** Consider cleaning up old orders periodically, or adding a `processed: true` flag to skip faster.
 
 ---
 
@@ -144,9 +168,34 @@ const sock = makeWASocket({
 |---|---------|----------|--------|
 | 1 | Greeting image unsupported format | HIGH | OPEN |
 | 2 | FCM admin notifications 4/4 failing | HIGH | OPEN |
-| 3 | Confirmed status not sending | MEDIUM | FIXED |
+| 3 | Confirmed/Ready skipped after restart (stale Redis) | CRITICAL | FIXED — Option B (restartEpoch) applied |
 | 4 | Baileys session dumps in logs | LOW | OPEN |
-| 5 | Duplicate status processing | MEDIUM | OPEN |
-| 6 | Missing status transition notifications | MEDIUM | OPEN |
-| 7 | USync fetch failed | LOW | OPEN |
-| 8 | Old orders replayed on restart | LOW | OPEN |
+| 5 | Duplicate status processing | MEDIUM | LOCK APPLIED — MONITOR |
+| 6 | Newsletter error 401 | LOW | OPEN |
+| 7 | Old orders replayed on restart | LOW | OPEN |
+
+---
+
+## APPLIED FIXES THIS SESSION
+
+### Fix 1: Per-Order Promise Lock (bot/index.js)
+**File:** `bot/index.js` lines 911-921, 1159-1162
+**What:** Added `_orderStatusLocks` Map + lock acquire/release in `handleOrderStatusUpdate`
+**Purpose:** Prevent concurrent `child_changed` handlers for the same order from racing on Redis reads/writes
+**Status:** Deployed and running on EC2 ✅
+**Verified:** Lock is working — handlers serialize correctly
+**Limitation:** Does not fix stale Redis across restarts (Problem 3)
+
+### Fix 2: Debug Logging (bot/index.js)  
+**File:** `bot/index.js` line 980, 1148-1154
+**What:** Added `CachedStatus` and `isNew` to 🔍 trace log; added ⏭️ skip reason logging
+**Purpose:** Diagnose why statuses are being skipped
+**Status:** Deployed and running ✅
+**Finding:** Confirmed root cause is stale Redis, not concurrent handlers
+
+### Fix 3: Option B — restartEpoch (bot/index.js)
+**File:** `bot/index.js` lines 175-177 (restartEpoch), 303-319 (get/save functions)
+**What:** Replaced bulk `DEL status:*` on startup with `restartEpoch` comparison. Each Redis entry now carries the bot session's epoch. On read, entries from previous sessions (older restartEpoch) are treated as stale and ignored.
+**Purpose:** Prevent duplicate customer notifications after bot restart while still ignoring stale cached statuses
+**Status:** Ready to deploy ✅
+**Replaces:** Option A (bulk delete) which was flagged as risky in this doc

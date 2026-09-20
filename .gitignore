@@ -60,6 +60,7 @@ Desktop.ini
 
 # Test artifacts
 test-results/
+tmp_check.js
 
 # Audit temp files
 _audit_tmp/

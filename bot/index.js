@@ -173,6 +173,9 @@ let dailyReportSent = false;
 let weeklyReportSent = false;
 let monthlyReportSent = false;
 const startupTime = Date.now();
+// Option B: restartEpoch — entries from previous sessions are ignored
+// instead of bulk-deleting all status:* keys (which causes duplicate messages).
+const restartEpoch = startupTime;
 
 // Track current socket to clean up on reconnect
 let currentSock = null;
@@ -300,8 +303,13 @@ async function saveSession(sender, data) {
 async function getProcessedStatus(id) {
     try {
         if (redisReady) {
-            const data = await redisClient.get(`status:${id}`);
-            if (data) return JSON.parse(data);
+            const raw = await redisClient.get(`status:${id}`);
+            if (raw) {
+                const data = JSON.parse(raw);
+                // Option B: ignore entries from previous bot sessions
+                if (data.restartEpoch && data.restartEpoch < restartEpoch) return null;
+                return data;
+            }
         }
     } catch (e) { }
     return localStatusCache.get(id) || null;
@@ -309,8 +317,9 @@ async function getProcessedStatus(id) {
 async function saveProcessedStatus(id, data) {
     try {
         if (data) {
-            localStatusCache.set(id, data);
-            if (redisReady) await redisClient.setEx(`status:${id}`, STATUS_TTL, JSON.stringify(data));
+            const entry = { ...data, restartEpoch };
+            localStatusCache.set(id, entry);
+            if (redisReady) await redisClient.setEx(`status:${id}`, STATUS_TTL, JSON.stringify(entry));
         }
     } catch (e) { }
 }
@@ -826,7 +835,7 @@ async function sendFCMToAdmins(orderId, order) {
             tokens: unique,
             notification: { title, body },
             data: { orderId, outlet, type: 'new_order', title, body },
-            android: { priority: "high", ttl: "86400s" },
+            android: { priority: "high", ttl: "86400000" },
             webpush: { headers: { TTL: "86400", Urgency: "high" } }
         });
         const failed = results.responses.filter(r => !r.success).length;
@@ -908,7 +917,17 @@ async function notifyAdmin(sock, orderId, order, type = 'NEW') {
 }
 
 
+// Per-order lock: serialize status updates so concurrent child_changed
+// events for the same order don't race on Redis reads/writes.
+const _orderStatusLocks = new Map();
+
 async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
+    // Wait for any in-flight handler on this order, then claim the slot.
+    while (_orderStatusLocks.has(id)) {
+        await _orderStatusLocks.get(id);
+    }
+    let release;
+    _orderStatusLocks.set(id, new Promise(r => { release = r; }));
     try {
         if (!sock || isSocketDead(sock)) return;
         // FIX: Robust JID resolution for both Online and POS orders.
@@ -967,7 +986,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
         const shouldSendOtpMessage = isDeliveryOtpStatus && storedOTP && !currentProcessedStatus?.lastOtp && !currentProcessedStatus?.lastOtp;
 
         const maskedJid = maskJid(jid);
-        console.log(`[Status Update] 🔍 Processing Order #${id.slice(-5)} | Status: ${currentStatus} | OTP Changed: ${isOtpChanged} | Target: ${maskedJid}`);
+        console.log(`[Status Update] 🔍 Processing Order #${id.slice(-5)} | Status: ${currentStatus} | OTP Changed: ${isOtpChanged} | Target: ${maskedJid} | CachedStatus: ${currentProcessedStatus?.status || 'null'} | isNew: ${isNew}`);
 
         if (!currentProcessedStatus || currentProcessedStatus.status !== currentStatus || isNew || isOtpChanged || shouldSendOtpMessage) {
             const currentRider = order.riderId || order.assignedRider || "";
@@ -1135,16 +1154,20 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 });
             }
         } else {
-            // Log skip reason if needed
             if (currentProcessedStatus && currentProcessedStatus.status === currentStatus) {
-                // Already processed this status
+                console.log(`[Status Update] ⏭️ Skipping #${id.slice(-5)}: status '${currentStatus}' already processed (cached: '${currentProcessedStatus.status}')`);
             } else if (!jid) {
-                // Already handled in the check above
+                console.log(`[Status Update] ⏭️ Skipping #${id.slice(-5)}: no JID`);
+            } else {
+                console.log(`[Status Update] ⏭️ Skipping #${id.slice(-5)}: unknown skip reason (cached: ${JSON.stringify(currentProcessedStatus)}, isNew: ${isNew}, otpChanged: ${isOtpChanged}, shouldSendOtp: ${shouldSendOtpMessage})`);
             }
         }
     } catch (err) {
         console.error("Status Update Error:", err);
         updateData(`bot/logs/${id}`, { error: err.message, timestamp: Date.now() }, order.outlet || OUTLET).catch(() => { });
+    } finally {
+        _orderStatusLocks.delete(id);
+        release();
     }
 }
 
