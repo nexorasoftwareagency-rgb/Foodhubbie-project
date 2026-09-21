@@ -1045,8 +1045,8 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
 
             const botSettings = await getData("settings/Bot", order.outlet) || {};
             const storeSettings = await getData("settings/Store", order.outlet) || {};
-            // Fallback chain: specific status image -> menu image -> banner image -> generic food image
-            const fallbackImg = botSettings.menuImage || storeSettings.bannerImage || 'https://firebasestorage.googleapis.com/v0/b/foodhubbie-10.appspot.com/o/images%2Fdefault-food.jpg?alt=media';
+            // Fallback chain: specific status image -> menu image -> banner image -> 1x1 transparent PNG base64 (never fails)
+            const fallbackImg = botSettings.menuImage || storeSettings.bannerImage || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
             let msg = "";
             let img = null;
 
