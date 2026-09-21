@@ -7833,6 +7833,13 @@ body.pos-selection-mode .walkin-picker {
 }
 .walkin-offers-manage-link:hover { text-decoration:underline; }
 
+/* Table Bill Payment summary (reuses .walkin-offer-* / .btn-walkin-coupon* above) */
+.table-bill-summary {
+    background:#f8fafc; border-radius:8px; padding:10px 12px; margin-top:4px;
+}
+.table-bill-summary .flex-between { padding:4px 0; }
+.table-bill-total-row { border-top:1px solid #e2e8f0; margin-top:4px; padding-top:8px !important; font-size:15px; }
+
 /* Discounts Reports Modal */
 .discount-kpi-grid {
     display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));

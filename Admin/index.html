@@ -5485,6 +5485,91 @@
 
             </div>
 
+    <!-- Table Bill Payment — coupon/discount review, opened by "Make Payment"
+         on a table or a split-bill group before the payment-method picker.
+         Lives outside #tab-tables (like discountEditorModal) so its clicks
+         are caught by main.js's global data-action dispatcher, not tables.js's
+         tab-scoped one — tables.js only opens/closes it from JS. -->
+    <div id="tableBillReviewModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tableBillReviewTitle" aria-hidden="true">
+
+        <div class="modal-content glass-card" style="max-width:460px;">
+
+            <div class="modal-header">
+
+                <h3 id="tableBillReviewTitle">Table — Bill</h3>
+
+                <button class="btn-text" data-action="closeTableBillReview" aria-label="Close">
+
+                    <i data-lucide="x"></i>
+
+                </button>
+
+            </div>
+
+            <div class="modal-body">
+
+                <button type="button" id="tableBillOffersBtn" class="btn-walkin-offers" data-action="toggleTableBillOffersPanel" aria-expanded="false" aria-controls="tableBillOffersPanel" title="See every currently-active discount and coupon" style="margin-bottom:10px;">
+
+                    <i data-lucide="tag"></i> Active offers
+
+                </button>
+
+                <div id="tableBillOffersPanel" class="walkin-offers-panel hidden"></div>
+
+                <div class="flex-row flex-center flex-gap-8 mb-8 walkin-coupon-row">
+
+                    <input type="text" id="tableBillCouponCode" placeholder="Coupon code (optional)" class="walkin-coupon-input" style="flex:1;">
+
+                    <button type="button" class="btn-walkin-coupon" data-action="applyTableBillCoupon">Apply</button>
+
+                    <button type="button" id="tableBillCouponClearBtn" class="btn-walkin-coupon-clear hidden" data-action="clearTableBillCoupon" title="Clear coupon">
+
+                        <i data-lucide="x"></i>
+
+                    </button>
+
+                </div>
+
+                <div id="tableBillCouponHint" class="text-muted-small fs-11 mb-8 hidden walkin-coupon-hint"></div>
+
+                <div class="flex-row flex-center flex-gap-8 mb-8">
+
+                    <label class="text-muted-small fs-11" style="flex:1;">Or give a manual discount —
+
+                        <input type="number" id="tableBillDiscountAmt" value="0" min="0" style="width:80px;"> ₹ flat
+
+                    </label>
+
+                    <label class="text-muted-small fs-11">
+
+                        <input type="number" id="tableBillDiscountPct" value="0" min="0" max="100" style="width:60px;"> %
+
+                    </label>
+
+                </div>
+
+                <div class="table-bill-summary">
+
+                    <div class="flex-between"><span class="text-muted-small">Subtotal</span><span id="tableBillSubtotal">₹0</span></div>
+
+                    <div id="tableBillDiscountRow" class="flex-between hidden"><span class="text-muted-small">Discount</span><span id="tableBillDiscountVal" style="color:#059669;">-₹0</span></div>
+
+                    <div class="flex-between table-bill-total-row"><strong>Total</strong><strong id="tableBillTotal">₹0</strong></div>
+
+                </div>
+
+                <button type="button" class="btn-primary" style="width:100%;margin-top:12px;" data-action="confirmTableBillPayment">
+
+                    <i data-lucide="wallet"></i> Proceed to Payment
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
             <div class="modal-body">
 
                 <form id="discountEditorForm">
