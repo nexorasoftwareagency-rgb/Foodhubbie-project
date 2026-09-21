@@ -55,6 +55,24 @@ export function discountAllowsChannel(d, channel) {
         || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos'));
 }
 
+/**
+ * Builds the list of currently-eligible-for-display discounts for a
+ * quick-apply offers panel: active, channel-permitted, not at its global
+ * redemption cap. Coupon types sort first. Shared by POS's and Table
+ * Bill Payment's "Active offers" panels so both apply the exact same
+ * eligibility rule — a discount that shows as available in one always
+ * shows (or doesn't) the same way in the other.
+ */
+export function getEligibleOffersForDisplay(all, { channel = 'pos', now = Date.now() } = {}) {
+    return Object.entries(all || {})
+        .map(([id, d]) => ({ id, ...d }))
+        .filter(d => d && d.type && d.value != null)
+        .filter(d => isDiscountActiveNow(d, now))
+        .filter(d => discountAllowsChannel(d, channel))
+        .filter(d => !d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
+        .sort((a, b) => (a.type === 'coupon' ? 0 : 1) - (b.type === 'coupon' ? 0 : 1));
+}
+
 async function _isFeatureEnabled() {
     try {
         const snap = await get(Outlet.ref(FEATURE_FLAG_PATH));

@@ -336,6 +336,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'editDiscount': logger.info('DISCOUNT', `Edit discount: ${el.dataset.id}`); window.__discounts?.openEditor(el.dataset.id); break;
                 case 'closeDiscountEditor': logger.info('DISCOUNT', 'Close editor'); window.__discounts?.closeEditor(); break;
                 case 'saveDiscount': logger.info('DISCOUNT', 'Save discount'); window.__discounts?.save(); break;
+                case 'closeTableBillReview': logger.info('TABLES', 'Close bill review'); window.__tables?.closeBillReview(); break;
+                case 'applyTableBillCoupon': logger.info('TABLES', 'Apply table bill coupon'); window.__tables?.applyBillCoupon(); break;
+                case 'clearTableBillCoupon': logger.info('TABLES', 'Clear table bill coupon'); window.__tables?.clearBillCoupon(); break;
+                case 'toggleTableBillOffersPanel': logger.info('TABLES', 'Toggle table bill offers panel'); window.__tables?.toggleBillOffers(); break;
+                case 'applyTableOfferFromPanel': {
+                    const code = el.getAttribute('data-code');
+                    logger.info('TABLES', `Apply table bill offer from panel: ${code}`);
+                    window.__tables?.applyBillOfferFromPanel(code);
+                    break;
+                }
+                case 'confirmTableBillPayment': logger.info('TABLES', 'Confirm table bill payment'); window.__tables?.confirmBillPayment(); break;
                 case 'deleteDiscount': logger.info('DISCOUNT', `Delete discount: ${el.dataset.id}`); window.__discounts?.remove(el.dataset.id); break;
                 case 'viewDiscountUsage': logger.info('DISCOUNT', `View discount usage: ${el.dataset.id}`); (await useMod('discountsReports')).openDiscountUsageDirect?.(el.dataset.id); break;
                 case 'openDiscountsReports': logger.info('DISCOUNT', 'Open discount reports'); (await useMod('discountsReports')).openDiscountsReports?.(); break;

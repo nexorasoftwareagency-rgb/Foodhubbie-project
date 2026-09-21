@@ -33,6 +33,7 @@ import { showToast, showConfirm, showDeleteConfirm, showPaymentPicker } from '..
 import { printOrderReceipt } from './printing.js';
 import { haptic, escapeHtml, playNotificationSound } from '../utils.js';
 import { loadLucide } from '../ui.js';
+import { evaluateDiscount, recordDiscountUsage, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
 
 // ---------------------------------------------------------------------
 // Module-level cache
@@ -851,43 +852,7 @@ async function _makePaymentForTable(tableId) {
         return;
     }
 
-    // Compute total from non-cancelled orders (session-level grandTotal may be inflated)
-    const total = activeOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
-    const method = await showPaymentPicker(total);
-    if (!method) return;
-
-    const sessRef = _sessRef(sess.sessionId);
-    const tblRef = _tblRef(tableId);
-    try {
-        // Mark all orders as paid first
-        for (const o of orders) {
-            if (o.id && o.status !== 'Cancelled') {
-                await update(_ordersRef(o.id), { paymentMethod: method, paymentStatus: 'Paid', updatedAt: Date.now() });
-            }
-        }
-        // Close session and free table only after all orders are updated
-        await update(sessRef, { status: 'closed', closedAt: Date.now(), paymentMethod: method, paidAt: Date.now() });
-        await update(tblRef, { status: 'free', currentSession: null, updatedAt: Date.now() });
-        await runTransaction(Outlet.ref(`tableAnalytics/${tableId}`), (cur) => {
-            cur = cur || { totalOrders: 0, totalRevenue: 0, avgSessionTime: 0, occupancyRate: 0 };
-            const orderCount = (sess.orders || []).length;
-            const mins = _sessionElapsedMinutes(sess);
-            cur.totalOrders = (cur.totalOrders || 0) + orderCount;
-            cur.totalRevenue = (cur.totalRevenue || 0) + total;
-            cur.avgSessionTime = cur.avgSessionTime ? Math.round((cur.avgSessionTime + mins) / 2) : mins;
-            return cur;
-        });
-        if (_drawerTableId === tableId) _closeTableDrawer();
-        showToast(`Table closed — ₹${total.toLocaleString('en-IN')} via ${method}`, 'success');
-        haptic(30);
-    } catch (e) {
-        // Rollback: try to restore session + table state on failure
-        try {
-            await update(sessRef, { status: 'billing' });
-            await update(tblRef, { status: 'billing', updatedAt: Date.now() });
-        } catch (_) {}
-        showToast('Payment failed: ' + (e?.message || e), 'error');
-    }
+    openTableBillReview(tableId, null);
 }
 async function _closeExpiredSession(tableId) {
     const t = _tables[tableId];
@@ -914,31 +879,442 @@ async function _makePaymentForGroup(tableId, groupId) {
         showToast('Group must be in billing state first', 'warning');
         return;
     }
-    const total = _ordersForGroup(sess.sessionId, groupId)
-        .filter(o => o.status !== 'Cancelled')
-        .reduce((sum, o) => sum + Number(o.total || 0), 0);
-    const method = await showPaymentPicker(total);
-    if (!method) return;
+    openTableBillReview(tableId, groupId);
+}
+
+// ---------------------------------------------------------------------
+// Table Bill Payment — coupon / discount review, applied at bill-settle
+// time. "You ran a promotion, so we came" → staff opens the Active
+// Offers panel, applies the code, THEN picks a payment method.
+//
+// Design decisions worth knowing if you extend this:
+//
+// - A table bill can cover MANY orders (a whole session, or one billing
+//   group within a split session). There is no single "order" a
+//   table-level discount belongs to, so it's stored on the SESSION (or
+//   orderGroup) document itself — subtotal/discount/discountId/
+//   discountLabel/discountSource/paidAmount — the same shape a real
+//   receipt uses (item prices unchanged, discount shown as a bill-level
+//   line), rather than retroactively rewriting each order's stored total.
+//
+// - tableAnalytics.totalRevenue is credited with paidAmount (post-
+//   discount), not the gross subtotal — it should reflect money actually
+//   collected.
+//
+// - Channel is 'pos' for table billing (same bucket as Walk-in), not a
+//   new channel value — the discount editor's Channel field only has
+//   three options (WhatsApp / POS / Both) and introducing a fourth would
+//   touch the editor UI, the evaluator, and the reports channel-split.
+//   If you want table-billing redemptions tracked separately from
+//   walk-in in the P&L reports later, that's the place to start.
+//
+// - Category-type discounts may not correctly auto-evaluate here: order
+//   records in this session don't carry category IDs the way a live POS
+//   cart does, so `cart` is passed empty. Coupon, storewide, and
+//   first-order discounts are unaffected — only category-scoped
+//   discounts are the gap, and it's a real one, not silently patched.
+//
+// - The discount-usage audit log's "view order" link expects a real
+//   order id, not a session id (a table bill isn't one). We record
+//   usage against one representative order from the bill (the first one
+//   that has a customerPhone, or just the first order) — clicking
+//   through later shows a real, relevant order, not the whole bill, but
+//   that's honest given the existing link only understands orders.
+//
+// - Customer discountUsage / firstOrderDiscountUsed are bumped here (so
+//   a coupon can't be reused across POS, WhatsApp, and table billing
+//   past its per-customer limit) — but orderCount/totalSpent/lastSeen
+//   are deliberately NOT touched. Those are already maintained wherever
+//   the individual dine-in orders were first created; bumping them again
+//   at bill-settle time would double-count revenue and visit counts.
+// ---------------------------------------------------------------------
+
+let _billTableId = null;
+let _billGroupId = null;     // null = whole-table payment; set = one split-bill group
+let _billManualDiscount = 0;
+let _billManualDiscountPct = 0;
+let _billAutoDiscount = null; // evaluateDiscount() result: { discount, amount, label, source }
+let _billCouponCode = null;
+
+function _billSubtotal() {
+    const t = _tables[_billTableId];
+    const sess = _sessionForTable(_billTableId);
+    if (!t || !sess) return 0;
+    const orders = _billGroupId
+        ? _ordersForGroup(sess.sessionId, _billGroupId)
+        : _ordersForSession(sess.sessionId || t.currentSession);
+    return orders.filter(o => o.status !== 'Cancelled').reduce((sum, o) => sum + Number(o.total || 0), 0);
+}
+
+function _billCustomerPhoneAndOrderId() {
+    const t = _tables[_billTableId];
+    const sess = _sessionForTable(_billTableId);
+    if (!t || !sess) return { phone: null, orderId: null };
+    const orders = (_billGroupId
+        ? _ordersForGroup(sess.sessionId, _billGroupId)
+        : _ordersForSession(sess.sessionId || t.currentSession)
+    ).filter(o => o.status !== 'Cancelled');
+    const withPhone = orders.find(o => o.customerPhone);
+    return { phone: withPhone?.customerPhone || null, orderId: (withPhone || orders[0])?.id || null };
+}
+
+function _billComputedDiscount(subtotal) {
+    let discountValue = 0, discountLabel = null, discountId = null, discountSource = 'none', discountGlobalLimit = null;
+    if (_billManualDiscount > 0) {
+        discountValue = _billManualDiscount;
+        discountSource = 'manual:flat';
+    } else if (_billManualDiscountPct > 0) {
+        discountValue = Math.round((subtotal * _billManualDiscountPct) / 100);
+        discountSource = 'manual:percent';
+    } else if (_billAutoDiscount && _billAutoDiscount.amount > 0) {
+        discountValue = _billAutoDiscount.amount;
+        discountId = _billAutoDiscount.discount.id;
+        discountLabel = _billAutoDiscount.label;
+        discountSource = _billAutoDiscount.source;
+        discountGlobalLimit = _billAutoDiscount.discount.globalLimit;
+    }
+    discountValue = Math.max(0, Math.min(Math.round(discountValue), subtotal));
+    return { discountValue, discountLabel, discountId, discountSource, discountGlobalLimit };
+}
+
+export async function openTableBillReview(tableId, groupId = null) {
+    _billTableId = tableId;
+    _billGroupId = groupId || null;
+    _billManualDiscount = 0;
+    _billManualDiscountPct = 0;
+    _billAutoDiscount = null;
+    _billCouponCode = null;
+    _clearTableBillCouponUI();
+    document.getElementById('tableBillOffersPanel')?.classList.add('hidden');
+
+    const amtInput = document.getElementById('tableBillDiscountAmt');
+    if (amtInput) {
+        amtInput.value = 0;
+        if (!amtInput.dataset.listener) {
+            amtInput.dataset.listener = '1';
+            amtInput.addEventListener('input', (e) => setTableBillDiscount(parseFloat(e.target.value) || 0));
+        }
+    }
+    const pctInput = document.getElementById('tableBillDiscountPct');
+    if (pctInput) {
+        pctInput.value = 0;
+        if (!pctInput.dataset.listener) {
+            pctInput.dataset.listener = '1';
+            pctInput.addEventListener('input', (e) => setTableBillDiscountPct(parseFloat(e.target.value) || 0));
+        }
+    }
+
+    _renderTableBillReview();
+    document.getElementById('tableBillReviewModal')?.classList.add('active');
+    loadLucide();
+}
+
+export function closeTableBillReview() {
+    document.getElementById('tableBillReviewModal')?.classList.remove('active');
+    _billTableId = null;
+    _billGroupId = null;
+}
+
+function _renderTableBillReview() {
+    const t = _tables[_billTableId];
+    if (!t) return;
+    const subtotal = _billSubtotal();
+    const { discountValue, discountLabel } = _billComputedDiscount(subtotal);
+    const finalTotal = Math.max(0, subtotal - discountValue);
+
+    const title = document.getElementById('tableBillReviewTitle');
+    if (title) {
+        const sess = _sessionForTable(_billTableId);
+        const groupLabel = _billGroupId ? (sess?.orderGroups?.[_billGroupId]?.label || 'Group') : null;
+        title.textContent = groupLabel ? `Table ${t.number} — ${groupLabel}` : `Table ${t.number} — Bill`;
+    }
+
+    const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    setText('tableBillSubtotal', `₹${subtotal.toLocaleString('en-IN')}`);
+    const discRow = document.getElementById('tableBillDiscountRow');
+    if (discountValue > 0) {
+        discRow?.classList.remove('hidden');
+        setText('tableBillDiscountVal', discountLabel ? `-₹${discountValue.toLocaleString('en-IN')} (${discountLabel})` : `-₹${discountValue.toLocaleString('en-IN')}`);
+    } else {
+        discRow?.classList.add('hidden');
+    }
+    setText('tableBillTotal', `₹${finalTotal.toLocaleString('en-IN')}`);
+}
+
+function _clearTableBillCouponUI() {
+    const input = document.getElementById('tableBillCouponCode');
+    const hint = document.getElementById('tableBillCouponHint');
+    const clear = document.getElementById('tableBillCouponClearBtn');
+    if (input) input.value = '';
+    if (hint) hint.classList.add('hidden');
+    if (clear) clear.classList.add('hidden');
+}
+
+export function setTableBillDiscount(amt) {
+    _billManualDiscount = Math.max(0, Number(amt) || 0);
+    _billManualDiscountPct = 0;
+    if (_billManualDiscount > 0) {
+        _billAutoDiscount = null; _billCouponCode = null; _clearTableBillCouponUI();
+        const pctInput = document.getElementById('tableBillDiscountPct');
+        if (pctInput) pctInput.value = 0;
+    }
+    _renderTableBillReview();
+}
+
+export function setTableBillDiscountPct(pct) {
+    _billManualDiscountPct = Math.max(0, Math.min(100, Number(pct) || 0));
+    _billManualDiscount = 0;
+    if (_billManualDiscountPct > 0) {
+        _billAutoDiscount = null; _billCouponCode = null; _clearTableBillCouponUI();
+        const amtInput = document.getElementById('tableBillDiscountAmt');
+        if (amtInput) amtInput.value = 0;
+    }
+    _renderTableBillReview();
+}
+
+export async function applyTableBillCoupon() {
+    const input = document.getElementById('tableBillCouponCode');
+    const hint = document.getElementById('tableBillCouponHint');
+    const clear = document.getElementById('tableBillCouponClearBtn');
+    if (!input || !_billTableId) return;
+    const code = (input.value || '').trim();
+    if (!code) {
+        if (hint) { hint.classList.remove('hidden'); hint.textContent = 'Enter a code first.'; }
+        return;
+    }
+    if (_billManualDiscount > 0 || _billManualDiscountPct > 0) {
+        if (hint) { hint.classList.remove('hidden'); hint.textContent = 'Clear the manual discount first.'; }
+        return;
+    }
+    const subtotal = _billSubtotal();
+    if (subtotal <= 0) {
+        if (hint) { hint.classList.remove('hidden'); hint.textContent = 'No billable items on this bill.'; }
+        return;
+    }
+
+    const { phone } = _billCustomerPhoneAndOrderId();
+    let customer = null;
+    if (phone) {
+        try {
+            const snap = await get(Outlet.ref(`customers/${phone}`));
+            if (snap.exists()) customer = snap.val();
+        } catch (e) { console.warn('[Tables] customer fetch failed:', e?.message || e); }
+    }
+
     try {
-        const now = Date.now();
-        // Mark group's orders as paid first, then update group status
-        const gOrders = sess.orderGroups[groupId].orders || [];
-        const results = await Promise.allSettled(gOrders.map(oid => {
-            if (_orders[oid] && _orders[oid].status !== 'Cancelled') {
-                return update(_ordersRef(oid), { paymentMethod: method, paymentStatus: 'Paid', updatedAt: now });
-            }
-            return Promise.resolve();
-        }));
-        const failures = results.filter(r => r.status === 'rejected');
-        if (failures.length > 0) {
-            showToast(`${failures.length} order(s) failed to update — group not marked paid`, 'error');
+        const evalResult = await evaluateDiscount({ customer, subtotal, couponCode: code, cart: [], channel: 'pos' });
+        if (!evalResult || evalResult.amount <= 0) {
+            _billAutoDiscount = null; _billCouponCode = null;
+            if (hint) { hint.classList.remove('hidden'); hint.textContent = `❌ Code "${code}" is not valid or doesn't apply to this bill.`; }
+            if (clear) clear.classList.add('hidden');
+            _renderTableBillReview();
             return;
         }
-        await update(_sessRef(`${sess.sessionId}/orderGroups/${groupId}`), { status: 'paid', paidAt: now, paymentMethod: method });
-        showToast(`${group.label} paid — ₹${total.toLocaleString('en-IN')} via ${method}`, 'success');
+        _billAutoDiscount = evalResult;
+        _billCouponCode = code;
+        if (hint) { hint.classList.remove('hidden'); hint.textContent = `✅ Applied: ${evalResult.label} (saved ₹${evalResult.amount.toLocaleString('en-IN')})`; }
+        if (clear) clear.classList.remove('hidden');
+        _renderTableBillReview();
+    } catch (e) {
+        console.error('[Tables] applyTableBillCoupon failed:', e);
+        if (hint) { hint.classList.remove('hidden'); hint.textContent = 'Error evaluating discount. Try again.'; }
+    }
+}
+
+export function clearTableBillCoupon() {
+    _billAutoDiscount = null;
+    _billCouponCode = null;
+    _clearTableBillCouponUI();
+    _renderTableBillReview();
+}
+
+export async function toggleTableBillOffersPanel() {
+    const panel = document.getElementById('tableBillOffersPanel');
+    const btn = document.getElementById('tableBillOffersBtn');
+    if (!panel) return;
+    const opening = panel.classList.contains('hidden');
+    if (!opening) {
+        panel.classList.add('hidden');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        return;
+    }
+    panel.classList.remove('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+    panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">Loading offers…</div>';
+    await _renderTableBillOffers();
+}
+
+async function _renderTableBillOffers() {
+    const panel = document.getElementById('tableBillOffersPanel');
+    if (!panel) return;
+
+    let all;
+    try {
+        all = await getAllDiscounts();
+    } catch (e) {
+        panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">Could not load offers. Try again.</div>';
+        return;
+    }
+
+    const subtotal = _billSubtotal();
+    const list = getEligibleOffersForDisplay(all, { channel: 'pos' });
+
+    if (list.length === 0) {
+        panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
+        return;
+    }
+
+    panel.innerHTML = list.map(d => {
+        const valueLabel = d.mode === 'percent'
+            ? `${Number(d.value).toFixed(d.value % 1 === 0 ? 0 : 1)}% off`
+            : `₹${Number(d.value).toFixed(0)} off`;
+        const capLabel = d.maxCap ? ` (cap ₹${Number(d.maxCap).toFixed(0)})` : '';
+        const minLabel = d.minSubtotal ? ` · min ₹${Number(d.minSubtotal).toFixed(0)}` : '';
+        const used = d.stats?.usedCount || 0;
+        const usedLabel = used > 0 ? ` · used ${used}${d.globalLimit ? `/${d.globalLimit}` : ''}×` : '';
+
+        if (d.type === 'coupon') {
+            const meetsMin = !d.minSubtotal || subtotal >= d.minSubtotal;
+            const shortfall = meetsMin ? 0 : Math.ceil(d.minSubtotal - subtotal);
+            return `
+                <div class="walkin-offer-item${meetsMin ? '' : ' walkin-offer-disabled'}">
+                    <div class="walkin-offer-info">
+                        <div class="walkin-offer-name"><code>${escapeHtml(d.couponCode)}</code> — ${escapeHtml(d.name || '')}</div>
+                        <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel}</div>
+                    </div>
+                    <button type="button" class="chip walkin-offer-apply-btn" data-action="applyTableOfferFromPanel" data-code="${escapeHtml(d.couponCode)}" ${meetsMin ? '' : 'disabled'} title="${meetsMin ? 'Apply this code' : `Add ₹${shortfall} more to qualify`}">
+                        ${meetsMin ? 'Apply' : `+₹${shortfall} to use`}
+                    </button>
+                </div>`;
+        }
+
+        const typeLabel = d.type === 'firstOrder' ? 'New customer' : d.type === 'category' ? 'Category' : 'Storewide';
+        return `
+            <div class="walkin-offer-item walkin-offer-auto">
+                <div class="walkin-offer-info">
+                    <div class="walkin-offer-name">${escapeHtml(d.name || typeLabel)} <span class="badge badge-info walkin-offer-auto-badge">auto</span></div>
+                    <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel} · applies automatically if eligible</div>
+                </div>
+            </div>`;
+    }).join('') + '<div class="walkin-offers-manage-row"><button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
+}
+
+export function applyTableOfferFromPanel(code) {
+    const input = document.getElementById('tableBillCouponCode');
+    if (input) input.value = code;
+    document.getElementById('tableBillOffersPanel')?.classList.add('hidden');
+    document.getElementById('tableBillOffersBtn')?.setAttribute('aria-expanded', 'false');
+    applyTableBillCoupon();
+}
+
+async function _bumpCustomerDiscountUsage(phone, discountId, discountSource) {
+    if (!phone || !discountId) return;
+    try {
+        const isFirstOrderDiscount = discountSource === 'firstOrder' && discountId;
+        await runTransaction(Outlet.ref(`customers/${phone}`), (cur) => {
+            if (cur === null) return cur; // no existing customer record — that's owned by order-creation flows, not billing
+            if (isFirstOrderDiscount) {
+                cur.firstOrderDiscountUsed = Date.now();
+                cur.firstOrderDiscountId = discountId;
+            }
+            cur.discountUsage = cur.discountUsage || {};
+            cur.discountUsage[discountId] = (cur.discountUsage[discountId] || 0) + 1;
+            return cur;
+        });
+    } catch (e) {
+        console.warn('[Tables] Failed to bump customer discount usage:', e?.message || e);
+    }
+}
+
+export async function confirmTableBillPayment() {
+    const tableId = _billTableId;
+    const groupId = _billGroupId;
+    const t = _tables[tableId];
+    const sess = _sessionForTable(tableId);
+    if (!t || !sess) { closeTableBillReview(); return; }
+
+    const subtotal = _billSubtotal();
+    const { discountValue, discountLabel, discountId, discountSource, discountGlobalLimit } = _billComputedDiscount(subtotal);
+    const finalTotal = Math.max(0, subtotal - discountValue);
+
+    const method = await showPaymentPicker(finalTotal);
+    if (!method) return; // leave the review modal open so they can retry or cancel
+
+    const { phone: customerPhone, orderId: representativeOrderId } = _billCustomerPhoneAndOrderId();
+
+    if (groupId) {
+        try {
+            const now = Date.now();
+            const gOrders = sess.orderGroups[groupId]?.orders || [];
+            const results = await Promise.allSettled(gOrders.map(oid => {
+                if (_orders[oid] && _orders[oid].status !== 'Cancelled') {
+                    return update(_ordersRef(oid), { paymentMethod: method, paymentStatus: 'Paid', updatedAt: now });
+                }
+                return Promise.resolve();
+            }));
+            const failures = results.filter(r => r.status === 'rejected');
+            if (failures.length > 0) {
+                showToast(`${failures.length} order(s) failed to update — group not marked paid`, 'error');
+                return;
+            }
+            await update(_sessRef(`${sess.sessionId}/orderGroups/${groupId}`), {
+                status: 'paid', paidAt: now, paymentMethod: method,
+                subtotal, discount: discountValue, discountId, discountLabel, discountSource, paidAmount: finalTotal
+            });
+            if (discountId && discountValue > 0) {
+                try {
+                    await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'pos', discountLabel, discountSource, globalLimit: discountGlobalLimit });
+                } catch (e) { console.warn('[Tables] recordDiscountUsage failed:', e?.message || e); }
+                await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource);
+            }
+            closeTableBillReview();
+            showToast(`${sess.orderGroups[groupId]?.label || 'Group'} paid — ₹${finalTotal.toLocaleString('en-IN')} via ${method}`, 'success');
+            haptic(30);
+        } catch (e) {
+            showToast('Failed: ' + (e?.message || e), 'error');
+        }
+        return;
+    }
+
+    const orders = _ordersForSession(sess.sessionId || t.currentSession);
+    const sessRef = _sessRef(sess.sessionId);
+    const tblRef = _tblRef(tableId);
+    try {
+        for (const o of orders) {
+            if (o.id && o.status !== 'Cancelled') {
+                await update(_ordersRef(o.id), { paymentMethod: method, paymentStatus: 'Paid', updatedAt: Date.now() });
+            }
+        }
+        await update(sessRef, {
+            status: 'closed', closedAt: Date.now(), paymentMethod: method, paidAt: Date.now(),
+            subtotal, discount: discountValue, discountId, discountLabel, discountSource, paidAmount: finalTotal
+        });
+        await update(tblRef, { status: 'free', currentSession: null, updatedAt: Date.now() });
+        await runTransaction(Outlet.ref(`tableAnalytics/${tableId}`), (cur) => {
+            cur = cur || { totalOrders: 0, totalRevenue: 0, avgSessionTime: 0, occupancyRate: 0 };
+            const orderCount = (sess.orders || []).length;
+            const mins = _sessionElapsedMinutes(sess);
+            cur.totalOrders = (cur.totalOrders || 0) + orderCount;
+            cur.totalRevenue = (cur.totalRevenue || 0) + finalTotal; // net of discount — actual revenue collected
+            cur.avgSessionTime = cur.avgSessionTime ? Math.round((cur.avgSessionTime + mins) / 2) : mins;
+            return cur;
+        });
+        if (discountId && discountValue > 0) {
+            try {
+                await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'pos', discountLabel, discountSource, globalLimit: discountGlobalLimit });
+            } catch (e) { console.warn('[Tables] recordDiscountUsage failed:', e?.message || e); }
+            await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource);
+        }
+        if (_drawerTableId === tableId) _closeTableDrawer();
+        closeTableBillReview();
+        showToast(`Table closed — ₹${finalTotal.toLocaleString('en-IN')} via ${method}`, 'success');
         haptic(30);
     } catch (e) {
-        showToast('Failed: ' + (e?.message || e), 'error');
+        try {
+            await update(sessRef, { status: 'billing' });
+            await update(tblRef, { status: 'billing', updatedAt: Date.now() });
+        } catch (_) {}
+        showToast('Payment failed: ' + (e?.message || e), 'error');
     }
 }
 
@@ -1678,5 +2054,13 @@ window.__tables = {
     printSessionBill: _printSessionBill,
     printBillForGroup: _printBillForGroup,
     resolveTableRequest: _resolveTableRequest,
-    editTable: _openTableEditor, setTableEnabled: _setTableEnabled
+    editTable: _openTableEditor, setTableEnabled: _setTableEnabled,
+    closeBillReview: closeTableBillReview,
+    setBillDiscount: setTableBillDiscount,
+    setBillDiscountPct: setTableBillDiscountPct,
+    applyBillCoupon: applyTableBillCoupon,
+    clearBillCoupon: clearTableBillCoupon,
+    toggleBillOffers: toggleTableBillOffersPanel,
+    applyBillOfferFromPanel: applyTableOfferFromPanel,
+    confirmBillPayment: confirmTableBillPayment
 };

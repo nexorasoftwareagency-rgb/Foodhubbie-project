@@ -10,7 +10,7 @@ import { autoDeductStock } from './inventory.js';
 import { ui, loadLucide } from '../ui.js';
 import { printOrderReceipt } from './printing.js';
 import { t } from '../l10n.js';
-import { evaluateDiscount, recordDiscountUsage, clearDiscountCache, getAllDiscounts, isDiscountActiveNow, discountAllowsChannel } from './discount-evaluator.js';
+import { evaluateDiscount, recordDiscountUsage, clearDiscountCache, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
 import { logger } from '../utils/logger.js';
 
 let _connUnsub = null;
@@ -728,13 +728,7 @@ async function _renderWalkinOffers() {
 
     const now = Date.now();
     const subtotal = _walkinSubtotal();
-    const list = Object.entries(all || {})
-        .map(([id, d]) => ({ id, ...d }))
-        .filter(d => d && d.type && d.value != null)
-        .filter(d => isDiscountActiveNow(d, now))
-        .filter(d => discountAllowsChannel(d, 'pos'))
-        .filter(d => !d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
-        .sort((a, b) => (a.type === 'coupon' ? 0 : 1) - (b.type === 'coupon' ? 0 : 1));
+    const list = getEligibleOffersForDisplay(all, { channel: 'pos', now });
 
     if (list.length === 0) {
         panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
