@@ -588,8 +588,21 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
         // extractImageThumb never chokes on WebP/corrupt/broken formats.
         if (typeof image === 'string') {
             let inputBuf;
+            let isDataUrlJpeg = false;
             if (image.startsWith('data:image')) {
                 inputBuf = Buffer.from(image.split(',')[1], 'base64');
+                // If already JPEG data URL, convert to PNG (Sharp handles PNG better than JPEG for thumbnail generation)
+                if (image.startsWith('data:image/jpeg') || image.startsWith('data:image/jpg')) {
+                    if (sharpLib) {
+                        try {
+                            console.log(`[SEND IMAGE] Converting JPEG data URL to PNG for Baileys thumbnail compatibility`);
+                            inputBuf = await sharpLib(inputBuf).png().toBuffer();
+                            console.log(`[SEND IMAGE] Converted JPEG to PNG successfully`);
+                        } catch (e) {
+                            console.warn(`[SEND IMAGE] PNG conversion failed, using original JPEG: ${e.message}`);
+                        }
+                    }
+                }
             } else {
                 const ctrl = new AbortController();
                 const timer = setTimeout(() => ctrl.abort(), 15000);
@@ -597,10 +610,18 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
                 clearTimeout(timer);
                 if (!resp.ok) throw new Error(`Image fetch ${resp.status}`);
                 inputBuf = Buffer.from(await resp.arrayBuffer());
+                // Convert URL-fetched JPEG to PNG for Baileys thumbnail compatibility
+                if (sharpLib) {
+                    try {
+                        console.log(`[SEND IMAGE] Converting URL-fetched JPEG to PNG for Baileys thumbnail compatibility`);
+                        inputBuf = await sharpLib(inputBuf).png().toBuffer();
+                        console.log(`[SEND IMAGE] Converted URL JPEG to PNG successfully`);
+                    } catch (e) {
+                        console.warn(`[SEND IMAGE] PNG conversion failed, using original JPEG: ${e.message}`);
+                    }
+                }
             }
-            if (sharpLib) {
-                try { inputBuf = await sharpLib(inputBuf).jpeg({ quality: 85 }).toBuffer(); } catch (e) { console.warn(`[SEND IMAGE] Sharp conversion failed, sending raw: ${e.message}`); }
-            }
+            // Already converted to PNG above (or fell back to raw), send as-is
             payload = { image: inputBuf, caption: finalMsg };
         } else {
             payload = { image: image, caption: finalMsg };
