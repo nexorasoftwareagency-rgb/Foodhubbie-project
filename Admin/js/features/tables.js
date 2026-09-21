@@ -1238,33 +1238,37 @@ export async function confirmTableBillPayment() {
     const finalTotal = Math.max(0, subtotal - discountValue);
 
     const method = await showPaymentPicker(finalTotal);
-    if (!method) return; // leave the review modal open so they can retry or cancel
+    if (!method) return;
 
     const { phone: customerPhone, orderId: representativeOrderId } = _billCustomerPhoneAndOrderId();
+    const now = Date.now();
+    const outletRef = Outlet.ref('');
 
     if (groupId) {
-        try {
-            const now = Date.now();
-            const gOrders = sess.orderGroups[groupId]?.orders || [];
-            const results = await Promise.allSettled(gOrders.map(oid => {
-                if (_orders[oid] && _orders[oid].status !== 'Cancelled') {
-                    return update(_ordersRef(oid), { paymentMethod: method, paymentStatus: 'Paid', updatedAt: now });
-                }
-                return Promise.resolve();
-            }));
-            const failures = results.filter(r => r.status === 'rejected');
-            if (failures.length > 0) {
-                showToast(`${failures.length} order(s) failed to update — group not marked paid`, 'error');
-                return;
+        // GROUP PAYMENT — atomic multi-path update
+        const gOrders = sess.orderGroups[groupId]?.orders || [];
+        const updates = {};
+        gOrders.forEach(oid => {
+            if (_orders[oid] && _orders[oid].status !== 'Cancelled') {
+                updates[`outlets/${OUTLET}/orders/${oid}/paymentMethod`] = method;
+                updates[`outlets/${OUTLET}/orders/${oid}/paymentStatus`] = 'Paid';
+                updates[`outlets/${OUTLET}/orders/${oid}/updatedAt`] = now;
             }
-            await update(_sessRef(`${sess.sessionId}/orderGroups/${groupId}`), {
-                status: 'paid', paidAt: now, paymentMethod: method,
-                subtotal, discount: discountValue, discountId, discountLabel, discountSource, paidAmount: finalTotal
-            });
+        });
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'paid';
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = now;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = method;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/subtotal`] = subtotal;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = discountValue;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = discountId || null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = discountLabel || null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = discountSource || null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = finalTotal;
+
+        try {
+            await outletRef.update(updates);
             if (discountId && discountValue > 0) {
-                try {
-                    await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'pos', discountLabel, discountSource, globalLimit: discountGlobalLimit });
-                } catch (e) { console.warn('[Tables] recordDiscountUsage failed:', e?.message || e); }
+                await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'pos', discountLabel, discountSource, globalLimit: discountGlobalLimit });
                 await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource);
             }
             closeTableBillReview();
@@ -1276,26 +1280,40 @@ export async function confirmTableBillPayment() {
         return;
     }
 
+    // FULL TABLE PAYMENT — atomic multi-path update
     const orders = _ordersForSession(sess.sessionId || t.currentSession);
-    const sessRef = _sessRef(sess.sessionId);
-    const tblRef = _tblRef(tableId);
-    try {
-        for (const o of orders) {
-            if (o.id && o.status !== 'Cancelled') {
-                await update(_ordersRef(o.id), { paymentMethod: method, paymentStatus: 'Paid', updatedAt: Date.now() });
-            }
+    const updates = {};
+    const orderCount = (sess.orders || []).length;
+    const mins = _sessionElapsedMinutes(sess);
+
+    orders.forEach(o => {
+        if (o.id && o.status !== 'Cancelled') {
+            updates[`outlets/${OUTLET}/orders/${o.id}/paymentMethod`] = method;
+            updates[`outlets/${OUTLET}/orders/${o.id}/paymentStatus`] = 'Paid';
+            updates[`outlets/${OUTLET}/orders/${o.id}/updatedAt`] = now;
         }
-        await update(sessRef, {
-            status: 'closed', closedAt: Date.now(), paymentMethod: method, paidAt: Date.now(),
-            subtotal, discount: discountValue, discountId, discountLabel, discountSource, paidAmount: finalTotal
-        });
-        await update(tblRef, { status: 'free', currentSession: null, updatedAt: Date.now() });
+    });
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/status`] = 'closed';
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/closedAt`] = now;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentMethod`] = method;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paidAt`] = now;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/subtotal`] = subtotal;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discount`] = discountValue;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountId`] = discountId || null;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountLabel`] = discountLabel || null;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountSource`] = discountSource || null;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paidAmount`] = finalTotal;
+    updates[`outlets/${OUTLET}/tables/${tableId}/status`] = 'free';
+    updates[`outlets/${OUTLET}/tables/${tableId}/currentSession`] = null;
+    updates[`outlets/${OUTLET}/tables/${tableId}/updatedAt`] = now;
+
+    try {
+        await outletRef.update(updates);
+        // Analytics transaction (separate — independent)
         await runTransaction(Outlet.ref(`tableAnalytics/${tableId}`), (cur) => {
             cur = cur || { totalOrders: 0, totalRevenue: 0, avgSessionTime: 0, occupancyRate: 0 };
-            const orderCount = (sess.orders || []).length;
-            const mins = _sessionElapsedMinutes(sess);
             cur.totalOrders = (cur.totalOrders || 0) + orderCount;
-            cur.totalRevenue = (cur.totalRevenue || 0) + finalTotal; // net of discount — actual revenue collected
+            cur.totalRevenue = (cur.totalRevenue || 0) + finalTotal;
             cur.avgSessionTime = cur.avgSessionTime ? Math.round((cur.avgSessionTime + mins) / 2) : mins;
             return cur;
         });
@@ -1310,10 +1328,6 @@ export async function confirmTableBillPayment() {
         showToast(`Table closed — ₹${finalTotal.toLocaleString('en-IN')} via ${method}`, 'success');
         haptic(30);
     } catch (e) {
-        try {
-            await update(sessRef, { status: 'billing' });
-            await update(tblRef, { status: 'billing', updatedAt: Date.now() });
-        } catch (_) {}
         showToast('Payment failed: ' + (e?.message || e), 'error');
     }
 }
