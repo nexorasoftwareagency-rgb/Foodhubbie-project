@@ -155,9 +155,9 @@ export async function evaluateDiscount(ctx = {}) {
         && (!d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
         && discountAllowsChannel(d, channel)
         && (!d.perCustomerLimit || !customerPhone || 
-            (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit ||
+            (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit &&
             // For table channel, also check separate table counter
-            (channel === 'table' && (customer?.discountUsage?.table?.[d.id] || 0) < d.perCustomerLimit))
+            (channel !== 'table' || (customer?.discountUsage?.table?.[d.id] || 0) < d.perCustomerLimit))
     );
 
     const applicable = candidates.filter(d => {
@@ -204,18 +204,21 @@ export async function evaluateDiscount(ctx = {}) {
 /**
  * Persist a usage record + bump the discount's stats atomically.
  * Called from POS and Bot after a successful order.
+ * Pass isVoid: true to decrement stats for voided redemptions.
  */
-export async function recordDiscountUsage({ discountId, orderId, customerPhone, amountGiven, channel, discountLabel, discountSource, globalLimit }) {
+export async function recordDiscountUsage({ discountId, orderId, customerPhone, amountGiven, channel, discountLabel, discountSource, globalLimit, isVoid }) {
     try {
         // Bump stats atomically — abort if globalLimit would be exceeded
         let reserved = true;
         const txResult = await runTransaction(Outlet.ref(`discounts/${discountId}/stats`), (cur) => {
             cur = cur || {};
-            const nextCount = (cur.usedCount || 0) + 1;
+            const currentCount = cur.usedCount || 0;
+            const nextCount = isVoid ? Math.max(0, currentCount - 1) : currentCount + 1;
             if (globalLimit && nextCount > globalLimit) { reserved = false; return; }
+            const amount = Math.round(Number(amountGiven) || 0);
             return {
                 usedCount: nextCount,
-                totalDiscountGiven: (cur.totalDiscountGiven || 0) + Math.round(Number(amountGiven) || 0),
+                totalDiscountGiven: (cur.totalDiscountGiven || 0) + (isVoid ? -amount : amount),
                 lastUsedAt: Date.now()
             };
         });
@@ -224,7 +227,7 @@ export async function recordDiscountUsage({ discountId, orderId, customerPhone, 
         await Outlet.ref(`discountsUsage/${usageId}`).set({
             discountId, discountLabel: discountLabel || '',
             orderId: orderId || '', customerPhone: customerPhone || '',
-            amountGiven: Math.round(Number(amountGiven) || 0),
+            amountGiven: isVoid ? -Math.round(Number(amountGiven) || 0) : Math.round(Number(amountGiven) || 0),
             appliedAt: Date.now(), channel: channel || 'pos',
             source: discountSource || ''
         });
