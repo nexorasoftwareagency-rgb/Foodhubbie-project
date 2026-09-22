@@ -1555,8 +1555,12 @@ async function _printBillForGroup(tableId, groupId) {
     const tax = taxItems.reduce((s, t) => s + t.amount, 0);
     const serviceCharge = scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0;
     const groupDiscount = groupOrders.reduce((sum, o) => sum + Number(o.discount || 0), 0);
-    const grandTotalAfterDiscount = subtotal + tax + serviceCharge - groupDiscount;
+    // Include bill-level discount from payment modal (stored on group)
+    const billDiscount = Number(g.discount || 0);
+    const billDiscountLabel = g.discountLabel || null;
+    const grandTotalAfterDiscount = subtotal + tax + serviceCharge - groupDiscount - billDiscount;
     await printOrderReceipt({
+
         orderId: `TABLE-${t.number}-${g.label.replace(/\s/g, '')}`,
         type: 'Dine-in', items: allItems,
         total: grandTotalAfterDiscount, subtotal, tax, taxItems,
@@ -1564,7 +1568,8 @@ async function _printBillForGroup(tableId, groupId) {
         serviceCharge,
         serviceChargeName: dine.serviceChargeName || 'Service Charge',
         serviceChargeRate: scRate,
-        discount: groupDiscount, deliveryFee: 0,
+        discount: groupDiscount + billDiscount, deliveryFee: 0,
+        discountLabel: billDiscount > 0 ? billDiscountLabel : undefined,
         tableNo: String(t.number),
         createdAt: sess.openedAt || Date.now(),
         paymentMethod: g.paymentMethod || 'Cash',
@@ -1616,6 +1621,9 @@ async function _printSessionBill(tableId) {
     const serviceCharge = Number(sess.serviceCharge ?? 0) || (scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0);
     const grandTotal = _effectiveTotal(sess);
     const sessionDiscount = orders.reduce((sum, o) => sum + Number(o.discount || 0), 0);
+    // Include bill-level discount from payment modal (stored on session)
+    const billDiscount = Number(sess.discount || 0);
+    const billDiscountLabel = sess.discountLabel || null;
 
     const combinedOrder = {
         orderId: `TABLE-${t.number}`,
@@ -1626,7 +1634,8 @@ async function _printSessionBill(tableId) {
         serviceCharge,
         serviceChargeName: dine.serviceChargeName || 'Service Charge',
         serviceChargeRate: scRate,
-        discount: sessionDiscount, deliveryFee: 0,
+        discount: sessionDiscount + billDiscount, deliveryFee: 0,
+        discountLabel: billDiscount > 0 ? billDiscountLabel : undefined,
         tableNo: String(t.number),
         createdAt: sess.openedAt || Date.now(),
         paymentMethod: sess.paymentMethod || 'Cash',
