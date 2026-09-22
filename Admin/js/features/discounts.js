@@ -12,6 +12,10 @@ import { loadLucide } from '../ui.js';
 
 const DISCOUNT_TYPES = ['global', 'category', 'firstOrder', 'coupon'];
 
+function _fmtINR(n) {
+    return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
+}
+
 let _listener = null;
 let _allDiscountsSnap = {};
 let _categoriesSnap = [];
@@ -160,11 +164,162 @@ async function _renderList() {
 
 function _switchList(mode) {
     document.querySelectorAll('#tab-discounts .promo-mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
-    const map = { active: 'discountListActive', scheduled: 'discountListScheduled', expired: 'discountListExpired' };
+    const map = { active: 'discountListActive', scheduled: 'discountListScheduled', expired: 'discountListExpired', usage: 'discountListUsage' };
     Object.entries(map).forEach(([k, id]) => {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('hidden', k !== mode);
     });
+    if (mode === 'usage') _renderUsageList();
+}
+
+async function _renderUsageList() {
+    const el = document.getElementById('discountListUsage');
+    if (!el) return;
+
+    try {
+        const [discountsSnap, usageSnap] = await Promise.all([
+            get(_ref('discounts')),
+            get(_ref('discountsUsage'))
+        ]);
+
+        const discounts = discountsSnap.val() || {};
+        const usage = usageSnap.val() || {};
+
+        const usageEntries = Object.entries(usage).map(([id, u]) => ({
+            id,
+            discountId: u.discountId,
+            discountLabel: u.discountLabel || '',
+            orderId: u.orderId,
+            customerPhone: u.customerPhone,
+            amountGiven: Number(u.amountGiven || 0),
+            appliedAt: u.appliedAt,
+            channel: u.channel || 'unknown',
+            source: u.source || 'auto',
+            discountSource: u.discountSource || ''
+        }));
+
+        if (usageEntries.length === 0) {
+            el.innerHTML = `
+                <div class="discount-usage-empty">
+                    <i data-lucide="clipboard-list"></i>
+                    <h4>No discount usage yet</h4>
+                    <p>Customer allotments will appear here as discounts are redeemed.</p>
+                </div>
+            `;
+            await loadLucide();
+            window.lucide.createIcons({ root: el });
+            return;
+        }
+
+        // Sort by appliedAt descending
+        usageEntries.sort((a, b) => (b.appliedAt || 0) - (a.appliedAt || 0));
+
+        // Build customer name cache
+        const nameCache = new Map();
+        async function getName(phone) {
+            if (!phone) return 'Walk-in';
+            const clean = String(phone).replace(/\D/g, '').slice(-10);
+            if (!clean) return 'Walk-in';
+            if (nameCache.has(clean)) return nameCache.get(clean);
+            try {
+                const snap = await get(Outlet.ref(`customers/${clean}`));
+                const name = snap.exists() ? (snap.val()?.name || null) : null;
+                nameCache.set(clean, name);
+                return name;
+            } catch { return 'Walk-in'; }
+        }
+
+        // Filter dropdown HTML
+        const typeFilterHtml = `
+            <select id="usageTypeFilter" class="usage-type-filter" style="padding:6px 10px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px; margin-bottom:12px;">
+                <option value="all">All Types</option>
+                <option value="coupon">Coupon</option>
+                <option value="firstOrder">First Order</option>
+                <option value="category">Category</option>
+                <option value="global">Storewide</option>
+                <option value="manual">Manual</option>
+            </select>
+        `;
+
+        // Filter state
+        let currentTypeFilter = 'all';
+        let filtered = usageEntries;
+
+        function applyFilter() {
+            filtered = currentTypeFilter === 'all'
+                ? usageEntries
+                : usageEntries.filter(u => u.discountSource === currentTypeFilter || 
+                    (currentTypeFilter === 'manual' && u.discountSource?.startsWith('manual:')));
+            render();
+        }
+
+        async function render() {
+            el.innerHTML = `
+                <div class="flex-between flex-center mb-16 flex-wrap" style="gap:8px;">
+                    <h3 class="panel-title fs-14" style="margin:0;">Usage / Allotments <span class="badge">${usageEntries.length}</span></h3>
+                    ${typeFilterHtml}
+                </div>
+                <div class="discount-usage-table-container" style="max-height:500px; overflow-y:auto;">
+                    <table class="discount-usage-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+                        <thead>
+                            <tr style="position:sticky; top:0; background:#f8fafc; z-index:1;">
+                                <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Customer</th>
+                                <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Phone</th>
+                                <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Discount</th>
+                                <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Type</th>
+                                <th style="text-align:right; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Amount</th>
+                                <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Channel</th>
+                                <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Order</th>
+                                <th style="text-align:left; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Date</th>
+                                <th style="text-align:center; padding:8px 10px; border-bottom:1px solid #e2e8f0;">Receipt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filtered.map(u => {
+                                const d = new Date(u.appliedAt || 0);
+                                const dateStr = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                                const channel = String(u.channel || 'other');
+                                const orderLink = u.orderId ? `<span class="usage-log-order-link" data-action="viewOrderFromDiscountUsage" data-id="${escapeHtml(u.orderId)}" style="cursor:pointer; color:#1d4ed8; text-decoration:underline;">#${String(u.orderId).slice(-5)}</span>` : '—';
+                                return `
+                                    <tr>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(u.customerPhone || 'Walk-in')}</td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(u.customerPhone || 'Walk-in')}</td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(u.discountLabel || 'Discount')}</td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;"><span class="discount-type-badge discount-type-${escapeHtml(u.discountSource || 'auto')}">${escapeHtml(u.discountSource || 'auto')}</span></td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:right;">${_fmtINR(u.amountGiven)}</td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;"><span class="channel-chip channel-${escapeHtml(channel)}">${escapeHtml(channel)}</span></td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${orderLink}</td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(dateStr)}</td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:center;">
+                                            <button type="button" class="btn-text" data-action="viewReceiptFromUsage" data-order-id="${escapeHtml(u.orderId)}" data-discount-label="${escapeHtml(u.discountLabel)}" data-amount="${u.amountGiven}" title="View Receipt" style="font-size:11px;">
+                                                <i data-lucide="receipt"></i> View
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            await loadLucide();
+            window.lucide.createIcons({ root: el });
+
+            // Attach filter listener
+            const filterEl = document.getElementById('usageTypeFilter');
+            if (filterEl) {
+                filterEl.addEventListener('change', (e) => {
+                    currentTypeFilter = e.target.value;
+                    applyFilter();
+                });
+            }
+        }
+
+        render();
+    } catch (e) {
+        console.error('[Discounts] Usage render failed:', e);
+        el.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">⚠️</div><h4>Failed to load usage</h4><p>' + (e?.message || e) + '</p></div>';
+    }
 }
 
 async function _loadCategories() {
@@ -325,7 +480,7 @@ function _attachListener() {
         _renderList();
     }, (err) => {
         console.error('[Discounts] Read error:', err);
-        ['discountListActive','discountListScheduled','discountListExpired'].forEach(id => {
+        ['discountListActive','discountListScheduled','discountListExpired','discountListUsage'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">⚠️</div><h4>Permission denied</h4><p>Could not load discount data. Try refreshing the page.</p></div>';
         });
@@ -344,12 +499,12 @@ export function loadDiscounts() {
     _renderList();
     _switchList('active');
     if (isConnected()) {
-        _attachListener();
-    } else {
-        ['discountListActive','discountListScheduled','discountListExpired'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">📡</div><h4>Waiting for connection</h4><p>Discount data will load automatically when the connection is restored.</p></div>';
-        });
+_attachListener();
+        } else {
+            ['discountListActive','discountListScheduled','discountListExpired','discountListUsage'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">📡</div><h4>Waiting for connection</h4><p>Discount data will load automatically when the connection is restored.</p></div>';
+            });
         if (!_connUnsub) _connUnsub = onConnectionChange(function _retryDisc(online) {
             if (!online) return;
             if (_connUnsub) { _connUnsub(); _connUnsub = null; }
@@ -382,4 +537,4 @@ export function loadDiscounts() {
     ['discType','discMode','discNoEnd'].forEach(id => { const el = document.getElementById(id); if (el) { el.removeEventListener('change', _applyEditorVisibility); el.addEventListener('change', _applyEditorVisibility); } });
 }
 
-window.__discounts = { openEditor: _openEditor, closeEditor: _closeEditor, save: _save, toggle: _toggle, remove: _delete, applyVisibility: _applyEditorVisibility, switchList: _switchList };
+window.__discounts = { openEditor: _openEditor, closeEditor: _closeEditor, save: _save, toggle: _toggle, remove: _delete, applyVisibility: _applyEditorVisibility, switchList: _switchList, renderUsageList: _renderUsageList };
