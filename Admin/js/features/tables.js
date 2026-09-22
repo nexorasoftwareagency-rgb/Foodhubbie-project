@@ -302,7 +302,7 @@ function _tableCard(t) {
         if (sess.status === 'expired') {
             metaLine = `<div class="table-card-expired-badge">⏰ Expired</div>`;
         } else {
-            const orderCount = (sess.orders || []).length;
+            const tableOrderCount = (sess.orders || []).length;
             const mins = _sessionElapsedMinutes(sess);
             metaLine = `<div class="table-card-bill">₹${_effectiveTotal(sess).toLocaleString('en-IN')}</div>
                      <div class="table-card-meta-row">${orderCount} Order${orderCount !== 1 ? 's' : ''} · ${mins} min</div>`;
@@ -669,6 +669,11 @@ async function _renderTableDrawer() {
         }
     } else {
         btns.push(`<button class="btn-action-green btn-small" data-action="closeSessionForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="check-check" class="icon-14"></i> Close Table (Paid)</button>`);
+        // Void payment button for paid tables
+        const hasPaidOrders = ordersAll.some(o => o.paymentStatus === 'Paid');
+        if (hasPaidOrders) {
+            btns.push(`<button class="btn-text text-warning btn-small" data-action="voidTableBill" data-id="${escapeHtml(t.id)}"><i data-lucide="rotate-ccw" class="icon-14"></i> Void Payment</button>`);
+        }
     }
     btns.push(`<button class="btn-secondary btn-small" data-action="printTableKOT" data-id="${escapeHtml(t.id)}"><i data-lucide="printer" class="icon-14"></i> Print KOT</button>`);
     if (groups.length > 1) {
@@ -1389,7 +1394,7 @@ export async function confirmTableBillPayment() {
     // FULL TABLE PAYMENT — atomic multi-path update
     const orders = _ordersForSession(sess.sessionId || t.currentSession);
     const updates = {};
-    const orderCount = (sess.orders || []).length;
+    const tableOrderCount = (sess.orders || []).length;
     const mins = _sessionElapsedMinutes(sess);
 
     orders.forEach(o => {
@@ -1519,679 +1524,168 @@ async function _cancelSessionForTable(tableId) {
         await update(_tblRef(tableId), { status: 'free', currentSession: null, updatedAt: Date.now() });
         if (_drawerTableId === tableId) _closeTableDrawer();
         showToast('Session cancelled, table freed', 'success');
-    } catch (e) {
+} catch (e) {
         showToast('Failed: ' + (e?.message || e), 'error');
     }
 }
 
 // ---------------------------------------------------------------------
-// ACTIONS — Order status advance (writes the SAME /orders node)
+// VOID/REFUND — Revert a paid bill (group or full table) back to billing
 // ---------------------------------------------------------------------
-async function _advanceOrder(orderId, nextStatus) {
-    try {
-        const valid = {
-            'Placed': ['Confirmed', 'Cancelled'],
-            'Confirmed': ['Ready', 'Cancelled'],
-            'Preparing': ['Ready', 'Cancelled'],
-            'Ready': ['Served', 'Cancelled'],
-            'Served': [], 'Delivered': [], 'Cancelled': []
-        };
-        let orderData, tableId;
-        const result = await runTransaction(_ordersRef(orderId), (current) => {
-            if (!current) return;
-            const o = current; // ponytail: runTransaction gives raw value, not snapshot
-            if (!o) return;
-            if (!valid[o.status]?.includes(nextStatus)) {
-                return; // abort — transaction won't commit
-            }
-            orderData = o;
-            tableId = o.tableId;
-            return { ...o, status: nextStatus, updatedAt: Date.now() };
-        });
-        if (!orderData) {
-            const o = _orders[orderId];
-            if (!o) showToast('Order not found', 'error');
-            else showToast(`Cannot change status from ${o.status} to ${nextStatus}`, 'warning');
-            return;
-        }
-        if (_orders[orderId]) {
-            _orders[orderId] = { ..._orders[orderId], status: nextStatus, updatedAt: Date.now() };
-        }
-        _renderAll();
-
-        if (nextStatus === 'Confirmed' && tableId) {
-            setTimeout(() => _printTableKOT(tableId), 500);
-        }
-
-        showToast(`Order moved to ${nextStatus}`, 'success');
-        haptic(20);
-    } catch (e) {
-        showToast('Update failed: ' + (e?.message || e), 'error');
-    }
-}
-
-// ---------------------------------------------------------------------
-// Cross-tab navigation — opens a specific order on the existing Orders
-// tab using its own search box. The current orders.js render does not
-// surface a table number in row text, so searching by table would not
-// reliably match; the order's own ID (which IS rendered and searchable)
-// is used instead. This avoids touching orders.js's render logic.
-// ---------------------------------------------------------------------
-function _jumpToOrderInOrdersTab(orderId) {
-    const shortId = String(orderId).slice(-6);
-    // window.switchTab is the global entry point main.js wires to every
-    // data-action="switchTab" button; calling it directly here follows
-    // the same call path a sidebar click would make.
-    if (typeof window.switchTab === 'function') {
-        window.switchTab('orders');
-    } else {
-        document.querySelector('[data-action="switchTab"][data-tab="orders"]')?.click();
-    }
-    // Give switchTab's lazy module import a moment to resolve and render
-    // before touching the search input it creates.
-    setTimeout(() => {
-        const input = document.getElementById('orderSearch');
-        if (input) {
-            input.value = shortId;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            input.focus();
-        }
-    }, 350);
-}
-
-// ---------------------------------------------------------------------
-// KOT printing — lightweight kitchen ticket (printing.js handles the
-// customer-facing receipt; KOT is a separate, simpler print job)
-// ---------------------------------------------------------------------
-function _printTableKOT(tableId) {
+export async function voidTableBill(tableId, groupId = null) {
     const t = _tables[tableId];
     const sess = _sessionForTable(tableId);
-    if (!t || !sess) { showToast('No active session to print', 'warning'); return; }
-    const orders = _ordersForSession(sess.sessionId || t.currentSession);
-    const grouped = {};
-    orders.forEach(o => Object.values(o.items || {}).forEach(it => {
-        const name = it.name || 'Item';
-        grouped[name] = (grouped[name] || 0) + (it.qty || 1);
-    }));
-    const itemRows = Object.entries(grouped).map(([name, qty]) =>
-        `<div class="kot-item-row"><span>${qty} ×</span><span>${escapeHtml(name)}</span></div>`
-    ).join('');
-    const w = window.open('', '_blank', 'width=380,height=600');
-    w.document.write(`<html><head><title>KOT — Table ${escapeHtml(t.number)}</title><style>
-        body{font-family:'Courier New',monospace;padding:16px;width:280px;}
-        h2{text-align:center;margin-bottom:2px;font-size:18px;}
-        .sub{text-align:center;font-size:11px;color:#555;margin-bottom:14px;border-bottom:1px dashed #000;padding-bottom:10px;}
-        .kot-item-row{display:flex;gap:8px;font-size:14px;padding:4px 0;border-bottom:1px dotted #ccc;}
-        .kot-item-row span:first-child{font-weight:700;min-width:30px;}
-        .foot{margin-top:14px;font-size:11px;text-align:center;color:#777;}
-        </style></head><body>
-        <h2>KOT — TABLE ${escapeHtml(t.number)}</h2>
-        <div class="sub">${new Date().toLocaleString('en-IN')} · Session ${escapeHtml(sess.sessionId || '')}</div>
-        ${itemRows || '<p>No items</p>'}
-        <div class="foot">Kitchen Copy</div>
-        <script>window.onload=function(){window.print();};</script></body></html>`);
-    w.document.close();
-}
+    if (!t || !sess) { showToast('Table or session not found', 'error'); return; }
 
-async function _printBillForGroup(tableId, groupId) {
-    const t = _tables[tableId];
-    const sess = _sessionForTable(tableId);
-    if (!t || !sess || !groupId) { showToast('No session for this group', 'warning'); return; }
-    const sessionId = sess.sessionId || t.currentSession;
-    const groups = _orderGroupsForSession(sessionId);
-    const g = groups.find(g => g.id === groupId);
-    if (!g) { showToast('Group not found', 'warning'); return; }
-    const dineSnap = await get(_settingsRef());
-    const dine = dineSnap.val() || {};
-    const taxEnabled = dine.taxEnabled !== false;
-    const scEnabled = dine.serviceChargeEnabled === true;
-    const taxRates = (dine.taxRates && Array.isArray(dine.taxRates) && dine.taxRates.length > 0) ? dine.taxRates : (taxEnabled ? [{ name: dine.taxName || 'Tax', rate: typeof dine.taxRate === 'number' ? dine.taxRate : 5 }] : []);
-    const scRate = typeof dine.serviceChargeRate === 'number' ? dine.serviceChargeRate : 0;
-    const groupOrders = (g.orders || []).map(oid => ({ id: oid, ...(_orders[oid] || {}) })).filter(o => o.id && o.status !== 'Cancelled');
-    if (!groupOrders.length) { showToast('No orders in this group', 'warning'); return; }
-    let subtotal = 0;
-    const allItems = [];
-    groupOrders.forEach(o => {
-        Object.values(o.items || {}).forEach(it => {
-            const qty = Number(it.qty || 1);
-            const price = Number(it.price || 0);
-            allItems.push({ name: it.name || 'Item', qty, price, size: it.size || '', addon: it.addon || '' });
-            subtotal += price * qty;
-        });
-    });
-    const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
-    const tax = taxItems.reduce((s, t) => s + t.amount, 0);
-    const serviceCharge = scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0;
-    const groupDiscount = groupOrders.reduce((sum, o) => sum + Number(o.discount || 0), 0);
-    // Include bill-level discount from payment modal (stored on group)
-    const billDiscount = Number(g.discount || 0);
-    const billDiscountLabel = g.discountLabel || null;
-    const grandTotalAfterDiscount = subtotal + tax + serviceCharge - groupDiscount - billDiscount;
-    await printOrderReceipt({
-
-        orderId: `TABLE-${t.number}-${g.label.replace(/\s/g, '')}`,
-        type: 'Dine-in', items: allItems,
-        total: grandTotalAfterDiscount, subtotal, tax, taxItems,
-        taxName: taxRates.map(r => r.name).join(' + ') || 'Tax',
-        serviceCharge,
-        serviceChargeName: dine.serviceChargeName || 'Service Charge',
-        serviceChargeRate: scRate,
-        discount: groupDiscount + billDiscount, deliveryFee: 0,
-        discountLabel: billDiscount > 0 ? billDiscountLabel : undefined,
-        tableNo: String(t.number),
-        createdAt: sess.openedAt || Date.now(),
-        paymentMethod: g.paymentMethod || 'Cash',
-        status: 'Delivered',
-        customerName: `Table ${t.number} · ${g.label}`
-    }, true);
-}
-
-async function _printSessionBill(tableId) {
-    const t = _tables[tableId];
-    const sess = _sessionForTable(tableId);
-    if (!t || !sess) { showToast('No active session to print', 'warning'); return; }
-
-    const sessionId = sess.sessionId || t.currentSession;
-    const groups = _orderGroupsForSession(sessionId);
-    const dineSnap = await get(_settingsRef());
-    const dine = dineSnap.val() || {};
-    const taxEnabled = dine.taxEnabled !== false;
-    const scEnabled = dine.serviceChargeEnabled === true;
-    const taxRates = (dine.taxRates && Array.isArray(dine.taxRates) && dine.taxRates.length > 0) ? dine.taxRates : (taxEnabled ? [{ name: dine.taxName || 'Tax', rate: typeof dine.taxRate === 'number' ? dine.taxRate : 5 }] : []);
-    const scRate = typeof dine.serviceChargeRate === 'number' ? dine.serviceChargeRate : 0;
-
-    if (groups.length > 1) {
-        const billableGroups = groups.filter(g => g.status === 'billing' || g.status === 'paid');
-        if (!billableGroups.length) { showToast('No billed groups to print', 'warning'); return; }
-        for (const g of billableGroups) {
-            await _printBillForGroup(tableId, g.id);
-        }
-        return;
-    }
-
-    // Single-bill mode: existing behavior
-    const orders = _ordersForSession(sessionId);
-    if (!orders.length) { showToast('No orders to bill', 'warning'); return; }
-
-    let subtotal = 0;
-    const allItems = [];
-    orders.filter(o => o.status !== 'Cancelled').forEach(o => {
-        Object.values(o.items || {}).forEach(it => {
-            const qty = Number(it.qty || 1);
-            const price = Number(it.price || 0);
-            allItems.push({ name: it.name || 'Item', qty, price, size: it.size || '', addon: it.addon || '' });
-            subtotal += price * qty;
-        });
-    });
-
-    const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
-    const tax = Number(sess.tax ?? 0) || taxItems.reduce((s, t) => s + t.amount, 0);
-    const serviceCharge = Number(sess.serviceCharge ?? 0) || (scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0);
-    const grandTotal = _effectiveTotal(sess);
-    const sessionDiscount = orders.reduce((sum, o) => sum + Number(o.discount || 0), 0);
-    // Include bill-level discount from payment modal (stored on session)
-    const billDiscount = Number(sess.discount || 0);
-    const billDiscountLabel = sess.discountLabel || null;
-
-    const combinedOrder = {
-        orderId: `TABLE-${t.number}`,
-        type: 'Dine-in',
-        items: allItems,
-        total: grandTotal, subtotal, tax, taxItems,
-        taxName: taxRates.map(r => r.name).join(' + ') || 'Tax',
-        serviceCharge,
-        serviceChargeName: dine.serviceChargeName || 'Service Charge',
-        serviceChargeRate: scRate,
-        discount: sessionDiscount + billDiscount, deliveryFee: 0,
-        discountLabel: billDiscount > 0 ? billDiscountLabel : undefined,
-        tableNo: String(t.number),
-        createdAt: sess.openedAt || Date.now(),
-        paymentMethod: sess.paymentMethod || 'Cash',
-        status: 'Delivered',
-        customerName: `Table ${t.number}`
-    };
-
-    await printOrderReceipt(combinedOrder, true);
-}
-
-// ---------------------------------------------------------------------
-// QR generation — client-side only, no external API call
-// ---------------------------------------------------------------------
-let _dineInBaseUrlCache = null;
-async function _dineInBaseUrl() {
-    if (_dineInBaseUrlCache) return _dineInBaseUrlCache;
-    try {
-        const snap = await Promise.race([
-            get(_settingsRef('qrBaseUrl')),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-        ]);
-        _dineInBaseUrlCache = snap.exists() ? snap.val() : 'https://foodhubbie-qrmenu.web.app/';
-    } catch {
-        _dineInBaseUrlCache = 'https://foodhubbie-qrmenu.web.app/';
-    }
-    return _dineInBaseUrlCache;
-}
-
-let _storeBrandingCache = null;
-async function _fetchStoreBranding() {
-    if (_storeBrandingCache) return _storeBrandingCache;
-    const snap = await get(Outlet.ref('settings/Store'));
-    const s = snap.val() || {};
-    _storeBrandingCache = {
-        storeName: s.storeName || 'Our Restaurant',
-        poweredBy: (s.poweredBy || '').trim()
-    };
-    return _storeBrandingCache;
-}
-
-function _qrCardMarkup({ storeName, poweredBy, tableNumber, qrSrc, compact }) {
-    const qrSize = compact ? 150 : 220;
-    // Defensive: some outlets have "Powered by X" already saved as the
-    // poweredBy value itself, which used to render as "Powered by Powered by X".
-    const poweredByClean = (poweredBy || '').replace(/^powered\s+by\s+/i, '').trim();
-    const footer = poweredByClean
-        ? `<div class="qr-divider"></div><div class="qr-footer">Powered by <b>${escapeHtml(poweredByClean)}</b></div>`
-        : '';
-    return `
-    <div class="qr-frame${compact ? ' qr-frame-compact' : ''}">
-        <div class="qr-card">
-            <div class="qr-header">
-                <div class="qr-store-name">🏪 ${escapeHtml(storeName)}</div>
-                <div class="qr-tagline">DINE-IN MENU</div>
-            </div>
-            <div class="qr-body">
-                <div class="qr-table-label">TABLE</div>
-                <div class="qr-table-number">${escapeHtml(String(tableNumber))}</div>
-                <div class="qr-scan-cta">📷                 <div class="qr-scan-cta">📷 Scan & Crave</div>
-                <div class="qr-img-frame">${qrSrc ? `<img src="${qrSrc}" width="${qrSize}" height="${qrSize}">` : '<p style="font-size:11px;color:#c81d11;">QR failed</p>'}</div>
-            </div>
-            ${footer}
-        </div>
-    </div>`;
-}
-
-const QR_CARD_CSS = `
-    .qr-frame{ display:inline-block; background:linear-gradient(135deg,#FFB347,#E84908 55%,#C81D11); border-radius:26px; padding:5px; box-shadow:0 10px 26px rgba(232,73,8,.25); }
-    .qr-frame-compact{ border-radius:20px; padding:4px; box-shadow:none; break-inside:avoid; page-break-inside:avoid; }
-    .qr-card{ background:#fff; border-radius:22px; overflow:hidden; width:300px; text-align:center; font-family:-apple-system,'Segoe UI',sans-serif; }
-    .qr-frame-compact .qr-card{ border-radius:17px; width:230px; }
-    .qr-header{ background:linear-gradient(135deg,#FF8A3D,#E84908); color:#fff; padding:16px 14px 14px; }
-    .qr-frame-compact .qr-header{ padding:11px 10px 10px; }
-    .qr-store-name{ font-size:17px; font-weight:900; letter-spacing:.01em; text-transform:uppercase; line-height:1.2; }
-    .qr-frame-compact .qr-store-name{ font-size:13px; }
-    .qr-tagline{ font-size:10px; opacity:.92; margin-top:3px; font-weight:700; letter-spacing:.1em; }
-    .qr-body{ padding:20px 18px 16px; }
-    .qr-frame-compact .qr-body{ padding:13px 12px 10px; }
-    .qr-table-label{ font-size:11px; font-weight:800; color:#E84908; letter-spacing:.14em; }
-    .qr-table-number{ font-size:40px; font-weight:900; color:#1a1a1a; line-height:1; margin:2px 0 12px; }
-    .qr-frame-compact .qr-table-number{ font-size:28px; margin-bottom:8px; }
-    .qr-scan-cta{ font-size:12px; font-weight:800; color:#C81D11; margin-bottom:12px; }
-    .qr-frame-compact .qr-scan-cta{ font-size:10px; margin-bottom:8px; }
-    .qr-img-frame{ display:inline-block; padding:10px; background:#fff7ed; border:3px solid #FFB347; border-radius:14px; }
-    .qr-frame-compact .qr-img-frame{ padding:6px; border-radius:11px; border-width:2px; }
-    .qr-img-frame img{ display:block; }
-    .qr-divider{ border-top:2px dashed #f3cba8; margin:14px 18px 0; }
-    .qr-frame-compact .qr-divider{ margin:10px 12px 0; }
-    .qr-footer{ padding:10px 14px 16px; font-size:10px; color:#b97a4e; font-weight:600; }
-    .qr-frame-compact .qr-footer{ padding:7px 10px 11px; font-size:8px; }
-    .qr-footer b{ color:#E84908; }
-`;
-
-// Inject QR_CARD_CSS into the admin document itself, once. Without this,
-// the branded card can only ever render inside the print popup (which
-// builds its own <style> tag) — never in the on-screen preview modal.
-let _qrCardCssInjected = false;
-function _ensureQrCardCssInPage() {
-    if (_qrCardCssInjected) return;
-    const style = document.createElement('style');
-    style.id = 'qrCardCssShared';
-    style.textContent = QR_CARD_CSS;
-    document.head.appendChild(style);
-    _qrCardCssInjected = true;
-}
-
-async function _ensureQrLib() {
-    if (window.QRCode) return true;
-    return new Promise((resolve) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-        s.onload = () => resolve(true);
-        s.onerror = () => resolve(false);
-        document.head.appendChild(s);
-    });
-}
-
-async function _qrDataUri(text, size = 220) {
-    const ok = await _ensureQrLib();
-    if (!ok || !window.QRCode) return null;
-    try {
-        const holder = document.createElement('div');
-        new window.QRCode(holder, { text, width: size, height: size, colorDark: '#1a1a1a', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
-        const img = holder.querySelector('img');
-        const canvas = holder.querySelector('canvas');
-        return img?.src || canvas?.toDataURL('image/png') || null;
-    } catch (e) {
-        console.error('[QRDataUri]', e);
-        return null;
-    }
-}
-
-// Secure URL shape — TOKEN ONLY, never a table number (Decision #5/#6)
-async function _qrUrlForTable(t) {
-    const base = await _dineInBaseUrl();
-    const sep = base.includes('?') ? '&' : '?';
-    return `${base}${sep}o=${encodeURIComponent(Outlet.current)}&b=${encodeURIComponent(BUSINESS_ID())}&t=${t.token}`;
-}
-
-async function _openQrModal(id) {
-    if (_qrModalOpening) return;
-    _ensureQrCardCssInPage();
-    const modal = document.getElementById('tableQrModal');
-    const preview = document.getElementById('tableQrCardPreview');
-    const titleEl = document.getElementById('tableQrModalTitle');
-    const urlEl = document.getElementById('tableQrModalUrl');
-    try {
-        _qrModalOpening = true;
-        const t = _tables[id];
-        if (!t) { modal?.classList.remove('active'); return; }
-
-        titleEl.textContent = `Table ${t.number} QR Code`;
-        if (preview) preview.innerHTML = `<p class="text-muted-small">Loading…</p>`;
-        if (modal) modal.dataset.tableId = id;
-        modal?.classList.remove('hidden');
-        modal?.classList.add('active');
-
-        const url = await _qrUrlForTable(t);
-        urlEl.textContent = url;
-        const dataUri = await _qrDataUri(url, 220);
-        if (!dataUri) { showToast('QR generation failed — check connection', 'error'); return; }
-
-        // Same markup + same data the print flow uses — this IS what will print.
-        const { storeName, poweredBy } = await _fetchStoreBranding();
-        if (preview) {
-            preview.innerHTML = _qrCardMarkup({ storeName, poweredBy, tableNumber: t.number, qrSrc: dataUri, compact: false });
-        }
-    } catch (e) {
-        showToast('Failed to load QR', 'error');
-        modal?.classList.remove('active');
-        modal?.classList.add('hidden');
-    } finally {
-        _qrModalOpening = false;
-    }
-}
-function _closeQrModal() { document.getElementById('tableQrModal')?.classList.remove('active'); }
-
-function _copyQrLink() {
-    const url = document.getElementById('tableQrModalUrl')?.textContent;
-    if (!url) return;
-    navigator.clipboard?.writeText(url).then(() => showToast('Link copied', 'success')).catch(() => showToast('Could not copy link', 'error'));
-}
-
-async function _printSingleQr() {
-    // Print exactly what's on screen right now — clone the live preview
-    // node's HTML rather than re-fetching data and rebuilding the card
-    // independently. This is what actually guarantees print === preview:
-    // if the on-screen card is ever wrong (stale name, missing branding),
-    // print will be wrong the same way, which is honest and debuggable,
-    // instead of two code paths silently drifting apart.
-    const preview = document.getElementById('tableQrCardPreview');
-    const cardHtml = preview?.querySelector('.qr-frame')?.outerHTML;
-    if (!cardHtml) { showToast('Nothing to print yet — wait for the QR to load', 'warning'); return; }
-
-    const titleText = document.getElementById('tableQrModalTitle')?.textContent || 'Table QR';
-    const { storeName } = await _fetchStoreBranding();
-
-    const w = window.open('', '_blank', 'width=420,height=620');
-    if (!w) { showToast('Popup blocked — allow popups for print', 'error'); return; }
-    w.document.write(`<html><head><title>${escapeHtml(titleText)} — ${escapeHtml(storeName)}</title><style>
-        *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-        body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fef3e8;padding:24px;}
-        ${QR_CARD_CSS}
-        </style></head><body>
-        ${cardHtml}
-        <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script></body></html>`);
-    w.document.close();
-}
-
-async function _bulkQrPrint() {
-    const tables = Object.values(_tables).filter(t => t.status !== 'disabled').sort((a, b) => Number(a.number) - Number(b.number));
-    if (tables.length === 0) { showToast('No tables to print', 'warning'); return; }
-    const ok = await showConfirm(`Generate printable QR cards for all ${tables.length} tables?`, 'Bulk QR Print');
+    const ok = await showConfirm(
+        `Void the payment and reopen the ${groupId ? 'group bill' : 'table bill'}? 
+Orders will be reverted to Served status. Discount usage will be reverted.
+This action cannot be undone.`,
+        'Void Payment'
+    );
     if (!ok) return;
 
-    showToast('Generating QR codes…', 'info');
-    const { storeName, poweredBy } = await _fetchStoreBranding();
-    const poweredByClean = (poweredBy || '').replace(/^powered\s+by\s+/i, '').trim();
-    const cards = [];
-    for (const t of tables) {
-        const url = await _qrUrlForTable(t);
-        const dataUri = await _qrDataUri(url, 250);
-        cards.push({ t, dataUri });
-    }
-    // 2 BIG cards per A4 landscape page — inline styles, no CSS class conflicts
-    const cardHtml = ({ num, src }) => {
-        const footer = poweredByClean
-            ? `<div style="border-top:2px dashed #f3cba8;margin:12px 20px 0;"></div><div style="padding:8px 20px 14px;font-size:11px;color:#b97a4e;font-weight:600;">Powered by <b style="color:#E84908;">${escapeHtml(poweredByClean)}</b></div>`
-            : '';
-        return `<div style="display:inline-block;vertical-align:top;width:38%;margin:3%;background:linear-gradient(135deg,#FFB347,#E84908 55%,#C81D11);border-radius:26px;padding:6px;page-break-inside:avoid;">
-            <div style="background:#fff;border-radius:22px;overflow:hidden;text-align:center;font-family:-apple-system,'Segoe UI',sans-serif;">
-                <div style="background:linear-gradient(135deg,#FF8A3D,#E84908);color:#fff;padding:20px 18px 18px;">
-                    <div style="font-size:22px;font-weight:900;text-transform:uppercase;line-height:1.2;">${escapeHtml(storeName)}</div>
-                    <div style="font-size:11px;opacity:.92;margin-top:4px;font-weight:700;letter-spacing:.12em;">DINE-IN MENU</div>
-                </div>
-                <div style="padding:24px 20px 20px;">
-                    <div style="font-size:13px;font-weight:800;color:#E84908;letter-spacing:.14em;">TABLE</div>
-                    <div style="font-size:52px;font-weight:900;color:#1a1a1a;line-height:1;margin:4px 0 16px;">${escapeHtml(String(num))}</div>
-                    <div style="font-size:14px;font-weight:800;color:#C81D11;margin-bottom:16px;">Scan & Crave</div>
-                    <div style="display:inline-block;padding:12px;background:#fff7ed;border:3px solid #FFB347;border-radius:16px;">
-                        <img src="${src}" width="250" height="250" style="display:block;">
-                    </div>
-                </div>
-                ${footer}
-            </div>
-        </div>`;
-    };
-    // Pair cards into rows of 2, page-break between rows
-    let rowsHtml = '';
-    for (let i = 0; i < cards.length; i += 2) {
-        const pair = cards.slice(i, i + 2);
-        const rowCards = pair.map(c => cardHtml({ num: c.t.number, src: c.dataUri })).join('');
-        const pageBreak = i + 2 < cards.length ? 'page-break-after:always;' : '';
-        rowsHtml += `<div style="text-align:center;${pageBreak}">${rowCards}</div>`;
-    }
-    const w = window.open('', '_blank', 'width=960,height=700');
-    w.document.write(`<html><head><title>Bulk QR Print — ${escapeHtml(storeName)}</title><style>
-        @page{size:A4 landscape;margin:8mm;}
-        *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-        body{font-family:-apple-system,'Segoe UI',sans-serif;background:#fef3e8;}
-        @media print{body{background:#fff;}}
-        </style></head><body>${rowsHtml}
-        <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script></body></html>`);
-    w.document.close();
-}
+    try {
+        const { phone: customerPhone, orderId: representativeOrderId } = _billCustomerPhoneAndOrderId();
+        const now = Date.now();
+        const outletRef = Outlet.ref('');
+        let groupOrderCount = 0;
+        let ordersToRevert = [];
 
-function _exportTablesCsv() {
-    const rows = [['Table', 'Capacity', 'Status', 'Current Session', 'Running Total']];
-    Object.values(_tables).sort((a, b) => Number(a.number) - Number(b.number)).forEach(t => {
-        const sess = _sessionForTable(t.id);
-        rows.push([t.number, t.capacity, t.status, sess?.sessionId || '', sess ? _effectiveTotal(sess) : '']);
-    });
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `tables-export-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-}
-
-// ---------------------------------------------------------------------
-// Firebase listeners — exactly 3 listeners total, NEVER one-per-table
-// (matches "Performance Architecture" rule in the spec)
-// ---------------------------------------------------------------------
-function _attachListeners() {
-    if (_tablesListener) { _tablesListener(); _tablesListener = null; }
-    if (_sessionsListener) { _sessionsListener(); _sessionsListener = null; }
-    if (_ordersListener) { _ordersListener(); _ordersListener = null; }
-    if (_requestsListener) { _requestsListener(); _requestsListener = null; }
-
-    _tablesListener = onValue(_tblRef(), (snap) => {
-        _tables = snap.val() || {};
-        _renderAll();
-    }, (err) => {
-        console.error('[Tables] Read error:', err);
-        const grid = document.getElementById('tableManagementGrid');
-        if (grid) grid.innerHTML = `<div class="offline-placeholder"><i data-lucide="alert-triangle" class="icon-32"></i><h4>Permission denied</h4><p>Could not load table data.</p></div>`;
-    });
-
-    _sessionsListener = onValue(_sessRef(), (snap) => {
-        _sessions = snap.val() || {};
-        _renderAll();
-    }, (err) => {
-        console.error('[Tables] Sessions read error:', err);
-        document.getElementById('tblKpiRevenue').textContent = '—';
-    });
-
-    // Always attach an /orders listener so KDS status updates
-    // (advanceTableOrder) immediately trigger a re-render.
-    if (state.ordersMap && state.ordersMap.size > 0) {
-        _orders = Object.fromEntries(state.ordersMap);
-        _syncCustomersFromOrders(_orders);
-    }
-    if (!_ordersListenerAttached) {
-        _ordersListenerAttached = true;
-        _ordersListener = onValue(_ordersRef(), (snap) => {
-            _orders = snap.val() || {};
-            _syncCustomersFromOrders(_orders);
-            _renderAll();
-        }, (err) => {
-            console.error('[Tables] Orders read error:', err);
-        });
-    }
-
-    _requestsListener = onValue(_reqRef(), (snap) => {
-        _tableRequests = snap.val() || {};
-        const currentIds = new Set(Object.keys(_tableRequests));
-
-        if (_seenRequestIds !== null) {
-            const newOnes = [...currentIds].filter(id => !_seenRequestIds.has(id) && _tableRequests[id]?.status !== 'resolved');
-            newOnes.forEach(id => {
-                const r = _tableRequests[id];
-                const meta = REQUEST_TYPE_META[r.type] || { label: r.type || 'Request' };
-                showToast(`Table ${r.tableNumber || ''}: ${meta.label}`, 'info');
-            });
-            if (newOnes.length) { haptic(25); playNotificationSound(); }
-        }
-        _seenRequestIds = currentIds;
-        _renderAll();
-    });
-}
-
-export function cleanupTables() {
-    if (_tablesListener) { _tablesListener(); _tablesListener = null; }
-    if (_sessionsListener) { _sessionsListener(); _sessionsListener = null; }
-    if (_ordersListener) { _ordersListener(); _ordersListener = null; _ordersListenerAttached = false; }
-    if (_requestsListener) { _requestsListener(); _requestsListener = null; }
-    if (_connUnsub) { _connUnsub(); _connUnsub = null; }
-    if (_kdsTickInterval) { clearInterval(_kdsTickInterval); _kdsTickInterval = null; }
-    if (_policeInterval) { clearInterval(_policeInterval); _policeInterval = null; }
-    _seenRequestIds = null;
-    _customerSyncedOrderIds.clear();
-    _closeTableDrawer();
-}
-
-export function loadTableManagement() {
-    console.log('[Tables] Loading tab…');
-    if (_connUnsub) { _connUnsub(); _connUnsub = null; }
-
-    if (isConnected()) {
-        _attachListeners();
-    } else {
-        const grid = document.getElementById('tableManagementGrid');
-        if (grid) grid.innerHTML = `<div class="offline-placeholder"><i data-lucide="wifi-off" class="icon-32"></i><h4>Waiting for connection</h4><p>Table data will load automatically when the connection is restored.</p></div>`;
-        if (!_connUnsub) _connUnsub = onConnectionChange(function _retryTables(online) {
-            if (!online) return;
-            if (_connUnsub) { _connUnsub(); _connUnsub = null; }
-            cleanupTables();
-            loadTableManagement();
-        });
-    }
-
-    if (!_kdsTickInterval) _kdsTickInterval = setInterval(_tickKDS, 1000);
-    if (!_policeInterval) _policeInterval = setInterval(_policeExpiredSessions, 30000);
-
-    const tabRoot = document.getElementById('tab-tables');
-    if (tabRoot && !tabRoot.__tablesWired) {
-        tabRoot.__tablesWired = true;
-        tabRoot.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-action]');
-            if (!btn) return;
-            const action = btn.dataset.action;
-            const id = btn.dataset.id;
-            switch (action) {
-                case 'openTableDrawer': _openTableDrawer(id); break;
-                case 'openTableDrawerByOrder': _openTableDrawerByOrder(btn.dataset.orderId); break;
-                case 'openAddTable': _openTableEditor(null); break;
-                case 'editTable': _openTableEditor(id); break;
-                case 'deleteTable': _deleteTable(id); break;
-                case 'enableTable': _setTableEnabled(id, true); break;
-                case 'disableTable': _setTableEnabled(id, false); break;
-                case 'openTableQr': _openQrModal(id); break;
-                case 'bulkQrPrint': _bulkQrPrint(); break;
-                case 'exportTables': _exportTablesCsv(); break;
-                case 'advanceTableOrder': _advanceOrder(id, btn.dataset.next); break;
-                case 'requestBillForTable': _requestBillForTable(id); break;
-                case 'requestBillForGroup': _requestBillForGroup(id, btn.dataset.groupId); break;
-                case 'makePaymentForGroup': _makePaymentForGroup(id, btn.dataset.groupId); break;
-                case 'closeSessionForTable': _closeSessionForTable(id); break;
-                case 'makePaymentForTable': _makePaymentForTable(id); break;
-                case 'cancelSessionForTable': _cancelSessionForTable(id); break;
-                case 'closeExpiredSession': _closeExpiredSession(id); break;
-                case 'printTableKOT': _printTableKOT(id); break;
-                case 'printSessionBill': _printSessionBill(id); break;
-                case 'printBillForGroup': _printBillForGroup(id, btn.dataset.groupId); break;
-                case 'resolveTableRequest': _resolveTableRequest(btn.dataset.id); break;
-                case 'jumpToOrderInOrdersTab': _jumpToOrderInOrdersTab(id); break;
-                case 'closeTableDrawer': _closeTableDrawer(); break;
+        if (groupId) {
+            // GROUP VOID
+            const group = sess.orderGroups[groupId];
+            if (!group || group.status !== 'paid') {
+                showToast('Group is not in paid state', 'warning');
+                return;
             }
+
+            const gOrders = group.orders || [];
+            const updates = {};
+
+            gOrders.forEach(oid => {
+                if (_orders[oid] && _orders[oid].status === 'Paid') {
+                    updates[`outlets/${OUTLET}/orders/${oid}/paymentStatus`] = 'Served';
+                    updates[`outlets/${OUTLET}/orders/${oid}/paymentMethod`] = null;
+                    updates[`outlets/${OUTLET}/orders/${oid}/paymentDetails`] = null;
+                    updates[`outlets/${OUTLET}/orders/${oid}/paymentEntries`] = null;
+                    updates[`outlets/${OUTLET}/orders/${oid}/updatedAt`] = Date.now();
+                }
+            });
+
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'billing';
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = null;
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = null;
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = null;
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = null;
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = 0;
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = null;
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = null;
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = null;
+            updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = 0;
+
+            try {
+                await outletRef.update(updates);
+
+                // Revert order statuses via transactions
+                await Promise.all(ordersToRevert.map(oid => runTransaction(_ordersRef(oid), (cur) => {
+                    if (!cur || cur.status !== 'Paid') return;
+                    return { ...cur, status: 'Served', paymentStatus: 'Unpaid', paymentMethod: null, paymentDetails: null, paymentEntries: null, discount: 0, discountLabel: null, discountId: null, discountSource: null, updatedAt: Date.now() };
+                })));
+
+                // Revert discount usage if applicable
+                const group = sess.orderGroups[groupId];
+                if (group?.discountId && group.discount > 0) {
+                    await recordDiscountUsage({ discountId: group.discountId, orderId: representativeOrderId, customerPhone: '', amountGiven: -group.discount, channel: 'pos', discountLabel: group.discountLabel, discountSource: group.discountSource, globalLimit: group.discountGlobalLimit, isVoid: true });
+                    await _bumpCustomerDiscountUsage(customerPhone, group.discountId, group.discountSource, true);
+                }
+
+                closeTableBillReview();
+                showToast(`${group.label || 'Group'} payment voided — orders reverted to Served`, 'success');
+                haptic(30);
+            } catch (e) {
+                showToast('Failed to void group payment: ' + (e?.message || e), 'error');
+            }
+            return;
+        }
+
+        // FULL TABLE VOID
+        const orders = _ordersForSession(sess.sessionId || t.currentSession);
+        const paidOrders = orders.filter(o => o.id && o.status === 'Paid');
+
+        if (paidOrders.length === 0) {
+            showToast('No paid orders to void', 'warning');
+            return;
+        }
+
+        const tableOrderCount = (sess.orders || []).length;
+        const mins = _sessionElapsedMinutes(sess);
+        const updates = {};
+
+        paidOrders.forEach(o => {
+            updates[`outlets/${OUTLET}/orders/${o.id}/paymentStatus`] = 'Served';
+            updates[`outlets/${OUTLET}/orders/${o.id}/paymentMethod`] = null;
+            updates[`outlets/${OUTLET}/orders/${o.id}/paymentDetails`] = null;
+            updates[`outlets/${OUTLET}/orders/${o.id}/paymentEntries`] = null;
+            updates[`outlets/${OUTLET}/orders/${o.id}/updatedAt`] = Date.now();
         });
+
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/status`] = 'billing';
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/closedAt`] = null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentMethod`] = null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentDetails`] = null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentEntries`] = null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paidAt`] = null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/subtotal`] = subtotal;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discount`] = 0;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountId`] = null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountLabel`] = null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountSource`] = null;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paidAmount`] = 0;
+        updates[`outlets/${OUTLET}/tables/${tableId}/status`] = 'billing';
+        updates[`outlets/${OUTLET}/tables/${tableId}/currentSession`] = sess.sessionId;
+        updates[`outlets/${OUTLET}/tables/${tableId}/updatedAt`] = Date.now();
+
+        try {
+            await outletRef.update(updates);
+
+            // Revert order statuses via transactions
+            await Promise.all(paidOrders.map(o => runTransaction(_ordersRef(o.id), (cur) => {
+                if (!cur || cur.status !== 'Paid') return cur;
+                return { ...cur, status: 'Served', paymentStatus: 'Unpaid', paymentMethod: null, paymentDetails: null, paymentEntries: null, discount: 0, discountLabel: null, discountId: null, discountSource: null, updatedAt: Date.now() };
+            })));
+
+            // Analytics transaction — decrement revenue
+            await runTransaction(Outlet.ref(`tableAnalytics/${tableId}`), (cur) => {
+                cur = cur || { totalOrders: 0, totalRevenue: 0, avgSessionTime: 0, occupancyRate: 0 };
+                cur.totalOrders = Math.max(0, (cur.totalOrders || 0) - paidOrders.length);
+                cur.totalRevenue = Math.max(0, (cur.totalRevenue || 0) - _effectiveTotal(sess));
+                return cur;
+            });
+
+            // Revert discount usage if applicable
+            const sessDiscountId = sess.discountId;
+            const sessDiscountValue = sess.discount;
+            if (sessDiscountId && sessDiscountValue > 0) {
+                try {
+                    await recordDiscountUsage({ discountId: sess.discountId, orderId: representativeOrderId, customerPhone: '', amountGiven: -sess.discount, channel: 'pos', discountLabel: sess.discountLabel, discountSource: sess.discountSource, globalLimit: sess.discountGlobalLimit, isVoid: true });
+                    await _bumpCustomerDiscountUsage(customerPhone, sess.discountId, sess.discountSource, true);
+                } catch (e) { console.warn('[Tables] recordDiscountUsage void failed:', e?.message || e); }
+            }
+
+            if (_drawerTableId === tableId) _closeTableDrawer();
+            closeTableBillReview();
+            showToast(`Table payment voided — ${paidOrders.length} order(s) reverted to Served`, 'success');
+            haptic(30);
+        } catch (e) {
+            showToast('Failed to void table payment: ' + (e?.message || e), 'error');
+        }
+} catch (e) {
+            showToast('Failed to void payment: ' + (e?.message || e), 'error');
+        }
     }
 
-    if (!window.__tablesModalsWired) {
-        window.__tablesModalsWired = true;
-        document.getElementById('tableEditorSaveBtn')?.addEventListener('click', _saveTable);
-        document.getElementById('tableEditorCancelBtn')?.addEventListener('click', _closeTableEditor);
-        document.getElementById('tableEditorCloseBtn')?.addEventListener('click', _closeTableEditor);
-        document.getElementById('tableQrCloseBtn')?.addEventListener('click', _closeQrModal);
-        document.getElementById('tableQrPrintBtn')?.addEventListener('click', _printSingleQr);
-        document.getElementById('tableQrCopyLinkBtn')?.addEventListener('click', _copyQrLink);
-        document.getElementById('tableDrawerOverlay')?.addEventListener('click', _closeTableDrawer);
-        document.getElementById('tableDrawerCloseBtn')?.addEventListener('click', _closeTableDrawer);
-    }
-}
+// ---------------------------------------------------------------------
 
-window.__tables = {
-    openEditor: _openTableEditor, closeEditor: _closeTableEditor, save: _saveTable,
-    delete: _deleteTable, openDrawer: _openTableDrawer, closeDrawer: _closeTableDrawer,
-    openQr: _openQrModal, closeQr: _closeQrModal, bulkPrint: _bulkQrPrint, exportCsv: _exportTablesCsv,
-    openDrawerByOrder: _openTableDrawerByOrder, requestBill: _requestBillForTable,
-    requestBillForGroup: _requestBillForGroup,
-    makePaymentForGroup: _makePaymentForGroup,
-    printKOT: _printTableKOT, jumpToOrder: _jumpToOrderInOrdersTab,
-    closeSession: _closeSessionForTable, cancelSession: _cancelSessionForTable,
-    closeExpiredSession: _closeExpiredSession,
-    makePaymentForTable: _makePaymentForTable,
-    advanceOrder: _advanceOrder,
-    printSessionBill: _printSessionBill,
-    printBillForGroup: _printBillForGroup,
-    resolveTableRequest: _resolveTableRequest,
-    editTable: _openTableEditor, setTableEnabled: _setTableEnabled,
-    closeBillReview: closeTableBillReview,
-    setBillDiscount: setTableBillDiscount,
-    setBillDiscountPct: setTableBillDiscountPct,
-    applyBillCoupon: applyTableBillCoupon,
-    clearBillCoupon: clearTableBillCoupon,
-    toggleBillOffers: toggleTableBillOffersPanel,
-    applyBillOfferFromPanel: applyTableOfferFromPanel,
-    confirmBillPayment: confirmTableBillPayment
-};
+// ---------------------------------------------------------------------
+// ACTIONS — Order status advance (writes the SAME /orders node)
