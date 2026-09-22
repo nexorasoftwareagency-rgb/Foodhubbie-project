@@ -29,11 +29,12 @@
 
 import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange } from '../firebase.js';
 import { state } from '../state.js';
-import { showToast, showConfirm, showDeleteConfirm, showPaymentPicker, showSplitPaymentPicker } from '../ui-utils.js';
+import { showToast, showConfirm, showDeleteConfirm, showPaymentPicker, showSplitPaymentPicker, logAudit } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
 import { haptic, escapeHtml, playNotificationSound } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { evaluateDiscount, recordDiscountUsage, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
+import { getCategories } from './catalog.js';
 
 // ---------------------------------------------------------------------
 // Module-level cache
@@ -1252,6 +1253,7 @@ async function _renderTableBillOffers() {
         return;
     }
 
+    const categories = await getCategories();
     const subtotal = _billSubtotal();
     const cart = _billCart();
     const list = getEligibleOffersForDisplay(all, { channel: 'table', cart, includeNonMatchingCategories: true });
@@ -1271,7 +1273,7 @@ async function _renderTableBillOffers() {
         const usedLabel = used > 0 ? ` · used ${used}${d.globalLimit ? `/${d.globalLimit}` : ''}×` : '';
         const categoryMismatch = d.type === 'category' && d._categoryMatches === false;
         const categoryNames = d.categoryIds?.map(id => {
-            const cat = _categoriesSnap?.find(c => c.id === id);
+            const cat = categories?.find(c => c.id === id);
             return cat?.name || id;
         }).join(', ') || 'Unknown';
 
@@ -1313,7 +1315,7 @@ export function applyTableOfferFromPanel(code) {
     applyTableBillCoupon();
 }
 
-async function _bumpCustomerDiscountUsage(phone, discountId, discountSource) {
+async function _bumpCustomerDiscountUsage(phone, discountId, discountSource, isVoid) {
     if (!phone || !discountId) return;
     try {
         const isFirstOrderDiscount = discountSource === 'firstOrder' && discountId;
@@ -1324,7 +1326,11 @@ async function _bumpCustomerDiscountUsage(phone, discountId, discountSource) {
                 cur.firstOrderDiscountId = discountId;
             }
             cur.discountUsage = cur.discountUsage || {};
-            cur.discountUsage[discountId] = (cur.discountUsage[discountId] || 0) + 1;
+            if (isVoid) {
+                cur.discountUsage[discountId] = Math.max(0, (cur.discountUsage[discountId] || 0) - 1);
+            } else {
+                cur.discountUsage[discountId] = (cur.discountUsage[discountId] || 0) + 1;
+            }
             return cur;
         });
     } catch (e) {
@@ -1386,8 +1392,8 @@ export async function confirmTableBillPayment() {
         try {
             await outletRef.update(updates);
             if (discountId && discountValue > 0) {
-                await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'pos', discountLabel, discountSource, globalLimit: discountGlobalLimit });
-                await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource);
+await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'table', discountLabel, discountSource, globalLimit: discountGlobalLimit });
+            await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource, false);
             }
             closeTableBillReview();
             showToast(`${sess.orderGroups[groupId]?.label || 'Group'} paid — ₹${finalTotal.toLocaleString('en-IN')} via ${paymentDetails}`, 'success');
@@ -1439,9 +1445,9 @@ export async function confirmTableBillPayment() {
         });
         if (discountId && discountValue > 0) {
             try {
-                await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'pos', discountLabel, discountSource, globalLimit: discountGlobalLimit });
+                await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'table', discountLabel, discountSource, globalLimit: discountGlobalLimit });
             } catch (e) { console.warn('[Tables] recordDiscountUsage failed:', e?.message || e); }
-            await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource);
+            await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource, false);
         }
         if (_drawerTableId === tableId) _closeTableDrawer();
         closeTableBillReview();
@@ -1603,7 +1609,7 @@ This action cannot be undone.`,
                 // Revert discount usage if applicable
                 const group = sess.orderGroups[groupId];
                 if (group?.discountId && group.discount > 0) {
-                    await recordDiscountUsage({ discountId: group.discountId, orderId: representativeOrderId, customerPhone: '', amountGiven: -group.discount, channel: 'pos', discountLabel: group.discountLabel, discountSource: group.discountSource, globalLimit: group.discountGlobalLimit, isVoid: true });
+                    await recordDiscountUsage({ discountId: group.discountId, orderId: representativeOrderId, customerPhone: '', amountGiven: -group.discount, channel: 'table', discountLabel: group.discountLabel, discountSource: group.discountSource, globalLimit: group.discountGlobalLimit, isVoid: true });
                     await _bumpCustomerDiscountUsage(customerPhone, group.discountId, group.discountSource, true);
                 }
 
@@ -1675,7 +1681,7 @@ This action cannot be undone.`,
             const sessDiscountValue = sess.discount;
             if (sessDiscountId && sessDiscountValue > 0) {
                 try {
-                    await recordDiscountUsage({ discountId: sess.discountId, orderId: representativeOrderId, customerPhone: '', amountGiven: -sess.discount, channel: 'pos', discountLabel: sess.discountLabel, discountSource: sess.discountSource, globalLimit: sess.discountGlobalLimit, isVoid: true });
+                    await recordDiscountUsage({ discountId: sess.discountId, orderId: representativeOrderId, customerPhone: '', amountGiven: -sess.discount, channel: 'table', discountLabel: sess.discountLabel, discountSource: sess.discountSource, globalLimit: sess.discountGlobalLimit, isVoid: true });
                     await _bumpCustomerDiscountUsage(customerPhone, sess.discountId, sess.discountSource, true);
                 } catch (e) { console.warn('[Tables] recordDiscountUsage void failed:', e?.message || e); }
             }

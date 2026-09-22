@@ -52,7 +52,7 @@
 **Fix:**
 - Added voidTableBill(tableId, groupId) to revert paid bills to billing state
 - Supports both group-level and full-table voids
-- Reverts order statuses from Paid ? Served via transactions
+- Reverts order statuses from Paid -> Served via transactions
 - Decrements analytics (totalOrders, totalRevenue)
 - Reverts discount usage records (negative amountGiven)
 - UI: 'Void Payment' button in table drawer for paid tables
@@ -60,6 +60,17 @@
 - Atomic multi-path updates via outletRef.update()
 - Cleanup of connection listeners on modal close
 **Effort:** Medium | Regression Risk: Low | Compatibility: Full
+
+### P2-1: Walkout Audit Trail (MEDIUM IMPACT) - DONE
+**Problem:** No walkout tracking for dine-in customers who leave without paying
+**Fix:**
+- Added recordWalkout(tableId, sessionId, {reason, orders, subtotal}) function
+- Auto-detects walkouts when session expires with unpaid served orders via session expiry police
+- Records walkout to logs/walkouts with details (table, session, orders, subtotal, reason)
+- Adds 'Record Walkout' button in table drawer for served but unpaid orders
+- Logs walkouts to logs/walkouts in Firebase with details (table, session, orders, subtotal, reason)
+- Exposes recordWalkout and checkAndRecordWalkout via window.__tables
+**Effort:** Low | Regression Risk: Low | Compatibility: Full
 
 ---
 
@@ -74,6 +85,7 @@
 | 5 | P1-1: Category Discount UI | Low | Low | DONE |
 | 6 | P1-2: Atomic Payment | Low | Low | DONE |
 | 7 | P1-7: Void/Refund Flow | Medium | Low | DONE |
+| 8 | P2-1: Walkout Audit Trail | Low | Low | DONE |
 
 ---
 
