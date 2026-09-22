@@ -27,9 +27,15 @@
 - Category discounts now work on table bills
 **Effort:** Low | Regression Risk: Low | Compatibility: Full
 
-### P1-1: Category Discounts on Table Bills (MEDIUM IMPACT)
+### P1-1: Category Discounts on Table Bills (MEDIUM IMPACT) - DONE
 **Problem:** Category discounts appear in Active Offers panel but silently fail (empty cart: [] passed to evaluator)
-Status: Partially fixed with _billCart() - needs verification + UI hint for unmatched categories
+**Fix:**
+- getEligibleOffersForDisplay accepts includeNonMatchingCategories parameter
+- _renderTableBillOffers passes includeNonMatchingCategories: true for table bills
+- Category discounts that don't match cart show 'Requires items from: [category names]' hint
+- Non-matching category discounts shown as disabled with hint
+- POS unchanged (default includeNonMatchingCategories=false)
+**Effort:** Low | Regression Risk: Low | Compatibility: Full (POS unchanged)
 
 ### P1-2: Atomic Payment (HIGH IMPACT, ARCHITECTURAL)
 **Problem:** Orders marked Paid - crash - session stays billing - orders Paid but table billing = manual cleanup
@@ -54,8 +60,8 @@ Effort: Medium (new feature)
 | 2 | P1-5: Analytics Backfill | Low | None | DONE |
 | 3 | P1-6: Offline Guard | Low | None | DONE |
 | 4 | P1-4: Channel Separation | Low | Low | DONE |
-| 5 | P1-1: Category Discount UI | Low | Low | NEXT |
-| 6 | P1-2: Atomic Payment | Medium | Low | THEN (use runTransaction) |
+| 5 | P1-1: Category Discount UI | Low | Low | DONE |
+| 6 | P1-2: Atomic Payment | Medium | Low | NEXT (use runTransaction) |
 | 7 | P1-7: Void/Refund | Medium | Medium | LAST |
 
 ---

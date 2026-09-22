@@ -1028,22 +1028,22 @@ export async function openTableBillReview(tableId, groupId = null) {
     const isOnline = isConnected();
     const banner = document.getElementById('tableBillOfflineBanner');
     const proceedBtn = document.querySelector('[data-action="confirmTableBillPayment"]');
-    if (banner) banner.classList.toggle('hidden', isConnected());
-    if (proceedBtn) proceedBtn.disabled = !isConnected();
+    if (banner) banner.classList.toggle('hidden', isOnline);
+    if (proceedBtn) proceedBtn.disabled = !isOnline;
 
     // Retry button in offline banner
     const retryBtn = document.getElementById('tableBillRetryConnection');
     if (retryBtn && !retryBtn.dataset.listener) {
         retryBtn.dataset.listener = '1';
-        retryBtn.addEventListener('click', () => {
-            const proceedBtn = document.querySelector('[data-action="confirmTableBillPayment"]');
+        retryBtn._handler = () => {
             if (isConnected()) {
                 proceedBtn.disabled = false;
-                document.getElementById('tableBillOfflineBanner')?.classList.add('hidden');
+                banner?.classList.add('hidden');
             } else {
                 showToast('Still offline. Please check your connection.', 'warning');
             }
-        });
+        };
+        retryBtn.addEventListener('click', retryBtn._handler);
     }
 }
 
@@ -1054,6 +1054,13 @@ export function closeTableBillReview() {
     if (_billReviewConnUnsub) {
         _billReviewConnUnsub();
         _billReviewConnUnsub = null;
+    }
+    // Cleanup retry button listener
+    const retryBtn = document.getElementById('tableBillRetryConnection');
+    if (retryBtn) {
+        retryBtn.removeEventListener('click', retryBtn._handler);
+        delete retryBtn.dataset.listener;
+        delete retryBtn._handler;
     }
 }
 
@@ -1324,8 +1331,8 @@ export async function confirmTableBillPayment() {
     const { discountValue, discountLabel, discountId, discountSource, discountGlobalLimit } = _billComputedDiscount(subtotal);
     const finalTotal = Math.max(0, subtotal - discountValue);
 
-    // Offline guard: prevent payment if offline
-    if (!navigator.onLine) {
+    // Use Firebase connection state (reliable) instead of navigator.onLine
+    if (!isConnected()) {
         showToast('You are offline. Please reconnect to process payment.', 'warning');
         return;
     }
