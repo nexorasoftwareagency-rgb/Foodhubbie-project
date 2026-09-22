@@ -1235,7 +1235,7 @@ async function _renderTableBillOffers() {
 
     const subtotal = _billSubtotal();
     const cart = _billCart();
-    const list = getEligibleOffersForDisplay(all, { channel: 'table', cart });
+    const list = getEligibleOffersForDisplay(all, { channel: 'table', cart, includeNonMatchingCategories: true });
 
     if (list.length === 0) {
         panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
@@ -1250,6 +1250,11 @@ async function _renderTableBillOffers() {
         const minLabel = d.minSubtotal ? ` · min ₹${Number(d.minSubtotal).toFixed(0)}` : '';
         const used = d.stats?.usedCount || 0;
         const usedLabel = used > 0 ? ` · used ${used}${d.globalLimit ? `/${d.globalLimit}` : ''}×` : '';
+        const categoryMismatch = d.type === 'category' && d._categoryMatches === false;
+        const categoryNames = d.categoryIds?.map(id => {
+            const cat = _categoriesSnap?.find(c => c.id === id);
+            return cat?.name || id;
+        }).join(', ') || 'Unknown';
 
         if (d.type === 'coupon') {
             const meetsMin = !d.minSubtotal || subtotal >= d.minSubtotal;
@@ -1267,11 +1272,15 @@ async function _renderTableBillOffers() {
         }
 
         const typeLabel = d.type === 'firstOrder' ? 'New customer' : d.type === 'category' ? 'Category' : 'Storewide';
+        const mismatchNote = d.type === 'category' && d._categoryMatches === false
+            ? `<div class="walkin-offer-mismatch" style="color:#ef4444; font-size:11px; margin-top:4px;">Requires items from: ${categoryNames}</div>`
+            : '';
+
         return `
-            <div class="walkin-offer-item walkin-offer-auto">
+            <div class="walkin-offer-item walkin-offer-auto${d._categoryMatches === false ? ' walkin-offer-disabled' : ''}">
                 <div class="walkin-offer-info">
                     <div class="walkin-offer-name">${escapeHtml(d.name || typeLabel)} <span class="badge badge-info walkin-offer-auto-badge">auto</span></div>
-                    <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel} · applies automatically if eligible</div>
+                    <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel} · applies automatically if eligible${mismatchNote}</div>
                 </div>
             </div>`;
     }).join('') + '<div class="walkin-offers-manage-row"><button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';

@@ -63,13 +63,30 @@ export function discountAllowsChannel(d, channel) {
  * eligibility rule — a discount that shows as available in one always
  * shows (or doesn't) the same way in the other.
  */
-export function getEligibleOffersForDisplay(all, { channel = 'pos', now = Date.now(), cart = [] } = {}) {
-    return Object.entries(all || {})
+export function getEligibleOffersForDisplay(all, { channel = 'pos', now = Date.now(), cart = [], includeNonMatchingCategories = false } = {}) {
+    const baseList = Object.entries(all || {})
         .map(([id, d]) => ({ id, ...d }))
         .filter(d => d && d.type && d.value != null)
         .filter(d => isDiscountActiveNow(d, now))
         .filter(d => discountAllowsChannel(d, channel))
-        .filter(d => !d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
+        .filter(d => !d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit);
+
+    if (includeNonMatchingCategories) {
+        // Include category discounts even if they don't match cart, but mark them
+        return baseList
+            .filter(d => {
+                if (d.type === 'category') {
+                    const matches = _cartHasCategory(cart, d.categoryIds);
+                    d._categoryMatches = matches;
+                    return true; // Include all category discounts
+                }
+                return true;
+            })
+            .sort((a, b) => (a.type === 'coupon' ? 0 : 1) - (b.type === 'coupon' ? 0 : 1));
+    }
+
+    // Original behavior: filter out non-matching category discounts
+    return baseList
         .filter(d => {
             if (d.type === 'category') {
                 return _cartHasCategory(cart, d.categoryIds);
