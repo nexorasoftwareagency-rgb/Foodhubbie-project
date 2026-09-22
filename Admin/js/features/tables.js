@@ -960,12 +960,15 @@ function _billCustomerPhoneAndOrderId() {
 
 function _billComputedDiscount(subtotal) {
     let discountValue = 0, discountLabel = null, discountId = null, discountSource = 'none', discountGlobalLimit = null;
+    // Manual discounts (flat ₹ / %) are explicitly UNLIMITED — no per-customer or global limits
+    // They are created inline during bill review and have no discountId, so they don't
+    // participate in coupon limits, per-customer limits, or usage tracking.
     if (_billManualDiscount > 0) {
         discountValue = _billManualDiscount;
-        discountSource = 'manual:flat';
+        discountSource = MANUAL_DISCOUNT_SOURCES.FLAT;
     } else if (_billManualDiscountPct > 0) {
         discountValue = Math.round((subtotal * _billManualDiscountPct) / 100);
-        discountSource = 'manual:percent';
+        discountSource = MANUAL_DISCOUNT_SOURCES.PERCENT;
     } else if (_billAutoDiscount && _billAutoDiscount.amount > 0) {
         discountValue = _billAutoDiscount.amount;
         discountId = _billAutoDiscount.discount.id;
@@ -1049,6 +1052,13 @@ function _clearTableBillCouponUI() {
     if (hint) hint.classList.add('hidden');
     if (clear) clear.classList.add('hidden');
 }
+
+// Manual discount sources — explicitly unlimited (no per-customer / global limits)
+// These are created inline during bill review and don't have a discountId
+const MANUAL_DISCOUNT_SOURCES = {
+    FLAT: 'manual:flat',
+    PERCENT: 'manual:percent',
+};
 
 export function setTableBillDiscount(amt) {
     _billManualDiscount = Math.max(0, Number(amt) || 0);
