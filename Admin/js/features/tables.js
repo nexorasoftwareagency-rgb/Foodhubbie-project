@@ -29,7 +29,7 @@
 
 import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange } from '../firebase.js';
 import { state } from '../state.js';
-import { showToast, showConfirm, showDeleteConfirm, showPaymentPicker } from '../ui-utils.js';
+import { showToast, showConfirm, showDeleteConfirm, showPaymentPicker, showSplitPaymentPicker } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
 import { haptic, escapeHtml, playNotificationSound } from '../utils.js';
 import { loadLucide } from '../ui.js';
@@ -1276,12 +1276,16 @@ export async function confirmTableBillPayment() {
     const { discountValue, discountLabel, discountId, discountSource, discountGlobalLimit } = _billComputedDiscount(subtotal);
     const finalTotal = Math.max(0, subtotal - discountValue);
 
-    const method = await showPaymentPicker(finalTotal);
-    if (!method) return;
+    const paymentEntries = await showSplitPaymentPicker(finalTotal);
+    if (!paymentEntries || paymentEntries.length === 0) return;
 
     const { phone: customerPhone, orderId: representativeOrderId } = _billCustomerPhoneAndOrderId();
     const now = Date.now();
     const outletRef = Outlet.ref('');
+
+    // Primary payment method (first entry) for order/group records
+    const primaryMethod = paymentEntries[0].method;
+    const paymentDetails = paymentEntries.map(e => `${e.method} ₹${e.amount}`).join(' + ');
 
     if (groupId) {
         // GROUP PAYMENT — atomic multi-path update
@@ -1289,14 +1293,16 @@ export async function confirmTableBillPayment() {
         const updates = {};
         gOrders.forEach(oid => {
             if (_orders[oid] && _orders[oid].status !== 'Cancelled') {
-                updates[`outlets/${OUTLET}/orders/${oid}/paymentMethod`] = method;
+                updates[`outlets/${OUTLET}/orders/${oid}/paymentMethod`] = primaryMethod;
                 updates[`outlets/${OUTLET}/orders/${oid}/paymentStatus`] = 'Paid';
                 updates[`outlets/${OUTLET}/orders/${oid}/updatedAt`] = now;
             }
         });
         updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'paid';
         updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = now;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = method;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = primaryMethod;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = paymentDetails;
+        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = paymentEntries;
         updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/subtotal`] = subtotal;
         updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = discountValue;
         updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = discountId || null;
@@ -1311,7 +1317,7 @@ export async function confirmTableBillPayment() {
                 await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource);
             }
             closeTableBillReview();
-            showToast(`${sess.orderGroups[groupId]?.label || 'Group'} paid — ₹${finalTotal.toLocaleString('en-IN')} via ${method}`, 'success');
+            showToast(`${sess.orderGroups[groupId]?.label || 'Group'} paid — ₹${finalTotal.toLocaleString('en-IN')} via ${paymentDetails}`, 'success');
             haptic(30);
         } catch (e) {
             showToast('Failed: ' + (e?.message || e), 'error');
@@ -1327,14 +1333,16 @@ export async function confirmTableBillPayment() {
 
     orders.forEach(o => {
         if (o.id && o.status !== 'Cancelled') {
-            updates[`outlets/${OUTLET}/orders/${o.id}/paymentMethod`] = method;
+            updates[`outlets/${OUTLET}/orders/${o.id}/paymentMethod`] = primaryMethod;
             updates[`outlets/${OUTLET}/orders/${o.id}/paymentStatus`] = 'Paid';
             updates[`outlets/${OUTLET}/orders/${o.id}/updatedAt`] = now;
         }
     });
     updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/status`] = 'closed';
     updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/closedAt`] = now;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentMethod`] = method;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentMethod`] = primaryMethod;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentDetails`] = paymentDetails;
+    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentEntries`] = paymentEntries;
     updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paidAt`] = now;
     updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/subtotal`] = subtotal;
     updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discount`] = discountValue;
@@ -1364,7 +1372,7 @@ export async function confirmTableBillPayment() {
         }
         if (_drawerTableId === tableId) _closeTableDrawer();
         closeTableBillReview();
-        showToast(`Table closed — ₹${finalTotal.toLocaleString('en-IN')} via ${method}`, 'success');
+        showToast(`Table closed — ₹${finalTotal.toLocaleString('en-IN')} via ${paymentDetails}`, 'success');
         haptic(30);
     } catch (e) {
         showToast('Payment failed: ' + (e?.message || e), 'error');

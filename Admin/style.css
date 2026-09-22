@@ -1690,6 +1690,366 @@ html, body {
     background: rgba(197,48,48,0.1);
 }
 
+/* SPLIT PAYMENT PICKER (ui-utils.js showSplitPaymentPicker) */
+.split-payment-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    border: 1px solid #e2e8f0;
+}
+.split-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 500;
+}
+.split-total-row span { color: #64748b; }
+.split-total-row strong { font-size: 16px; font-weight: 700; }
+.split-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.split-entry-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.split-entry-method {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px;
+    height: 32px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+}
+.split-entry-amount {
+    flex: 1;
+    text-align: right;
+    font-weight: 600;
+    color: #0f172a;
+    font-size: 14px;
+}
+.split-entry-remove {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: #fee2e2;
+    color: #dc2626;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+.split-entry-remove:hover { background: #fecaca; }
+.split-add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.split-select {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 14px;
+    color: #0f172a;
+}
+.split-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.split-input {
+    width: 90px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 14px;
+    color: #0f172a;
+    text-align: right;
+}
+.split-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.split-add-btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.split-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.split-add-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.split-empty {
+    text-align: center;
+    color: #94a3b8;
+    padding: 20px;
+    font-size: 13px;
+}
+.pay-btn-confirm {
+    background: var(--success) !important;
+    border-color: var(--success) !important;
+    color: #fff !important;
+}
+.pay-btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+.pay-btn-confirm:hover:not(:disabled) { filter: brightness(1.1); }
+.usage-type-filter {
+    background: #fff;
+    color: #0f172a;
+}
+.discount-usage-table-container {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.discount-usage-table {
+    width: 100%;
+}
+.discount-usage-table th,
+.discount-usage-table td {
+    white-space: nowrap;
+}
+.discount-usage-empty,
+.usage-log-empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: #94a3b8;
+}
+.discount-usage-empty i,
+.usage-log-empty i {
+    font-size: 32px;
+    margin-bottom: 8px;
+    display: block;
+}
+.usage-log-order-link {
+    cursor: pointer;
+    color: var(--primary);
+    text-decoration: underline;
+}
+.usage-log-order-link:hover { opacity: 0.8; }
+.usage-type-filter {
+    padding: 6px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    color: #0f172a;
+}
+.usage-log-row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1.5fr 1fr 0.8fr 1fr 0.8fr 1fr 0.6fr;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    align-items: center;
+    font-size: 12px;
+}
+.usage-log-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 11px;
+}
+.usage-log-name { font-weight: 600; color: #0f172a; }
+.usage-log-meta {
+    display: flex;
+    gap: 6px;
+    font-size: 11px;
+    color: #64748b;
+}
+.usage-log-amount { font-weight: 700; color: #dc2626; text-align: right; }
+.usage-log-date { color: #64748b; font-size: 11px; white-space: nowrap; }
+.discount-type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+.discount-type-coupon { background: #fef3c7; color: #b45309; }
+.discount-type-firstorder { background: #dbeafe; color: #1e40af; }
+.discount-type-category { background: #fce7f3; color: #be185d; }
+.discount-type-global { background: #dcfce7; color: #166534; }
+.discount-type-manual\:flat,
+.discount-type-manual\:percent { background: #f3f4f6; color: #374151; }
+.discount-type-auto { background: #e0e7ff; color: #3730a3; }
+.discount-usage-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.discount-usage-kpi-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+}
+.discount-usage-kpi-card .kpi-label {
+    font-size: 11px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.discount-usage-kpi-card .kpi-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 4px;
+}
+.discount-usage-kpi-card .kpi-value.money { color: #059669; }
+.discount-limit-progress { margin-top: 12px; }
+.dlp-track {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+.dlp-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s;
+}
+.dlp-fill.ok { background: #22c55e; }
+.dlp-fill.warn { background: #f59e0b; }
+.dlp-fill.full { background: #ef4444; }
+.dlp-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+}
+.discount-usage-table-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.discount-usage-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.discount-usage-table th,
+.discount-usage-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #f1f5f9;
+}
+.discount-usage-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #334155;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.discount-usage-table td {
+    font-size: 12px;
+    color: #1e293b;
+}
+.discount-type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+.discount-type-coupon { background: #fef3c7; color: #b45309; }
+.discount-type-firstorder { background: #dbeafe; color: #1e40af; }
+.discount-type-category { background: #fce7f3; color: #be185d; }
+.discount-type-global { background: #dcfce7; color: #166534; }
+.discount-type-manual\:flat,
+.discount-type-manual\:percent { background: #f3f4f6; color: #374151; }
+.discount-type-auto { background: #e0e7ff; color: #3730a3; }
+.discount-usage-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.discount-usage-kpi-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+}
+.discount-usage-kpi-card .kpi-label {
+    font-size: 11px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.discount-usage-kpi-card .kpi-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 4px;
+}
+.discount-usage-kpi-card .kpi-value.money { color: #059669; }
+.discount-limit-progress { margin-top: 12px; }
+.dlp-track {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+.dlp-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s;
+}
+.dlp-fill.ok { background: #22c55e; }
+.dlp-fill.warn { background: #f59e0b; }
+.dlp-fill.full { background: #ef4444; }
+.dlp-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+}
+.usage-type-filter {
+    padding: 6px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    color: #0f172a;
+}
+
 /* MENU BANK BROWSER (menu-bank.js) */
 .menubank-box {
     max-width: 760px;
