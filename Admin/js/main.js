@@ -443,6 +443,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'closeSessionForTable': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Close session'); window.__tables?.closeSession?.(id); break;
                 case 'cancelSessionForTable': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Cancel session'); window.__tables?.cancelSession?.(id); break;
                 case 'voidTableBill': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Void payment'); window.__tables?.voidTableBill?.(id, el.getAttribute('data-group-id')); break;
+                case 'recordWalkout': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Record walkout'); window.__tables?.recordWalkout?.(id, el.getAttribute('data-session-id')); break;
                 case 'resolveTableRequest': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Resolve table request'); window.__tables?.resolveTableRequest?.(id); break;
                 default:
                     logger.warn('CLICK', `Unhandled action: ${action}`, { el: el.outerHTML.slice(0, 200) });

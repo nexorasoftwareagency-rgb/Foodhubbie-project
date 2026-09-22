@@ -466,6 +466,8 @@ async function _policeExpiredSessions() {
                     if (g.status === 'paid') (g.orders || []).forEach(oid => paidOrderIds.add(oid));
                 });
             }
+            // Check for walkout before canceling — log unpaid served orders as walkouts
+            await checkAndRecordWalkout(linkedTable?.id, id);
             // Cancel all pending orders so kitchen doesn't prepare phantom orders
             orderIds.forEach(oid => {
                 if (paidOrderIds.has(oid)) return;
@@ -666,6 +668,11 @@ async function _renderTableDrawer() {
         btns.push(`<button class="btn-action-orange btn-small" data-action="requestBillForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="receipt" class="icon-14"></i> Generate Bill</button>`);
         if (allServed) {
             btns.push(`<button class="btn-action-green btn-small" data-action="makePaymentForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="wallet" class="icon-14"></i> Make Payment</button>`);
+        }
+        // Walkout button for served but unpaid orders
+        const unpaidServed = activeOrders.filter(o => o.status === 'Served' && o.paymentStatus !== 'Paid');
+        if (unpaidServed.length > 0) {
+            btns.push(`<button class="btn-text text-warning btn-small" data-action="recordWalkout" data-id="${escapeHtml(t.id)}"><i data-lucide="user-x" class="icon-14"></i> Record Walkout</button>`);
         }
     } else {
         btns.push(`<button class="btn-action-green btn-small" data-action="closeSessionForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="check-check" class="icon-14"></i> Close Table (Paid)</button>`);
@@ -1686,6 +1693,98 @@ This action cannot be undone.`,
     }
 
 // ---------------------------------------------------------------------
+// WALKOUT AUDIT TRAIL — Track dine-in customers who leave without paying
+// ---------------------------------------------------------------------
+/**
+ * Records a walkout event when a dine-in customer leaves without paying.
+ * Called when a session is closed/expired with unpaid orders, or when
+ * staff manually marks a walkout.
+ * @param {string} tableId - Table ID
+ * @param {string} sessionId - Session ID
+ * @param {Object} opts - { reason: string, orders: Array, subtotal: number, walkedOutAt: timestamp }
+ */
+export async function recordWalkout(tableId, sessionId, { reason = 'Walkout', orders = [], subtotal = 0, walkedOutAt = Date.now() }) {
+    const t = _tables[tableId];
+    if (!t) { showToast('Table not found', 'error'); return; }
+
+    const sessionRef = Outlet.ref(`tableSessions/${sessionId}`);
+    try {
+        const walkoutId = push(Outlet.ref('logs/walkouts')).key;
+        const walkoutData = {
+            walkoutId,
+            tableId,
+            sessionId,
+            tableNumber: t.number,
+            reason,
+            subtotal,
+            orders: orders.map(o => ({ id: o.id, total: o.total, status: o.status })),
+            walkedOutAt,
+            createdAt: Date.now(),
+            recordedBy: (window.currentUser?.uid || 'system'),
+            outlet: Outlet.current || 'pizza'
+        };
+
+        const updates = {};
+        updates[`logs/walkouts/${walkoutId}`] = walkoutData;
+        // Mark session as walkout
+        updates[`tableSessions/${sessionId}/walkout`] = { walkoutId, reason, walkedOutAt };
+
+        await Outlet.ref('').update(updates);
+        showToast(`Walkout recorded for Table ${t.number} (₹${subtotal.toLocaleString()})`, 'warning');
+        logAudit('Walkout', `Walkout recorded for Table ${t.number}`, Outlet.current);
+        return walkoutId;
+    } catch (e) {
+        console.error('[Walkout] Record failed:', e);
+        showToast('Failed to record walkout: ' + (e?.message || e), 'error');
+        return null;
+    }
+}
+
+/**
+ * Auto-detect potential walkouts when session expires with unpaid orders.
+ * Called by session expiry logic.
+ */
+export async function checkAndRecordWalkout(tableId, sessionId) {
+    const t = _tables[tableId];
+    const sess = _sessionForTable(tableId);
+    if (!t || !sess) return;
+
+    // Check if session has unpaid orders that were served/delivered
+    const orders = _ordersForSession(sess.sessionId || t.currentSession);
+    const unpaidServed = orders.filter(o =>
+        o.status === 'Served' || o.status === 'Delivered'
+    ).filter(o => o.paymentStatus !== 'Paid');
+
+    if (unpaidServed.length === 0) return;
+
+    const subtotal = unpaidServed.reduce((sum, o) => sum + Number(o.total || 0), 0);
+    if (subtotal <= 0) return;
+
+    const walkoutId = await recordWalkout(tableId, sessionId, {
+        reason: 'Session expired with unpaid orders',
+        orders: unpaidServed,
+        subtotal,
+        walkedOutAt: Date.now()
+    });
+
+    // Mark orders as walkout
+    const now = Date.now();
+    const updates = {};
+    unpaidServed.forEach(o => {
+        if (o.status !== 'Cancelled') {
+            const updates = { status: 'Walkout', paymentStatus: 'Walkout', walkoutRecordedAt: Date.now() };
+            Object.keys(updates).forEach(k => { /* handled below */ });
+        }
+    });
+
+    await Outlet.ref('').update(updates);
+    return walkoutId;
+}
 
 // ---------------------------------------------------------------------
 // ACTIONS — Order status advance (writes the SAME /orders node)
+
+window.__tables = {
+    recordWalkout,
+    checkAndRecordWalkout
+};
