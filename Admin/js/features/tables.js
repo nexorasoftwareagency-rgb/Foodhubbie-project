@@ -1356,7 +1356,6 @@ export async function confirmTableBillPayment() {
 
     const { phone: customerPhone, orderId: representativeOrderId } = _billCustomerPhoneAndOrderId();
     const now = Date.now();
-    const outletRef = Outlet.ref('');
 
     // Primary payment method (first entry) for order/group records
     const primaryMethod = paymentEntries[0].method;
@@ -1368,25 +1367,25 @@ export async function confirmTableBillPayment() {
         const updates = {};
         gOrders.forEach(oid => {
             if (_orders[oid] && _orders[oid].status !== 'Cancelled') {
-                updates[`outlets/${OUTLET}/orders/${oid}/paymentMethod`] = primaryMethod;
-                updates[`outlets/${OUTLET}/orders/${oid}/paymentStatus`] = 'Paid';
-                updates[`outlets/${OUTLET}/orders/${oid}/updatedAt`] = now;
+                updates[`orders/${oid}/paymentMethod`] = primaryMethod;
+                updates[`orders/${oid}/paymentStatus`] = 'Paid';
+                updates[`orders/${oid}/updatedAt`] = now;
             }
         });
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'paid';
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = now;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = primaryMethod;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = paymentDetails;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = paymentEntries;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/subtotal`] = subtotal;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = discountValue;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = discountId || null;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = discountLabel || null;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = discountSource || null;
-        updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = finalTotal;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'paid';
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = now;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = primaryMethod;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = paymentDetails;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = paymentEntries;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/subtotal`] = subtotal;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = discountValue;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = discountId || null;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = discountLabel || null;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = discountSource || null;
+        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = finalTotal;
 
         try {
-            await outletRef.update(updates);
+            await Outlet.multiUpdate(updates);
             if (discountId && discountValue > 0) {
                 await recordDiscountUsage({ discountId, orderId: representativeOrderId, customerPhone, amountGiven: discountValue, channel: 'table', discountLabel, discountSource, globalLimit: discountGlobalLimit });
                 await _bumpCustomerDiscountUsage(customerPhone, discountId, discountSource, false);
@@ -1408,29 +1407,29 @@ export async function confirmTableBillPayment() {
 
     orders.forEach(o => {
         if (o.id && o.status !== 'Cancelled') {
-            updates[`outlets/${OUTLET}/orders/${o.id}/paymentMethod`] = primaryMethod;
-            updates[`outlets/${OUTLET}/orders/${o.id}/paymentStatus`] = 'Paid';
-            updates[`outlets/${OUTLET}/orders/${o.id}/updatedAt`] = now;
+            updates[`orders/${o.id}/paymentMethod`] = primaryMethod;
+            updates[`orders/${o.id}/paymentStatus`] = 'Paid';
+            updates[`orders/${o.id}/updatedAt`] = now;
         }
     });
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/status`] = 'closed';
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/closedAt`] = now;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentMethod`] = primaryMethod;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentDetails`] = paymentDetails;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paymentEntries`] = paymentEntries;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paidAt`] = now;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/subtotal`] = subtotal;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discount`] = discountValue;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountId`] = discountId || null;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountLabel`] = discountLabel || null;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/discountSource`] = discountSource || null;
-    updates[`outlets/${OUTLET}/sessions/${sess.sessionId}/paidAmount`] = finalTotal;
-    updates[`outlets/${OUTLET}/tables/${tableId}/status`] = 'free';
-    updates[`outlets/${OUTLET}/tables/${tableId}/currentSession`] = null;
-    updates[`outlets/${OUTLET}/tables/${tableId}/updatedAt`] = now;
+    updates[`sessions/${sess.sessionId}/status`] = 'closed';
+    updates[`sessions/${sess.sessionId}/closedAt`] = now;
+    updates[`sessions/${sess.sessionId}/paymentMethod`] = primaryMethod;
+    updates[`sessions/${sess.sessionId}/paymentDetails`] = paymentDetails;
+    updates[`sessions/${sess.sessionId}/paymentEntries`] = paymentEntries;
+    updates[`sessions/${sess.sessionId}/paidAt`] = now;
+    updates[`sessions/${sess.sessionId}/subtotal`] = subtotal;
+    updates[`sessions/${sess.sessionId}/discount`] = discountValue;
+    updates[`sessions/${sess.sessionId}/discountId`] = discountId || null;
+    updates[`sessions/${sess.sessionId}/discountLabel`] = discountLabel || null;
+    updates[`sessions/${sess.sessionId}/discountSource`] = discountSource || null;
+    updates[`sessions/${sess.sessionId}/paidAmount`] = finalTotal;
+    updates[`tables/${tableId}/status`] = 'free';
+    updates[`tables/${tableId}/currentSession`] = null;
+    updates[`tables/${tableId}/updatedAt`] = now;
 
     try {
-        await outletRef.update(updates);
+        await Outlet.multiUpdate(updates);
         // Analytics transaction (separate — independent)
         await runTransaction(Outlet.ref(`tableAnalytics/${tableId}`), (cur) => {
             cur = cur || { totalOrders: 0, totalRevenue: 0, avgSessionTime: 0, occupancyRate: 0 };
@@ -1471,7 +1470,6 @@ export async function voidTableBill(tableId, groupId = null) {
     try {
         const { phone: customerPhone, orderId: representativeOrderId } = _billCustomerPhoneAndOrderId();
         const now = Date.now();
-        const outletRef = Outlet.ref('');
 
         // Group void
         if (groupId) {
@@ -1484,26 +1482,26 @@ export async function voidTableBill(tableId, groupId = null) {
             const updates = {};
             groupOrders.forEach(o => {
                 if (o.status === 'Paid') {
-                    updates[`outlets/${Outlet.current}/orders/${o.id}/paymentStatus`] = 'Served';
-                    updates[`outlets/${Outlet.current}/orders/${o.id}/paymentMethod`] = null;
-                    updates[`outlets/${Outlet.current}/orders/${o.id}/paymentDetails`] = null;
-                    updates[`outlets/${Outlet.current}/orders/${o.id}/paymentEntries`] = null;
-                    updates[`outlets/${Outlet.current}/orders/${o.id}/updatedAt`] = now;
+                    updates[`orders/${o.id}/paymentStatus`] = 'Served';
+                    updates[`orders/${o.id}/paymentMethod`] = null;
+                    updates[`orders/${o.id}/paymentDetails`] = null;
+                    updates[`orders/${o.id}/paymentEntries`] = null;
+                    updates[`orders/${o.id}/updatedAt`] = now;
                 }
             });
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'billing';
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = null;
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = null;
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = null;
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = null;
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = 0;
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = null;
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = null;
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = null;
-            updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = 0;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'billing';
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = null;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = null;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = null;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = null;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = 0;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = null;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = null;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = null;
+            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = 0;
 
             try {
-                await outletRef.update(updates);
+                await Outlet.multiUpdate(updates);
                 // Revert orders to Served
                 await Promise.all(groupOrders.map(o => runTransaction(Outlet.ref(`orders/${o.id}`), (cur) => {
                     if (!cur || cur.status !== 'Paid') return cur;
@@ -1540,30 +1538,30 @@ export async function voidTableBill(tableId, groupId = null) {
         const updates = {};
 
         paidOrders.forEach(o => {
-            updates[`outlets/${Outlet.current}/orders/${o.id}/paymentStatus`] = 'Served';
-            updates[`outlets/${Outlet.current}/orders/${o.id}/paymentMethod`] = null;
-            updates[`outlets/${Outlet.current}/orders/${o.id}/paymentDetails`] = null;
-            updates[`outlets/${Outlet.current}/orders/${o.id}/paymentEntries`] = null;
-            updates[`outlets/${Outlet.current}/orders/${o.id}/updatedAt`] = now;
+            updates[`orders/${o.id}/paymentStatus`] = 'Served';
+            updates[`orders/${o.id}/paymentMethod`] = null;
+            updates[`orders/${o.id}/paymentDetails`] = null;
+            updates[`orders/${o.id}/paymentEntries`] = null;
+            updates[`orders/${o.id}/updatedAt`] = now;
         });
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/status`] = 'billing';
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/closedAt`] = null;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/paymentMethod`] = null;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/paymentDetails`] = null;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/paymentEntries`] = null;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/paidAt`] = null;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/subtotal`] = subtotal;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/discount`] = 0;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/discountId`] = null;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/discountLabel`] = null;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/discountSource`] = null;
-        updates[`outlets/${Outlet.current}/sessions/${sess.sessionId}/paidAmount`] = 0;
-        updates[`outlets/${Outlet.current}/tables/${tableId}/status`] = 'billing';
-        updates[`outlets/${Outlet.current}/tables/${tableId}/currentSession`] = sess.sessionId;
-        updates[`outlets/${Outlet.current}/tables/${tableId}/updatedAt`] = now;
+        updates[`sessions/${sess.sessionId}/status`] = 'billing';
+        updates[`sessions/${sess.sessionId}/closedAt`] = null;
+        updates[`sessions/${sess.sessionId}/paymentMethod`] = null;
+        updates[`sessions/${sess.sessionId}/paymentDetails`] = null;
+        updates[`sessions/${sess.sessionId}/paymentEntries`] = null;
+        updates[`sessions/${sess.sessionId}/paidAt`] = null;
+        updates[`sessions/${sess.sessionId}/subtotal`] = subtotal;
+        updates[`sessions/${sess.sessionId}/discount`] = 0;
+        updates[`sessions/${sess.sessionId}/discountId`] = null;
+        updates[`sessions/${sess.sessionId}/discountLabel`] = null;
+        updates[`sessions/${sess.sessionId}/discountSource`] = null;
+        updates[`sessions/${sess.sessionId}/paidAmount`] = 0;
+        updates[`tables/${tableId}/status`] = 'billing';
+        updates[`tables/${tableId}/currentSession`] = sess.sessionId;
+        updates[`tables/${tableId}/updatedAt`] = now;
 
         try {
-            await outletRef.update(updates);
+            await Outlet.multiUpdate(updates);
             await Promise.all(paidOrders.map(o => runTransaction(Outlet.ref(`orders/${o.id}`), (cur) => {
                 if (!cur || cur.status !== 'Paid') return cur;
                 return { ...cur, status: 'Served', paymentStatus: 'Unpaid', paymentMethod: null, paymentDetails: null, paymentEntries: null, discount: 0, discountLabel: null, discountId: null, discountSource: null, updatedAt: now };
