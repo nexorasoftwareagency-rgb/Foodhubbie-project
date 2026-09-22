@@ -77,6 +77,14 @@ cats.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
     });
 }
 
+/**
+ * Get categories from state (used by tables.js for discount evaluation)
+ * @returns {Array} Array of category objects
+ */
+export function getCategories() {
+    return state.categories || [];
+}
+
 let isProcessingCategory = false;
 export async function addCategory() {
     if (isProcessingCategory) return;
