@@ -5514,6 +5514,12 @@
 
             </div>
 
+            <!-- Offline banner for bill review modal -->
+            <div id="tableBillOfflineBanner" class="offline-banner hidden" role="alert" aria-live="polite" style="margin:0 16px 12px; padding:8px 12px; border-radius:8px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; font-weight:600;">
+                <span>No internet connection — payment cannot be processed</span>
+                <button id="tableBillRetryConnection" type="button" class="btn-text" style="font-size:12px; padding:4px 8px;">Retry</button>
+            </div>
+
             <div class="modal-body">
 
                 <button type="button" id="tableBillOffersBtn" class="btn-walkin-offers" data-action="toggleTableBillOffersPanel" aria-expanded="false" aria-controls="tableBillOffersPanel" title="See every currently-active discount and coupon" style="margin-bottom:10px;">

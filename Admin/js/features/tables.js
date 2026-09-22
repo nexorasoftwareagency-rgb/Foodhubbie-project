@@ -935,6 +935,7 @@ let _billManualDiscount = 0;
 let _billManualDiscountPct = 0;
 let _billAutoDiscount = null; // evaluateDiscount() result: { discount, amount, label, source }
 let _billCouponCode = null;
+let _billReviewConnUnsub = null; // connection change unsubscribe for bill review modal
 
 function _billSubtotal() {
     const t = _tables[_billTableId];
@@ -1013,12 +1014,47 @@ export async function openTableBillReview(tableId, groupId = null) {
     _renderTableBillReview();
     document.getElementById('tableBillReviewModal')?.classList.add('active');
     loadLucide();
+
+    // Offline banner handling for bill review modal
+    if (!_billReviewConnUnsub) {
+        _billReviewConnUnsub = onConnectionChange((online) => {
+            const banner = document.getElementById('tableBillOfflineBanner');
+            const proceedBtn = document.querySelector('[data-action="confirmTableBillPayment"]');
+            if (banner) banner.classList.toggle('hidden', online);
+            if (proceedBtn) proceedBtn.disabled = !online;
+        });
+    }
+    // Initial state
+    const isOnline = isConnected();
+    const banner = document.getElementById('tableBillOfflineBanner');
+    const proceedBtn = document.querySelector('[data-action="confirmTableBillPayment"]');
+    if (banner) banner.classList.toggle('hidden', isConnected());
+    if (proceedBtn) proceedBtn.disabled = !isConnected();
+
+    // Retry button in offline banner
+    const retryBtn = document.getElementById('tableBillRetryConnection');
+    if (retryBtn && !retryBtn.dataset.listener) {
+        retryBtn.dataset.listener = '1';
+        retryBtn.addEventListener('click', () => {
+            const proceedBtn = document.querySelector('[data-action="confirmTableBillPayment"]');
+            if (isConnected()) {
+                proceedBtn.disabled = false;
+                document.getElementById('tableBillOfflineBanner')?.classList.add('hidden');
+            } else {
+                showToast('Still offline. Please check your connection.', 'warning');
+            }
+        });
+    }
 }
 
 export function closeTableBillReview() {
     document.getElementById('tableBillReviewModal')?.classList.remove('active');
     _billTableId = null;
     _billGroupId = null;
+    if (_billReviewConnUnsub) {
+        _billReviewConnUnsub();
+        _billReviewConnUnsub = null;
+    }
 }
 
 function _renderTableBillReview() {
@@ -1278,6 +1314,12 @@ export async function confirmTableBillPayment() {
     const subtotal = _billSubtotal();
     const { discountValue, discountLabel, discountId, discountSource, discountGlobalLimit } = _billComputedDiscount(subtotal);
     const finalTotal = Math.max(0, subtotal - discountValue);
+
+    // Offline guard: prevent payment if offline
+    if (!navigator.onLine) {
+        showToast('You are offline. Please reconnect to process payment.', 'warning');
+        return;
+    }
 
     const paymentEntries = await showSplitPaymentPicker(finalTotal);
     if (!paymentEntries || paymentEntries.length === 0) return;
