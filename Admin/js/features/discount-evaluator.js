@@ -52,7 +52,7 @@ export function isDiscountActiveNow(d, now = Date.now()) {
 /** True if a discount's `channel` field permits it to apply on this channel. */
 export function discountAllowsChannel(d, channel) {
     return !d.channel || d.channel === 'all' || d.channel === channel
-        || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos'));
+        || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos' || channel === 'table'));
 }
 
 /**
@@ -137,7 +137,10 @@ export async function evaluateDiscount(ctx = {}) {
         && (!d.minSubtotal || subtotal >= d.minSubtotal)
         && (!d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
         && discountAllowsChannel(d, channel)
-        && (!d.perCustomerLimit || !customerPhone || (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit)
+        && (!d.perCustomerLimit || !customerPhone || 
+            (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit ||
+            // For table channel, also check separate table counter
+            (channel === 'table' && (customer?.discountUsage?.table?.[d.id] || 0) < d.perCustomerLimit))
     );
 
     const applicable = candidates.filter(d => {
