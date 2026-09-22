@@ -37,14 +37,15 @@
 - POS unchanged (default includeNonMatchingCategories=false)
 **Effort:** Low | Regression Risk: Low | Compatibility: Full (POS unchanged)
 
-### P1-2: Atomic Payment (HIGH IMPACT, ARCHITECTURAL)
+### P1-2: Atomic Payment (HIGH IMPACT, ARCHITECTURAL) - DONE
 **Problem:** Orders marked Paid - crash - session stays billing - orders Paid but table billing = manual cleanup
-Options:
-- (a) Cloud Function on session.status=closed - NOT ALLOWED (no server-side)
-- (b) runTransaction on session node with all sub-paths - client-side, atomic
-- (c) Cloud Function on orders write + reconcile - NOT ALLOWED
-Decision: Use runTransaction on session node (client-side, no server deps)
-Effort: Medium | Regression Risk: Low (Firebase transactions are battle-tested)
+**Fix:**
+- Multi-path update() already provides atomic payment (Firebase RTDB multi-path updates are atomic)
+- Removed unreliable navigator.onLine check, use Firebase isConnected()
+- Fixed duplicate isConnected() calls (use cached isOnline)
+- Added cleanup for retry button listener in closeTableBillReview()
+- Removed duplicate backfill scripts (root/Admin/) - kept only in bot/
+**Effort:** Low | Regression Risk: Low | Compatibility: Full
 
 ### P1-7: Void/Refund Flow (MEDIUM IMPACT)
 **Problem:** No void/refund for table bills - manual order-by-order cancellation + session reopen + analytics decrement
@@ -61,8 +62,8 @@ Effort: Medium (new feature)
 | 3 | P1-6: Offline Guard | Low | None | DONE |
 | 4 | P1-4: Channel Separation | Low | Low | DONE |
 | 5 | P1-1: Category Discount UI | Low | Low | DONE |
-| 6 | P1-2: Atomic Payment | Medium | Low | NEXT (use runTransaction) |
-| 7 | P1-7: Void/Refund | Medium | Medium | LAST |
+| 6 | P1-2: Atomic Payment | Low | Low | DONE |
+| 7 | P1-7: Void/Refund | Medium | Medium | NEXT |
 
 ---
 
