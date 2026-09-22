@@ -1179,7 +1179,7 @@ export async function applyTableBillCoupon() {
 
     try {
         const cart = _billCart();
-        const evalResult = await evaluateDiscount({ customer, subtotal, couponCode: code, cart, channel: 'pos' });
+        const evalResult = await evaluateDiscount({ customer, subtotal, couponCode: code, cart, channel: 'table' });
         if (!evalResult || evalResult.amount <= 0) {
             _billAutoDiscount = null; _billCouponCode = null;
             if (hint) { hint.classList.remove('hidden'); hint.textContent = `❌ Code "${code}" is not valid or doesn't apply to this bill.`; }
@@ -1235,7 +1235,7 @@ async function _renderTableBillOffers() {
 
     const subtotal = _billSubtotal();
     const cart = _billCart();
-    const list = getEligibleOffersForDisplay(all, { channel: 'pos', cart });
+    const list = getEligibleOffersForDisplay(all, { channel: 'table', cart });
 
     if (list.length === 0) {
         panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
