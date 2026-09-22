@@ -670,11 +670,13 @@ async function _renderTableDrawer() {
         if (allServed) {
             btns.push(`<button class="btn-action-green btn-small" data-action="makePaymentForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="wallet" class="icon-14"></i> Make Payment</button>`);
         }
-        // Walkout button for served but unpaid orders
-        const unpaidServed = activeOrders.filter(o => o.status === 'Served' && o.paymentStatus !== 'Paid');
-        if (unpaidServed.length > 0) {
-            btns.push(`<button class="btn-text text-warning btn-small" data-action="recordWalkout" data-id="${escapeHtml(t.id)}"><i data-lucide="user-x" class="icon-14"></i> Record Walkout</button>`);
-        }
+// Walkout button for served but unpaid orders
+            const unpaidServed = activeOrders.filter(o => o.status === 'Served' && o.paymentStatus !== 'Paid');
+            if (unpaidServed.length > 0) {
+                const sess = _sessionForTable(t.id);
+                const sessionId = sess?.sessionId || t.currentSession;
+                btns.push(`<button class="btn-text text-warning btn-small" data-action="recordWalkout" data-id="${escapeHtml(t.id)}" data-session-id="${escapeHtml(sessionId)}"><i data-lucide="user-x" class="icon-14"></i> Record Walkout</button>`);
+            }
     } else {
         btns.push(`<button class="btn-action-green btn-small" data-action="closeSessionForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="check-check" class="icon-14"></i> Close Table (Paid)</button>`);
         // Void payment button for paid tables
