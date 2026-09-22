@@ -47,9 +47,19 @@
 - Removed duplicate backfill scripts (root/Admin/) - kept only in bot/
 **Effort:** Low | Regression Risk: Low | Compatibility: Full
 
-### P1-7: Void/Refund Flow (MEDIUM IMPACT)
+### P1-7: Void/Refund Flow (MEDIUM IMPACT) - DONE
 **Problem:** No void/refund for table bills - manual order-by-order cancellation + session reopen + analytics decrement
-Effort: Medium (new feature)
+**Fix:**
+- Added voidTableBill(tableId, groupId) to revert paid bills to billing state
+- Supports both group-level and full-table voids
+- Reverts order statuses from Paid ? Served via transactions
+- Decrements analytics (totalOrders, totalRevenue)
+- Reverts discount usage records (negative amountGiven)
+- UI: 'Void Payment' button in table drawer for paid tables
+- Confirmation dialog with warning
+- Atomic multi-path updates via outletRef.update()
+- Cleanup of connection listeners on modal close
+**Effort:** Medium | Regression Risk: Low | Compatibility: Full
 
 ---
 
@@ -63,7 +73,7 @@ Effort: Medium (new feature)
 | 4 | P1-4: Channel Separation | Low | Low | DONE |
 | 5 | P1-1: Category Discount UI | Low | Low | DONE |
 | 6 | P1-2: Atomic Payment | Low | Low | DONE |
-| 7 | P1-7: Void/Refund | Medium | Medium | NEXT |
+| 7 | P1-7: Void/Refund Flow | Medium | Low | DONE |
 
 ---
 
