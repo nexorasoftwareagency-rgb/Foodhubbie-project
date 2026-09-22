@@ -1082,6 +1082,33 @@ export function setTableBillDiscountPct(pct) {
     _renderTableBillReview();
 }
 
+// Build cart from session/group orders for discount evaluation (needed for category-type discounts)
+function _billCart() {
+    const t = _tables[_billTableId];
+    const sess = _sessionForTable(_billTableId);
+    if (!t || !sess) return [];
+    const orders = _billGroupId
+        ? _ordersForGroup(sess.sessionId, _billGroupId)
+        : _ordersForSession(sess.sessionId || t.currentSession);
+    const cart = [];
+    orders.filter(o => o.status !== 'Cancelled').forEach(o => {
+        Object.values(o.items || {}).forEach(it => {
+            const qty = Number(it.qty || 1);
+            for (let i = 0; i < qty; i++) {
+                cart.push({
+                    name: it.name || 'Item',
+                    price: Number(it.price || 0),
+                    category: it.category || '',
+                    categoryId: it.categoryId || '',
+                    size: it.size || '',
+                    addon: it.addon || ''
+                });
+            }
+        });
+    });
+    return cart;
+}
+
 export async function applyTableBillCoupon() {
     const input = document.getElementById('tableBillCouponCode');
     const hint = document.getElementById('tableBillCouponHint');
@@ -1112,7 +1139,8 @@ export async function applyTableBillCoupon() {
     }
 
     try {
-        const evalResult = await evaluateDiscount({ customer, subtotal, couponCode: code, cart: [], channel: 'pos' });
+        const cart = _billCart();
+        const evalResult = await evaluateDiscount({ customer, subtotal, couponCode: code, cart, channel: 'pos' });
         if (!evalResult || evalResult.amount <= 0) {
             _billAutoDiscount = null; _billCouponCode = null;
             if (hint) { hint.classList.remove('hidden'); hint.textContent = `❌ Code "${code}" is not valid or doesn't apply to this bill.`; }
@@ -1167,7 +1195,8 @@ async function _renderTableBillOffers() {
     }
 
     const subtotal = _billSubtotal();
-    const list = getEligibleOffersForDisplay(all, { channel: 'pos' });
+    const cart = _billCart();
+    const list = getEligibleOffersForDisplay(all, { channel: 'pos', cart });
 
     if (list.length === 0) {
         panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
