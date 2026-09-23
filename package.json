@@ -4,14 +4,20 @@
     "build:admin": "node tools/build.mjs --admin",
     "build:supreme": "node tools/build.mjs --supreme",
     "deploy:admin": "npm run build:admin && firebase deploy --only hosting:admin",
-    "deploy:supreme": "npm run build:supreme && firebase deploy --only hosting:supreme"
+    "deploy:supreme": "npm run build:supreme && firebase deploy --only hosting:supreme",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "install:browsers": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "playwright": "^1.61.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
-    "purgecss": "^8.0.0"
+    "purgecss": "^8.0.0",
+    "@playwright/test": "^1.63.0"
   },
   "allowScripts": {
     "esbuild@0.28.1": true

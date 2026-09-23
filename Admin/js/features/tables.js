@@ -29,12 +29,11 @@
 
 import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange } from '../firebase.js';
 import { state } from '../state.js';
-import { showToast, showConfirm, showDeleteConfirm, showPaymentPicker, showSplitPaymentPicker } from '../ui-utils.js';
+import { showToast, showConfirm, showDeleteConfirm } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
 import { haptic, escapeHtml, playNotificationSound, logAudit } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { evaluateDiscount, recordDiscountUsage, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
-import { getCategories } from './catalog.js';
 
 // ---------------------------------------------------------------------
 // Module-level cache
@@ -223,8 +222,6 @@ async function _renderRequestsBanner() {
         } else {
             banner.classList.remove('hidden');
             banner.innerHTML = pending.map(_requestChip).join('');
-            await loadLucide();
-            if (window.lucide) window.lucide.createIcons({ root: banner });
         }
     }
 
@@ -331,8 +328,6 @@ async function _renderFloorGrid() {
     } else {
         grid.innerHTML = tables.map(_tableCard).join('');
     }
-    await loadLucide();
-    if (window.lucide) window.lucide.createIcons({ root: grid });
 }
 
 // ---------------------------------------------------------------------
@@ -369,8 +364,6 @@ async function _renderLiveOrdersList() {
     list.innerHTML = orders.length
         ? orders.map(_orderListRow).join('')
         : `<p class="text-muted-small">No active dine-in orders right now.</p>`;
-    await loadLucide();
-    if (window.lucide) window.lucide.createIcons({ root: list });
 }
 
 // ---------------------------------------------------------------------
@@ -482,6 +475,10 @@ async function _policeExpiredSessions() {
             const linkedTable = Object.values(_tables).find(t => t.currentSession === id);
             if (linkedTable) {
                 update(_tblRef(linkedTable.id), { status: 'free', currentSession: null, updatedAt: now }).catch(() => {});
+            }
+            // Auto-record walkout if there were unpaid served orders
+            if (linkedTable) {
+                checkAndRecordWalkout(linkedTable.id, id).catch(() => {});
             }
         }
     }
@@ -657,7 +654,7 @@ async function _renderTableDrawer() {
             if (g.status === 'active') {
                 btns.push(`<button class="btn-action-orange btn-small" data-action="requestBillForGroup" data-id="${escapeHtml(t.id)}" data-group-id="${escapeHtml(g.id)}"><i data-lucide="receipt" class="icon-14"></i> Bill ${escapeHtml(g.label)}</button>`);
             } else if (g.status === 'billing') {
-                btns.push(`<button class="btn-action-green btn-small" data-action="makePaymentForGroup" data-id="${escapeHtml(t.id)}" data-group-id="${escapeHtml(g.id)}"><i data-lucide="wallet" class="icon-14"></i> Mark ${escapeHtml(g.label)} Paid</button>`);
+                btns.push(`<button class="btn-action-orange btn-small" data-action="makePaymentForGroup" data-id="${escapeHtml(t.id)}" data-group-id="${escapeHtml(g.id)}"><i data-lucide="receipt" class="icon-14"></i> View Bill ${escapeHtml(g.label)}</button>`);
             }
         });
         if (allGroupsPaid) {
@@ -674,6 +671,7 @@ async function _renderTableDrawer() {
             btns.push(`<button class="btn-text text-warning btn-small" data-action="recordWalkout" data-id="${escapeHtml(t.id)}" data-session-id="${escapeHtml(sessId)}"><i data-lucide="user-x" class="icon-14"></i> Record Walkout</button>`);
         }
     } else {
+        btns.push(`<button class="btn-action-orange btn-small" data-action="makePaymentForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="receipt" class="icon-14"></i> View Bill</button>`);
         btns.push(`<button class="btn-action-green btn-small" data-action="closeSessionForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="check-check" class="icon-14"></i> Close Table (Paid)</button>`);
         const hasPaidOrders = ordersAll.some(o => o.paymentStatus === 'Paid');
         if (hasPaidOrders) {
@@ -691,19 +689,37 @@ async function _renderTableDrawer() {
     }
     btns.push(`<button class="btn-secondary btn-small" data-action="openTableQr" data-id="${escapeHtml(t.id)}"><i data-lucide="qr-code" class="icon-14"></i> View QR</button>`);
     btns.push(`<button class="btn-text text-danger btn-small" data-action="cancelSessionForTable" data-id="${escapeHtml(t.id)}"><i data-lucide="x-circle" class="icon-14"></i> Cancel / Free Table</button>`);
-    actionsWrap.innerHTML = btns.join('');
+actionsWrap.innerHTML = btns.join('');
+ }
 
-    await loadLucide();
-    if (window.lucide) window.lucide.createIcons({ root: drawer });
+let _renderAllRafId = null;
+async function _renderAll() {
+    if (_renderAllRafId) return;
+    _renderAllRafId = requestAnimationFrame(async () => {
+        _renderAllRafId = null;
+        _renderKpis();
+        _renderFloorGrid();
+        _renderLiveOrdersList();
+        _renderKDS();
+        await _renderTableDrawer();
+        await _renderRequestsBanner();
+        try { await loadLucide(); } catch (_) {}
+        if (window.lucide) window.lucide.createIcons();
+    });
 }
 
-function _renderAll() {
+function _flushRenderAll() {
+    if (_renderAllRafId) {
+        cancelAnimationFrame(_renderAllRafId);
+        _renderAllRafId = null;
+    }
     _renderKpis();
     _renderFloorGrid();
     _renderLiveOrdersList();
     _renderKDS();
     _renderTableDrawer();
     _renderRequestsBanner();
+    loadLucide().then(() => { if (window.lucide) window.lucide.createIcons(); });
 }
 
 // ---------------------------------------------------------------------
@@ -761,7 +777,7 @@ async function _deleteTable(id) {
     if (!ok) return;
     try {
         await remove(_tblRef(id));
-        if (_drawerTableId === id) { _drawerTableId = null; _renderTableDrawer(); }
+        if (_drawerTableId === id) { _drawerTableId = null; _flushRenderAll(); }
         showToast('Table deleted', 'success');
     } catch (e) {
         showToast('Delete failed', 'error');
@@ -780,12 +796,12 @@ async function _setTableEnabled(id, enabled) {
 function _openTableDrawer(id) {
     if (_drawerTableId === id && document.getElementById('tableDrawer')?.classList.contains('active')) return;
     _drawerTableId = id;
-    _renderTableDrawer();
+    _flushRenderAll();
     haptic(10);
 }
 function _closeTableDrawer() {
     _drawerTableId = null;
-    _renderTableDrawer();
+    _flushRenderAll();
 }
 function _openTableDrawerByOrder(orderId) {
     const o = _orders[orderId];
@@ -946,6 +962,17 @@ let _billManualDiscountPct = 0;
 let _billAutoDiscount = null; // evaluateDiscount() result: { discount, amount, label, source }
 let _billCouponCode = null;
 let _billReviewConnUnsub = null; // connection change unsubscribe for bill review modal
+let _billSplitActive = false;
+let _billSplitMethod = 'Cash'; // which method the primary input controls
+
+// Persist/load split method preference
+const SPLIT_METHOD_KEY = 'foodhubbie_split_method';
+function _saveSplitMethod(method) {
+    try { sessionStorage.setItem(SPLIT_METHOD_KEY, method); } catch (_) {}
+}
+function _loadSplitMethod() {
+    try { return sessionStorage.getItem(SPLIT_METHOD_KEY) || 'Cash'; } catch (_) { return 'Cash'; }
+}
 
 function _billSubtotal() {
     const t = _tables[_billTableId];
@@ -1001,25 +1028,25 @@ export async function openTableBillReview(tableId, groupId = null) {
     _billManualDiscountPct = 0;
     _billAutoDiscount = null;
     _billCouponCode = null;
+    _billSplitActive = false;
+    _billSplitMethod = _loadSplitMethod();
     _clearTableBillCouponUI();
     document.getElementById('tableBillOffersPanel')?.classList.add('hidden');
 
+    // Reset split section
+    document.getElementById('billSplitSection')?.classList.add('hidden');
+    document.getElementById('billSplitToggle')?.classList.remove('active');
+
+    // Reset payment method buttons
+    document.querySelectorAll('.bill-pay-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.method === 'Cash');
+    });
+
+    // Reset discount inputs
     const amtInput = document.getElementById('tableBillDiscountAmt');
-    if (amtInput) {
-        amtInput.value = 0;
-        if (!amtInput.dataset.listener) {
-            amtInput.dataset.listener = '1';
-            amtInput.addEventListener('input', (e) => setTableBillDiscount(parseFloat(e.target.value) || 0));
-        }
-    }
+    if (amtInput) amtInput.value = 0;
     const pctInput = document.getElementById('tableBillDiscountPct');
-    if (pctInput) {
-        pctInput.value = 0;
-        if (!pctInput.dataset.listener) {
-            pctInput.dataset.listener = '1';
-            pctInput.addEventListener('input', (e) => setTableBillDiscountPct(parseFloat(e.target.value) || 0));
-        }
-    }
+    if (pctInput) pctInput.value = 0;
 
     _renderTableBillReview();
     document.getElementById('tableBillReviewModal')?.classList.add('active');
@@ -1029,7 +1056,7 @@ export async function openTableBillReview(tableId, groupId = null) {
     if (!_billReviewConnUnsub) {
         _billReviewConnUnsub = onConnectionChange((online) => {
             const banner = document.getElementById('tableBillOfflineBanner');
-            const proceedBtn = document.querySelector('[data-action="confirmTableBillPayment"]');
+            const proceedBtn = document.getElementById('billConfirmBtn');
             if (banner) banner.classList.toggle('hidden', online);
             if (proceedBtn) proceedBtn.disabled = !online;
         });
@@ -1037,7 +1064,7 @@ export async function openTableBillReview(tableId, groupId = null) {
     // Initial state
     const isOnline = isConnected();
     const banner = document.getElementById('tableBillOfflineBanner');
-    const proceedBtn = document.querySelector('[data-action="confirmTableBillPayment"]');
+    const proceedBtn = document.getElementById('billConfirmBtn');
     if (banner) banner.classList.toggle('hidden', isOnline);
     if (proceedBtn) proceedBtn.disabled = !isOnline;
 
@@ -1077,27 +1104,179 @@ export function closeTableBillReview() {
 function _renderTableBillReview() {
     const t = _tables[_billTableId];
     if (!t) return;
+    const sess = _sessionForTable(_billTableId);
     const subtotal = _billSubtotal();
     const { discountValue, discountLabel } = _billComputedDiscount(subtotal);
     const finalTotal = Math.max(0, subtotal - discountValue);
 
+    // Title
     const title = document.getElementById('tableBillReviewTitle');
     if (title) {
-        const sess = _sessionForTable(_billTableId);
         const groupLabel = _billGroupId ? (sess?.orderGroups?.[_billGroupId]?.label || 'Group') : null;
-        title.textContent = groupLabel ? `Table ${t.number} — ${groupLabel}` : `Table ${t.number} — Bill`;
+        title.textContent = groupLabel ? `Table ${t.number} — ${groupLabel}` : `Table ${t.number} — Payment`;
     }
 
+    // === LEFT: Invoice ===
+    const tableLabel = document.getElementById('billInvoiceTableLabel');
+    if (tableLabel) tableLabel.textContent = _billGroupId ? `Table ${t.number} — ${sess?.orderGroups?.[_billGroupId]?.label || 'Group'}` : `Table ${t.number}`;
+    const dateEl = document.getElementById('billInvoiceDate');
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    // Items
+    const orders = _billGroupId
+        ? _ordersForGroup(sess.sessionId, _billGroupId)
+        : _ordersForSession(sess.sessionId || t.currentSession);
+    const activeOrders = orders.filter(o => o.status !== 'Cancelled');
+    const itemsEl = document.getElementById('billInvoiceItems');
+    if (itemsEl) {
+        const itemRows = [];
+        activeOrders.forEach(o => {
+            Object.values(o.items || {}).forEach(it => {
+                const qty = Number(it.qty || 1);
+                const price = Number(it.price || 0);
+                const lineTotal = qty * price;
+                const meta = [it.size, it.addon].filter(Boolean).join(' · ');
+                itemRows.push(`<div class="bill-invoice-item">
+                    <div class="bill-invoice-item-name">
+                        <span class="bill-invoice-item-qty">${qty}×</span>
+                        <span class="bill-invoice-item-name-text">${escapeHtml(it.name || 'Item')}</span>
+                        ${meta ? `<div class="bill-invoice-item-meta">${escapeHtml(meta)}</div>` : ''}
+                    </div>
+                    <span class="bill-invoice-item-price">₹${lineTotal.toLocaleString('en-IN')}</span>
+                </div>`);
+            });
+        });
+        itemsEl.innerHTML = itemRows.length ? itemRows.join('') : '<p class="text-muted-small" style="padding:16px;text-align:center;">No items</p>';
+    }
+
+    // Summary
+    const summaryEl = document.getElementById('billInvoiceSummary');
+    if (summaryEl) {
+        let html = `<div class="bill-invoice-summary-row"><span>Subtotal (${activeOrders.length} order${activeOrders.length !== 1 ? 's' : ''})</span><span>₹${subtotal.toLocaleString('en-IN')}</span></div>`;
+        if (discountValue > 0) {
+            html += `<div class="bill-invoice-summary-row" style="color:#059669;"><span>${escapeHtml(discountLabel || 'Discount')}</span><span>-₹${discountValue.toLocaleString('en-IN')}</span></div>`;
+        }
+        html += `<div class="bill-invoice-summary-row total"><span>Total</span><span>₹${finalTotal.toLocaleString('en-IN')}</span></div>`;
+        summaryEl.innerHTML = html;
+    }
+
+    // === RIGHT: Payment panel ===
+    // Total
+    const totalEl = document.getElementById('billTotalAmount');
+    if (totalEl) totalEl.textContent = `₹${finalTotal.toLocaleString('en-IN')}`;
+
+    // Reset split state
+    _billSplitActive = false;
+    // Don't reset _billSplitMethod — keep user's preference
+    const splitSection = document.getElementById('billSplitSection');
+    if (splitSection) splitSection.classList.add('hidden');
+    const splitToggle = document.getElementById('billSplitToggle');
+    if (splitToggle) splitToggle.classList.remove('active');
+
+    // Reset payment method buttons
+    document.querySelectorAll('.bill-pay-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.method === _billSplitMethod);
+    });
+
+    // Update summary
     const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-    setText('tableBillSubtotal', `₹${subtotal.toLocaleString('en-IN')}`);
-    const discRow = document.getElementById('tableBillDiscountRow');
+    setText('billSummarySubtotal', `₹${subtotal.toLocaleString('en-IN')}`);
+    const discRow = document.getElementById('billSummaryDiscountRow');
     if (discountValue > 0) {
         discRow?.classList.remove('hidden');
-        setText('tableBillDiscountVal', discountLabel ? `-₹${discountValue.toLocaleString('en-IN')} (${discountLabel})` : `-₹${discountValue.toLocaleString('en-IN')}`);
+        setText('billSummaryDiscountLabel', discountLabel || 'Discount');
+        setText('billSummaryDiscountVal', `-₹${discountValue.toLocaleString('en-IN')}`);
     } else {
         discRow?.classList.add('hidden');
     }
-    setText('tableBillTotal', `₹${finalTotal.toLocaleString('en-IN')}`);
+    setText('billSummaryTotal', `₹${finalTotal.toLocaleString('en-IN')}`);
+}
+
+// ---------------------------------------------------------------------
+// Smart Split Payment
+// ---------------------------------------------------------------------
+function _getBillFinalTotal() {
+    const subtotal = _billSubtotal();
+    const { discountValue } = _billComputedDiscount(subtotal);
+    return Math.max(0, subtotal - discountValue);
+}
+
+function _renderSplitInputs() {
+    const total = _getBillFinalTotal();
+    const primaryInput = document.getElementById('billSplitPrimaryAmt');
+    const secondaryInput = document.getElementById('billSplitSecondaryAmt');
+    const primaryLabel = document.getElementById('billSplitPrimaryLabel');
+    const secondaryLabel = document.getElementById('billSplitSecondaryLabel');
+    const remainingEl = document.getElementById('billSplitRemaining');
+    if (!primaryInput || !secondaryInput) return;
+
+    const primary = _billSplitMethod;
+    const secondary = primary === 'Cash' ? 'UPI' : 'Cash';
+    if (primaryLabel) primaryLabel.textContent = primary;
+    if (secondaryLabel) secondaryLabel.textContent = secondary;
+
+    const primaryAmt = Number(primaryInput.value) || 0;
+    const secondaryAmt = Math.max(0, total - primaryAmt);
+    secondaryInput.value = secondaryAmt;
+    if (remainingEl) {
+        const remaining = total - primaryAmt - secondaryAmt;
+        remainingEl.textContent = remaining === 0 ? 'Full amount covered' : `₹${remaining.toLocaleString('en-IN')} remaining`;
+        remainingEl.style.color = remaining === 0 ? '#16a34a' : '#ef4444';
+    }
+}
+
+export function toggleBillSplit() {
+    _billSplitActive = !_billSplitActive;
+    const section = document.getElementById('billSplitSection');
+    const toggle = document.getElementById('billSplitToggle');
+    if (section) section.classList.toggle('hidden', !_billSplitActive);
+    if (toggle) toggle.classList.toggle('active', _billSplitActive);
+
+    if (_billSplitActive) {
+        const total = _getBillFinalTotal();
+        const primaryInput = document.getElementById('billSplitPrimaryAmt');
+        if (primaryInput) primaryInput.value = total;
+        _renderSplitInputs();
+    }
+}
+
+export function adjustBillSplit(target, delta) {
+    const total = _getBillFinalTotal();
+    const primaryInput = document.getElementById('billSplitPrimaryAmt');
+    if (!primaryInput) return;
+
+    let current = Number(primaryInput.value) || 0;
+    current = Math.max(0, Math.min(total, current + delta));
+    primaryInput.value = current;
+    _renderSplitInputs();
+}
+
+export function onBillSplitInput() {
+    const total = _getBillFinalTotal();
+    const primaryInput = document.getElementById('billSplitPrimaryAmt');
+    if (!primaryInput) return;
+    let val = Number(primaryInput.value) || 0;
+    val = Math.max(0, Math.min(total, val));
+    primaryInput.value = val;
+    _renderSplitInputs();
+}
+
+function _collectPaymentEntries() {
+    const total = _getBillFinalTotal();
+    if (!_billSplitActive) {
+        // Full payment — default to Cash
+        const activeBtn = document.querySelector('.bill-pay-btn.active');
+        const method = activeBtn?.dataset?.method || 'Cash';
+        return [{ method, amount: total }];
+    }
+    // Split payment
+    const primaryInput = document.getElementById('billSplitPrimaryAmt');
+    const primaryAmt = Number(primaryInput?.value) || 0;
+    const secondaryAmt = total - primaryAmt;
+    const entries = [];
+    if (primaryAmt > 0) entries.push({ method: _billSplitMethod, amount: primaryAmt });
+    if (secondaryAmt > 0) entries.push({ method: _billSplitMethod === 'Cash' ? 'UPI' : 'Cash', amount: secondaryAmt });
+    return entries;
 }
 
 function _clearTableBillCouponUI() {
@@ -1224,16 +1403,13 @@ export function clearTableBillCoupon() {
 
 export async function toggleTableBillOffersPanel() {
     const panel = document.getElementById('tableBillOffersPanel');
-    const btn = document.getElementById('tableBillOffersBtn');
     if (!panel) return;
     const opening = panel.classList.contains('hidden');
     if (!opening) {
         panel.classList.add('hidden');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
         return;
     }
     panel.classList.remove('hidden');
-    if (btn) btn.setAttribute('aria-expanded', 'true');
     panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">Loading offers…</div>';
     await _renderTableBillOffers();
 }
@@ -1269,7 +1445,7 @@ async function _renderTableBillOffers() {
         const usedLabel = used > 0 ? ` · used ${used}${d.globalLimit ? `/${d.globalLimit}` : ''}×` : '';
         const categoryMismatch = d.type === 'category' && d._categoryMatches === false;
         const categoryNames = d.categoryIds?.map(id => {
-            const cat = getCategories().find(c => c.id === id);
+            const cat = (state.categories || []).find(c => c.id === id);
             return cat?.name || id;
         }).join(', ') || 'Unknown';
 
@@ -1307,7 +1483,6 @@ export function applyTableOfferFromPanel(code) {
     const input = document.getElementById('tableBillCouponCode');
     if (input) input.value = code;
     document.getElementById('tableBillOffersPanel')?.classList.add('hidden');
-    document.getElementById('tableBillOffersBtn')?.setAttribute('aria-expanded', 'false');
     applyTableBillCoupon();
 }
 
@@ -1351,7 +1526,7 @@ export async function confirmTableBillPayment() {
         return;
     }
 
-    const paymentEntries = await showSplitPaymentPicker(finalTotal);
+    const paymentEntries = _collectPaymentEntries();
     if (!paymentEntries || paymentEntries.length === 0) return;
 
     const { phone: customerPhone, orderId: representativeOrderId } = _billCustomerPhoneAndOrderId();
@@ -1372,17 +1547,17 @@ export async function confirmTableBillPayment() {
                 updates[`orders/${oid}/updatedAt`] = now;
             }
         });
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'paid';
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = now;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = primaryMethod;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = paymentDetails;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = paymentEntries;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/subtotal`] = subtotal;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = discountValue;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = discountId || null;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = discountLabel || null;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = discountSource || null;
-        updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = finalTotal;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'paid';
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = now;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = primaryMethod;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = paymentDetails;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = paymentEntries;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/subtotal`] = subtotal;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = discountValue;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = discountId || null;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = discountLabel || null;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = discountSource || null;
+        updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = finalTotal;
 
         try {
             await Outlet.multiUpdate(updates);
@@ -1412,18 +1587,18 @@ export async function confirmTableBillPayment() {
             updates[`orders/${o.id}/updatedAt`] = now;
         }
     });
-    updates[`sessions/${sess.sessionId}/status`] = 'closed';
-    updates[`sessions/${sess.sessionId}/closedAt`] = now;
-    updates[`sessions/${sess.sessionId}/paymentMethod`] = primaryMethod;
-    updates[`sessions/${sess.sessionId}/paymentDetails`] = paymentDetails;
-    updates[`sessions/${sess.sessionId}/paymentEntries`] = paymentEntries;
-    updates[`sessions/${sess.sessionId}/paidAt`] = now;
-    updates[`sessions/${sess.sessionId}/subtotal`] = subtotal;
-    updates[`sessions/${sess.sessionId}/discount`] = discountValue;
-    updates[`sessions/${sess.sessionId}/discountId`] = discountId || null;
-    updates[`sessions/${sess.sessionId}/discountLabel`] = discountLabel || null;
-    updates[`sessions/${sess.sessionId}/discountSource`] = discountSource || null;
-    updates[`sessions/${sess.sessionId}/paidAmount`] = finalTotal;
+    updates[`tableSessions/${sess.sessionId}/status`] = 'closed';
+    updates[`tableSessions/${sess.sessionId}/closedAt`] = now;
+    updates[`tableSessions/${sess.sessionId}/paymentMethod`] = primaryMethod;
+    updates[`tableSessions/${sess.sessionId}/paymentDetails`] = paymentDetails;
+    updates[`tableSessions/${sess.sessionId}/paymentEntries`] = paymentEntries;
+    updates[`tableSessions/${sess.sessionId}/paidAt`] = now;
+    updates[`tableSessions/${sess.sessionId}/subtotal`] = subtotal;
+    updates[`tableSessions/${sess.sessionId}/discount`] = discountValue;
+    updates[`tableSessions/${sess.sessionId}/discountId`] = discountId || null;
+    updates[`tableSessions/${sess.sessionId}/discountLabel`] = discountLabel || null;
+    updates[`tableSessions/${sess.sessionId}/discountSource`] = discountSource || null;
+    updates[`tableSessions/${sess.sessionId}/paidAmount`] = finalTotal;
     updates[`tables/${tableId}/status`] = 'free';
     updates[`tables/${tableId}/currentSession`] = null;
     updates[`tables/${tableId}/updatedAt`] = now;
@@ -1489,16 +1664,16 @@ export async function voidTableBill(tableId, groupId = null) {
                     updates[`orders/${o.id}/updatedAt`] = now;
                 }
             });
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'billing';
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = null;
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = null;
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = null;
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = null;
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = 0;
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = null;
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = null;
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = null;
-            updates[`sessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = 0;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'billing';
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = null;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = null;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paymentDetails`] = null;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paymentEntries`] = null;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/discount`] = 0;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/discountId`] = null;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/discountLabel`] = null;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/discountSource`] = null;
+            updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paidAmount`] = 0;
 
             try {
                 await Outlet.multiUpdate(updates);
@@ -1544,18 +1719,18 @@ export async function voidTableBill(tableId, groupId = null) {
             updates[`orders/${o.id}/paymentEntries`] = null;
             updates[`orders/${o.id}/updatedAt`] = now;
         });
-        updates[`sessions/${sess.sessionId}/status`] = 'billing';
-        updates[`sessions/${sess.sessionId}/closedAt`] = null;
-        updates[`sessions/${sess.sessionId}/paymentMethod`] = null;
-        updates[`sessions/${sess.sessionId}/paymentDetails`] = null;
-        updates[`sessions/${sess.sessionId}/paymentEntries`] = null;
-        updates[`sessions/${sess.sessionId}/paidAt`] = null;
-        updates[`sessions/${sess.sessionId}/subtotal`] = subtotal;
-        updates[`sessions/${sess.sessionId}/discount`] = 0;
-        updates[`sessions/${sess.sessionId}/discountId`] = null;
-        updates[`sessions/${sess.sessionId}/discountLabel`] = null;
-        updates[`sessions/${sess.sessionId}/discountSource`] = null;
-        updates[`sessions/${sess.sessionId}/paidAmount`] = 0;
+        updates[`tableSessions/${sess.sessionId}/status`] = 'billing';
+        updates[`tableSessions/${sess.sessionId}/closedAt`] = null;
+        updates[`tableSessions/${sess.sessionId}/paymentMethod`] = null;
+        updates[`tableSessions/${sess.sessionId}/paymentDetails`] = null;
+        updates[`tableSessions/${sess.sessionId}/paymentEntries`] = null;
+        updates[`tableSessions/${sess.sessionId}/paidAt`] = null;
+        updates[`tableSessions/${sess.sessionId}/subtotal`] = subtotal;
+        updates[`tableSessions/${sess.sessionId}/discount`] = 0;
+        updates[`tableSessions/${sess.sessionId}/discountId`] = null;
+        updates[`tableSessions/${sess.sessionId}/discountLabel`] = null;
+        updates[`tableSessions/${sess.sessionId}/discountSource`] = null;
+        updates[`tableSessions/${sess.sessionId}/paidAmount`] = 0;
         updates[`tables/${tableId}/status`] = 'billing';
         updates[`tables/${tableId}/currentSession`] = sess.sessionId;
         updates[`tables/${tableId}/updatedAt`] = now;
@@ -1617,7 +1792,7 @@ export async function recordWalkout(tableId, sessionId, { reason = 'Walkout', or
         updates[`logs/walkouts/${walkoutId}`] = walkoutData;
         updates[`tableSessions/${sessionId}/walkout`] = { walkoutId, reason, walkedOutAt };
 
-        await Outlet.ref('').update(updates);
+        await update(Outlet.ref(''), updates);
         showToast(`Walkout recorded for Table ${t.number} (₹${subtotal.toLocaleString()})`, 'warning');
         haptic(20);
         return walkoutId;
@@ -1659,7 +1834,7 @@ export async function checkAndRecordWalkout(tableId, sessionId) {
         }
     });
 
-    await Outlet.ref('').update(updates);
+    await update(Outlet.ref(''), updates);
     return walkoutId;
 }
 
@@ -2323,6 +2498,212 @@ export function cleanupTables() {
     _closeTableDrawer();
 }
 
+function _wireBillReviewModal() {
+    // Wire up payment method buttons (once)
+    const methodsWrap = document.getElementById('billPaymentMethods');
+    if (methodsWrap && !methodsWrap.dataset.wired) {
+        methodsWrap.dataset.wired = '1';
+        methodsWrap.addEventListener('click', (e) => {
+            const btn = e.target.closest('.bill-pay-btn');
+            if (!btn) return;
+            document.querySelectorAll('.bill-pay-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (_billSplitActive) {
+                _billSplitMethod = btn.dataset.method;
+                _saveSplitMethod(_billSplitMethod);
+                _renderSplitInputs();
+            }
+        });
+    }
+
+    // Wire up split toggle (once)
+    const splitToggle = document.getElementById('billSplitToggle');
+    if (splitToggle && !splitToggle.dataset.wired) {
+        splitToggle.dataset.wired = '1';
+        splitToggle.addEventListener('click', () => toggleBillSplit());
+    }
+
+    // Wire up split +/- buttons and input (once)
+    const splitSection = document.getElementById('billSplitSection');
+    if (splitSection && !splitSection.dataset.wired) {
+        splitSection.dataset.wired = '1';
+        splitSection.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-action="billSplitMinus"], [data-action="billSplitPlus"]');
+            if (!btn) return;
+            const delta = btn.dataset.action === 'billSplitPlus' ? 100 : -100;
+            adjustBillSplit(btn.dataset.target, delta);
+        });
+        const primaryInput = document.getElementById('billSplitPrimaryAmt');
+        if (primaryInput) primaryInput.addEventListener('input', () => onBillSplitInput());
+    }
+
+    // Wire up click-outside-to-close
+    const modal = document.getElementById('tableBillReviewModal');
+    if (modal && !modal.dataset.outsideWired) {
+        modal.dataset.outsideWired = '1';
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeTableBillReview();
+        });
+    }
+
+    // Wire up discount inputs (once)
+    const amtInput = document.getElementById('tableBillDiscountAmt');
+    if (amtInput && !amtInput.dataset.listener) {
+        amtInput.dataset.listener = '1';
+        amtInput.addEventListener('input', (e) => setTableBillDiscount(parseFloat(e.target.value) || 0));
+    }
+    const pctInput = document.getElementById('tableBillDiscountPct');
+    if (pctInput && !pctInput.dataset.listener) {
+        pctInput.dataset.listener = '1';
+        pctInput.addEventListener('input', (e) => setTableBillDiscountPct(parseFloat(e.target.value) || 0));
+    }
+
+    // Wire up coupon input
+    const couponInput = document.getElementById('tableBillCouponCode');
+    if (couponInput && !couponInput.dataset.listener) {
+        couponInput.dataset.listener = '1';
+        couponInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyTableBillCoupon();
+            }
+        });
+    }
+
+    // Wire up coupon clear button
+    const couponClear = document.getElementById('tableBillCouponClearBtn');
+    if (couponClear && !couponClear.dataset.listener) {
+        couponClear.dataset.listener = '1';
+        couponClear.addEventListener('click', clearTableBillCoupon);
+    }
+
+    // Wire up offers toggle
+    const offersBtn = document.querySelector('.bill-offers-btn');
+    if (offersBtn && !offersBtn.dataset.listener) {
+        offersBtn.dataset.listener = '1';
+        offersBtn.addEventListener('click', toggleTableBillOffersPanel);
+    }
+
+    // Wire up confirm button
+    const confirmBtn = document.getElementById('billConfirmBtn');
+    if (confirmBtn && !confirmBtn.dataset.listener) {
+        confirmBtn.dataset.listener = '1';
+        confirmBtn.addEventListener('click', confirmTableBillPayment);
+    }
+
+    // Wire up retry button
+    const retryBtn = document.getElementById('tableBillRetryConnection');
+    if (retryBtn && !retryBtn.dataset.listener) {
+        retryBtn.dataset.listener = '1';
+        retryBtn.addEventListener('click', () => {
+            if (isConnected()) {
+                confirmBtn.disabled = false;
+                document.getElementById('tableBillOfflineBanner')?.classList.add('hidden');
+            } else {
+                showToast('Still offline. Please check your connection.', 'warning');
+            }
+        });
+    }
+
+    // ===== KEYBOARD SUPPORT FOR SPLIT PAYMENT CONTROLS =====
+    // Make all interactive elements focusable
+    document.querySelectorAll('.bill-pay-btn, .bill-split-qty-btn, .bill-split-toggle, #billSplitPrimaryAmt')
+        .forEach(el => { if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0'); });
+
+    // Payment method buttons: ArrowLeft/Right to switch, Enter/Space to select
+    const payBtns = document.querySelectorAll('.bill-pay-btn');
+    payBtns.forEach((btn, idx) => {
+        if (btn.dataset.kbdWired) return;
+        btn.dataset.kbdWired = '1';
+        btn.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                const next = payBtns[(idx + 1) % payBtns.length];
+                next.focus();
+                next.click();
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const prev = payBtns[(idx - 1 + payBtns.length) % payBtns.length];
+                prev.focus();
+                prev.click();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                btn.click();
+            }
+        });
+    });
+
+    // Split toggle: Enter/Space to toggle
+    const splitToggleBtn = document.getElementById('billSplitToggle');
+    if (splitToggleBtn && !splitToggleBtn.dataset.kbdWired) {
+        splitToggleBtn.dataset.kbdWired = '1';
+        splitToggleBtn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleBillSplit();
+            }
+        });
+    }
+
+    // Split +/- buttons: ArrowUp/Down for increment/decrement
+    const qtyBtns = document.querySelectorAll('.bill-split-qty-btn');
+    qtyBtns.forEach(btn => {
+        if (btn.dataset.kbdWired) return;
+        btn.dataset.kbdWired = '1';
+        btn.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const delta = btn.dataset.action === 'billSplitPlus' ? 100 : -100;
+                adjustBillSplit(btn.dataset.target, delta);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const delta = btn.dataset.action === 'billSplitPlus' ? -100 : 100;
+                adjustBillSplit(btn.dataset.target, delta);
+            }
+        });
+    });
+
+    // Primary amount input: ArrowUp/Down for increment/decrement
+    const primaryAmtInput = document.getElementById('billSplitPrimaryAmt');
+    if (primaryAmtInput && !primaryAmtInput.dataset.kbdWired) {
+        primaryAmtInput.dataset.kbdWired = '1';
+        primaryAmtInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                adjustBillSplit('primary', 100);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                adjustBillSplit('primary', -100);
+            } else if (e.key === 'Enter') {
+                onBillSplitInput();
+            }
+        });
+    }
+
+    // Trap focus in modal (basic)
+    if (modal && !modal.dataset.focusTrap) {
+        modal.dataset.focusTrap = '1';
+        modal.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                const focusable = modal.querySelectorAll(
+                    'button, input, select, [tabindex]:not([tabindex="-1"])'
+                );
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            } else if (e.key === 'Escape') {
+                closeTableBillReview();
+            }
+        });
+    }
+}
+
 export function loadTableManagement() {
     console.log('[Tables] Loading tab…');
     if (_connUnsub) { _connUnsub(); _connUnsub = null; }
@@ -2392,13 +2773,14 @@ export function loadTableManagement() {
         document.getElementById('tableQrCopyLinkBtn')?.addEventListener('click', _copyQrLink);
         document.getElementById('tableDrawerOverlay')?.addEventListener('click', _closeTableDrawer);
         document.getElementById('tableDrawerCloseBtn')?.addEventListener('click', _closeTableDrawer);
+        _wireBillReviewModal();
     }
 }
 
 window.__tables = {
-    openEditor: _openTableEditor, closeEditor: _closeTableEditor, save: _saveTable,
+    openEditor: _openTableEditor,
     delete: _deleteTable, openDrawer: _openTableDrawer, closeDrawer: _closeTableDrawer,
-    openQr: _openQrModal, closeQr: _closeQrModal, bulkPrint: _bulkQrPrint, exportCsv: _exportTablesCsv,
+    openQr: _openQrModal, bulkPrint: _bulkQrPrint, exportCsv: _exportTablesCsv,
     openDrawerByOrder: _openTableDrawerByOrder, requestBill: _requestBillForTable,
     requestBillForGroup: _requestBillForGroup,
     makePaymentForGroup: _makePaymentForGroup,
@@ -2410,10 +2792,8 @@ window.__tables = {
     printSessionBill: _printSessionBill,
     printBillForGroup: _printBillForGroup,
     resolveTableRequest: _resolveTableRequest,
-    editTable: _openTableEditor, setTableEnabled: _setTableEnabled,
+    setTableEnabled: _setTableEnabled,
     closeBillReview: closeTableBillReview,
-    setBillDiscount: setTableBillDiscount,
-    setBillDiscountPct: setTableBillDiscountPct,
     applyBillCoupon: applyTableBillCoupon,
     clearBillCoupon: clearTableBillCoupon,
     toggleBillOffers: toggleTableBillOffersPanel,

@@ -1,9 +1,22 @@
 import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
-import { app, auth, db, ref, set } from './firebase.js';
+import { app, auth, db, ref, set, onAuthStateChanged } from './firebase.js';
 import { showToast } from '../../shared/dom/modal.js';
 
 let messaging = null;
 let fcmInitDone = false;
+
+// Promise that resolves when auth state is ready (user or null)
+let _authReadyPromise = null;
+function getAuthReady() {
+  if (_authReadyPromise) return _authReadyPromise;
+  _authReadyPromise = new Promise((resolve) => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      unsub();
+      resolve(user);
+    });
+  });
+  return _authReadyPromise;
+}
 
 function getMessagingInstance() {
   if (typeof Capacitor !== 'undefined') return null;
@@ -43,10 +56,21 @@ function initFCM() {
 
 initFCM();
 
-// When a new SW takes over, refresh FCM token for the next login
+// When a new SW takes over, refresh FCM token for the current admin
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    console.log('[FCM] New SW activated, token will refresh on next setup');
+  navigator.serviceWorker.addEventListener('controllerchange', async () => {
+    console.log('[FCM] New SW activated, waiting for auth then refreshing token...');
+    try {
+      const user = await getAuthReady();
+      if (user) {
+        await refreshFCMToken(user.uid);
+        console.log('[FCM] Token refreshed after SW controllerchange');
+      } else {
+        console.log('[FCM] No authenticated user, skipping token refresh');
+      }
+    } catch (e) {
+      console.warn('[FCM] Token refresh failed:', e?.message || e);
+    }
   });
 }
 
