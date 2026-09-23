@@ -5475,114 +5475,137 @@
 
 
 
-    <!-- NEW DISCOUNT MODAL (outside .main, alongside other modals) -->
+    <!-- Table Bill Payment — merged invoice + payment center modal.
+         Left: full item breakdown invoice. Right: payment method, discount/promo, confirm.
+         Replaces the old two-step bill-review + split-payment-picker flow. -->
+    <div id="tableBillReviewModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tableBillReviewTitle">
+        <div class="modal-content bill-payment-modal" style="max-width:820px;">
 
-    <div id="discountEditorModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="discountEditorTitle" aria-hidden="true">
-
-        <div class="modal-content glass-card" style="max-width:640px;">
-
-            <div class="modal-header">
-
-                <h3 id="discountEditorTitle" data-i18n="discount.editor.newTitle">New Discount</h3>
-
-                <button class="btn-text" data-action="closeDiscountEditor" aria-label="Close">
-
+            <div class="modal-header" style="padding:14px 20px; border-bottom:1px solid #e5e7eb;">
+                <h3 id="tableBillReviewTitle" style="font-size:16px; font-weight:700;">Table — Bill</h3>
+                <button class="btn-text" data-action="closeTableBillReview" aria-label="Close" style="font-size:20px; padding:4px 8px;">
                     <i data-lucide="x"></i>
-
                 </button>
-
             </div>
 
-    <!-- Table Bill Payment — coupon/discount review, opened by "Make Payment"
-         on a table or a split-bill group before the payment-method picker.
-         Lives outside #tab-tables (like discountEditorModal) so its clicks
-         are caught by main.js's global data-action dispatcher, not tables.js's
-         tab-scoped one — tables.js only opens/closes it from JS. -->
-    <div id="tableBillReviewModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tableBillReviewTitle" aria-hidden="true">
-
-        <div class="modal-content glass-card" style="max-width:460px;">
-
-            <div class="modal-header">
-
-                <h3 id="tableBillReviewTitle">Table — Bill</h3>
-
-                <button class="btn-text" data-action="closeTableBillReview" aria-label="Close">
-
-                    <i data-lucide="x"></i>
-
-                </button>
-
-            </div>
-
-            <!-- Offline banner for bill review modal -->
+            <!-- Offline banner -->
             <div id="tableBillOfflineBanner" class="offline-banner hidden" role="alert" aria-live="polite" style="margin:0 16px 12px; padding:8px 12px; border-radius:8px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; font-weight:600;">
-                <span>No internet connection — payment cannot be processed</span>
+                <span>No internet — payment cannot be processed</span>
                 <button id="tableBillRetryConnection" type="button" class="btn-text" style="font-size:12px; padding:4px 8px;">Retry</button>
             </div>
 
-            <div class="modal-body">
+            <div class="bill-payment-body">
 
-                <button type="button" id="tableBillOffersBtn" class="btn-walkin-offers" data-action="toggleTableBillOffersPanel" aria-expanded="false" aria-controls="tableBillOffersPanel" title="See every currently-active discount and coupon" style="margin-bottom:10px;">
+                <!-- LEFT: Invoice -->
+                <div class="bill-invoice-panel" id="billInvoicePanel">
+                    <div class="bill-invoice-header">
+                        <span class="bill-invoice-title" id="billInvoiceTableLabel">Table —</span>
+                        <span class="bill-invoice-date" id="billInvoiceDate"></span>
+                    </div>
+                    <div class="bill-invoice-items" id="billInvoiceItems"></div>
+                    <div class="bill-invoice-summary" id="billInvoiceSummary"></div>
+                </div>
 
-                    <i data-lucide="tag"></i> Active offers
+                <!-- RIGHT: Payment + Discount -->
+                <div class="bill-payment-panel">
 
-                </button>
+                    <!-- Total display -->
+                    <div class="bill-total-display">
+                        <span class="bill-total-label">Total</span>
+                        <span class="bill-total-amount" id="billTotalAmount">₹0</span>
+                    </div>
 
-                <div id="tableBillOffersPanel" class="walkin-offers-panel hidden"></div>
+                    <!-- Payment method toggle -->
+                    <div class="bill-payment-methods" id="billPaymentMethods">
+                        <button type="button" class="bill-pay-btn active" data-method="Cash">💵 Cash</button>
+                        <button type="button" class="bill-pay-btn" data-method="UPI">📱 UPI</button>
+                    </div>
 
-                <div class="flex-row flex-center flex-gap-8 mb-8 walkin-coupon-row">
+                    <!-- Split amount inputs (hidden by default, shown when split is active) -->
+                    <div class="bill-split-section hidden" id="billSplitSection">
+                        <div class="bill-split-row">
+                            <label class="bill-split-label" id="billSplitPrimaryLabel">Cash</label>
+                            <div class="bill-split-input-group">
+                                <button type="button" class="bill-split-qty-btn" data-action="billSplitMinus" data-target="primary">−</button>
+                                <input type="number" id="billSplitPrimaryAmt" class="bill-split-input" value="0" min="0">
+                                <button type="button" class="bill-split-qty-btn" data-action="billSplitPlus" data-target="primary">+</button>
+                            </div>
+                        </div>
+                        <div class="bill-split-row">
+                            <label class="bill-split-label" id="billSplitSecondaryLabel">UPI</label>
+                            <div class="bill-split-input-group">
+                                <button type="button" class="bill-split-qty-btn" data-action="billSplitMinus" data-target="secondary">−</button>
+                                <input type="number" id="billSplitSecondaryAmt" class="bill-split-input" value="0" min="0" readonly>
+                                <button type="button" class="bill-split-qty-btn" data-action="billSplitPlus" data-target="secondary">+</button>
+                            </div>
+                        </div>
+                        <div class="bill-split-remaining" id="billSplitRemaining"></div>
+                    </div>
 
-                    <input type="text" id="tableBillCouponCode" placeholder="Coupon code (optional)" class="walkin-coupon-input" style="flex:1;">
+                    <!-- Split toggle -->
+                    <button type="button" class="bill-split-toggle" id="billSplitToggle" data-action="toggleBillSplit">
+                        <i data-lucide="scissors" style="width:14px;height:14px;"></i> Split Payment
+                    </button>
 
-                    <button type="button" class="btn-walkin-coupon" data-action="applyTableBillCoupon">Apply</button>
+                    <!-- Active Offers -->
+                    <div class="bill-offers-section">
+                        <button type="button" class="bill-offers-btn" data-action="toggleTableBillOffersPanel" aria-expanded="false" aria-controls="tableBillOffersPanel">
+                            <i data-lucide="tag" style="width:14px;height:14px;"></i> Active Offers
+                        </button>
+                        <div id="tableBillOffersPanel" class="bill-offers-panel hidden"></div>
+                    </div>
 
-                    <button type="button" id="tableBillCouponClearBtn" class="btn-walkin-coupon-clear hidden" data-action="clearTableBillCoupon" title="Clear coupon">
+                    <!-- Coupon -->
+                    <div class="bill-coupon-row">
+                        <input type="text" id="tableBillCouponCode" placeholder="Coupon code" class="bill-coupon-input">
+                        <button type="button" class="bill-coupon-apply" data-action="applyTableBillCoupon">Apply</button>
+                        <button type="button" id="tableBillCouponClearBtn" class="bill-coupon-clear hidden" data-action="clearTableBillCoupon" title="Clear">×</button>
+                    </div>
+                    <div id="tableBillCouponHint" class="text-muted-small fs-11 mb-8 hidden bill-coupon-hint"></div>
 
-                        <i data-lucide="x"></i>
+                    <!-- Manual Discount -->
+                    <div class="bill-discount-row">
+                        <label class="bill-discount-label">Manual Discount</label>
+                        <div class="bill-discount-inputs">
+                            <div class="bill-discount-field">
+                                <input type="number" id="tableBillDiscountAmt" value="0" min="0" class="bill-discount-input">
+                                <span class="bill-discount-unit">₹</span>
+                            </div>
+                            <span class="bill-discount-sep">or</span>
+                            <div class="bill-discount-field">
+                                <input type="number" id="tableBillDiscountPct" value="0" min="0" max="100" class="bill-discount-input">
+                                <span class="bill-discount-unit">%</span>
+                            </div>
+                        </div>
+                    </div>
 
+                    <!-- Summary -->
+                    <div class="bill-summary">
+                        <div class="bill-summary-row"><span>Subtotal</span><span id="billSummarySubtotal">₹0</span></div>
+                        <div class="bill-summary-row bill-summary-discount hidden" id="billSummaryDiscountRow"><span id="billSummaryDiscountLabel">Discount</span><span id="billSummaryDiscountVal" style="color:#059669;">-₹0</span></div>
+                        <div class="bill-summary-row bill-summary-total"><strong>You Pay</strong><strong id="billSummaryTotal">₹0</strong></div>
+                    </div>
+
+                    <!-- Confirm -->
+                    <button type="button" class="bill-confirm-btn" data-action="confirmTableBillPayment" id="billConfirmBtn">
+                        <i data-lucide="check-circle" style="width:18px;height:18px;"></i> Confirm Payment
                     </button>
 
                 </div>
-
-                <div id="tableBillCouponHint" class="text-muted-small fs-11 mb-8 hidden walkin-coupon-hint"></div>
-
-                <div class="flex-row flex-center flex-gap-8 mb-8">
-
-                    <label class="text-muted-small fs-11" style="flex:1;">Or give a manual discount —
-
-                        <input type="number" id="tableBillDiscountAmt" value="0" min="0" style="width:80px;"> ₹ flat
-
-                    </label>
-
-                    <label class="text-muted-small fs-11">
-
-                        <input type="number" id="tableBillDiscountPct" value="0" min="0" max="100" style="width:60px;"> %
-
-                    </label>
-
-                </div>
-
-                <div class="table-bill-summary">
-
-                    <div class="flex-between"><span class="text-muted-small">Subtotal</span><span id="tableBillSubtotal">₹0</span></div>
-
-                    <div id="tableBillDiscountRow" class="flex-between hidden"><span class="text-muted-small">Discount</span><span id="tableBillDiscountVal" style="color:#059669;">-₹0</span></div>
-
-                    <div class="flex-between table-bill-total-row"><strong>Total</strong><strong id="tableBillTotal">₹0</strong></div>
-
-                </div>
-
-                <button type="button" class="btn-primary" style="width:100%;margin-top:12px;" data-action="confirmTableBillPayment">
-
-                    <i data-lucide="wallet"></i> Proceed to Payment
-
-                </button>
-
             </div>
 
         </div>
-
     </div>
+
+    <!-- Discount Editor Modal body (form content) — stays inside #discountEditorModal -->
+    <div id="discountEditorModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="discountEditorTitle" aria-hidden="true">
+        <div class="modal-content glass-card" style="max-width:640px;">
+            <div class="modal-header">
+                <h3 id="discountEditorTitle" data-i18n="discount.editor.newTitle">New Discount</h3>
+                <button class="btn-text" data-action="closeDiscountEditor" aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
 
             <div class="modal-body">
 

@@ -8160,7 +8160,7 @@ body.pos-selection-mode .walkin-picker {
 .btn-walkin-offers:hover { background:#eff6ff; }
 .btn-walkin-offers[aria-expanded="true"] { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
 .btn-walkin-offers i { width:14px; height:14px; }
-.walkin-offers-panel {
+.walkin-offers-panel, .bill-offers-panel {
     background:#fff; border:1px solid #e5e7eb; border-radius:10px;
     margin-bottom:10px; max-height:280px; overflow-y:auto;
 }
@@ -9730,4 +9730,465 @@ body.pos-selection-mode .walkin-picker {
     color: #E84908;
     border-color: transparent;
     box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+
+/* =====================================================
+   BILL PAYMENT CENTER MODAL — two-column layout
+   ===================================================== */
+.bill-payment-modal {
+    max-width: 820px !important;
+    width: 95% !important;
+    max-height: 90vh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+.bill-payment-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.bill-invoice-panel {
+    flex: 1;
+    min-width: 0;
+    border-right: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.bill-payment-panel {
+    width: 340px;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 16px;
+    gap: 14px;
+}
+
+/* Invoice panel */
+.bill-invoice-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.bill-invoice-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e293b;
+}
+.bill-invoice-date {
+    font-size: 12px;
+    color: #94a3b8;
+}
+.bill-invoice-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 16px;
+}
+.bill-invoice-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 13px;
+}
+.bill-invoice-item:last-child { border-bottom: none; }
+.bill-invoice-item-name {
+    flex: 1;
+    min-width: 0;
+}
+.bill-invoice-item-qty {
+    color: #64748b;
+    font-weight: 600;
+    margin-right: 8px;
+    white-space: nowrap;
+}
+.bill-invoice-item-name-text {
+    font-weight: 500;
+    color: #1e293b;
+}
+.bill-invoice-item-meta {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+.bill-invoice-item-price {
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    margin-left: 12px;
+}
+.bill-invoice-summary {
+    padding: 12px 16px;
+    border-top: 1px solid #e5e7eb;
+    background: #f8fafc;
+}
+.bill-invoice-summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 13px;
+    color: #475569;
+}
+.bill-invoice-summary-row.total {
+    border-top: 1px solid #e2e8f0;
+    margin-top: 6px;
+    padding-top: 8px;
+    font-weight: 700;
+    font-size: 16px;
+    color: #1e293b;
+}
+
+/* Total display */
+.bill-total-display {
+    text-align: center;
+    padding: 12px;
+    background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+    border-radius: 12px;
+    border: 1px solid #bbf7d0;
+}
+.bill-total-label {
+    display: block;
+    font-size: 12px;
+    color: #16a34a;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.bill-total-amount {
+    display: block;
+    font-size: 28px;
+    font-weight: 800;
+    color: #15803d;
+    line-height: 1.2;
+}
+
+/* Payment method buttons */
+.bill-payment-methods {
+    display: flex;
+    gap: 8px;
+}
+.bill-pay-btn {
+    flex: 1;
+    padding: 10px 8px;
+    border-radius: 10px;
+    border: 2px solid #e2e8f0;
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748b;
+    transition: all .2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.bill-pay-btn:hover {
+    border-color: #f97316;
+    color: #1e293b;
+    background: #fff7ed;
+}
+.bill-pay-btn.active {
+    border-color: #f97316;
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: white;
+    box-shadow: 0 4px 12px rgba(249,115,22,.25);
+}
+
+/* Split payment section */
+.bill-split-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+.bill-split-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.bill-split-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    min-width: 60px;
+}
+.bill-split-input-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.bill-split-qty-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background: white;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 700;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s;
+    padding: 0;
+    line-height: 1;
+}
+.bill-split-qty-btn:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+.bill-split-qty-btn:active {
+    transform: scale(0.95);
+}
+.bill-split-input {
+    width: 80px;
+    text-align: center;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 4px 6px;
+    font-size: 14px;
+    font-weight: 600;
+    background: white;
+}
+.bill-split-input[readonly] {
+    background: #f1f5f9;
+    color: #64748b;
+    border-color: #e2e8f0;
+}
+.bill-split-remaining {
+    text-align: center;
+    font-size: 12px;
+    color: #94a3b8;
+    padding-top: 4px;
+    border-top: 1px dashed #e2e8f0;
+}
+
+/* Split toggle */
+.bill-split-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px dashed #d1d5db;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    transition: all .2s;
+}
+.bill-split-toggle:hover {
+    border-color: #f97316;
+    color: #f97316;
+    background: #fff7ed;
+}
+.bill-split-toggle.active {
+    border-style: solid;
+    border-color: #f97316;
+    color: #f97316;
+    background: #fff7ed;
+}
+
+/* Offers */
+.bill-offers-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    transition: all .2s;
+}
+.bill-offers-btn:hover {
+    background: #f8fafc;
+    border-color: #f97316;
+    color: #f97316;
+}
+
+/* Coupon */
+.bill-coupon-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.bill-coupon-input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 12px;
+    outline: none;
+    transition: border .2s;
+}
+.bill-coupon-input:focus { border-color: #f97316; }
+.bill-coupon-apply {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    background: #f97316;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+    white-space: nowrap;
+}
+.bill-coupon-apply:hover { background: #ea580c; }
+.bill-coupon-clear {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    cursor: pointer;
+    font-size: 16px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.bill-coupon-clear:hover { color: #ef4444; border-color: #fca5a5; }
+.bill-coupon-hint {
+    font-size: 11px;
+    color: #64748b;
+    padding: 4px 0;
+}
+
+/* Manual discount */
+.bill-discount-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.bill-discount-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+}
+.bill-discount-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.bill-discount-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+.bill-discount-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    text-align: center;
+}
+.bill-discount-input:focus { border-color: #f97316; }
+.bill-discount-unit {
+    font-size: 13px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+.bill-discount-sep {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+/* Summary */
+.bill-summary {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+.bill-summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 13px;
+    color: #475569;
+}
+.bill-summary-discount { color: #059669; }
+.bill-summary-total {
+    border-top: 1px solid #e2e8f0;
+    margin-top: 4px;
+    padding-top: 8px;
+    font-size: 16px;
+    color: #1e293b;
+}
+
+/* Confirm button */
+.bill-confirm-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all .2s;
+    box-shadow: 0 4px 12px rgba(34,197,94,.25);
+}
+.bill-confirm-btn:hover {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    box-shadow: 0 6px 16px rgba(34,197,94,.35);
+    transform: translateY(-1px);
+}
+.bill-confirm-btn:active { transform: translateY(0); }
+.bill-confirm-btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Mobile: stack columns */
+@media (max-width: 700px) {
+    .bill-payment-body {
+        flex-direction: column;
+    }
+    .bill-invoice-panel {
+        border-right: none;
+        border-bottom: 1px solid #e5e7eb;
+        max-height: 55vh;
+        flex: 1;
+        min-height: 200px;
+    }
+    .bill-payment-panel {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 12px;
+    }
+    .bill-total-amount { font-size: 24px; }
+    .bill-payment-modal {
+        max-width: 100% !important;
+        max-height: 95vh !important;
+    }
 }
