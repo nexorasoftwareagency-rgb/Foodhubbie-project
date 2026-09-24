@@ -172,7 +172,8 @@ async function recordDiscountUsage({ OUTLET, discountId, orderId, customerPhone,
             orderId: orderId || '', customerPhone: customerPhone || '',
             amountGiven: Math.round(Number(amountGiven) || 0),
             appliedAt: Date.now(), channel: channel || 'whatsapp',
-            source: discountSource || ''
+            source: discountSource || '',
+            discountSource: discountSource || ''
         });
         return true;
     } catch (e) {

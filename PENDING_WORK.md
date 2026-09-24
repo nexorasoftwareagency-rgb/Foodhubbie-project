@@ -244,7 +244,7 @@
 | **Files Changed** | `Admin/style.css` (lines 10177-10181) |
 | **Verified** | Build passes, deploy successful |
 
-### P2-8: Void Bill Discount Analytics Gap (M5) — **OPEN**
+### P2-8: Void Bill Discount Analytics Gap (M5) — **✅ FIXED**
 | Field | Detail |
 |-------|--------|
 | **Problem** | Voiding a table/group bill does not fully reverse bill-level discount in analytics/reports |
@@ -252,9 +252,10 @@
 | **Issue** | (1) Void only calls `recordDiscountUsage(..., isVoid: true)` when `discountId` is set — **manual bill discounts with no `discountId` are never usage-tracked, so void cannot reverse them**. (2) `discountsReports` sums `amountGiven` but renders rows as `-${amountGiven}` — void rows store **negative** `amountGiven`, so UI shows double-negative (`-₹-50`). (3) `tableAnalytics.totalRevenue` is reduced by session `subtotal` on void, not by `subtotal − billDiscount`, so revenue KPI can disagree with paid history. |
 | **Reason** | `recordDiscountUsage` requires a discount definition; manual payment-modal bill discount often writes only `sess.discount`/`g.discount` + label without `discountId` |
 | **Impact** | Discount reports under-count void reversals for manual bill discounts; void rows display wrong; table revenue KPI may drift from cash collected |
-| **Status** | **OPEN — deferred (M5)** |
-| **Fix Sketch** | (a) On bill settle, always write a usage row for bill discount (synthetic id or `source: 'manual:bill'`); (b) on void, reverse with matching negative amount; (c) reports: show `Math.abs(amountGiven)` with void badge, or filter void pairs; (d) `tableAnalytics` void: subtract `(subtotal − billDiscount)` or track `paidAmount` delta |
-| **Verify** | Apply bill discount without picking a catalog discount → void → discountsUsage has void row; reports total nets to 0; tableAnalytics matches paidAmount history |
+| **Status** | **✅ FIXED (this session)** |
+| **Fix Applied** | (a) `_billComputedDiscount` + POS manual now set synthetic `discountId` (`manual:flat`/`manual:percent`) + `discountLabel: 'Manual Discount'` → usage row written on settle, reversed on void. (b) Reports/usage rows render `Math.abs(amountGiven)` with green `void` badge (`+₹X void`) instead of `-₹-50`. (c) `tableAnalytics` void subtracts `paidAmount` (or `subtotal − discount` for legacy closed sessions); group-only sessions skip analytics reverse (group pay never credited it). (d) `recordDiscountUsage` writes both `source` and `discountSource` fields (bot too) so type filters/void badge resolve. (e) KPI redemptions count excludes void rows; savings stay signed (pairs net to 0). |
+| **Files Changed** | `Admin/js/features/tables.js`, `discountsReports.js`, `discounts.js`, `discount-evaluator.js`, `pos.js`, `Admin/style.css`, `bot/discount-engine.js` |
+| **Verified** | `node --check` clean ×6; build + firebase deploy OK; bot scp MD5 match + pm2 restart; E2E 11/11 |
 
 ### P2-9: Coupon Discount Base Amount Inconsistency (M7) — **OPEN**
 | Field | Detail |
@@ -368,10 +369,10 @@
 |----------|-------|------------------------|
 | **P0** | 6 | ✅ YES (all 6 — P0-4/5/6 fixed this session) |
 | **P1** | 6 | ✅ YES (all 6) |
-| **P2** | 9 | ⚠️ Recommended (7/9 done; M5+M7 open) |
+| **P2** | 9 | ⚠️ Recommended (8/9 done; only M7 open) |
 | **P3** | 6 | 📋 Backlog (5/6 done) |
 
-**Total Active Issues: 15** (0 P0 + 0 P1 + 2 P2 open + 1 P3 remaining)
+**Total Active Issues: 14** (0 P0 + 0 P1 + 1 P2 open + 1 P3 remaining)
 
 ---
 
@@ -379,8 +380,7 @@
 
 ```bash
 # 1. P3-2: Verify Sharp conversion with real WhatsApp message
-# 2. P2-8 (M5): void bill-discount usage reverse + reports abs display + tableAnalytics paid delta
-# 3. P2-9 (M7): shared coupon base helper (menu + evaluator + bot), lock stacking policy
+# 2. P2-9 (M7): shared coupon base helper (menu + evaluator + bot), lock stacking policy
 ```
 ```
 

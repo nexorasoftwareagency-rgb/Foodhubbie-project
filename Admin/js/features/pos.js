@@ -883,9 +883,13 @@ export async function submitWalkinSale() {
         if (state.walkinDiscount > 0) {
             discountValue = state.walkinDiscount;
             discountSource = 'manual:flat';
+            discountId = 'manual:flat';
+            discountLabel = 'Manual Discount';
         } else if (state.walkinDiscountPct > 0) {
             discountValue = (subtotal * state.walkinDiscountPct) / 100;
             discountSource = 'manual:percent';
+            discountId = 'manual:percent';
+            discountLabel = 'Manual Discount';
         } else {
             // Auto-evaluate (best of: firstOrder / coupon / global / category)
             try {

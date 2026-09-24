@@ -8251,6 +8251,12 @@ body.pos-selection-mode .walkin-picker {
 .drcr-discount { font-weight:600; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .drcr-customer, .drcr-order, .drcr-source { color:#475569; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .drcr-amount { font-weight:700; color:#dc2626; text-align:right; }
+.drcr-amount.void, .usage-log-amount.void { color:#16a34a; }
+.void-badge {
+    display:inline-block; font-size:9px; font-weight:800; text-transform:uppercase;
+    letter-spacing:.5px; padding:1px 5px; border-radius:3px;
+    background:#dcfce7; color:#166534; margin-right:4px; vertical-align:middle;
+}
 .channel-chip {
     font-size:10px; padding:2px 6px; border-radius:4px;
     text-transform:uppercase; letter-spacing:.5px; font-weight:700;
