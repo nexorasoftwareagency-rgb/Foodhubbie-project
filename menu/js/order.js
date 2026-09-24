@@ -122,7 +122,9 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
     if (discountAmount > 0) {
         orderPayload.discount = discountAmount;
         orderPayload.discountLabel = discount.label || '';
-        orderPayload.discountSource = discount.source || '';
+        // validateCoupon now returns source:'coupon:CODE'; fall back for callers
+        // that only provide couponCode (bot re-verify extracts claimed code from this).
+        orderPayload.discountSource = discount.source || (discount.couponCode ? 'coupon:' + discount.couponCode : '');
         orderPayload.discountId = discount.discountId || '';
         orderPayload.discountMode = discount.mode || 'fixed';
         orderPayload.discountValue = discount.value || 0;

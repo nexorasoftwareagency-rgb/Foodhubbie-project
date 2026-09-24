@@ -993,11 +993,13 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
         }
 
         if (!jid) {
-            const status = (order.status || "Unknown").toUpperCase();
             const type = (order.type || order.orderType || "Walk-in");
-            if (order.phone !== "Walk-in") {
+            // Dine-in QR orders intentionally carry no phone (PII lives in
+            // tableSessionsContact) — silent skip, not a warning.
+            const isDineIn = /dine|walk/i.test(String(type));
+            if (!isDineIn) {
                 console.warn(`[BOT] ⚠️ Skipping Notification for #${formatOrderId(order.orderId || id)} (${type}): No valid phone. Value: "${order.phone}"`);
-                updateData(`bot/logs/${id}`, { error: "No valid JID", phone: order.phone && order.phone !== 'undefined' ? order.phone : null, type, timestamp: Date.now() }, order.outlet || OUTLET).catch(() => { });
+                updateData(`bot/logs/${id}`, { error: "No valid JID", phone: order.phone || null, type, timestamp: Date.now() }, order.outlet || OUTLET).catch(() => { });
             }
             return;
         }
@@ -1243,9 +1245,12 @@ async function verifyQrOrderDiscount(orderId, order, OUTLET) {
         const claimedCouponCode = (order.discountSource || '').startsWith('coupon:')
             ? order.discountSource.slice('coupon:'.length)
             : null;
+        // order.js stores items as an object ({item_0,...}); delivery-order.js
+        // stores an array. _cartHasCategory only checks arrays — normalize.
+        const cartForVerify = Array.isArray(order.items) ? order.items : Object.values(order.items || {});
         verified = await discountEngine.evaluateDiscount({
             OUTLET, customer: null, subtotal: order.subtotal,
-            couponCode: claimedCouponCode, cart: order.items, channel: 'website'
+            couponCode: claimedCouponCode, cart: cartForVerify, channel: 'website'
         });
         correctedDiscount = verified ? verified.amount : 0;
     } catch (discErr) {

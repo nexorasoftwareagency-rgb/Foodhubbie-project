@@ -58,28 +58,34 @@
 | **Fix Applied** | Removed 7 dead exports from `window.__tables` object |
 | **Verified** | Build passes, all action dispatcher calls still work |
 
-### P0-4: Record Walkout DB Rules — Deployed but UNTESTED — **✅ RULES DEPLOYED**
+### P0-4: Record Walkout Writes to Root Path — **✅ FIXED & RETESTED (200 OK)**
 | Field | Detail |
 |-------|--------|
-| **Problem** | Security rules for `logs/walkouts` added but never verified against real write |
-| **Place** | `database.rules.json:151-156` (added `logs` block under `$outletId`) |
-| **Issue** | Rules deployed via `firebase deploy --only database` but last Playwright test showed `PERMISSION_DENIED` on walkout write |
-| **Reason** | Rules syntax may not match actual data path (`logs/walkouts` vs `logs/walkouts/$walkoutId`), or auth context mismatch |
-| **Impact** | **Data loss risk** — walkouts silently fail to record, no audit trail for dine-and-dash |
-| **Fix Applied** | Rules already present in deployed `database.rules.json`; need real-order test to verify |
-| **Status** | Rules deployed; manual verification needed with real walkout scenario |
-| **Issue** | Exported but never called externally: `closeEditor`, `save`, `closeQr`, `bulkPrint`, `exportCsv`, `setBillDiscount`, `setBillDiscountPct` |
-| **Reason** | Legacy exports from old table editor / QR modal / discount inline handlers. New flow uses inline event listeners in `openTableBillReview` |
-| **Impact** | API surface confusion, potential accidental calls, bundle bloat |
+| **Problem** | Walkouts written to root `/logs/walkouts` (no write rule) instead of outlet-scoped path — PERMISSION_DENIED, no audit trail |
+| **Place** | `Admin/js/features/tables.js` `recordWalkout` / `checkAndRecordWalkout` |
+| **Root Cause** | `Outlet.ref('')` returns ROOT ref; `logs` is in `Outlet.globalPaths` so writes went to `/logs/walkouts` |
+| **Impact** | **Data loss** — walkouts silently failed to record |
+| **Fix Applied** | Switched to `Outlet.multiUpdate(updates)` with outlet-relative keys: `logs/walkouts/{id}`, `tableSessions/{sid}/walkout`, `orders/{id}/status` |
+| **Verified** | `tests/walkout-retest.spec.js` — REST PUT with admin ID token → 200 OK, read-back verified, cleanup done. E2E 11/11 pass |
 
-### P0-4: Record Walkout DB Rules — Deployed but **UNTESTED**
+### P0-5: Bot Dine-in "No valid phone" Spam — **✅ FIXED**
 | Field | Detail |
 |-------|--------|
-| **Problem** | Security rules for `logs/walkouts` added but never verified against real write |
-| **Place** | `database.rules.json:151-156` (added `logs` block under `$outletId`) |
-| **Issue** | Rules deployed via `firebase deploy --only database` but last Playwright test showed `PERMISSION_DENIED` on walkout write |
-| **Reason** | Rules syntax may not match actual data path (`logs/walkouts` vs `logs/walkouts/$walkoutId`), or auth context mismatch |
-| **Impact** | **Data loss risk** — walkouts silently fail to record, no audit trail for dine-and-dash |
+| **Problem** | Every dine-in QR order logged `⚠️ No valid phone` + wrote `bot/logs/{id}` — intentional (PII in `tableSessionsContact`) but spammed logs |
+| **Place** | `bot/index.js` ~995-1004 (`if (!jid)` block) |
+| **Fix Applied** | Silent skip for `/dine\|walk/i` types; non-dine-in still warns + writes bot/logs |
+| **Deployed** | scp → `/var/www/foodhubbie/bot/` (NOT `/home/ubuntu/`), `pm2 restart bot-roshani-pizza-pizza`, MD5 verified |
+| **Verified** | `node --check` pass; live bot MD5 matches local |
+
+### P0-6: QR Coupon Discount Mismatch (claimed vs applied) — **✅ FIXED**
+| Field | Detail |
+|-------|--------|
+| **Problem** | Bot re-verify claimed ₹0 / wrong amount on webview delivery coupons — channel gate missing, `discountSource` empty, cart object vs array |
+| **Place** | `menu/js/discount.js` `validateCoupon`; `menu/js/order.js` discountSource; `bot/index.js` verifyQrOrderDiscount; `bot/discount-engine.js` |
+| **Fix Applied** | (1) validateCoupon: skip non-`website`/`all` channels + return `source:'coupon:CODE'`; (2) order.js: fallback `discountSource` from couponCode; (3) bot: normalize items object→array; (4) engine: `both` includes `table`, `_cartHasCategory` handles object cart |
+| **Deployed** | `node tools/build.mjs` + `firebase deploy --only database,hosting:*`; bot scp + restart |
+| **Verified** | `node --check` all; E2E 11/11 |
+| **Known Gap** | Category discounts on QR need `categoryId` on cart lines (deferred) |
 
 ---
 

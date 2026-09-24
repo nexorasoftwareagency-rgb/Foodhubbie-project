@@ -27,8 +27,10 @@ async function getAllDiscounts(OUTLET) {
 }
 
 function _cartHasCategory(cart, categoryIds) {
-    if (!Array.isArray(cart) || !Array.isArray(categoryIds) || categoryIds.length === 0) return false;
-    return cart.some(item => categoryIds.includes(item.categoryId) || categoryIds.includes(item.category));
+    if (!Array.isArray(categoryIds) || categoryIds.length === 0) return false;
+    const arr = Array.isArray(cart) ? cart : Object.values(cart || {});
+    if (!arr.length) return false;
+    return arr.some(item => categoryIds.includes(item.categoryId) || categoryIds.includes(item.category));
 }
 
 function _discountAmount(d, subtotal) {
@@ -73,7 +75,7 @@ async function evaluateDiscount({ OUTLET, customer, subtotal, couponCode, cart, 
         && (d.endsAt === 0 || d.endsAt == null || now <= d.endsAt)
         && (!d.minSubtotal || subtotal >= d.minSubtotal)
         && (!d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
-        && (!d.channel || d.channel === 'all' || d.channel === channel || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos')))
+        && (!d.channel || d.channel === 'all' || d.channel === channel || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos' || channel === 'table')))
         && (!d.perCustomerLimit || !customerPhone || (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit)
     );
 
