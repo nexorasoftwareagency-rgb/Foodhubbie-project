@@ -2073,7 +2073,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     // friction for a customer who's ready to order). Otherwise send
                     // ONLY a plain greeting + an explicit ask, and wait for them to
                     // say the word before any promotional content goes out.
-                    if (/^(menu|order|food|khana|start|hi|hello|hey)$/i.test(text.trim())) {
+                    if (/^(menu|order|food|khana|start|hi+|hello+|hey+)$/i.test(text.trim())) {
                         await sendOrderFlow(sock, sender, pushName, user);
                         user.step = "WEBVIEW";
                         return;
@@ -2095,7 +2095,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                 // stops a confused/annoyed reply ("who is this", "not interested")
                 // from ever reaching the order-link send.
                 if (user.step === "AWAITING_ORDER_INTENT") {
-                    if (/^(menu|order|food|khana|start)$/i.test(text.trim())) {
+                    if (/^(menu|order|food|khana|start|hi+|hello+|hey+)$/i.test(text.trim())) {
                         const store = await getData("settings/Store", OUTLET);
                         await resendMenuCTA(sock, sender, user, store, null);
                         user.step = "WEBVIEW";
@@ -2115,7 +2115,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         return sock.sendMessage(sender, { text: "📋 Type *status* to check your order status, or tap the menu link above to order again." });
                     }
                     // C3: Menu keywords → resend just the menu CTA
-                    if (/^(order|menu|food|start|restart)$/i.test(text)) {
+                    if (/^(order|menu|food|start|restart|hi+|hello+|hey+)$/i.test(text)) {
                         return resendMenuCTA(sock, sender, user);
                     }
                     // C5: Anything else → nudge + resend the menu CTA
