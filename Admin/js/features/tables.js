@@ -31,7 +31,7 @@ import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runT
 import { state } from '../state.js';
 import { showToast, showConfirm, showDeleteConfirm } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
-import { haptic, escapeHtml, playNotificationSound, logAudit } from '../utils.js';
+import { haptic, escapeHtml, playNotificationSound, logAudit, formatOrderId } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { evaluateDiscount, recordDiscountUsage, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
 
@@ -347,7 +347,7 @@ function _orderListRow(o) {
     <div class="live-order-row" data-action="openTableDrawerByOrder" data-order-id="${escapeHtml(o.id)}">
         <div class="live-order-row-main">
             <span class="live-order-table-chip">Table ${tNum}</span>
-            <span class="live-order-id">#${escapeHtml(String(o.id).slice(-6).toUpperCase())}</span>
+            <span class="live-order-id">#${escapeHtml(formatOrderId(o.orderId || o.id))}</span>
             <span class="live-order-time">${new Date(o.createdAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         <div class="live-order-row-items">${itemsLine || 'No items'}</div>
@@ -398,7 +398,7 @@ function _kdsCard(o) {
     <div class="kds-card ${urgentCls}" data-order-id="${escapeHtml(o.id)}">
         <div class="kds-card-top">
             <span class="kds-card-table">Table ${tNum}${groupLabel ? ` <span class="kds-card-group">· ${escapeHtml(groupLabel)}</span>` : ''}</span>
-            <span class="kds-card-id">#${escapeHtml(String(o.id).slice(-6).toUpperCase())}</span>
+            <span class="kds-card-id">#${escapeHtml(formatOrderId(o.orderId || o.id))}</span>
         </div>
         <div class="kds-card-items">${itemsLines}</div>
         <div class="kds-card-actions">${actionBtn}</div>
@@ -539,7 +539,7 @@ function _orderCardInDrawer(o, borderColor) {
     return `
     <div class="drawer-order-block" style="${bdrStyle}">
         <div class="drawer-order-block-head">
-            <span>#${escapeHtml(String(o.id).slice(-6).toUpperCase())}</span>
+            <span>#${escapeHtml(formatOrderId(o.orderId || o.id))}</span>
             <span class="badge ${_statusPillClass(o.status)}">${escapeHtml(o.status || 'Placed')}</span>
         </div>
         ${itemLines}
@@ -2079,7 +2079,7 @@ async function _advanceOrder(orderId, nextStatus) {
 // is used instead. This avoids touching orders.js's render logic.
 // ---------------------------------------------------------------------
 function _jumpToOrderInOrdersTab(orderId) {
-    const shortId = String(orderId).slice(-6);
+    const shortId = formatOrderId(orderId);
     // window.switchTab is the global entry point main.js wires to every
     // data-action="switchTab" button; calling it directly here follows
     // the same call path a sidebar click would make.

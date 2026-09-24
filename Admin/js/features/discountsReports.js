@@ -8,7 +8,7 @@
  *   - CSV export of the per-discount summary
  */
 import { db, Outlet, get } from '../firebase.js';
-import { escapeHtml, logAudit, showToast } from '../utils.js';
+import { escapeHtml, logAudit, showToast, formatOrderId } from '../utils.js';
 import { ui, loadLucide } from '../ui.js';
 import { loadJSPDF } from './printing.js';
 
@@ -226,7 +226,7 @@ async function renderReport() {
                 const dateStr = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
                 const channel = String(u.channel || 'other');
                 const source = String(u.discountSource || 'auto');
-                const orderLink = u.orderId ? escapeHtml(u.orderId) : '\u2014';
+                const orderLink = u.orderId ? escapeHtml(formatOrderId(u.orderId)) : '\u2014';
                 return `
                     <div class="discount-recent-row">
                         <div class="drcr-time">${escapeHtml(dateStr)}</div>
@@ -388,7 +388,7 @@ export async function openCodeUses(discountId) {
                     <div class="usage-log-name">${escapeHtml(name)}</div>
                     <div class="usage-log-meta">
                         <span>${escapeHtml(u.customerPhone || '—')}</span>
-                        ${u.orderId ? `<span>·</span><span class="usage-log-order-link" data-action="viewOrderFromDiscountUsage" data-id="${escapeHtml(u.orderId)}" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">#${escapeHtml(String(u.orderId).slice(-5))}</span>` : ''}
+                        ${u.orderId ? `<span>·</span><span class="usage-log-order-link" data-action="viewOrderFromDiscountUsage" data-id="${escapeHtml(u.orderId)}" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">#${escapeHtml(formatOrderId(u.orderId))}</span>` : ''}
                         <span class="channel-chip channel-${escapeHtml(channel)}">${escapeHtml(channel)}</span>
                     </div>
                 </div>

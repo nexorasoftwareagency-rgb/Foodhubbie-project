@@ -8,7 +8,7 @@ import { logRiderError } from "@/services/auditService";
 import { toast } from "@/hooks/use-toast";
 import type { Rider, RiderStats } from "@/types";
 import type { OutletId } from "@/lib/constants";
-import { resolveBusinessIdForOutlet, outletBusinessIdCache } from "@/lib/constants";
+import { resolveBusinessIdForOutlet } from "@/lib/constants";
 
 type RiderContextValue = {
   rider: Rider | null;

@@ -5,7 +5,7 @@
 
 import { db, Outlet, tenantRef, serverTimestamp, ref, get, set, update, query, orderByChild, orderByKey, equalTo, limitToLast, startAt, endAt, endBefore, onValue, onChildAdded, onChildChanged } from '../firebase.js';
 import { state } from '../state.js';
-import { escapeHtml, showToast, playNotificationSound, startContinuousSound, stopContinuousSound, logAudit, calculateDistance, getFeeFromSlabs, addRiderNotification, getISTDateString, getSkeletonRows } from '../utils.js';
+import { escapeHtml, showToast, playNotificationSound, startContinuousSound, stopContinuousSound, logAudit, calculateDistance, getFeeFromSlabs, addRiderNotification, getISTDateString, getSkeletonRows, formatOrderId } from '../utils.js';
 import { showAlert, addNotification, highlightOrder } from './notifications.js';
 import { showPaymentPicker } from '../ui-utils.js';
 import { autoDeductStock } from './inventory.js';
@@ -73,7 +73,7 @@ export function initRealtimeListeners() {
             const isPostLoad = orderTime && orderTime > loadTime - 5000;
             if (order.status === "Placed" && isRecent && isPostLoad) {
                 showAlert(order);
-                addNotification(`New Order #${snap.key.slice(-5)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
+                addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
                 state.unacknowledgedOrders.add(snap.key);
                 startContinuousSound();
                 setTimeout(() => { highlightOrder(snap.key); }, 1000);
@@ -87,7 +87,7 @@ export function initRealtimeListeners() {
             // Handle Pending→Placed transition for QR/dine-in orders
             if (order.status === "Placed" && !state.unacknowledgedOrders.has(snap.key)) {
                 showAlert(order);
-                addNotification(`New Order #${snap.key.slice(-5)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
+                addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
                 state.unacknowledgedOrders.add(snap.key);
                 startContinuousSound();
                 setTimeout(() => { highlightOrder(snap.key); }, 1000);
@@ -100,7 +100,7 @@ export function initRealtimeListeners() {
                 }
             }
             if (order.status === "Delivered") {
-                addNotification(`Order Delivered (#${snap.key.slice(-5)})`, `Customer: ${order.customerName || 'Walk-in'} • ₹${order.total}`, 'delivered', state.currentOutlet);
+                addNotification(`Order Delivered (#${formatOrderId(order.orderId || snap.key)})`, `Customer: ${order.customerName || 'Walk-in'} • ₹${order.total}`, 'delivered', state.currentOutlet);
             }
         }
     });
@@ -513,7 +513,7 @@ export async function renderOrders(snap) {
             }
         };
         
-        const safeOrderId = escapeHtml(o.orderId || id.slice(-5));
+        const safeOrderId = escapeHtml(formatOrderId(o.orderId || id));
         const safeCustomerName = escapeHtml(o.customerName || "Customer");
         const safeStatus = escapeHtml(o.status || "Unknown");
         const safeStatusClass = safeStatus.replace(/ /g, '');
@@ -831,7 +831,7 @@ async function renderPriorityOrders(orders) {
         return `
             <div class="priority-card-v4 status-${safeStatusClass}" data-order-id="${id}">
                 <div class="header">
-                    <span class="order-id">#${id.slice(-5).toUpperCase()}</span>
+                    <span class="order-id">#${formatOrderId(o.orderId || id)}</span>
                     <span class="time">${timeStr}</span>
                 </div>
                 <div class="cust-info">
@@ -1084,7 +1084,7 @@ export async function updateStatus(id, status) {
     try {
         logger.firebase('ORDERS', `Saving status update: orders/${id} → ${status}`);
         await update(Outlet.ref(`orders/${id}`), updates);
-        logAudit("Orders", `Updated Status: #${id.slice(-5)} -> ${status}`, id);
+        logAudit("Orders", `Updated Status: #${formatOrderId(order.orderId || id)} -> ${status}`, id);
         showToast(`Order status updated to ${status}`, "success");
         logger.success('ORDERS', `Status updated: ${id} → ${status}`);
         closeOrderDrawer();
@@ -1142,9 +1142,9 @@ export async function assignRider(id, riderId) {
         showToast(`Rider ${rider.name} assigned. Status updated if needed.`, "success");
         
         // Notify Rider (in-app notification; FCM push handled by Cloud Function)
-        await addRiderNotification(riderId, "New Order Assigned!", `Order #${id.slice(-5)} for ₹${order.total} assigned to you.`, 'new');
+        await addRiderNotification(riderId, "New Order Assigned!", `Order #${formatOrderId(order.orderId || id)} for ₹${order.total} assigned to you.`, 'new');
 
-        logAudit("Orders", `Assigned Rider: ${rider.name} to #${id.slice(-5)}`, id);
+        logAudit("Orders", `Assigned Rider: ${rider.name} to #${formatOrderId(order.orderId || id)}`, id);
         logger.success('ORDERS', `Rider ${rider.name} assigned to ${id}`);
     } catch (e) {
         logger.error('ORDERS', `Rider assignment failed: ${e.message}`, e);
@@ -1162,7 +1162,7 @@ export async function markAsPaid(id) {
     if (!method) return;
     try {
         await update(Outlet.ref(`orders/${id}`), { paymentMethod: method, paymentStatus: "Paid" });
-        logAudit("Payments", `Marked Order Paid: #${id.slice(-5)} via ${method}`, id);
+        logAudit("Payments", `Marked Order Paid: #${formatOrderId(order.orderId || id)} via ${method}`, id);
         showToast(`Order marked as PAID via ${method}`, "success");
     } catch (e) {
         showToast("Update failed: " + e.message, "error");
@@ -1189,7 +1189,7 @@ export async function saveDeliveredOrder(id) {
             deliveredAt: serverTimestamp()
         });
         closeOrderDrawer();
-        logAudit("Orders", `Order Delivered: #${id.slice(-5)}`, id);
+        logAudit("Orders", `Order Delivered: #${formatOrderId(order.orderId || id)}`, id);
         showToast("Order finalized and delivered!", "success");
     } catch (e) {
         showToast("Finalization failed: " + e.message, "error");
@@ -1386,7 +1386,7 @@ export async function openOrderDrawer(id) {
             <div class="dw-toprow">
                 <span class="dw-type-badge"><i data-lucide="${orderTypeIcon}" style="width:9px;height:9px;"></i> ${escapeHtml(orderType)}</span>
             </div>
-            <div class="dw-id">#${escapeHtml(order.orderId || id.slice(-5))}</div>
+            <div class="dw-id">#${escapeHtml(formatOrderId(order.orderId || id))}</div>
             <div class="dw-meta-row">
                 <span class="dw-time">${dateStr} at ${timeStr}</span>
                 ${!['Delivered', 'Cancelled'].includes(order.status) ? `<span class="dw-age-chip ${age.cls}" id="dwAgeChip"><i data-lucide="${age.icon}" style="width:9px;height:9px;"></i> ${age.mins}m ago</span>` : ''}

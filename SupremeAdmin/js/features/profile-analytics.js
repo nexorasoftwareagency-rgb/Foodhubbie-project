@@ -21,7 +21,7 @@
 
 import { registerAction } from '/js/main.js';
 import { getRawBusinesses } from '/js/data-store.js';
-import { refreshIcons, escapeHtml } from '/js/utils.js';
+import { refreshIcons, escapeHtml, formatOrderId } from '/js/utils.js';
 
 const PALETTE = { revenue: '#E84908', orders: '#2563eb', avgOrder: '#9333ea', newCust: '#d97706' };
 const PAY_COLORS = { upi: '#9333ea', cash: '#16a34a', cod: '#d97706' };
@@ -401,7 +401,7 @@ function renderTable(tbody, rows) {
     return `<tr>
       <td>
         <div class="pa-td-strong">${formatDateTime(o.createdAt)}</div>
-        <div class="pa-td-sub">#${escapeHtml(String(o.orderId || o.key || '').slice(-5).toUpperCase())}</div>
+        <div class="pa-td-sub">#${escapeHtml(formatOrderId(o.orderId || o.key))}</div>
       </td>
       <td>${count ? `${count} item${count === 1 ? '' : 's'}` : '—'}</td>
       <td>

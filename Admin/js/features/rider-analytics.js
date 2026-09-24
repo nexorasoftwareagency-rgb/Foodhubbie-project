@@ -5,7 +5,7 @@
 
 import { Outlet, tenantRef, db, ref, get, query, orderByChild, equalTo, startAt, endAt, push, set, serverTimestamp } from '../firebase.js';
 import { state } from '../state.js';
-import { escapeHtml, showToast, formatDate, getISTDateString, getSkeletonDivs } from '../utils.js';
+import { escapeHtml, showToast, formatDate, getISTDateString, getSkeletonDivs, formatOrderId } from '../utils.js';
 import { settleRiderWallet } from './riders.js';
 import { loadJSPDF } from './printing.js';
 
@@ -133,7 +133,7 @@ function _renderReport(orders, stats, settlements, riderId) {
                 const mins = _deliveryMinutes(o);
                 return `<tr>
                     <td>${formatDate(o.createdAt)}</td>
-                    <td>#${escapeHtml(String(o.id).slice(-5))}</td>
+                    <td>#${escapeHtml(formatOrderId(o.orderId || o.id))}</td>
                     <td>${(o.outlet || '').toUpperCase()}</td>
                     <td>${escapeHtml(o.paymentMethod || '—')}</td>
                     <td>₹${Number(o.deliveryFee || 0)}</td>
@@ -309,7 +309,7 @@ async function _sendWhatsApp() {
         `_${_reportRows.length} order(s) in period_`
     ];
     _reportRows.forEach(o => {
-        lines.push(`▫️ ${formatDate(o.createdAt)} | #${String(o.id).slice(-5)} | ${o.outlet?.toUpperCase() || ''} | ₹${Number(o.total || 0)} | ${o.status || ''}`);
+        lines.push(`▫️ ${formatDate(o.createdAt)} | #${formatOrderId(o.orderId || o.id)} | ${o.outlet?.toUpperCase() || ''} | ₹${Number(o.total || 0)} | ${o.status || ''}`);
     });
 
     _reportSending = true;
@@ -346,7 +346,7 @@ function _exportExcel() {
     if (_reportRows.length === 0) { showToast('No data to export. Run Analyze first.', 'info'); return; }
     const data = _reportRows.map(o => ({
         Date: formatDate(o.createdAt),
-        Order: '#' + String(o.id).slice(-5),
+        Order: '#' + formatOrderId(o.orderId || o.id),
         Outlet: (o.outlet || '').toUpperCase(),
         Payment: o.paymentMethod || '',
         'Delivery Fee': o.deliveryFee || 0,
@@ -383,7 +383,7 @@ async function _exportPDF() {
         head: [['Date', 'Order', 'Outlet', 'Payment', 'Fee', 'Total', 'Status']],
         body: _reportRows.map(o => [
             formatDate(o.createdAt),
-            '#' + String(o.id).slice(-5),
+            '#' + formatOrderId(o.orderId || o.id),
             (o.outlet || '').toUpperCase(),
             o.paymentMethod || '',
             '₹' + (o.deliveryFee || 0),

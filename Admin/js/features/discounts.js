@@ -6,7 +6,7 @@
 import { Outlet, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange } from '../firebase.js';
 import { state } from '../state.js';
 import { showToast, showConfirm } from '../ui-utils.js';
-import { haptic, escapeHtml, formatDate } from '../utils.js';
+import { haptic, escapeHtml, formatDate, formatOrderId } from '../utils.js';
 import { clearDiscountCache } from './discount-evaluator.js';
 import { loadLucide } from '../ui.js';
 
@@ -279,7 +279,7 @@ async function _renderUsageList() {
                                 const d = new Date(u.appliedAt || 0);
                                 const dateStr = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
                                 const channel = String(u.channel || 'other');
-                                const orderLink = u.orderId ? `<span class="usage-log-order-link" data-action="viewOrderFromDiscountUsage" data-id="${escapeHtml(u.orderId)}" style="cursor:pointer; color:#1d4ed8; text-decoration:underline;">#${String(u.orderId).slice(-5)}</span>` : '—';
+                                const orderLink = u.orderId ? `<span class="usage-log-order-link" data-action="viewOrderFromDiscountUsage" data-id="${escapeHtml(u.orderId)}" style="cursor:pointer; color:#1d4ed8; text-decoration:underline;">#${escapeHtml(formatOrderId(u.orderId))}</span>` : '—';
                                 return `
                                     <tr>
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(u.customerPhone || 'Walk-in')}</td>

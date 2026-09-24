@@ -20,7 +20,7 @@ import {
   serverTimestamp,
 } from "@/lib/firebase";
 import { dbPaths, PROXIMITY, OTP_LIMITS, type OutletId } from "@/lib/constants";
-import { getDistanceKm, isGhostOrder } from "@/lib/utils";
+import { getDistanceKm, isGhostOrder, formatOrderId } from "@/lib/utils";
 import { whatsappService } from "@/services/whatsappService";
 import type { AvailableOrder, OtpAttemptRecord, OutletSettings, RiderOrder } from "@/types";
 
@@ -318,7 +318,7 @@ export async function acceptOrder(params: {
   }
 
   if (customerPhone) {
-    await whatsappService.sendAccepted(outlet, customerPhone, riderName, orderId).catch(() => {});
+    await whatsappService.sendAccepted(outlet, customerPhone, riderName, formatOrderId(orderId)).catch(() => {});
   }
 }
 
@@ -367,7 +367,7 @@ export async function confirmPickup(params: {
   });
 
   if (customerPhone) {
-    await whatsappService.sendPickedUp(outlet, customerPhone, riderPhone, orderId).catch(() => {});
+    await whatsappService.sendPickedUp(outlet, customerPhone, riderPhone, formatOrderId(orderId)).catch(() => {});
   }
 }
 

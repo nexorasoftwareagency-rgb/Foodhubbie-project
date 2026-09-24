@@ -31,6 +31,19 @@ export const getFeeFromSlabs = (dist, slabs) => {
     return sorted[sorted.length - 1].fee;
 };
 
+// Unified order ID → display string. Callers add "#".
+// DDMMYY-N passes through; legacy YYYYMMDD-NNNN is rewritten to DDMMYY-N;
+// push-keys fall back to last-6 upper. Same logic lives in bot/utils.js,
+// menu/js/order.js, SupremeAdmin/js/utils.js, rider-app/src/lib/utils.ts.
+export function formatOrderId(o) {
+    const id = typeof o === 'string' ? o : (o && (o.orderId || o.id)) || '';
+    if (!id) return 'N/A';
+    if (/^\d{6}-\d+$/.test(id)) return id;
+    const m = String(id).match(/^(\d{4})(\d{2})(\d{2})-(\d+)$/);
+    if (m) return `${m[3]}${m[2]}${m[1].slice(2)}-${Number(m[4])}`;
+    return String(id).slice(-6).toUpperCase();
+}
+
 import { showToast, showConfirm } from './ui-utils.js';
 export { showToast, showConfirm };
 
@@ -107,7 +120,7 @@ export const playSuccessSound = () => {
 export const standardizeOrderData = (o) => {
     if (!o) return null;
 
-    const orderId = o.orderId || o.id || (o.key ? o.key.slice(-8).toUpperCase() : "ORD-N/A");
+    const orderId = o.orderId || o.id || (o.key ? formatOrderId(o.key) : "ORD-N/A");
     
     // Normalize items from various formats
     let rawItems = [];

@@ -3,6 +3,17 @@
  * Standardized templates for order printing.
  */
 
+// Local copy — this file is a classic script (no ESM imports).
+// Same logic as Admin/js/utils.js formatOrderId.
+function _fmtOrderId(id) {
+    if (!id) return 'N/A';
+    id = String(id);
+    if (/^\d{6}-\d+$/.test(id)) return id;
+    const m = id.match(/^(\d{4})(\d{2})(\d{2})-(\d+)$/);
+    if (m) return `${m[3]}${m[2]}${m[1].slice(2)}-${Number(m[4])}`;
+    return id.slice(-6).toUpperCase();
+}
+
 window.ReceiptTemplates = {
     /**
      * Generates HTML for a thermal receipt (76mm/80mm)
@@ -31,7 +42,7 @@ window.ReceiptTemplates = {
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Bill - ${order.orderId}</title>
+                <title>Bill - ${_fmtOrderId(order.orderId)}</title>
                 <style>
                     @page { margin: 0; }
                     * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
@@ -100,7 +111,7 @@ window.ReceiptTemplates = {
                 </div>
 
                 <div style="font-size: 0.8rem;">
-                    <div class="summary-row"><span>ORDER: #${order.orderId.slice(-5).toUpperCase()}</span> <span>${order.time || ''}</span></div>
+                    <div class="summary-row"><span>ORDER: #${_fmtOrderId(order.orderId)}</span> <span>${order.time || ''}</span></div>
                     <div class="summary-row"><span>DATE: ${order.date || ''}</span> <span>${order.paymentMethod || 'Cash'}</span></div>
                     ${order.tableNo ? `<div class="summary-row"><span class="bold">TABLE NO: ${order.tableNo}</span></div>` : ''}
                 </div>

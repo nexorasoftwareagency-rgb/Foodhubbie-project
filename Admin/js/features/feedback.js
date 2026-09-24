@@ -4,7 +4,7 @@
  */
 
 import { Outlet, onValue, isConnected, onConnectionChange } from '../firebase.js';
-import { escapeHtml, getSkeletonRows } from '../utils.js';
+import { escapeHtml, getSkeletonRows, formatOrderId } from '../utils.js';
 
 let _feedbackUnsub = null;
 let _connUnsub = null;
@@ -59,7 +59,7 @@ function _renderFeedTable() {
                 <div class="mob-td-sub">Log Time</div>
             </td>
             <td>
-                <div class="mob-td-strong">#${escapeHtml(f.orderId || 'N/A')}</div>
+                <div class="mob-td-strong">#${escapeHtml(formatOrderId(f.orderId))}</div>
             </td>
             <td>
                 <div class="mob-td-strong">${escapeHtml(name)}</div>

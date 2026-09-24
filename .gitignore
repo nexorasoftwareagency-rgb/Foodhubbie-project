@@ -107,3 +107,6 @@ tools/ssm-*.ps1
 # Stray empty file
 {
 
+
+playwright-report/
+.agent/

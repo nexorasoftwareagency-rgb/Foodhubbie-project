@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { escapeHtml, playNotificationSound } from '../utils.js';
+import { escapeHtml, playNotificationSound, formatOrderId } from '../utils.js';
 
 /**
  * SHOW ALERT
@@ -34,7 +34,7 @@ export function showAlert(data, type = 'info') {
 
         div.innerHTML = `
             <div class="alert-content" data-action="switchTab" data-tab="orders">
-                <div class="alert-title">${outletIcon} New Order #${escapeHtml(orderKey.slice(-5))}</div>
+                <div class="alert-title">${outletIcon} New Order #${escapeHtml(formatOrderId(order.orderId || orderKey))}</div>
                 <div class="alert-sub">₹${escapeHtml(order.total)} • ${itemCount} item(s)</div>
             </div>
             <button class="alert-print-btn" data-action="printReceiptById" data-id="${escapeHtml(orderKey)}">🖨️ Print</button>
@@ -243,7 +243,7 @@ export function highlightOrder(orderId) {
         let row = document.getElementById(`row-${orderId}`);
         if (!row) {
             const rows = document.querySelectorAll('tr');
-            rows.forEach(r => { if (r.innerText.includes(orderId.slice(-5))) row = r; });
+            rows.forEach(r => { if (r.innerText.includes(formatOrderId(orderId))) row = r; });
         }
         if (row) {
             row.classList.add('highlight');

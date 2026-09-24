@@ -1,6 +1,6 @@
 import { Outlet, get, query, orderByChild, equalTo, limitToLast } from '../firebase.js';
 import { updateStatus } from './orders.js';
-import { standardizeOrderData, showToast } from '../utils.js';
+import { standardizeOrderData, showToast, formatOrderId } from '../utils.js';
 
 let _jspdfLoaded = false;
 let _jspdfPromise = null;
@@ -303,7 +303,7 @@ export async function printKotById(orderId) {
             <h2>${storeName}</h2>
             <div class="sub">KITCHEN ORDER TICKET</div>
             <div class="divider"></div>
-            <div style="font-size:12px;"><b>Order:</b> #${o.orderId || orderId.slice(-8).toUpperCase()}</div>
+            <div style="font-size:12px;"><b>Order:</b> #${formatOrderId(o.orderId || orderId)}</div>
             <div style="font-size:12px;"><b>Date:</b> ${dateStr} ${timeStr}</div>
             ${o.tableNo ? `<div style="font-size:12px;"><b>Table:</b> ${o.tableNo}</div>` : ''}
             ${o.customerName ? `<div style="font-size:12px;"><b>Customer:</b> ${o.customerName}</div>` : ''}

@@ -38,7 +38,7 @@
  * ============================================================================
  */
 import { Outlet, tenantRef, get, ref, db, push, set, serverTimestamp } from '../firebase.js';
-import { escapeHtml, showToast } from '../utils.js';
+import { escapeHtml, showToast, formatOrderId } from '../utils.js';
 
 let sparkRevenue = null, sparkOrders = null, sparkAvg = null, sparkNewCust = null;
 let overviewChart = null, paymentDonut = null;
@@ -275,7 +275,7 @@ function _renderDataTable(orders) {
         return `<tr>
             <td>
                 <div class="mob-td-strong">${formatDateTime(o.createdAt)}</div>
-                <div class="mob-td-sub">#${escapeHtml(String(o.orderId || o.id || '').slice(-5).toUpperCase())}</div>
+                <div class="mob-td-sub">#${escapeHtml(formatOrderId(o.orderId || o.id))}</div>
             </td>
             <td>
                 <div class="mob-td-strong">${escapeHtml(o.customerName || 'Guest')}</div>

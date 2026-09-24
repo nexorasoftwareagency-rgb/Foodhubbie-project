@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PackageX } from "lucide-react";
 import type { OfflineAction } from "@/types";
+import { formatOrderId } from "@/lib/utils";
 
 const QUEUE_KEY = "foodhubbie_offline_queue";
 
@@ -124,7 +125,7 @@ export function useOfflineQueueProcessor() {
               riderLng: pos?.lng ?? p.outletLng,
               accuracy: pos?.accuracy,
             });
-            toast.success(`Order #${String(p.orderId).slice(-6)} accepted (synced)`);
+            toast.success(`Order #${formatOrderId(p.orderId)} accepted (synced)`);
           } else if (action.type === "REACHED_OUTLET") {
             const pos = await getCurrentPositionOnce().catch(() => null);
             await orderService.markReachedOutlet({

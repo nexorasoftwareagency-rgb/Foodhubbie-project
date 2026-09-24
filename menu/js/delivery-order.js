@@ -21,7 +21,8 @@
  *      subsequent WhatsApp update (Confirmed, Ready, Rider assigned + OTP,
  *      Delivered) automatically.
  */
-import { outletRef, push, set, get, OUTLET } from './firebase.js';
+import { outletRef, set, get, OUTLET } from './firebase.js';
+import { generateOrderId } from './order.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
 
 function round2(n) { return Math.round(n * 100) / 100; }
@@ -82,9 +83,9 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
     const discountAmount = discount && discount.amount > 0 ? Math.min(round2(discount.amount), subtotal + deliveryFee) : 0;
     const total = round2(subtotal + deliveryFee - discountAmount);
 
-    const newOrderRef = push(outletRef('orders'));
+    const orderId = await generateOrderId();
     const orderPayload = {
-        orderId: newOrderRef.key,
+        orderId,
         outlet: OUTLET,
         type: 'Online',
         source: 'webview_delivery',   // bot finalization hook keys on this; src=wa/qr is UI-only
@@ -118,7 +119,7 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         orderPayload.discountGlobalLimit = discount.maxCap || 0;
     }
 
-    await set(newOrderRef, orderPayload);
+    await set(outletRef(`orders/${orderId}`), orderPayload);
 
-    return { orderId: newOrderRef.key, total, deliveryFee };
+    return { orderId, total, deliveryFee };
 }

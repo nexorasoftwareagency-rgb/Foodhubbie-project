@@ -3,6 +3,7 @@
  * Pure rendering helpers — no Firebase calls live here. app.js calls these
  * functions and wires their button events.
  */
+import { formatOrderId } from './order.js';
 
 export function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -428,7 +429,7 @@ export function renderTracking(orderId, order, tableNumber) {
     const tableLabelEl = document.getElementById('trackingTableLabel');
     const container = document.getElementById('trackerStepsContainer');
     if (!container) return;
-    if (orderIdEl) orderIdEl.textContent = `#RP-T${String(tableNumber).padStart(2, '0')}-${String(orderId).slice(-3).toUpperCase()}`;
+    if (orderIdEl) orderIdEl.textContent = '#' + formatOrderId(orderId);
     if (tableLabelEl) tableLabelEl.textContent = `Table ${String(tableNumber).padStart(2, '0')}`;
 
     const status = order.status || 'Placed';

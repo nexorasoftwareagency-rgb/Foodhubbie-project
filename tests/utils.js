@@ -12,21 +12,23 @@ const TEST_URLS = {
   qrMenu: 'https://foodhubbie-qrmenu.web.app/?o=pizza&b=roshani-pizza&t=2135N2D5F5E3H6J4'
 };
 
+const FIREBASE_DB = 'https://foodhubbie-10-default-rtdb.firebaseio.com/businesses/roshani-pizza/outlets/pizza';
+
 /**
  * Login to admin dashboard
  */
 async function login(page) {
   await page.goto(TEST_URLS.admin);
   await page.waitForSelector('#loginEmail', { timeout: 30000 });
-  
+
   await page.fill('#loginEmail', ADMIN_CREDENTIALS.email);
   await page.fill('#loginPassword', ADMIN_CREDENTIALS.password);
   await page.click('#loginBtn');
-  
+
   // Wait for dashboard to load
   await page.waitForSelector('.layout:not(.hidden)', { timeout: 30000 });
   await page.waitForTimeout(2000); // Allow full initialization
-  
+
   console.log('[Utils] Login successful');
 }
 
@@ -57,11 +59,12 @@ async function goToTablesTab(page) {
 }
 
 /**
- * Find a table by number and return its button
+ * Find a table card by number (title attr: "Table 02 — …")
  */
 async function findTableButton(page, tableNumber) {
-  const selector = `button:has-text("${tableNumber} ")`;
-  await page.waitForSelector(selector, { timeout: 10000 });
+  const num = String(tableNumber).padStart(2, '0');
+  const selector = `button[data-action="openTableDrawer"][title^="Table ${num}"]`;
+  await page.waitForSelector(selector, { timeout: 15000 });
   return page.locator(selector).first();
 }
 
@@ -80,10 +83,19 @@ async function openTableDrawer(page, tableNumber) {
  * Click a button in the drawer by data-action
  */
 async function clickDrawerAction(page, action) {
-  const selector = `[data-action="${action}"]`;
+  const selector = `#tableDrawer [data-action="${action}"]`;
   await page.waitForSelector(selector, { timeout: 5000, state: 'visible' });
   await page.click(selector);
   await page.waitForTimeout(500);
+}
+
+/**
+ * Accept the showConfirm() modal (.dynamic-modal-overlay .btn-confirm)
+ */
+async function confirmDialog(page) {
+  await page.waitForSelector('.dynamic-modal-overlay .btn-confirm', { timeout: 5000 });
+  await page.click('.dynamic-modal-overlay .btn-confirm');
+  await page.waitForTimeout(1000);
 }
 
 /**
@@ -95,30 +107,73 @@ async function waitForModal(page, modalId) {
 }
 
 /**
- * Fill customer info in QR menu cart
+ * Free table N if it has an active session (cancel session → table free)
+ * Safe to call when already free.
+ */
+async function freeTableIfOccupied(page, tableNumber) {
+  await goToTablesTab(page);
+  const freeBtn = page.locator(`button[data-action="openTableDrawer"][title^="Table ${tableNumber}"]`);
+  await freeBtn.waitFor({ timeout: 15000 });
+  const title = await freeBtn.getAttribute('title');
+  if (/Free/i.test(title || '')) {
+    console.log('[Utils] Table', tableNumber, 'already free');
+    return;
+  }
+  await openTableDrawer(page, tableNumber);
+  const cancelBtn = page.locator('#tableDrawer [data-action="cancelSessionForTable"]');
+  if (await cancelBtn.count()) {
+    await cancelBtn.click();
+    await confirmDialog(page);
+    await page.waitForTimeout(1500);
+    console.log('[Utils] Freed table', tableNumber);
+  }
+  await page.keyboard.press('Escape').catch(() => {});
+  await page.waitForTimeout(500);
+}
+
+/**
+ * Fill customer info in QR menu cart (#checkoutName / #checkoutPhone)
  */
 async function fillCustomerInfo(page, name, phone) {
-  await page.fill('input[placeholder*="Rohan" i]', name);
-  await page.fill('input[placeholder*="98765" i]', phone);
+  await page.fill('#checkoutName', name);
+  await page.fill('#checkoutPhone', phone);
 }
 
 /**
  * Place order from QR menu
  */
 async function placeOrderFromQR(page) {
-  await page.click('button:has-text("PLACE ORDER")');
-  await page.waitForSelector('text=Order Received', { timeout: 15000 });
+  await page.click('#btnPlaceOrder');
+  await page.waitForSelector('#trackingOrderId', { timeout: 20000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('trackingOrderId');
+    return el && /^#\d{6}-\d+/.test((el.textContent || '').trim());
+  }, { timeout: 15000 });
   console.log('[Utils] Order placed successfully');
 }
 
 /**
- * Get order ID from QR menu confirmation
+ * Get unified display order id (DDMMYY-N, e.g. 240926-1) from tracking screen
  */
 async function getOrderId(page) {
-  const orderIdEl = await page.locator('text=/#[A-Z0-9]{5,}/').first();
-  const text = await orderIdEl.textContent();
-  const match = text.match(/#[A-Z0-9]{5,}/);
-  return match ? match[0].slice(1) : null;
+  const text = await page.locator('#trackingOrderId').textContent();
+  const match = (text || '').match(/#(\d{6}-\d+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Resolve full Firebase order key. For unified IDs the display IS the key.
+ * Legacy push-keys fall back to a suffix match against orders.json (auth-gated).
+ */
+async function resolveFullOrderId(page, shortId) {
+  if (!shortId) return null;
+  if (/^\d{6}-\d+$/.test(shortId)) return shortId;
+  const res = await page.request.get(`${FIREBASE_DB}/orders.json`);
+  const orders = await res.json().catch(() => ({}));
+  if (!orders) return null;
+  const suffix = shortId.toUpperCase();
+  const hit = Object.keys(orders).find(k => k.slice(-3).toUpperCase() === suffix);
+  return hit || null;
 }
 
 /**
@@ -196,8 +251,8 @@ async function confirmPayment(page) {
  */
 async function isTableFree(page, tableNumber) {
   const btn = await findTableButton(page, tableNumber);
-  const text = await btn.textContent();
-  return text.includes('Free');
+  const title = await btn.getAttribute('title');
+  return /Free/i.test(title || '');
 }
 
 /**
@@ -208,10 +263,10 @@ async function takeScreenshot(page, name) {
   const path = require('path');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `test-results/screenshots/${name}-${timestamp}.png`;
-  
+
   const dir = path.dirname(filename);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  
+
   await page.screenshot({ path: filename, fullPage: true });
   console.log('[Utils] Screenshot saved:', filename);
 }
@@ -219,16 +274,20 @@ async function takeScreenshot(page, name) {
 module.exports = {
   ADMIN_CREDENTIALS,
   TEST_URLS,
+  FIREBASE_DB,
   login,
   clearSWAndCaches,
   goToTablesTab,
   findTableButton,
   openTableDrawer,
   clickDrawerAction,
+  confirmDialog,
   waitForModal,
+  freeTableIfOccupied,
   fillCustomerInfo,
   placeOrderFromQR,
   getOrderId,
+  resolveFullOrderId,
   waitForOrderInAdmin,
   acceptOrderInKDS,
   markReadyInKDS,

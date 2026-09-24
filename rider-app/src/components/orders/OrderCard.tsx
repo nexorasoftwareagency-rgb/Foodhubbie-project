@@ -10,7 +10,7 @@ import { acceptOrder, OrderTakenError, ProximityError } from "@/services/orderSe
 import { enqueueOfflineAction } from "@/components/shared/OfflineQueue";
 import { logRiderError } from "@/services/auditService";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency, cn, formatOrderId } from "@/lib/utils";
 import type { AvailableOrder } from "@/types";
 
 export function OrderCard({ order }: { order: AvailableOrder }) {
@@ -74,7 +74,7 @@ export function OrderCard({ order }: { order: AvailableOrder }) {
           </span>
           <div>
             <div className="text-[14px] font-extrabold">{order.outletName}</div>
-            <div className="text-[10.5px] font-semibold text-muted-foreground/80 mt-0.5">#{order.id.slice(-8)}</div>
+            <div className="text-[10.5px] font-semibold text-muted-foreground/80 mt-0.5">#{formatOrderId(order.id)}</div>
           </div>
         </div>
         <Badge variant="success">READY</Badge>

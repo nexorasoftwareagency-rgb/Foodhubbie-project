@@ -1,6 +1,6 @@
 import { Outlet, tenantRef, db, ref, get, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { ui } from '../ui.js';
-import { showToast, formatDate, getISTDateString } from '../utils.js';
+import { showToast, formatDate, getISTDateString, formatOrderId } from '../utils.js';
 import { loadJSPDF } from './printing.js';
 import { initMobileAnalyticsUI, renderMobileAnalytics, cleanupMobileAnalytics } from './analytics-mobile.js';
 
@@ -176,7 +176,7 @@ export function downloadExcel() {
 
     const data = filtered.map(o => ({
         Date: formatDate(o.createdAt),
-        'Order ID': o.orderId || o.id,
+        'Order ID': formatOrderId(o.orderId || o.id),
         Customer: o.customerName || 'Guest',
         Phone: o.phone || '',
         Outlet: (o.outlet || 'pizza').toUpperCase(),
