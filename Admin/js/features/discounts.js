@@ -195,7 +195,7 @@ async function _renderUsageList() {
             appliedAt: u.appliedAt,
             channel: u.channel || 'unknown',
             source: u.source || 'auto',
-            discountSource: u.discountSource || ''
+            discountSource: u.discountSource || u.source || ''
         }));
 
         if (usageEntries.length === 0) {
@@ -279,6 +279,8 @@ async function _renderUsageList() {
                                 const d = new Date(u.appliedAt || 0);
                                 const dateStr = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
                                 const channel = String(u.channel || 'other');
+                                const amt = Number(u.amountGiven) || 0;
+                                const isVoid = amt < 0;
                                 const orderLink = u.orderId ? `<span class="usage-log-order-link" data-action="viewOrderFromDiscountUsage" data-id="${escapeHtml(u.orderId)}" style="cursor:pointer; color:#1d4ed8; text-decoration:underline;">#${escapeHtml(formatOrderId(u.orderId))}</span>` : '—';
                                 return `
                                     <tr>
@@ -286,7 +288,7 @@ async function _renderUsageList() {
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(u.customerPhone || 'Walk-in')}</td>
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(u.discountLabel || 'Discount')}</td>
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;"><span class="discount-type-badge discount-type-${escapeHtml(u.discountSource || 'auto')}">${escapeHtml(u.discountSource || 'auto')}</span></td>
-                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:right;">${_fmtINR(u.amountGiven)}</td>
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:right;${isVoid ? ' color:#16a34a;' : ''}">${isVoid ? `<span class="void-badge">void</span> +₹${Math.abs(amt).toLocaleString('en-IN')}` : _fmtINR(amt)}</td>
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;"><span class="channel-chip channel-${escapeHtml(channel)}">${escapeHtml(channel)}</span></td>
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${orderLink}</td>
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(dateStr)}</td>

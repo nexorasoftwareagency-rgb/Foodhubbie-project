@@ -119,8 +119,9 @@ export async function refreshDiscountsReport() {
 async function renderReport() {
     const filtered = _filterUsageByRange(REPORT_STATE.usage);
 
-    // KPIs
-    const totalRedemptions = filtered.length;
+    // KPIs — redemptions exclude void reversals (negative rows); savings stay signed so void pairs net to 0
+    const redemptions = filtered.filter(u => (Number(u.amountGiven) || 0) > 0);
+    const totalRedemptions = redemptions.length;
     const totalSavings = filtered.reduce((s, u) => s + (Number(u.amountGiven) || 0), 0);
     const now = Date.now();
     const activeCount = Object.values(REPORT_STATE.discounts).filter(d => _isActiveNow(d, now)).length;
@@ -146,7 +147,7 @@ async function renderReport() {
             });
         }
         const entry = perDiscount.get(k);
-        entry.count += 1;
+        if ((Number(u.amountGiven) || 0) > 0) entry.count += 1;
         entry.total += Number(u.amountGiven) || 0;
     }
     const breakdown = [...perDiscount.values()].sort((a, b) => b.total - a.total);
@@ -225,8 +226,10 @@ async function renderReport() {
                 const d = new Date(u.appliedAt || 0);
                 const dateStr = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
                 const channel = String(u.channel || 'other');
-                const source = String(u.discountSource || 'auto');
+                const source = String(u.discountSource || u.source || 'auto');
                 const orderLink = u.orderId ? escapeHtml(formatOrderId(u.orderId)) : '\u2014';
+                const amt = Number(u.amountGiven) || 0;
+                const isVoid = amt < 0;
                 return `
                     <div class="discount-recent-row">
                         <div class="drcr-time">${escapeHtml(dateStr)}</div>
@@ -235,7 +238,7 @@ async function renderReport() {
                         <div class="drcr-order">#${orderLink}</div>
                         <div class="drcr-channel"><span class="channel-chip channel-${escapeHtml(channel)}">${escapeHtml(channel)}</span></div>
                         <div class="drcr-source text-muted-small">${escapeHtml(source)}</div>
-                        <div class="drcr-amount">-${_fmtINR(u.amountGiven)}</div>
+                        <div class="drcr-amount${isVoid ? ' void' : ''}">${isVoid ? `<span class="void-badge">void</span> +${_fmtINR(Math.abs(amt))}` : `-${_fmtINR(amt)}`}</div>
                     </div>
                 `;
             }).join('');
@@ -264,7 +267,7 @@ export async function exportDiscountsReport() {
             });
         }
         const entry = perDiscount.get(k);
-        entry.count += 1;
+        if ((Number(u.amountGiven) || 0) > 0) entry.count += 1;
         entry.total += Number(u.amountGiven) || 0;
     }
     const rows = [...perDiscount.values()].sort((a, b) => b.total - a.total);
@@ -329,17 +332,18 @@ export async function openCodeUses(discountId) {
 
     if (!list) return;
 
+    const redemptionRows = sorted.filter(u => (Number(u.amountGiven) || 0) > 0);
     const totalSaved = sorted.reduce((s, u) => s + (Number(u.amountGiven) || 0), 0);
-    const avg = sorted.length > 0 ? Math.round(totalSaved / sorted.length) : 0;
+    const avg = redemptionRows.length > 0 ? Math.round(totalSaved / redemptionRows.length) : 0;
     const globalLimit = disc?.globalLimit || 0;
-    const usedCount = disc?.stats?.usedCount ?? sorted.length;
+    const usedCount = disc?.stats?.usedCount ?? redemptionRows.length;
     const pct = globalLimit ? Math.min(100, Math.round((usedCount / globalLimit) * 100)) : null;
 
     let kpiHtml = `
         <div class="discount-usage-kpis">
             <div class="discount-usage-kpi-card">
                 <div class="kpi-label">Times Used</div>
-                <div class="kpi-value">${sorted.length.toLocaleString('en-IN')}</div>
+                <div class="kpi-value">${redemptionRows.length.toLocaleString('en-IN')}</div>
             </div>
             <div class="discount-usage-kpi-card">
                 <div class="kpi-label">Total Given</div>
@@ -359,7 +363,7 @@ export async function openCodeUses(discountId) {
         </div>`;
     }
 
-    if (sorted.length === 0) {
+    if (redemptionRows.length === 0 && sorted.length === 0) {
         list.innerHTML = kpiHtml + `
             <div class="usage-log-empty">
                 <i data-lucide="ticket"></i>
@@ -380,8 +384,10 @@ export async function openCodeUses(discountId) {
         const name = _nameCache.get(cleanPhone) || u.customerPhone || 'Walk-in';
         const d = new Date(u.appliedAt || 0);
         const dateStr = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-        const channel = String(u.channel || 'other');
-        return `
+                const channel = String(u.channel || 'other');
+                const amt = Number(u.amountGiven) || 0;
+                const isVoid = amt < 0;
+                return `
             <div class="usage-log-row">
                 <div class="usage-log-avatar">${escapeHtml(_initials(name))}</div>
                 <div class="usage-log-info">
@@ -393,7 +399,7 @@ export async function openCodeUses(discountId) {
                     </div>
                 </div>
                 <div>
-                    <div class="usage-log-amount">-${_fmtINR(u.amountGiven)}</div>
+                    <div class="usage-log-amount${isVoid ? ' void' : ''}">${isVoid ? `<span class="void-badge">void</span> +${_fmtINR(Math.abs(amt))}` : `-${_fmtINR(amt)}`}</div>
                     <div class="usage-log-date">${escapeHtml(dateStr)}</div>
                 </div>
             </div>`;

@@ -1008,10 +1008,12 @@ function _billComputedDiscount(subtotal) {
         discountValue = _billManualDiscount;
         discountSource = MANUAL_DISCOUNT_SOURCES.FLAT;
         discountId = 'manual:flat';
+        discountLabel = 'Manual Discount';
     } else if (_billManualDiscountPct > 0) {
         discountValue = Math.round((subtotal * _billManualDiscountPct) / 100);
         discountSource = MANUAL_DISCOUNT_SOURCES.PERCENT;
         discountId = 'manual:percent';
+        discountLabel = 'Manual Discount';
     } else if (_billAutoDiscount && _billAutoDiscount.amount > 0) {
         discountValue = _billAutoDiscount.amount;
         discountId = _billAutoDiscount.discount.id;
@@ -1818,6 +1820,12 @@ export async function voidTableBill(tableId, groupId = null) {
         }
         const tableOrderCount = (sess.orders || []).length;
         const subtotal = _effectiveTotal(sess);
+        // P2-8: reverse analytics by what full-table payment actually credited.
+        // Group-only sessions never hit tableAnalytics (group pay skips it) — only
+        // reverse when paidAmount is set, or legacy closed sessions without it.
+        const paidAmt = Number(sess.paidAmount) || 0;
+        const analyticsBack = paidAmt > 0 ? paidAmt
+            : (sess.status === 'closed' ? Math.max(0, subtotal - Number(sess.discount || 0)) : 0);
         const updates = {};
         // NOTE: same fix as the group-void branch above — order-level
         // fields are written exclusively by the per-order runTransaction
@@ -1847,7 +1855,7 @@ export async function voidTableBill(tableId, groupId = null) {
             await runTransaction(Outlet.ref(`tableAnalytics/${tableId}`), (p) => {
                 p = p || { totalOrders: 0, totalRevenue: 0, avgSessionTime: 0, occupancyRate: 0 };
                 p.totalOrders = Math.max(0, (p.totalOrders || 0) - paidOrders.length);
-                p.totalRevenue = Math.max(0, (p.totalRevenue || 0) - subtotal);
+                p.totalRevenue = Math.max(0, (p.totalRevenue || 0) - analyticsBack);
                 return p;
             });
 

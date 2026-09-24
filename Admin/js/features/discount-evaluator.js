@@ -238,7 +238,11 @@ export async function recordDiscountUsage({ discountId, orderId, customerPhone, 
             orderId: orderId || '', customerPhone: customerPhone || '',
             amountGiven: Math.round(Number(amountGiven) || 0),
             appliedAt: Date.now(), channel: channel || 'pos',
-            source: discountSource || ''
+            source: discountSource || '',
+            // P2-8: readers (discounts.js / discountsReports.js) key off discountSource;
+            // bot + this writer historically only set `source` — write both so void
+            // rows and type filters resolve without field-name drift.
+            discountSource: discountSource || ''
         });
     } catch (e) {
         console.warn('[Discounts] Failed to record usage:', e?.message || e);
