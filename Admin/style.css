@@ -1,6 +1,6 @@
 :root {
-    /* VIBRANT ELECTRIC PALETTE (ZOMATO STYLE) */
-    --primary: #E84908;           /* Premium Roshani Orange */
+    /* Core brand palette */
+    --primary: #E84908;           /* Brand orange */
     --primary-rgb: 232, 73, 8;
     --primary-dark: #c43d00;      /* Deep Orange */
     --primary-darker: #a03200;    /* For deep accents */
@@ -16,11 +16,13 @@
     --success-rgb: 34, 197, 94;
     --success-light: #f0fdf4;
     --success-dark: #16a34a;
+    --success-darker: #15803d;    /* WCAG AA-safe fill for white text (3.30:1 on --success-dark fails 4.5:1) */
     
     --warning: #f59e0b;           /* Amber */
     --warning-rgb: 245, 158, 11;
     --warning-light: #fffbeb;
     --warning-dark: #d97706;
+    --warning-text: #b45309;      /* WCAG AA-safe for text on white/-light backgrounds (--warning itself is 2.1:1, fails) */
     --info: #3b82f6;              /* Royal Blue */
     --info-rgb: 59, 130, 246;
     --info-light: #eff6ff;
@@ -118,7 +120,7 @@
 .color-primary { color: var(--primary); }
 .color-success { color: var(--success); }
 .color-error { color: var(--error); }
-.color-warning { color: var(--warning); }
+.color-warning { color: var(--warning-text); }
 
 
 * {
@@ -312,7 +314,7 @@ html, body {
     display: none !important;
 }
 
-/* Base main styles — ensures scroll works on all viewports */
+/* Base main styles â€” ensures scroll works on all viewports */
 .main {
     flex: 1;
     min-width: 0;
@@ -823,7 +825,7 @@ html, body {
     display: block;
 }
 .form-input.error ~ .field-error::before {
-    content: '⚠ ';
+    content: 'âš  ';
 }
 @keyframes shake {
     0%,100% { transform: translateX(0); }
@@ -1063,7 +1065,7 @@ html, body {
     color: var(--success);
 }
 .modal-title.warning {
-    color: var(--warning);
+    color: var(--warning-text);
 }
 .modal-title.danger {
     color: var(--error);
@@ -1638,7 +1640,7 @@ html, body {
     filter: brightness(1.15);
 }
 .dynamic-modal-actions .btn-confirm.danger {
-    background: var(--error);
+    background: var(--error-dark);
 }
 .dynamic-modal-input {
     width: 100%;
@@ -1791,7 +1793,7 @@ html, body {
 .split-add-btn {
     padding: 10px 16px;
     border-radius: 8px;
-    background: var(--primary);
+    background: var(--primary-dark);
     color: #fff;
     font-weight: 600;
     cursor: pointer;
@@ -1806,8 +1808,8 @@ html, body {
     font-size: 13px;
 }
 .pay-btn-confirm {
-    background: var(--success) !important;
-    border-color: var(--success) !important;
+    background: var(--success-darker) !important;
+    border-color: var(--success-darker) !important;
     color: #fff !important;
 }
 .pay-btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -2115,8 +2117,8 @@ html, body {
     cursor: pointer;
 }
 .menubank-cat.active {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--primary-dark);
+    border-color: var(--primary-dark);
     color: #fff;
 }
 .menubank-grid {
@@ -2183,7 +2185,7 @@ html, body {
     transition: all 0.15s;
 }
 .menubank-add:hover {
-    background: var(--primary);
+    background: var(--primary-dark);
     color: #fff;
 }
 .menubank-add.added {
@@ -2919,7 +2921,7 @@ html, body {
     display: none;
 }
 
-/* The "sticky-cart" name was never actually wired up to position:sticky —
+/* The "sticky-cart" name was never actually wired up to position:sticky â€”
    only enable it on the desktop 2-column layout (matches .walkin-layout's
    own breakpoint); on mobile the cart is its own full-width section below
    the picker, where sticky would just look broken. */
@@ -2930,7 +2932,7 @@ html, body {
     }
 }
 
-/* ---------- Cart row v5 — qty badge / size subtitle / icon actions ---------- */
+/* ---------- Cart row v5 â€” qty badge / size subtitle / icon actions ---------- */
 .cart-row-v5 {
     display: flex;
     align-items: flex-start;
@@ -3473,7 +3475,7 @@ html, body {
    RESPONSIVE / MOBILE 
    =========================== */
 
-/* HAMBURGER BUTTON — hidden on desktop */
+/* HAMBURGER BUTTON â€” hidden on desktop */
 .hamburger-btn {
     align-items: center;
     background: var(--white);
@@ -3493,7 +3495,7 @@ html, body {
     z-index: 1100;
 }
 
-/* SIDEBAR OVERLAY — hidden on desktop */
+/* SIDEBAR OVERLAY â€” hidden on desktop */
 /* Removed redundant base overlay - managed in 768px block */
 
 /* CLEAN ADAPTIVE BREAKPOINT FOLLOWS */
@@ -3699,11 +3701,11 @@ body {
 
 .status-confirmed { background: var(--info-light); color: var(--info); border-color: rgba(var(--info-rgb), 0.2); }
 .status-preparing { background: var(--primary-light); color: var(--primary); border-color: rgba(var(--primary-rgb), 0.2); }
-.status-out-for-delivery { background: var(--warning-light); color: var(--warning); border-color: rgba(var(--warning-rgb), 0.2); }
+.status-out-for-delivery { background: var(--warning-light); color: var(--warning-text); border-color: rgba(var(--warning-rgb), 0.2); }
 .status-delivered { background: var(--success-light); color: var(--success); border-color: rgba(var(--success-rgb), 0.2); }
 .status-served { background: var(--success-light); color: var(--success); border-color: rgba(var(--success-rgb), 0.2); }
 .status-paid { background: var(--success-light); color: var(--success); border-color: rgba(var(--success-rgb), 0.2); }
-.status-pending-payment { background: var(--warning-light); color: var(--warning); border-color: rgba(var(--warning-rgb), 0.2); }
+.status-pending-payment { background: var(--warning-light); color: var(--warning-text); border-color: rgba(var(--warning-rgb), 0.2); }
 .status-cancelled { background: var(--error-light); color: var(--error); border-color: rgba(var(--error-rgb), 0.2); }
 
 .form-label-small {
@@ -4432,11 +4434,11 @@ body {
 
 .status-confirmed { background: var(--info-light); color: var(--info); border-color: rgba(var(--info-rgb), 0.2); }
 .status-preparing { background: var(--primary-light); color: var(--primary); border-color: rgba(var(--primary-rgb), 0.2); }
-.status-out-for-delivery { background: var(--warning-light); color: var(--warning); border-color: rgba(var(--warning-rgb), 0.2); }
+.status-out-for-delivery { background: var(--warning-light); color: var(--warning-text); border-color: rgba(var(--warning-rgb), 0.2); }
 .status-delivered { background: var(--success-light); color: var(--success); border-color: rgba(var(--success-rgb), 0.2); }
 .status-served { background: var(--success-light); color: var(--success); border-color: rgba(var(--success-rgb), 0.2); }
 .status-paid { background: var(--success-light); color: var(--success); border-color: rgba(var(--success-rgb), 0.2); }
-.status-pending-payment { background: var(--warning-light); color: var(--warning); border-color: rgba(var(--warning-rgb), 0.2); }
+.status-pending-payment { background: var(--warning-light); color: var(--warning-text); border-color: rgba(var(--warning-rgb), 0.2); }
 .status-cancelled { background: var(--error-light); color: var(--error); border-color: rgba(var(--error-rgb), 0.2); }
 
 .rider-stats-cell {
@@ -4455,7 +4457,7 @@ body {
 }
 
 .btn-rider-edit {
-    background: var(--primary);
+    background: var(--primary-dark);
     color: white;
     border: none;
     padding: 6px 14px;
@@ -4822,7 +4824,7 @@ body {
 /* The base style above assumes a dark surrounding context (semi-transparent
    white on dark) and renders almost invisible on the Reports table's white
    Tabulator cells. These data-method variants (matching the real values
-   written by pos.js and the WhatsApp bot — Cash, UPI, COD) make payment
+   written by pos.js and the WhatsApp bot â€” Cash, UPI, COD) make payment
    method legible and distinguishable at a glance. */
 .badge-payment[data-method="cash"] {
     background: #f0fdf4; border-color: rgba(34, 197, 94, 0.25); color: #166534;
@@ -5574,7 +5576,7 @@ body {
 .border-t-white-10 { border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .text-white-50 { color: rgba(255, 255, 255, 0.5); }
 
-/* === ORDER DRAWER v5 — status stepper redesign === */
+/* === ORDER DRAWER v5 â€” status stepper redesign === */
 
 /* Overlay */
 .drawer-overlay {
@@ -5700,9 +5702,9 @@ body {
     flex-shrink: 0; transition: all .3s ease;
     position: relative; z-index: 1;
 }
-.dw-phase-node.done { background: var(--success, #22c55e); color: white; }
+.dw-phase-node.done { background: var(--success-darker, #15803d); color: white; }
 .dw-phase-node.current {
-    background: var(--primary); color: white;
+    background: var(--primary-dark); color: white;
     box-shadow: 0 0 0 4px var(--primary-light, #fef0e8);
 }
 .dw-phase-line { flex: 1; height: 3px; background: #e2e8f0; }
@@ -5717,7 +5719,7 @@ body {
 .dw-current-text { font-size: 13px; color: #64748b; }
 .dw-current-text b { color: #0f172a; font-size: 14px; }
 .dw-btn-advance {
-    background: var(--primary);
+    background: var(--primary-dark);
     color: white; border: none;
     padding: 10px 16px; border-radius: 10px;
     font-size: 13px; font-weight: 800;
@@ -5752,7 +5754,7 @@ body {
 }
 .dw-eyebrow i { width: 11px; height: 11px; }
 
-/* Customer / context card — shape adapts per order type */
+/* Customer / context card â€” shape adapts per order type */
 .dw-ctx-full {
     background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px;
 }
@@ -5833,7 +5835,7 @@ body {
 }
 .dw-btn-mark-paid:hover { background: rgba(255,255,255,.16); }
 
-/* Rider — only rendered when actually relevant (delivery orders, post-Ready) */
+/* Rider â€” only rendered when actually relevant (delivery orders, post-Ready) */
 .dw-rider-card {
     background: var(--info-light, #eff6ff); border: 1px solid #bfdbfe; border-radius: 12px;
     padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
@@ -5858,7 +5860,7 @@ body {
 }
 .dw-act-btn:hover { background: #e2e8f0; }
 .dw-act-btn i { width: 15px; height: 15px; }
-.dw-act-btn.primary { background: var(--primary); color: white; flex: 1.6; }
+.dw-act-btn.primary { background: var(--primary-dark); color: white; flex: 1.6; }
 .dw-act-btn.primary:hover { background: var(--primary-dark); }
 .dw-act-btn.whatsapp { background: #dcfce7; color: #15803d; }
 .dw-act-btn.whatsapp:hover { background: #bbf7d0; }
@@ -5976,7 +5978,7 @@ body {
 }
 
 .qty-control-v4 .qty-btn:hover {
-    background: var(--primary);
+    background: var(--primary-dark);
     color: white;
 }
 
@@ -6838,7 +6840,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .cs-feature-card:hover i {
-    background: var(--primary);
+    background: var(--primary-dark);
     color: white;
     transform: rotate(10deg);
 }
@@ -7071,7 +7073,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .custom-checkbox.checked::after {
-    content: '✓';
+    content: 'âœ“';
     position: absolute;
     color: white;
     font-size: 12px;
@@ -7148,7 +7150,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .stock-adjust-btn.plus {
-    background: var(--primary);
+    background: var(--primary-dark);
     color: white;
 }
 
@@ -7235,7 +7237,7 @@ body.pos-selection-mode .walkin-picker {
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(22px); }
 .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-/* Toggle Switch (Small — for dish cards) */
+/* Toggle Switch (Small â€” for dish cards) */
 .toggle-switch-sm {
     position: relative;
     width: 36px;
@@ -8007,7 +8009,7 @@ body.pos-selection-mode .walkin-picker {
 .promo-media-preview img { max-width:80px; max-height:80px; border-radius:6px; border:1px solid var(--border-color, #e5e7eb); }
 .promo-message-preview { white-space:pre-wrap; background:#0b1220; color:#e5e7eb; padding:12px; border-radius:8px; font-family:monospace; font-size:13px; }
 
-/* ── Promotions Tab — Restructured Layout ─────────────────────────────── */
+/* â”€â”€ Promotions Tab â€” Restructured Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .promo-status-bar { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
 .promo-status-right { display:flex; align-items:center; gap:16px; flex-shrink:0; }
 .promo-kill-widget { display:flex; align-items:center; gap:8px; background:var(--bg-card, #fff); border:1px solid var(--border-color, #e5e7eb); border-radius:8px; padding:6px 12px; cursor:pointer; }
@@ -8266,7 +8268,7 @@ body.pos-selection-mode .walkin-picker {
 .channel-manual   { background:#f1f5f9; color:#475569; }
 .channel-other    { background:#f1f5f9; color:#64748b; }
 
-/* Discount card — now clickable through to its usage detail */
+/* Discount card â€” now clickable through to its usage detail */
 .discount-card {
     cursor: pointer;
     transition: box-shadow .15s ease, border-color .15s ease;
@@ -8280,7 +8282,7 @@ body.pos-selection-mode .walkin-picker {
     cursor: pointer;
 }
 
-/* Discount usage detail — focused view of the reports modal for one discount */
+/* Discount usage detail â€” focused view of the reports modal for one discount */
 .discount-usage-kpis {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 10px; margin-bottom: 16px;
@@ -8407,7 +8409,7 @@ body.pos-selection-mode .walkin-picker {
     margin: 0 2px !important;
 }
 /* =============================
-   TABULATOR — BRAND COLOR THEME
+   TABULATOR â€” BRAND COLOR THEME
    Warm orange treatment matching the rest of the app's "food craving"
    identity, applied to ALL Tabulator instances across every tab.
    ============================= */
@@ -8593,7 +8595,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 /* ================================================================
-   TABLE MANAGEMENT � Dine-In QR Ordering (appended by integration)
+   TABLE MANAGEMENT ï¿½ Dine-In QR Ordering (appended by integration)
    ================================================================ */
 
 /* ---------- Panel header ---------- */
@@ -8841,7 +8843,7 @@ body.pos-selection-mode .walkin-picker {
 .drawer-order-actions .btn-action-orange,
 .drawer-order-actions .btn-action-green { color: #fff; }
 
-/* QR modal preview — matches the "food craving" gradient-bordered
+/* QR modal preview â€” matches the "food craving" gradient-bordered
    design used on the actual printed QR cards (see tables.js
    _qrCardMarkup / QR_CARD_CSS), so what admin previews here is what
    customers will see on the table. */
@@ -8998,7 +9000,7 @@ body.pos-selection-mode .walkin-picker {
 .danger-zone-card h4 { display: flex; align-items: center; gap: 8px; }
 
 /* ================================================================
-   DASHBOARD REDESIGN — CSS-ONLY PATCH
+   DASHBOARD REDESIGN â€” CSS-ONLY PATCH
    Append this entire block to the END of Admin/style.css
    (same convention as table-management.css).
 
@@ -9008,30 +9010,30 @@ body.pos-selection-mode .walkin-picker {
    (updateDashboardStats, renderPriorityOrders). This patch only
    restyles what's already there.
 
-   SCOPING — why nothing else breaks:
-     .kpi-card-v4 / .kpi-row  → reused on 5 other tabs (POS, Analytics,
-        Payments, Inventory, RiderAnalytics — confirmed by grep).
+   SCOPING â€” why nothing else breaks:
+     .kpi-card-v4 / .kpi-row  â†’ reused on 5 other tabs (POS, Analytics,
+        Payments, Inventory, RiderAnalytics â€” confirmed by grep).
         Every rule below is scoped under #tab-dashboard, so those
         other tabs are untouched. Same convention already used
         elsewhere in this file at `#tab-riderAnalytics .kpi-row`.
-     .priority-card-v4 / .priority-order-list → style.css already has
+     .priority-card-v4 / .priority-order-list â†’ style.css already has
         TWO conflicting `.priority-order-list` blocks (~line 3031 and
         ~line 4092, pre-existing duplicate, not introduced here) plus
         a `.priority-card-v4` block (~line 5794) with a 3-color side
         bar. Every rule below is scoped under the `#priorityOrderList`
-        ID, so it wins regardless of those blocks' file position —
+        ID, so it wins regardless of those blocks' file position â€”
         nothing needs to be deleted for this to take effect.
         (Optional cleanup, unrelated to this patch: the block at
         ~line 3031 is fully dead today since ~line 4092 already wins
-        on source order — safe to delete next time you're in there.)
+        on source order â€” safe to delete next time you're in there.)
    ================================================================ */
 
 
 /* ----------------------------------------------------------------
-   1) KPI STRIP — merges the 4 separate glowing .kpi-card-v4 tiles
+   1) KPI STRIP â€” merges the 4 separate glowing .kpi-card-v4 tiles
       into one unified strip with internal dividers. Same 4 stats,
       same element IDs (statOrders, statPending, statRevenue,
-      statRidersActive, badgePending, badgeRevenue, badgeRiders) —
+      statRidersActive, badgePending, badgeRevenue, badgeRiders) â€”
       only the container chrome changes.
    ---------------------------------------------------------------- */
 
@@ -9107,19 +9109,19 @@ body.pos-selection-mode .walkin-picker {
 
 
 /* ----------------------------------------------------------------
-   2) SERVICE RAIL — turns the existing #priorityOrderList container
+   2) SERVICE RAIL â€” turns the existing #priorityOrderList container
       (currently a wrapping grid) into a horizontal scrolling rail of
       ticket cards, and gives .priority-card-v4 a full-width top edge
       colored by urgency instead of the current 3-color side bar.
 
       Urgency mapping reuses the SAME priority weights already
-      computed in renderPriorityOrders() (placed=4 highest …
-      ready=1 lowest) — just gives each tier a distinct, consistent
+      computed in renderPriorityOrders() (placed=4 highest â€¦
+      ready=1 lowest) â€” just gives each tier a distinct, consistent
       color instead of the current placed=amber/confirmed=blue/
       ready=orange mapping:
-        placed / pending  → hottest, needs acknowledgement  → red
-        confirmed         → warm, kitchen has it             → amber
-        ready             → done, waiting for pickup/serve   → green
+        placed / pending  â†’ hottest, needs acknowledgement  â†’ red
+        confirmed         â†’ warm, kitchen has it             â†’ amber
+        ready             â†’ done, waiting for pickup/serve   â†’ green
    ---------------------------------------------------------------- */
 
 #priorityOrderList.priority-order-list {
@@ -9150,7 +9152,7 @@ body.pos-selection-mode .walkin-picker {
     transform: translateY(-2px);
 }
 
-/* Full-width top edge instead of the centered 40%-height side bar —
+/* Full-width top edge instead of the centered 40%-height side bar â€”
    reads more clearly as a "ticket" at this card width. */
 #priorityOrderList .priority-card-v4::after {
     left: 0; top: 0; transform: none;
@@ -9183,7 +9185,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 /* Loading skeletons + empty state also live inside #priorityOrderList
-   at different times — give them rail-appropriate sizing too so the
+   at different times â€” give them rail-appropriate sizing too so the
    loading state doesn't look broken once the container becomes flex. */
 #priorityOrderList .skeleton-rider-card,
 #priorityOrderList .loading-placeholder {
@@ -9204,7 +9206,7 @@ body.pos-selection-mode .walkin-picker {
 
 
 /* ----------------------------------------------------------------
-   3) RECENT ORDER HISTORY — compact layout so all data
+   3) RECENT ORDER HISTORY â€” compact layout so all data
       fits without truncation in the main column.
    ---------------------------------------------------------------- */
 
@@ -9286,7 +9288,7 @@ body.pos-selection-mode .walkin-picker {
 .premium-stat-row .value-chip { color: #c43e00; background: rgba(196,62,0,0.08); }
 
 /* ================================================================
-   MENU BROWSER — Sidebar + Grid Layout for Quick Menu Setup
+   MENU BROWSER â€” Sidebar + Grid Layout for Quick Menu Setup
    ================================================================ */
 
 .menu-browser-layout {
@@ -9451,7 +9453,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .browser-view-toggle .btn-icon-v4.active {
-    background: var(--primary);
+    background: var(--primary-dark);
     color: white;
 }
 
@@ -9686,7 +9688,7 @@ body.pos-selection-mode .walkin-picker {
     animation: fadeInUp 0.2s ease forwards;
 }
 
-/* Analytics sub-tabs — desktop (mobile-overrides.css covers ≤1024px) */
+/* Analytics sub-tabs â€” desktop (mobile-overrides.css covers â‰¤1024px) */
 #reportsMobileView {
     background: var(--card-bg, #fff);
     border-radius: 16px;
@@ -9739,7 +9741,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 /* =====================================================
-   BILL PAYMENT CENTER MODAL — two-column layout
+   BILL PAYMENT CENTER MODAL â€” two-column layout
    ===================================================== */
 .bill-payment-modal {
     max-width: 820px !important;

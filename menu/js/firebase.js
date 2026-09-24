@@ -59,6 +59,10 @@ const pathParts = window.location.pathname.split('/').filter(Boolean);
 export const OUTLET = new URLSearchParams(window.location.search).get('o') || pathParts[0] || 'pizza';
 // Legacy map for backward compatibility with existing QR codes (no ?b= param)
 // New outlets MUST pass `?b=businessId` in the URL
+// SYNC WARNING: an identical copy of this map lives in
+// bot/helpers/outlet-resolution.js (Node CommonJS, can't share an ESM import
+// with this browser file). If you add an outlet here, add it there too —
+// see docs/FOODHUBBIE-AUDIT-REPORT.md §4.2.
 const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
 export const BUSINESS_ID = new URLSearchParams(window.location.search).get('b') || BUSINESS_BY_OUTLET[OUTLET] || 'roshani-pizza';
 

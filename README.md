@@ -1,6 +1,8 @@
-# Roshani ERP — WhatsApp-Based Food Ordering & Delivery Management System
+# Food-Hubbie — Multi-Tenant WhatsApp Food Ordering & Delivery Platform
 
-A full-stack ERP system for **Roshani Pizza** and **Roshani Cake** outlets. Customers order via WhatsApp bot; admins manage orders, menu, riders, and reports from a web dashboard; riders receive, track, and complete deliveries from a mobile-optimized web app.
+A full-stack, multi-tenant ERP platform for WhatsApp-based food ordering. Customers order via WhatsApp bot; restaurant admins manage orders, menu, riders, and reports from a web dashboard; riders receive, track, and complete deliveries from a mobile-optimized web app. Supreme Admin onboards new restaurants onto the platform.
+
+> This document still describes the original two-outlet deployment (Roshani Pizza / Roshani Cake) in places below — those sections are accurate for that deployment's data model (Firebase hosting targets, outlet partition keys) but predate the Food-Hubbie multi-tenant rename. Treat outlet-specific paths as illustrative examples, not the current product name.
 
 > **⚠️ Free-Tier Optimized** — This project runs entirely on Firebase **Spark (free)** plan. No Cloud Functions deployment needed. Push notifications (FCM) are sent directly from the Firebase Realtime Database listener using the Firebase Admin SDK. See [Custom Claims Security](#custom-claims--firebase-security) for the admin access security fix.
 
@@ -1294,7 +1296,7 @@ Shorthand scripts in `package.json`: `npm run deploy:admin` (build + deploy admi
 ssh -i your-key.pem ec2-user@your-instance-ip
 
 # Clone / pull latest code
-cd ~/Prasant-Pizza-ERP
+cd ~/Foodhubbie-project
 git pull origin main
 
 # Install bot dependencies
@@ -1373,8 +1375,8 @@ OUTLET=cake node bot/index.js
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/nexorasoftwareagency-rgb/roshani-pizza-bot.git
-cd roshani-pizza-bot
+git clone https://github.com/nexorasoftwareagency-rgb/Foodhubbie-project.git
+cd Foodhubbie-project
 
 # 2. Install bot dependencies
 cd bot
@@ -1418,7 +1420,7 @@ npx http-server -p 8080 -c-1
 ## Project Structure
 
 ```
-Prasant-Pizza-ERP/
+Foodhubbie-project/
 ├── Admin/                     # Admin Dashboard source (Firebase Hosting: admin → Admin/dist)
 │   ├── index.html             # SPA shell with 20 tab sections
 │   ├── firebase-config.js     # Firebase init + project config
