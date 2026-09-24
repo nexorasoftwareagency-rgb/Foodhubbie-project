@@ -214,11 +214,20 @@ export async function recordDiscountUsage({ discountId, orderId, customerPhone, 
             cur = cur || {};
             const currentCount = cur.usedCount || 0;
             const nextCount = isVoid ? Math.max(0, currentCount - 1) : currentCount + 1;
-            if (globalLimit && nextCount > globalLimit) { reserved = false; return; }
+            // amountGiven arrives already correctly signed by the caller
+            // (negative for a void, positive for a normal redemption) — do
+            // NOT re-negate it here. An earlier version did `isVoid ? -amount
+            // : amount`, which double-negated a void's already-negative
+            // value back to positive: voiding a discount INCREASED
+            // totalDiscountGiven instead of decreasing it, and recorded a
+            // positive audit-trail entry for a void instead of a negative
+            // one — so summing a discount's usage history would overcount
+            // by double the voided amount instead of netting to zero.
             const amount = Math.round(Number(amountGiven) || 0);
+            if (globalLimit && nextCount > globalLimit) { reserved = false; return; }
             return {
                 usedCount: nextCount,
-                totalDiscountGiven: (cur.totalDiscountGiven || 0) + (isVoid ? -amount : amount),
+                totalDiscountGiven: (cur.totalDiscountGiven || 0) + amount,
                 lastUsedAt: Date.now()
             };
         });
@@ -227,7 +236,7 @@ export async function recordDiscountUsage({ discountId, orderId, customerPhone, 
         await Outlet.ref(`discountsUsage/${usageId}`).set({
             discountId, discountLabel: discountLabel || '',
             orderId: orderId || '', customerPhone: customerPhone || '',
-            amountGiven: isVoid ? -Math.round(Number(amountGiven) || 0) : Math.round(Number(amountGiven) || 0),
+            amountGiven: Math.round(Number(amountGiven) || 0),
             appliedAt: Date.now(), channel: channel || 'pos',
             source: discountSource || ''
         });
