@@ -1892,10 +1892,14 @@ export async function recordWalkout(tableId, sessionId, { reason = 'Walkout', or
         };
 
         const updates = {};
+        // Outlet-relative paths + multiUpdate (tenantRef): outlet-level logs rules
+        // live at businesses/{bid}/outlets/{oid}/logs. Outlet.ref('') returns the
+        // ROOT ref and 'logs' is in Outlet's globalPaths — writing there hit
+        // root /logs/walkouts which has no write rule (P0-4 PERMISSION_DENIED).
         updates[`logs/walkouts/${walkoutId}`] = walkoutData;
         updates[`tableSessions/${sessionId}/walkout`] = { walkoutId, reason, walkedOutAt };
 
-        await update(Outlet.ref(''), updates);
+        await Outlet.multiUpdate(updates);
         showToast(`Walkout recorded for Table ${t.number} (₹${subtotal.toLocaleString()})`, 'warning');
         haptic(20);
         return walkoutId;
@@ -1931,13 +1935,16 @@ export async function checkAndRecordWalkout(tableId, sessionId) {
     const updates = {};
     unpaidServed.forEach(o => {
         if (o.status !== 'Cancelled') {
-            updates[`outlets/${Outlet.current}/orders/${o.id}/status`] = 'Walkout';
-            updates[`outlets/${Outlet.current}/orders/${o.id}/paymentStatus`] = 'Walkout';
-            updates[`outlets/${Outlet.current}/orders/${o.id}/walkoutRecordedAt`] = now;
+            // Outlet-relative (multiUpdate prefixes businesses/{bid}/outlets/{oid}/).
+            // Old keys `outlets/${Outlet.current}/orders/...` against Outlet.ref('')
+            // (root) wrote to /outlets/{outlet}/orders — wrong path entirely.
+            updates[`orders/${o.id}/status`] = 'Walkout';
+            updates[`orders/${o.id}/paymentStatus`] = 'Walkout';
+            updates[`orders/${o.id}/walkoutRecordedAt`] = now;
         }
     });
 
-    await update(Outlet.ref(''), updates);
+    await Outlet.multiUpdate(updates);
     return walkoutId;
 }
 

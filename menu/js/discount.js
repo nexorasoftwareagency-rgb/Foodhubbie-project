@@ -47,6 +47,11 @@ export async function validateCoupon(code, subtotal) {
         if (d.minSubtotal && subtotal < d.minSubtotal) continue;
         // Check global limit
         if (d.globalLimit && (d.stats?.usedCount || 0) >= d.globalLimit) continue;
+        // Channel gate — QR menu / webview is the "website" channel. Matches
+        // bot/discount-engine.js verify (channel: 'website') so client and
+        // server agree; whatsapp/pos/both coupons are rejected here up-front
+        // instead of being zeroed server-side after placement.
+        if (d.channel && d.channel !== 'all' && d.channel !== 'website') continue;
 
         const raw = d.mode === 'percent' ? subtotal * (Number(d.value) || 0) / 100 : Number(d.value) || 0;
         const amount = d.maxCap ? Math.min(raw, d.maxCap) : raw;
@@ -60,6 +65,7 @@ export async function validateCoupon(code, subtotal) {
             value: d.value,
             maxCap: d.maxCap || null,
             amount: Math.round(amount),
+            source: 'coupon:' + d.couponCode,
         };
     }
     return null;
