@@ -153,6 +153,7 @@ export const standardizeOrderData = (o) => {
         serviceChargeName: o.serviceChargeName || '',
         serviceChargeRate: o.serviceChargeRate || undefined,
         discount: parseFloat(o.discount || 0),
+        discountLabel: o.discountLabel || '',
         deliveryFee: parseFloat(o.deliveryFee || 0),
         total: parseFloat(o.total || 0),
         paymentMethod: o.paymentMethod || "Cash",

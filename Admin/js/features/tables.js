@@ -961,6 +961,8 @@ let _billManualDiscount = 0;
 let _billManualDiscountPct = 0;
 let _billAutoDiscount = null; // evaluateDiscount() result: { discount, amount, label, source }
 let _billCouponCode = null;
+let _billDine = {};         // dineinSettings cache for tax/SC labels on invoice
+let _billContact = {};      // tableSessionsContact cache (customerName/customerPhone)
 let _billReviewConnUnsub = null; // connection change unsubscribe for bill review modal
 let _billSplitActive = false;
 let _billSplitMethod = 'Cash'; // which method the primary input controls
@@ -1021,6 +1023,53 @@ discountValue = Math.max(0, Math.min(Math.round(discountValue), subtotal));
     return { discountValue, discountLabel, discountId, discountSource, discountGlobalLimit };
 }
 
+// Complete price breakdown for the invoice — derived from the active orders
+// (order-time truth: taxItems/serviceCharge are baked into each o.total),
+// with dineinSettings only as label/fallback for legacy orders.
+// Identity: food + tax + sc − orderDiscount === Σ o.total (console.warn if not).
+function _billBreakdown(activeOrders) {
+    let food = 0, tax = 0, sc = 0, orderDiscount = 0;
+    let scName = '', scRate = 0;
+    const taxMap = new Map();
+    const labels = new Set();
+    activeOrders.forEach(o => {
+        food += Number(o.subtotal || 0);
+        tax += Number(o.tax || 0);
+        sc += Number(o.serviceCharge || 0);
+        orderDiscount += Number(o.discount || 0);
+        if (o.discountLabel) labels.add(o.discountLabel);
+        if (o.serviceChargeName && !scName) { scName = o.serviceChargeName; scRate = Number(o.serviceChargeRate || 0); }
+        (Array.isArray(o.taxItems) ? o.taxItems : []).forEach(ti => {
+            const k = `${ti.name}|${ti.rate}`;
+            const cur = taxMap.get(k) || { name: ti.name, rate: ti.rate, amount: 0 };
+            cur.amount += Number(ti.amount || 0);
+            taxMap.set(k, cur);
+        });
+    });
+    // Legacy orders missing subtotal → derive from item lines
+    if (food === 0 && activeOrders.length) {
+        activeOrders.forEach(o => Object.values(o.items || {}).forEach(it => {
+            food += Number(it.qty || 1) * Number(it.price || 0);
+        }));
+    }
+    let taxRows = Array.from(taxMap.values());
+    if (!taxRows.length && food > 0 && tax > 0) {
+        const d = _billDine || {};
+        const rates = (d.taxRates && d.taxRates.length) ? d.taxRates
+            : (d.taxEnabled !== false ? [{ name: d.taxName || 'Tax', rate: typeof d.taxRate === 'number' ? d.taxRate : 5 }] : []);
+        taxRows = rates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(food * (r.rate / 100) * 100) / 100 })).filter(r => r.amount > 0);
+    }
+    if (!scName && sc > 0) {
+        scName = (_billDine || {}).serviceChargeName || 'Service Charge';
+        scRate = Number((_billDine || {}).serviceChargeRate || 0);
+    }
+    const ordersTotal = activeOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+    if (activeOrders.length && Math.abs(food + tax + sc - orderDiscount - ordersTotal) > 1) {
+        console.warn('[Bill] breakdown identity mismatch', { food, tax, sc, orderDiscount, ordersTotal });
+    }
+    return { food, taxRows, sc, scName, scRate, orderDiscount, orderLabels: Array.from(labels), ordersTotal };
+}
+
 export async function openTableBillReview(tableId, groupId = null) {
     _billTableId = tableId;
     _billGroupId = groupId || null;
@@ -1028,10 +1077,21 @@ export async function openTableBillReview(tableId, groupId = null) {
     _billManualDiscountPct = 0;
     _billAutoDiscount = null;
     _billCouponCode = null;
+    _billDine = {};
+    _billContact = {};
     _billSplitActive = false;
     _billSplitMethod = _loadSplitMethod();
     _clearTableBillCouponUI();
     document.getElementById('tableBillOffersPanel')?.classList.add('hidden');
+
+    // Cache dine settings + customer contact for the invoice breakdown (awaited so first render is complete)
+    const _sid = _sessionForTable(tableId)?.sessionId || _tables[tableId]?.currentSession;
+    const [_dineSnap, _contactSnap] = await Promise.all([
+        get(_settingsRef()).catch(() => null),
+        _sid ? get(Outlet.ref(`tableSessionsContact/${_sid}`)).catch(() => null) : Promise.resolve(null)
+    ]);
+    if (_dineSnap?.exists()) _billDine = _dineSnap.val() || {};
+    if (_contactSnap?.exists()) _billContact = _contactSnap.val() || {};
 
     // Reset split section
     document.getElementById('billSplitSection')?.classList.add('hidden');
@@ -1106,7 +1166,7 @@ function _renderTableBillReview() {
     if (!t) return;
     const sess = _sessionForTable(_billTableId);
     const subtotal = _billSubtotal();
-    const { discountValue, discountLabel } = _billComputedDiscount(subtotal);
+    const { discountValue, discountLabel, discountSource } = _billComputedDiscount(subtotal);
     const finalTotal = Math.max(0, subtotal - discountValue);
 
     // Title
@@ -1118,9 +1178,16 @@ function _renderTableBillReview() {
 
     // === LEFT: Invoice ===
     const tableLabel = document.getElementById('billInvoiceTableLabel');
-    if (tableLabel) tableLabel.textContent = _billGroupId ? `Table ${t.number} — ${sess?.orderGroups?.[_billGroupId]?.label || 'Group'}` : `Table ${t.number}`;
+    if (tableLabel) {
+        const base = _billGroupId ? `Table ${t.number} — ${sess?.orderGroups?.[_billGroupId]?.label || 'Group'}` : `Table ${t.number}`;
+        tableLabel.textContent = _billContact.customerName ? `${base} · ${_billContact.customerName}` : base;
+    }
     const dateEl = document.getElementById('billInvoiceDate');
-    if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (dateEl) {
+        let d = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        if (_billContact.customerPhone) d += ` · ${_billContact.customerPhone}`;
+        dateEl.textContent = d;
+    }
 
     // Items
     const orders = _billGroupId
@@ -1149,15 +1216,23 @@ function _renderTableBillReview() {
         itemsEl.innerHTML = itemRows.length ? itemRows.join('') : '<p class="text-muted-small" style="padding:16px;text-align:center;">No items</p>';
     }
 
-    // Summary
+    // Summary — complete breakdown: food → taxes → SC → order discounts → bill discount → total
     const summaryEl = document.getElementById('billInvoiceSummary');
     if (summaryEl) {
-        let html = `<div class="bill-invoice-summary-row"><span>Subtotal (${activeOrders.length} order${activeOrders.length !== 1 ? 's' : ''})</span><span>₹${subtotal.toLocaleString('en-IN')}</span></div>`;
+        const bd = _billBreakdown(activeOrders);
+        const money = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
+        const rows = [];
+        rows.push(`<div class="bill-invoice-summary-row"><span>Subtotal (${activeOrders.length} order${activeOrders.length !== 1 ? 's' : ''})</span><span>${money(bd.food)}</span></div>`);
+        bd.taxRows.forEach(tr => rows.push(`<div class="bill-invoice-summary-row"><span>${escapeHtml(tr.name)} (${tr.rate}%)</span><span>${money(tr.amount)}</span></div>`));
+        if (bd.sc > 0) rows.push(`<div class="bill-invoice-summary-row"><span>${escapeHtml(bd.scName || 'Service Charge')}${bd.scRate ? ` (${bd.scRate}%)` : ''}</span><span>${money(bd.sc)}</span></div>`);
+        if (bd.orderDiscount > 0) rows.push(`<div class="bill-invoice-summary-row" style="color:#059669;"><span>Discount${bd.orderLabels.length ? ` (${escapeHtml(bd.orderLabels.join(', '))})` : ''}</span><span>-${money(bd.orderDiscount)}</span></div>`);
         if (discountValue > 0) {
-            html += `<div class="bill-invoice-summary-row" style="color:#059669;"><span>${escapeHtml(discountLabel || 'Discount')}</span><span>-₹${discountValue.toLocaleString('en-IN')}</span></div>`;
+            let dl = discountLabel || (String(discountSource || '').startsWith('manual:') ? 'Manual Discount' : 'Discount');
+            if (_billCouponCode) dl = `${dl} (${_billCouponCode})`;
+            rows.push(`<div class="bill-invoice-summary-row" style="color:#059669;"><span>${escapeHtml(dl)}</span><span>-${money(discountValue)}</span></div>`);
         }
-        html += `<div class="bill-invoice-summary-row total"><span>Total</span><span>₹${finalTotal.toLocaleString('en-IN')}</span></div>`;
-        summaryEl.innerHTML = html;
+        rows.push(`<div class="bill-invoice-summary-row total"><span>Total</span><span>${money(finalTotal)}</span></div>`);
+        summaryEl.innerHTML = rows.join('');
     }
 
     // === RIGHT: Payment panel ===
@@ -1178,13 +1253,34 @@ function _renderTableBillReview() {
         btn.classList.toggle('active', btn.dataset.method === _billSplitMethod);
     });
 
-    // Update summary
+    // Update summary — mirror the complete breakdown from the left panel
     const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-    setText('billSummarySubtotal', `₹${subtotal.toLocaleString('en-IN')}`);
+    const bd = _billBreakdown(activeOrders);
+    setText('billSummarySubtotal', `₹${bd.food.toLocaleString('en-IN')}`);
+    const taxWrap = document.getElementById('billSummaryTaxRows');
+    if (taxWrap) {
+        taxWrap.innerHTML = bd.taxRows.map(tr =>
+            `<div class="bill-summary-row"><span>${escapeHtml(tr.name)} (${tr.rate}%)</span><span>₹${Number(tr.amount).toLocaleString('en-IN')}</span></div>`
+        ).join('');
+    }
+    const scRow = document.getElementById('billSummarySCRow');
+    if (scRow) {
+        scRow.classList.toggle('hidden', !(bd.sc > 0));
+        setText('billSummarySCLabel', `${bd.scName || 'Service Charge'}${bd.scRate ? ` (${bd.scRate}%)` : ''}`);
+        setText('billSummarySCVal', `₹${bd.sc.toLocaleString('en-IN')}`);
+    }
+    const odRow = document.getElementById('billSummaryOrderDiscRow');
+    if (odRow) {
+        odRow.classList.toggle('hidden', !(bd.orderDiscount > 0));
+        setText('billSummaryOrderDiscLabel', bd.orderLabels.length ? `Discount (${bd.orderLabels.join(', ')})` : 'Order Discounts');
+        setText('billSummaryOrderDiscVal', `-₹${bd.orderDiscount.toLocaleString('en-IN')}`);
+    }
     const discRow = document.getElementById('billSummaryDiscountRow');
     if (discountValue > 0) {
         discRow?.classList.remove('hidden');
-        setText('billSummaryDiscountLabel', discountLabel || 'Discount');
+        let dl = discountLabel || (String(discountSource || '').startsWith('manual:') ? 'Manual Discount' : 'Discount');
+        if (_billCouponCode) dl = `${dl} (${_billCouponCode})`;
+        setText('billSummaryDiscountLabel', dl);
         setText('billSummaryDiscountVal', `-₹${discountValue.toLocaleString('en-IN')}`);
     } else {
         discRow?.classList.add('hidden');
@@ -1497,10 +1593,22 @@ async function _bumpCustomerDiscountUsage(phone, discountId, discountSource, isV
                 cur.firstOrderDiscountId = discountId;
             }
             cur.discountUsage = cur.discountUsage || {};
+            // This function is only ever called from table-billing flows, so
+            // every call here IS a table-channel redemption. Bump both the
+            // flat/global counter AND the table-specific sub-counter —
+            // discount-evaluator.js's per-customer-limit check reads
+            // discountUsage.table[discountId] for table channel specifically,
+            // but nothing was ever writing to it, making that half of its
+            // AND-check permanently a no-op (always read as 0, always under
+            // any positive limit). The flat counter alone was carrying the
+            // actual enforcement; this makes the table-specific check real.
+            cur.discountUsage.table = cur.discountUsage.table || {};
             if (isVoid) {
                 cur.discountUsage[discountId] = Math.max(0, (cur.discountUsage[discountId] || 0) - 1);
+                cur.discountUsage.table[discountId] = Math.max(0, (cur.discountUsage.table[discountId] || 0) - 1);
             } else {
                 cur.discountUsage[discountId] = (cur.discountUsage[discountId] || 0) + 1;
+                cur.discountUsage.table[discountId] = (cur.discountUsage.table[discountId] || 0) + 1;
             }
             return cur;
         });
@@ -1655,15 +1763,15 @@ export async function voidTableBill(tableId, groupId = null) {
             }
             const groupOrders = (group.orders || []).map(id => _orders[id]).filter(Boolean);
             const updates = {};
-            groupOrders.forEach(o => {
-                if (o.status === 'Paid') {
-                    updates[`orders/${o.id}/paymentStatus`] = 'Served';
-                    updates[`orders/${o.id}/paymentMethod`] = null;
-                    updates[`orders/${o.id}/paymentDetails`] = null;
-                    updates[`orders/${o.id}/paymentEntries`] = null;
-                    updates[`orders/${o.id}/updatedAt`] = now;
-                }
-            });
+            // NOTE: order-level fields (status/paymentStatus/paymentMethod/etc.)
+            // are deliberately NOT set here — the per-order runTransaction
+            // below is the sole, correct writer for those. A redundant write
+            // here previously set paymentStatus to 'Served' (not a valid
+            // payment-status value — that belongs in the order's `status`
+            // field, never touched by this map at all). Harmless when the
+            // transaction after it succeeds (it overwrites this), but left
+            // orders in a genuinely inconsistent state on a partial failure
+            // between the two writes.
             updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/status`] = 'billing';
             updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paidAt`] = null;
             updates[`tableSessions/${sess.sessionId}/orderGroups/${groupId}/paymentMethod`] = null;
@@ -1711,14 +1819,9 @@ export async function voidTableBill(tableId, groupId = null) {
         const tableOrderCount = (sess.orders || []).length;
         const subtotal = _effectiveTotal(sess);
         const updates = {};
-
-        paidOrders.forEach(o => {
-            updates[`orders/${o.id}/paymentStatus`] = 'Served';
-            updates[`orders/${o.id}/paymentMethod`] = null;
-            updates[`orders/${o.id}/paymentDetails`] = null;
-            updates[`orders/${o.id}/paymentEntries`] = null;
-            updates[`orders/${o.id}/updatedAt`] = now;
-        });
+        // NOTE: same fix as the group-void branch above — order-level
+        // fields are written exclusively by the per-order runTransaction
+        // below, not here. See that comment for why.
         updates[`tableSessions/${sess.sessionId}/status`] = 'billing';
         updates[`tableSessions/${sess.sessionId}/closedAt`] = null;
         updates[`tableSessions/${sess.sessionId}/paymentMethod`] = null;
@@ -2036,6 +2139,8 @@ async function _printBillForGroup(tableId, groupId) {
     const sess = _sessionForTable(tableId);
     if (!t || !sess || !groupId) { showToast('No session for this group', 'warning'); return; }
     const sessionId = sess.sessionId || t.currentSession;
+    let contact = {};
+    try { contact = (await get(Outlet.ref(`tableSessionsContact/${sessionId}`))).val() || {}; } catch (_) {}
     const groups = _orderGroupsForSession(sessionId);
     const g = groups.find(g => g.id === groupId);
     if (!g) { showToast('Group not found', 'warning'); return; }
@@ -2048,7 +2153,9 @@ async function _printBillForGroup(tableId, groupId) {
     const groupOrders = (g.orders || []).map(oid => ({ id: oid, ...(_orders[oid] || {}) })).filter(o => o.id && o.status !== 'Cancelled');
     if (!groupOrders.length) { showToast('No orders in this group', 'warning'); return; }
     let subtotal = 0;
+    let orderTax = 0, orderSC = 0, ordersTotal = 0;
     const allItems = [];
+    const taxMap = new Map();
     groupOrders.forEach(o => {
         Object.values(o.items || {}).forEach(it => {
             const qty = Number(it.qty || 1);
@@ -2056,31 +2163,47 @@ async function _printBillForGroup(tableId, groupId) {
             allItems.push({ name: it.name || 'Item', qty, price, size: it.size || '', addon: it.addon || '' });
             subtotal += price * qty;
         });
+        orderTax += Number(o.tax || 0);
+        orderSC += Number(o.serviceCharge || 0);
+        ordersTotal += Number(o.total || 0);
+        (Array.isArray(o.taxItems) ? o.taxItems : []).forEach(ti => {
+            const k = `${ti.name}|${ti.rate}`;
+            const cur = taxMap.get(k) || { name: ti.name, rate: ti.rate, amount: 0 };
+            cur.amount += Number(ti.amount || 0);
+            taxMap.set(k, cur);
+        });
     });
-    const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
-    const tax = taxItems.reduce((s, t) => s + t.amount, 0);
-    const serviceCharge = scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0;
+    // M3: tax rows from order-time taxItems (settings only as legacy fallback)
+    let taxItems = Array.from(taxMap.values());
+    if (!taxItems.length) taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
+    const tax = taxItems.reduce((s, t) => s + t.amount, 0) || orderTax;
+    const serviceCharge = orderSC || (scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0);
     const groupDiscount = groupOrders.reduce((sum, o) => sum + Number(o.discount || 0), 0);
     // Include bill-level discount from payment modal (stored on group)
     const billDiscount = Number(g.discount || 0);
     const billDiscountLabel = g.discountLabel || null;
-    const grandTotalAfterDiscount = subtotal + tax + serviceCharge - groupDiscount - billDiscount;
+    // M1: NET PAYABLE must equal charged amount — paidAmount (post-payment) else Σ order totals − bill discount
+    const paidAmount = Number(g.paidAmount || 0);
+    const grandTotalAfterDiscount = paidAmount > 0 ? paidAmount : Math.max(0, ordersTotal - billDiscount);
+    const scName = groupOrders.find(o => o.serviceChargeName)?.serviceChargeName || dine.serviceChargeName || 'Service Charge';
+    const scRateVal = groupOrders.find(o => o.serviceChargeRate)?.serviceChargeRate ?? scRate;
+    const discLabels = [...new Set([...groupOrders.map(o => o.discountLabel).filter(Boolean), billDiscount > 0 ? billDiscountLabel : null].filter(Boolean))];
     await printOrderReceipt({
-
         orderId: `TABLE-${t.number}-${g.label.replace(/\s/g, '')}`,
         type: 'Dine-in', items: allItems,
         total: grandTotalAfterDiscount, subtotal, tax, taxItems,
-        taxName: taxRates.map(r => r.name).join(' + ') || 'Tax',
+        taxName: taxItems.map(ti => ti.name).join(' + ') || taxRates.map(r => r.name).join(' + ') || 'Tax',
         serviceCharge,
-        serviceChargeName: dine.serviceChargeName || 'Service Charge',
-        serviceChargeRate: scRate,
+        serviceChargeName: scName,
+        serviceChargeRate: scRateVal,
         discount: groupDiscount + billDiscount, deliveryFee: 0,
-        discountLabel: billDiscount > 0 ? billDiscountLabel : undefined,
+        discountLabel: discLabels.length ? discLabels.join(' + ') : undefined,
         tableNo: String(t.number),
         createdAt: sess.openedAt || Date.now(),
         paymentMethod: g.paymentMethod || 'Cash',
         status: 'Delivered',
-        customerName: `Table ${t.number} · ${g.label}`
+        customerName: contact.customerName || `Table ${t.number} · ${g.label}`,
+        phone: contact.customerPhone || contact.guestPhone || ''
     }, true);
 }
 
@@ -2090,6 +2213,8 @@ async function _printSessionBill(tableId) {
     if (!t || !sess) { showToast('No active session to print', 'warning'); return; }
 
     const sessionId = sess.sessionId || t.currentSession;
+    let contact = {};
+    try { contact = (await get(Outlet.ref(`tableSessionsContact/${sessionId}`))).val() || {}; } catch (_) {}
     const groups = _orderGroupsForSession(sessionId);
     const dineSnap = await get(_settingsRef());
     const dine = dineSnap.val() || {};
@@ -2110,43 +2235,62 @@ async function _printSessionBill(tableId) {
     // Single-bill mode: existing behavior
     const orders = _ordersForSession(sessionId);
     if (!orders.length) { showToast('No orders to bill', 'warning'); return; }
+    const activeOrders = orders.filter(o => o.status !== 'Cancelled');
 
     let subtotal = 0;
+    let orderTax = 0, orderSC = 0, orderDiscount = 0;
     const allItems = [];
-    orders.filter(o => o.status !== 'Cancelled').forEach(o => {
+    const taxMap = new Map();
+    activeOrders.forEach(o => {
         Object.values(o.items || {}).forEach(it => {
             const qty = Number(it.qty || 1);
             const price = Number(it.price || 0);
             allItems.push({ name: it.name || 'Item', qty, price, size: it.size || '', addon: it.addon || '' });
             subtotal += price * qty;
         });
+        orderTax += Number(o.tax || 0);
+        orderSC += Number(o.serviceCharge || 0);
+        orderDiscount += Number(o.discount || 0);
+        (Array.isArray(o.taxItems) ? o.taxItems : []).forEach(ti => {
+            const k = `${ti.name}|${ti.rate}`;
+            const cur = taxMap.get(k) || { name: ti.name, rate: ti.rate, amount: 0 };
+            cur.amount += Number(ti.amount || 0);
+            taxMap.set(k, cur);
+        });
     });
 
-    const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
-    const tax = Number(sess.tax ?? 0) || taxItems.reduce((s, t) => s + t.amount, 0);
-    const serviceCharge = Number(sess.serviceCharge ?? 0) || (scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0);
-    const grandTotal = _effectiveTotal(sess);
-    const sessionDiscount = orders.reduce((sum, o) => sum + Number(o.discount || 0), 0);
-    // Include bill-level discount from payment modal (stored on session)
-    const billDiscount = Number(sess.discount || 0);
-    const billDiscountLabel = sess.discountLabel || null;
+    // M3: tax rows from order-time taxItems (settings only as legacy fallback)
+    let taxItems = Array.from(taxMap.values());
+    if (!taxItems.length) taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
+    const tax = taxItems.reduce((s, t) => s + t.amount, 0) || orderTax;
+    const serviceCharge = orderSC || (scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0);
+    // M1: NET PAYABLE must equal charged amount — paidAmount (post-payment) else Σ order totals
+    const paidAmount = Number(sess.paidAmount || 0);
+    const grandTotal = paidAmount > 0 ? paidAmount : _effectiveTotal(sess);
+    // M2: sess.discount is Σ per-order discounts pre-payment but bill-discount post-payment — only count as bill discount once paid
+    const billDiscount = paidAmount > 0 ? Number(sess.discount || 0) : 0;
+    const billDiscountLabel = paidAmount > 0 ? (sess.discountLabel || null) : null;
+    const scName = activeOrders.find(o => o.serviceChargeName)?.serviceChargeName || dine.serviceChargeName || 'Service Charge';
+    const scRateVal = activeOrders.find(o => o.serviceChargeRate)?.serviceChargeRate ?? scRate;
+    const discLabels = [...new Set([...activeOrders.map(o => o.discountLabel).filter(Boolean), billDiscount > 0 ? billDiscountLabel : null].filter(Boolean))];
 
     const combinedOrder = {
         orderId: `TABLE-${t.number}`,
         type: 'Dine-in',
         items: allItems,
         total: grandTotal, subtotal, tax, taxItems,
-        taxName: taxRates.map(r => r.name).join(' + ') || 'Tax',
+        taxName: taxItems.map(ti => ti.name).join(' + ') || taxRates.map(r => r.name).join(' + ') || 'Tax',
         serviceCharge,
-        serviceChargeName: dine.serviceChargeName || 'Service Charge',
-        serviceChargeRate: scRate,
-        discount: sessionDiscount + billDiscount, deliveryFee: 0,
-        discountLabel: billDiscount > 0 ? billDiscountLabel : undefined,
+        serviceChargeName: scName,
+        serviceChargeRate: scRateVal,
+        discount: orderDiscount + billDiscount, deliveryFee: 0,
+        discountLabel: discLabels.length ? discLabels.join(' + ') : undefined,
         tableNo: String(t.number),
         createdAt: sess.openedAt || Date.now(),
         paymentMethod: sess.paymentMethod || 'Cash',
         status: 'Delivered',
-        customerName: `Table ${t.number}`
+        customerName: contact.customerName || `Table ${t.number}`,
+        phone: contact.customerPhone || contact.guestPhone || ''
     };
 
     await printOrderReceipt(combinedOrder, true);
