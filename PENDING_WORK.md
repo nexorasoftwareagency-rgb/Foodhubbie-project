@@ -244,6 +244,30 @@
 | **Files Changed** | `Admin/style.css` (lines 10177-10181) |
 | **Verified** | Build passes, deploy successful |
 
+### P2-8: Void Bill Discount Analytics Gap (M5) — **OPEN**
+| Field | Detail |
+|-------|--------|
+| **Problem** | Voiding a table/group bill does not fully reverse bill-level discount in analytics/reports |
+| **Place** | `Admin/js/features/tables.js` `voidTableBill` (~1742-1873); `Admin/js/features/discount-evaluator.js` `recordDiscountUsage`; `Admin/js/features/discountsReports.js` |
+| **Issue** | (1) Void only calls `recordDiscountUsage(..., isVoid: true)` when `discountId` is set — **manual bill discounts with no `discountId` are never usage-tracked, so void cannot reverse them**. (2) `discountsReports` sums `amountGiven` but renders rows as `-${amountGiven}` — void rows store **negative** `amountGiven`, so UI shows double-negative (`-₹-50`). (3) `tableAnalytics.totalRevenue` is reduced by session `subtotal` on void, not by `subtotal − billDiscount`, so revenue KPI can disagree with paid history. |
+| **Reason** | `recordDiscountUsage` requires a discount definition; manual payment-modal bill discount often writes only `sess.discount`/`g.discount` + label without `discountId` |
+| **Impact** | Discount reports under-count void reversals for manual bill discounts; void rows display wrong; table revenue KPI may drift from cash collected |
+| **Status** | **OPEN — deferred (M5)** |
+| **Fix Sketch** | (a) On bill settle, always write a usage row for bill discount (synthetic id or `source: 'manual:bill'`); (b) on void, reverse with matching negative amount; (c) reports: show `Math.abs(amountGiven)` with void badge, or filter void pairs; (d) `tableAnalytics` void: subtract `(subtotal − billDiscount)` or track `paidAmount` delta |
+| **Verify** | Apply bill discount without picking a catalog discount → void → discountsUsage has void row; reports total nets to 0; tableAnalytics matches paidAmount history |
+
+### P2-9: Coupon Discount Base Amount Inconsistency (M7) — **OPEN**
+| Field | Detail |
+|-------|--------|
+| **Problem** | Coupon % / min-subtotal base is food `subtotal` only across runtimes — may not match billable total or stacking expectations |
+| **Place** | `menu/js/discount.js` `validateCoupon`; `Admin/js/features/discount-evaluator.js` `_discountAmount` + `minSubtotal`; `bot/discount-engine.js` same |
+| **Issue** | All three compute `amount = subtotal * value%` and gate `minSubtotal` against **food subtotal** (excl. tax/SC/delivery). Cap is `min(total, subtotal)` not billable total. Stacked coupons each use the **full** subtotal as base, not remaining-after-prior-discount. No shared helper — three near-copies can drift (already drifted on channel gates until P0-6). |
+| **Reason** | Editor hint says “% off subtotal”; product never locked whether base = food-only vs pre-tax bill vs post-stack remainder |
+| **Impact** | Customer-visible coupon ₹ may differ from staff expectation on bills with heavy tax/SC; stacking two % coupons can over-discount relative to “% off order total” wording; future channel fix may re-split the three engines |
+| **Status** | **OPEN — deferred (M7)** |
+| **Fix Sketch** | Decide one base (recommend: food subtotal, document in discount editor); extract one `couponAmount(mode, value, base, maxCap)` + `meetsMin(base)` used by menu + evaluator + bot; if stacking should use remainder, change `_pickBest` loop to sequential base |
+| **Verify** | Unit assert: fixed coupon ₹100 on subtotal ₹500 with tax = ₹100 off food; percent 10% on ₹500 = ₹50; two stackable 10% coupons → document chosen behavior with assert |
+
 ---
 
 ## 🟢 P3 — LOW (Polish / Future-Proofing)
@@ -342,12 +366,12 @@
 
 | Priority | Count | Must-Fix Before Deploy |
 |----------|-------|------------------------|
-| **P0** | 4 | ✅ YES (all 4) |
+| **P0** | 6 | ✅ YES (all 6 — P0-4/5/6 fixed this session) |
 | **P1** | 6 | ✅ YES (all 6) |
-| **P2** | 6 | ⚠️ Recommended (6/6 done) |
+| **P2** | 9 | ⚠️ Recommended (7/9 done; M5+M7 open) |
 | **P3** | 6 | 📋 Backlog (5/6 done) |
 
-**Total Active Issues: 12** (4 P0 + 6 P1 + 6 P2 + 1 P3 remaining)
+**Total Active Issues: 15** (0 P0 + 0 P1 + 2 P2 open + 1 P3 remaining)
 
 ---
 
@@ -355,6 +379,8 @@
 
 ```bash
 # 1. P3-2: Verify Sharp conversion with real WhatsApp message
+# 2. P2-8 (M5): void bill-discount usage reverse + reports abs display + tableAnalytics paid delta
+# 3. P2-9 (M7): shared coupon base helper (menu + evaluator + bot), lock stacking policy
 ```
 ```
 
@@ -367,3 +393,4 @@
 - **Table 02**: Currently FREE (was billing, paid via test). Use fresh table for next E2E.
 - **Auth**: `roshanipizza@gmail.com` / `Ns@9724649971` for admin login
 - **QR Menu**: `https://foodhubbie-qrmenu.web.app/?o=pizza&b=roshani-pizza&t=2135N2D5F5E3H6J4` (Table 02)
+- **M5 = P2-8** (void billDiscount analytics); **M7 = P2-9** (coupon base). Bot deploy path is `/var/www/foodhubbie/bot/` (PM2 script path) — not `/home/ubuntu/`.
