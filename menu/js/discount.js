@@ -53,6 +53,8 @@ export async function validateCoupon(code, subtotal) {
         // instead of being zeroed server-side after placement.
         if (d.channel && d.channel !== 'all' && d.channel !== 'website') continue;
 
+        // P2-9 policy (locked): base = food subtotal only (no tax/SC/delivery).
+        // Same formula in Admin/js/features/discount-evaluator.js and bot/discount-engine.js — keep in sync.
         const raw = d.mode === 'percent' ? subtotal * (Number(d.value) || 0) / 100 : Number(d.value) || 0;
         const amount = d.maxCap ? Math.min(raw, d.maxCap) : raw;
         if (amount <= 0) continue;

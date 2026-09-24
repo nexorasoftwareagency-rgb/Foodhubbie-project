@@ -110,6 +110,9 @@ function _cartHasCategory(cart, categoryIds) {
     return cart.some(item => categoryIds.includes(item.categoryId) || categoryIds.includes(item.category));
 }
 
+// P2-9 policy (locked): base = food subtotal only (ctx.subtotal excludes tax/SC/delivery).
+// Stacked discounts each use the full food subtotal as base; grand total is capped at subtotal below.
+// Same formula in menu/js/discount.js and bot/discount-engine.js — keep in sync.
 function _discountAmount(d, subtotal) {
     let amt = d.mode === 'percent' ? subtotal * (Number(d.value) || 0) / 100 : Number(d.value) || 0;
     if (d.maxCap && amt > d.maxCap) amt = d.maxCap;

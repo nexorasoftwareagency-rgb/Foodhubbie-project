@@ -33,11 +33,16 @@ function _cartHasCategory(cart, categoryIds) {
     return arr.some(item => categoryIds.includes(item.categoryId) || categoryIds.includes(item.category));
 }
 
-function _discountAmount(d, subtotal) {
+// P2-9 policy (locked): base = food subtotal only (no tax/SC/delivery).
+// Stacked discounts each use the full food subtotal as base; grand total is capped at subtotal.
+// Same formula in menu/js/discount.js and Admin/js/features/discount-evaluator.js — keep in sync.
+// Exported so bot/tests/unit.test.js can lock the policy.
+function discountAmount(d, subtotal) {
     let amt = d.mode === 'percent' ? subtotal * (Number(d.value) || 0) / 100 : Number(d.value) || 0;
     if (d.maxCap && amt > d.maxCap) amt = d.maxCap;
     return amt;
 }
+const _discountAmount = discountAmount;
 
 function _pickBest(group, subtotal) {
     return group.slice().sort((a, b) => {
@@ -182,4 +187,4 @@ async function recordDiscountUsage({ OUTLET, discountId, orderId, customerPhone,
     }
 }
 
-module.exports = { evaluateDiscount, validateCouponCode, recordDiscountUsage };
+module.exports = { evaluateDiscount, validateCouponCode, recordDiscountUsage, discountAmount };

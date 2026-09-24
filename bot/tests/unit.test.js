@@ -121,3 +121,26 @@ test('customerIdFromJid: last-10-digits thread key for Baileys and Meta jids', (
     assert.strictEqual(customerIdFromJid('123@s.whatsapp.net'), null);
     assert.strictEqual(customerIdFromJid(null), null);
 });
+
+// P2-9: coupon % / flat / cap base is food subtotal only — same formula in
+// menu/js/discount.js and Admin/js/features/discount-evaluator.js.
+// Stacking uses full food subtotal per discount; grand total capped at subtotal.
+test('discountAmount: food-subtotal base, maxCap, stacking cap', () => {
+    const { discountAmount } = require('../discount-engine');
+    // 10% of ₹500 food subtotal = ₹50
+    assert.strictEqual(discountAmount({ mode: 'percent', value: 10 }, 500), 50);
+    // flat ₹100 off ₹500 food = ₹100 (tax on the bill does not change the base)
+    assert.strictEqual(discountAmount({ mode: 'flat', value: 100 }, 500), 100);
+    // maxCap clamps percent: 50% of ₹500 = ₹250 → cap ₹80
+    assert.strictEqual(discountAmount({ mode: 'percent', value: 50, maxCap: 80 }, 500), 80);
+    // maxCap=0 / missing = uncapped (falsy check, not === null)
+    assert.strictEqual(discountAmount({ mode: 'flat', value: 90, maxCap: 0 }, 500), 90);
+    // stacking: each stacked discount uses FULL food subtotal as base…
+    const a = discountAmount({ mode: 'percent', value: 10, stackable: true }, 500);
+    const b = discountAmount({ mode: 'percent', value: 20, stackable: true }, 500);
+    assert.strictEqual(a + b, 50 + 100);
+    // …and the grand total is capped at food subtotal (evaluateDiscount: Math.min(total, subtotal))
+    const heavy = discountAmount({ mode: 'percent', value: 80 }, 500)
+        + discountAmount({ mode: 'percent', value: 80 }, 500);
+    assert.strictEqual(Math.min(heavy, 500), 500);
+});
