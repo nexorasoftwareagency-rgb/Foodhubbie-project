@@ -15,7 +15,7 @@ import { acceptOrder, OrderTakenError, ProximityError } from "@/services/orderSe
 import { enqueueOfflineAction } from "@/components/shared/OfflineQueue";
 import { logRiderError } from "@/services/auditService";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrency, haptic } from "@/lib/utils";
+import { formatCurrency, haptic, formatOrderId } from "@/lib/utils";
 import { PROXIMITY, PING_COUNTDOWN_SECONDS } from "@/lib/constants";
 import type { AvailableOrder } from "@/types";
 
@@ -166,7 +166,7 @@ export function PingModal() {
       <div className="w-full max-w-[300px] rounded-[18px] bg-white/[0.07] border border-white/[0.14] backdrop-blur-md p-4 my-5">
         <div className="flex justify-between py-2">
           <span className="text-[10.5px] font-bold uppercase tracking-wide text-white/60">Order ID</span>
-          <span className="text-[13px] font-bold text-white">#{current.id.slice(-8)}</span>
+          <span className="text-[13px] font-bold text-white">#{formatOrderId(current.id)}</span>
         </div>
         <div className="flex justify-between py-2 border-t border-white/10">
           <span className="text-[10.5px] font-bold uppercase tracking-wide text-white/60 flex items-center gap-1">

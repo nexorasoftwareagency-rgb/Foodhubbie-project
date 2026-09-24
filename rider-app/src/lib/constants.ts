@@ -37,6 +37,13 @@ export function getBusinessIdForOutlet(outletId: OutletId): string {
   return outletBusinessIdCache.get(outletId) || "";
 }
 
+/** Display meta for outlet breakdown cards (fallback for unknown outlets). */
+export function getOutletMeta(outletId: OutletId): { name: string; icon: string; color: string } {
+  if (outletId === "cake") return { name: "Cake", icon: "🎂", color: "#D946EF" };
+  if (outletId === "pizza") return { name: "Pizza", icon: "🍕", color: "#E84908" };
+  return { name: outletId, icon: "🏪", color: "#E84908" };
+}
+
 /** Prefix outlet-scoped paths under businesses/{bid}/outlets/{oid}/.
  *  Business ID resolved at runtime from outlet settings. */
 export function tenantPath(outlet: OutletId, path: string): string {

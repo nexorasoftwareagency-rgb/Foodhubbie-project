@@ -917,12 +917,15 @@ export async function submitWalkinSale() {
         const total = Math.max(0, subtotal + tax + sc - discountValue);
 
         const today = new Date();
-        const dateStr = `${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
+        const dd = today.getDate().toString().padStart(2, '0');
+        const mm = (today.getMonth() + 1).toString().padStart(2, '0');
+        const yy = String(today.getFullYear()).slice(-2);
+        const dateStr = `${dd}${mm}${yy}`;
 
         // Get sequence from database
         const seqSnap = await runTransaction(tenantRef(Outlet.current, `metadata/orderSequence/${dateStr}`), (current) => (current || 0) + 1);
         const seqNum = seqSnap.snapshot.val() || 1;
-        const orderId = `${dateStr}-${seqNum.toString().padStart(4, '0')}`;
+        const orderId = `${dateStr}-${seqNum}`;
         logger.firebase('POS', `Generated order ID: ${orderId}`);
 
         const orderData = {

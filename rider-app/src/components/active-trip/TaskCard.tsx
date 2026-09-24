@@ -5,7 +5,7 @@ import { BillingSummary } from "@/components/active-trip/BillingSummary";
 import { ItemChecklist } from "@/components/active-trip/ItemChecklist";
 import { ActionButtons } from "@/components/active-trip/ActionButtons";
 import { SlideToAction } from "@/components/active-trip/SlideToAction";
-import { cn } from "@/lib/utils";
+import { cn, formatOrderId } from "@/lib/utils";
 import type { ActiveOrder } from "@/hooks/useActiveOrder";
 
 export function TaskCard({
@@ -43,7 +43,7 @@ export function TaskCard({
     <div className="glass-surface rounded-[20px] shadow-[var(--shadow-premium)] p-4 mb-3.5">
       <div className="flex gap-1.5 mb-3.5">
         <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-extrabold text-muted-foreground">
-          #{order.id.slice(-8)}
+          #{formatOrderId(order.id)}
         </span>
         <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-extrabold text-muted-foreground">
           {order.outletName}

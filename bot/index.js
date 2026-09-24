@@ -55,7 +55,7 @@ console.log = function (...args) {
 
 // ── Extracted modules ──────────────────────────────────────────────────────
 const {
-    formatJid, maskJid,
+    formatJid, maskJid, formatOrderId,
     getISTDateInfo, getISTDateString, isShopOpen,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
@@ -447,16 +447,16 @@ function initCommandListener(sock) {
 
 async function generateOrderId(outlet = 'outlet') {
     const today = new Date();
-    const y = today.getFullYear();
-    const m = (today.getMonth() + 1).toString().padStart(2, '0');
     const d = today.getDate().toString().padStart(2, '0');
-    const dateStr = `${y}${m}${d}`;
+    const m = (today.getMonth() + 1).toString().padStart(2, '0');
+    const yy = String(today.getFullYear()).slice(-2);
+    const dateStr = `${d}${m}${yy}`;
 
     const seqRef = db.ref(resolvePath(`metadata/orderSequence/${dateStr}`, outlet));
     const result = await seqRef.transaction((current) => (current || 0) + 1);
 
     const seqNum = result.snapshot.val() || 1;
-    return `${dateStr}-${seqNum.toString().padStart(4, '0')}`;
+    return `${dateStr}-${seqNum}`;
 }
 
 async function createWebviewToken(outlet, phone) {
@@ -873,7 +873,7 @@ async function sendFCMToAdmins(orderId, order) {
         const seen = new Map();
         entries.forEach(e => { if (!seen.has(e.token)) seen.set(e.token, e.uid); });
         const unique = [...seen.keys()];
-        const title = `🆕 New Order #${orderId.slice(-5)}`;
+        const title = `🆕 New Order #${formatOrderId(order.orderId || orderId)}`;
         const body = `${order.customerName || 'Customer'} · ₹${order.total || 0} · ${outlet.toUpperCase()}`;
         const results = await admin.messaging().sendEachForMulticast({
             tokens: unique,
@@ -945,14 +945,14 @@ async function notifyAdmin(sock, orderId, order, type = 'NEW') {
             msg = `⚠️ *LOST SALE / ABANDONED* ⚠️\n━━━━━━━━━━━━━━━━━━━━\n👤 *Customer:* ${order.customerName || 'Anonymous'}\n📞 *Phone:* ${order.phone || 'N/A'}\n💰 *Potential Total:* ₹${order.total || 0}\n🏪 *Outlet:* ${outlet.toUpperCase()}\n━━━━━━━━━━━━━━━━━━━━\n_User cancelled at final checkout step._`;
         } else if (type === 'RIDER_ACCEPTED') {
             const riderName = order.riderName || order.riderId || order.assignedRider || 'A rider';
-            msg = `🛵 *RIDER ON THE WAY TO RESTAURANT* 🛵\n━━━━━━━━━━━━━━━━━━━━\n🆔 ID: #${orderId.slice(-5)}\n👤 Customer: ${order.customerName || 'N/A'}\n📞 Phone: ${order.phone || 'N/A'}\n🛵 Rider: ${riderName}\n📞 Rider Phone: ${order.riderPhone || 'N/A'}\n━━━━━━━━━━━━━━━━━━━━\n_Get the order ready for pickup._`;
+            msg = `🛵 *RIDER ON THE WAY TO RESTAURANT* 🛵\n━━━━━━━━━━━━━━━━━━━━\n🆔 ID: #${formatOrderId(order.orderId || orderId)}\n👤 Customer: ${order.customerName || 'N/A'}\n📞 Phone: ${order.phone || 'N/A'}\n🛵 Rider: ${riderName}\n📞 Rider Phone: ${order.riderPhone || 'N/A'}\n━━━━━━━━━━━━━━━━━━━━\n_Get the order ready for pickup._`;
         } else if (type === 'RIDER_ARRIVED') {
             const riderName = order.riderName || order.riderId || order.assignedRider || 'A rider';
-            msg = `🛵 *RIDER ARRIVED AT RESTAURANT* 🛵\n━━━━━━━━━━━━━━━━━━━━\n🆔 ID: #${orderId.slice(-5)}\n🛵 Rider: ${riderName}\n━━━━━━━━━━━━━━━━━━━━\n_Hand over the order for pickup._`;
+            msg = `🛵 *RIDER ARRIVED AT RESTAURANT* 🛵\n━━━━━━━━━━━━━━━━━━━━\n🆔 ID: #${formatOrderId(order.orderId || orderId)}\n🛵 Rider: ${riderName}\n━━━━━━━━━━━━━━━━━━━━\n_Hand over the order for pickup._`;
         } else {
             let itemsText = (order.items || []).map(i => `• ${i.name} (${i.size}) x${i.quantity}`).join('\n');
             let adminMsg = type === 'NEW' ? `🔔 *NEW ORDER RECEIVED!* 🔔\n════════════════════════\n` : `📦 *ORDER UPDATE* 📦\n════════════════════════\n`;
-            adminMsg += `🆔 ID: #${orderId.slice(-5)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n════════════════════════\n📦 Items:\n${itemsText}\n════════════════════════\n💰 Total: ₹${order.total || 0}\n💳 Method: ${order.paymentMethod}`;
+            adminMsg += `🆔 ID: #${formatOrderId(order.orderId || orderId)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n════════════════════════\n📦 Items:\n${itemsText}\n════════════════════════\n💰 Total: ₹${order.total || 0}\n💳 Method: ${order.paymentMethod}`;
             msg = adminMsg;
         }
 
@@ -996,7 +996,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             const status = (order.status || "Unknown").toUpperCase();
             const type = (order.type || order.orderType || "Walk-in");
             if (order.phone !== "Walk-in") {
-                console.warn(`[BOT] ⚠️ Skipping Notification for #${id.slice(-5)} (${type}): No valid phone. Value: "${order.phone}"`);
+                console.warn(`[BOT] ⚠️ Skipping Notification for #${formatOrderId(order.orderId || id)} (${type}): No valid phone. Value: "${order.phone}"`);
                 updateData(`bot/logs/${id}`, { error: "No valid JID", phone: order.phone && order.phone !== 'undefined' ? order.phone : null, type, timestamp: Date.now() }, order.outlet || OUTLET).catch(() => { });
             }
             return;
@@ -1009,7 +1009,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
         const isDineIn = typeLower.includes("dine") || typeLower.includes("walk") || orderType === "Dine-in";
 
         if (isDineIn) {
-            console.log(`[BOT] 🍽️ Dine-in Order Detected: #${id.slice(-5)} | Status: ${currentStatus} | Target: ${maskJid(jid)}`);
+            console.log(`[BOT] 🍽️ Dine-in Order Detected: #${formatOrderId(order.orderId || id)} | Status: ${currentStatus} | Target: ${maskJid(jid)}`);
         }
 
         const phoneDisplay = order.phone || order.whatsappNumber || "N/A";
@@ -1030,7 +1030,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
         const shouldSendOtpMessage = isDeliveryOtpStatus && storedOTP && !currentProcessedStatus?.lastOtp && !currentProcessedStatus?.lastOtp;
 
         const maskedJid = maskJid(jid);
-        console.log(`[Status Update] 🔍 Processing Order #${id.slice(-5)} | Status: ${currentStatus} | OTP Changed: ${isOtpChanged} | Target: ${maskedJid} | CachedStatus: ${currentProcessedStatus?.status || 'null'} | isNew: ${isNew}`);
+        console.log(`[Status Update] 🔍 Processing Order #${formatOrderId(order.orderId || id)} | Status: ${currentStatus} | OTP Changed: ${isOtpChanged} | Target: ${maskedJid} | CachedStatus: ${currentProcessedStatus?.status || 'null'} | isNew: ${isNew}`);
 
         if (!currentProcessedStatus || currentProcessedStatus.status !== currentStatus || isNew || isOtpChanged || shouldSendOtpMessage) {
             const currentRider = order.riderId || order.assignedRider || "";
@@ -1056,11 +1056,11 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 riderId: currentRider
             });
 
-            console.log(`[Status Update] 🔔 Processing #${id.slice(-5)}: Status=${currentStatus}, Rider=${currentRider || 'None'}`);
+            console.log(`[Status Update] 🔔 Processing #${formatOrderId(order.orderId || id)}: Status=${currentStatus}, Rider=${currentRider || 'None'}`);
 
             // NEW: Notify Rider on Assignment
             if (isRiderChanged) {
-                console.log(`[RIDER] 🔄 Rider Change Detected for #${id.slice(-5)}: ${lastRider} -> ${currentRider}`);
+                console.log(`[RIDER] 🔄 Rider Change Detected for #${formatOrderId(order.orderId || id)}: ${lastRider} -> ${currentRider}`);
                 await riderNotify.notifyRiderAssignment(sock, id, order, addInAppNotification);
             }
 
@@ -1077,13 +1077,13 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             } else if (statusLower === "confirmed") {
                 if (isDineIn && isNew) {
                     const outletName = order.outlet?.toUpperCase() || 'OUR RESTAURANT';
-                    msg = `🏪 *WELCOME TO ${outletName}!* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour counter order has been *CONFIRMED*! 🎊\n🆔 *Order ID:* #${id.slice(-5)}\n👤 *Customer:* ${order.customerName || 'Guest'}\n${order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour delicious meal is being prepared right now! 👨‍🍳🔥\n_Thank you for dining with us!_ 🙏`;
+                    msg = `🏪 *WELCOME TO ${outletName}!* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour counter order has been *CONFIRMED*! 🎊\n🆔 *Order ID:* #${formatOrderId(order.orderId || id)}\n👤 *Customer:* ${order.customerName || 'Guest'}\n${order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour delicious meal is being prepared right now! 👨‍🍳🔥\n_Thank you for dining with us!_ 🙏`;
                 } else {
                     msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}Your order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")}`;
                 }
                 img = botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "ready" || statusLower === "packed") {
-                msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${id.slice(-5)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")}`;
+                msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${formatOrderId(order.orderId || id)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")}`;
                 img = botSettings.imgReady || fallbackImg;
 
                 if (!isDineIn) {
@@ -1119,9 +1119,9 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 }
 
                 if (isOtpChanged) {
-                    msg = `🔑 *NEW DELIVERY OTP!* 🔄\n━━━━━━━━━━━━━━━━━━━━\nYour previous code is now invalid. Please use the new one below for your delivery #${id.slice(-5)}:\n🔑 *NEW OTP:* ${otp}${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n_Share this code ONLY with the rider upon arrival._`;
+                    msg = `🔑 *NEW DELIVERY OTP!* 🔄\n━━━━━━━━━━━━━━━━━━━━\nYour previous code is now invalid. Please use the new one below for your delivery #${formatOrderId(order.orderId || id)}:\n🔑 *NEW OTP:* ${otp}${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n_Share this code ONLY with the rider upon arrival._`;
                 } else {
-                    msg = `🛵 *OUT FOR DELIVERY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nOur rider is on the way to your location! 🛵💨\n🆔 Order: #${id.slice(-5)}\n🔑 *OTP:* ${otp} (Share with rider only)${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n${getFoodFunnyProgress("Out for Delivery")}`;
+                    msg = `🛵 *OUT FOR DELIVERY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nOur rider is on the way to your location! 🛵💨\n🆔 Order: #${formatOrderId(order.orderId || id)}\n🔑 *OTP:* ${otp} (Share with rider only)${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n${getFoodFunnyProgress("Out for Delivery")}`;
                 }
                 img = botSettings.imgOut || fallbackImg;
             } else if (statusLower === "reached drop location") {
@@ -1130,17 +1130,17 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     otp = Math.floor(1000 + Math.random() * 9000).toString();
                     await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
-                msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${id.slice(-5)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nKripya order lene ke liye taiyar rahein. Shukriya! 🙏`;
+                msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${formatOrderId(order.orderId || id)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nKripya order lene ke liye taiyar rahein. Shukriya! 🙏`;
                 img = botSettings.imgOut || fallbackImg;
             } else if (statusLower === "delivered" || statusLower === "served") {
-                msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${id.slice(-5)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
+                msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${formatOrderId(order.orderId || id)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
                 img = botSettings.imgDelivered || fallbackImg;
             } else if (statusLower === "cancelled") {
-                msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nAapka order #${id.slice(-5)} cancel ho gaya hai. 😔\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nKoi sawaal ho toh humse baat karein. 🙏`;
+                msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nAapka order #${formatOrderId(order.orderId || id)} cancel ho gaya hai. 😔\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nKoi sawaal ho toh humse baat karein. 🙏`;
             }
 
             const prevStatus = currentProcessedStatus?.status || "None";
-            console.log(`[BOT] 🔔 Status Change for #${id.slice(-5)}: ${prevStatus} -> ${currentStatus} (${jid ? 'Valid JID' : 'NO JID'})`);
+            console.log(`[BOT] 🔔 Status Change for #${formatOrderId(order.orderId || id)}: ${prevStatus} -> ${currentStatus} (${jid ? 'Valid JID' : 'NO JID'})`);
 
             if (msg) {
                 console.log(`[BOT] 📧 Sending ${currentStatus} notification to ${maskJid(jid)}...`);
@@ -1173,12 +1173,12 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     // notification forever. Surface it in bot/alerts so it's
                     // visible in the Admin panel without pinging anyone on
                     // WhatsApp for what may just be a transient blip.
-                    console.error(`[Status Update] ❌ Notification FAILED for #${id.slice(-5)} (${currentStatus}) — will retry on next order update.`);
+                    console.error(`[Status Update] ❌ Notification FAILED for #${formatOrderId(order.orderId || id)} (${currentStatus}) — will retry on next order update.`);
                     db.ref(resolvePath(`bot/alerts/${order.outlet || OUTLET}`))
                         .push({
                             type: 'status_notification_failed',
                             severity: 'warning',
-                            message: `Order #${id.slice(-5)} — "${currentStatus}" notification failed to send to customer.`,
+                            message: `Order #${formatOrderId(order.orderId || id)} — "${currentStatus}" notification failed to send to customer.`,
                             orderId: id,
                             status: currentStatus,
                             createdAt: Date.now()
@@ -1202,11 +1202,11 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             }
         } else {
             if (currentProcessedStatus && currentProcessedStatus.status === currentStatus) {
-                console.log(`[Status Update] ⏭️ Skipping #${id.slice(-5)}: status '${currentStatus}' already processed (cached: '${currentProcessedStatus.status}')`);
+                console.log(`[Status Update] ⏭️ Skipping #${formatOrderId(order.orderId || id)}: status '${currentStatus}' already processed (cached: '${currentProcessedStatus.status}')`);
             } else if (!jid) {
-                console.log(`[Status Update] ⏭️ Skipping #${id.slice(-5)}: no JID`);
+                console.log(`[Status Update] ⏭️ Skipping #${formatOrderId(order.orderId || id)}: no JID`);
             } else {
-                console.log(`[Status Update] ⏭️ Skipping #${id.slice(-5)}: unknown skip reason (cached: ${JSON.stringify(currentProcessedStatus)}, isNew: ${isNew}, otpChanged: ${isOtpChanged}, shouldSendOtp: ${shouldSendOtpMessage})`);
+                console.log(`[Status Update] ⏭️ Skipping #${formatOrderId(order.orderId || id)}: unknown skip reason (cached: ${JSON.stringify(currentProcessedStatus)}, isNew: ${isNew}, otpChanged: ${isOtpChanged}, shouldSendOtp: ${shouldSendOtpMessage})`);
             }
         }
     } catch (err) {
@@ -2543,7 +2543,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         // Send confirmation to user IMMEDIATELY (fastest possible response)
                         let successMsg = `🎉 *ORDER PLACED SUCCESSFULLY!* 🎉\n`;
                         successMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                        successMsg += `🆔 *Order ID:* #${finalOrder.orderId.slice(-5)}\n`;
+                        successMsg += `🆔 *Order ID:* #${formatOrderId(finalOrder.orderId || orderId)}\n`;
                         successMsg += `🏪 *Shop:* ${OUTLET_NAME}\n`;
                         successMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
                         successMsg += `*Please wait while the admin confirms your order!* ⏳\n`;
@@ -2745,13 +2745,13 @@ function initFCMWatcher() {
     const before = orderState.get(orderId) || {};
     orderState.set(orderId, { riderId: after.riderId, status: after.status });
     if (after.riderId && after.riderId !== before.riderId) {
-      sendFCMToRider(after.riderId, 'New Order Assigned!', `Order #${orderId.slice(-5)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: './index.html' });
+      sendFCMToRider(after.riderId, 'New Order Assigned!', `Order #${formatOrderId(after.orderId || orderId)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: './index.html' });
     } else if (after.riderId && after.status && after.status !== before.status) {
       const s = String(after.status).toLowerCase();
       if (['ready', 'packed', 'cooked'].includes(s)) {
-        sendFCMToRider(after.riderId, `Order #${orderId.slice(-5)}`, `Order #${orderId.slice(-5)} is ready for pickup!`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
+        sendFCMToRider(after.riderId, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} is ready for pickup!`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
       } else if (s === 'cancelled') {
-        sendFCMToRider(after.riderId, `Order #${orderId.slice(-5)}`, `Order #${orderId.slice(-5)} has been cancelled.`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
+        sendFCMToRider(after.riderId, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} has been cancelled.`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
       }
     }
   });

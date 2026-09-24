@@ -1,6 +1,6 @@
 import { auth, db, Outlet, tenantRef, EmailAuthProvider, ref, get, onValue, onAuthStateChanged, signInWithEmailAndPassword, signOut, onChildAdded, reauthenticateWithCredential, serverTimestamp, set, push, BUSINESS_BY_OUTLET } from './firebase.js';
 import { state } from './state.js';
-import { showToast, logAudit } from './utils.js';
+import { showToast, logAudit, formatOrderId } from './utils.js';
 import * as ui from './ui.js';
 import { initRealtimeListeners } from './features/orders.js';
 import { loadRiders } from './features/riders.js';
@@ -425,7 +425,7 @@ function initNewOrderNotifications() {
         _lastNewOrder = order.orderId;
         if (Notification.permission === 'granted') {
             const n = new Notification('\uD83D\uDD04 New Order Received!', {
-                body: `#${order.orderId?.slice(-5) || snap.key?.slice(-5)} — ${order.customerName || 'Customer'} — ₹${order.total || 0}`,
+                body: `#${formatOrderId(order.orderId || snap.key)} — ${order.customerName || 'Customer'} — ₹${order.total || 0}`,
                 icon: '/icon-erp-logo.jpeg',
                 tag: `order-${snap.key}`
             });

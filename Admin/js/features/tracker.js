@@ -4,7 +4,7 @@
  */
 
 import { db, ref, onValue } from '../firebase.js';
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, formatOrderId } from '../utils.js';
 import { loadLucide } from '../ui.js';
 
 let leafletLoaded = false;
@@ -91,7 +91,7 @@ function buildPopup(r) {
     const { label, cls } = displayStatus(r);
     const lastSeen = r.location && r.location.ts ? formatTime(r.location.ts) : 'Recently';
     const phone = r.phone ? `<a href="tel:${escapeHtml(r.phone)}" class="tracker-popup-link">📞 ${escapeHtml(r.phone)}</a>` : '';
-    const orderId = r.currentOrder ? `<span class="tracker-popup-link tracker-popup-link-static">📦 Order #${escapeHtml(String(r.currentOrder).slice(-5))}</span>` : '';
+    const orderId = r.currentOrder ? `<span class="tracker-popup-link tracker-popup-link-static">📦 Order #${escapeHtml(formatOrderId(r.currentOrder))}</span>` : '';
     const maps = (r.location && r.location.lat) ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${r.location.lat},${r.location.lng}" target="_blank" rel="noopener" class="tracker-popup-link">🧭 Directions</a>` : '';
     const profileImg = r.profilePhoto || r.photoUrl || avatarSvg(r.name);
 
@@ -122,7 +122,7 @@ function buildSidebarCard(r, id) {
     const profileImg = r.profilePhoto || r.photoUrl || avatarSvg(r.name);
     const lastSeen = r.location && r.location.ts ? formatTime(r.location.ts) : '—';
     const orderInfo = r.currentOrder
-        ? `<div class="tracker-card-order">📦 Order #${escapeHtml(String(r.currentOrder).slice(-5))}</div>`
+        ? `<div class="tracker-card-order">📦 Order #${escapeHtml(formatOrderId(r.currentOrder))}</div>`
         : '';
     return `
         <div class="tracker-card tracker-card-${cls}" data-rider-id="${id}" ${r.location ? 'role="button" tabindex="0"' : ''} data-action="locate-rider">

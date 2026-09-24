@@ -22,11 +22,35 @@
  * for how to change this if you would rather standardize on "DineIn"
  * and update orders.js's STATUS_SEQUENCES key to match.
  */
-import { outletRef, push, set, update, get } from './firebase.js';
+import { outletRef, set, update, get, runTransaction } from './firebase.js';
 import { Session, attachOrderToSession, ensureSession, assertOutletEnabled } from './session.js';
 import { Cart, clearCart, subtotal as cartSubtotal } from './cart.js';
 
 function round2(n) { return Math.round(n * 100) / 100; }
+
+// Unified order ID → display string. Callers add "#".
+// Same logic as Admin/js/utils.js, bot/utils.js, SupremeAdmin, rider utils.
+export function formatOrderId(o) {
+    const id = typeof o === 'string' ? o : (o && (o.orderId || o.id)) || '';
+    if (!id) return 'N/A';
+    if (/^\d{6}-\d+$/.test(id)) return id;
+    const m = String(id).match(/^(\d{4})(\d{2})(\d{2})-(\d+)$/);
+    if (m) return `${m[3]}${m[2]}${m[1].slice(2)}-${Number(m[4])}`;
+    return String(id).slice(-6).toUpperCase();
+}
+
+// Daily atomic sequence → DDMMYY-N (unpadded). Path key also DDMMYY.
+export async function generateOrderId() {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yy = String(now.getFullYear()).slice(-2);
+    const dateStr = `${dd}${mm}${yy}`;
+    const seqRef = outletRef(`metadata/orderSequence/${dateStr}`);
+    const result = await runTransaction(seqRef, (current) => (current || 0) + 1);
+    const seqNum = (result.snapshot && result.snapshot.val()) || 1;
+    return `${dateStr}-${seqNum}`;
+}
 
 /**
  * @param {Object} opts
@@ -104,10 +128,12 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
         orderPayload.discountValue = discount.value || 0;
     }
 
-    const newOrderRef = push(outletRef('orders'));
+    const orderId = await generateOrderId();
+    const newOrderRef = outletRef(`orders/${orderId}`);
     // Write as 'Pending' first so the order is never visible as 'Placed' in KDS if the session attach fails
     var writeData = {};
     for (var k in orderPayload) { writeData[k] = orderPayload[k]; }
+    writeData.orderId = orderId;
     writeData.status = 'Pending';
     await set(newOrderRef, writeData);
 
@@ -147,5 +173,5 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
         _writeGuest(0);
     }
 
-    return { orderId: newOrderRef.key, ...orderPayload };
+    return { orderId, ...orderPayload };
 }

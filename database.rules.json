@@ -220,8 +220,11 @@
             },
             "metadata": {
               "orderSequence": {
-                ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
-                ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)"
+                ".read": "true",
+                "$date": {
+                  ".write": "newData.isNumber() && (data.exists() ? newData.val() == data.val() + 1 : newData.val() == 1)",
+                  ".validate": "$date.matches(/^[0-9]{6}$/) && newData.isNumber() && newData.val() >= 1 && newData.val() <= 999999"
+                }
               }
             },
             "uiConfig": {
@@ -285,7 +288,7 @@
             "tableSessionsContact": {
               ".read": "auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
               "$sessionId": {
-                ".write": "auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || (!data.exists() && newData.exists()))",
+                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (newData.exists() && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true)",
                 ".validate": "newData.hasChildren(['customerPhone','guestPhone'])",
                 "customerName": { ".validate": "newData.isString()" },
                 "customerPhone": { ".validate": "newData.isString()" },

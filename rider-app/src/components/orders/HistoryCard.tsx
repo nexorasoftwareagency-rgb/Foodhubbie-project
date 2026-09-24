@@ -1,6 +1,6 @@
 // === src/components/orders/HistoryCard.tsx ===
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatOrderId } from "@/lib/utils";
 import type { RiderOrder } from "@/types";
 
 export function HistoryCard({ order }: { order: RiderOrder & { outletName: string; outletIcon: string } }) {
@@ -11,7 +11,7 @@ export function HistoryCard({ order }: { order: RiderOrder & { outletName: strin
           <span className="text-[15px]">{order.outletIcon}</span>
           <div>
             <div className="text-[13px] font-extrabold">{order.outletName}</div>
-            <div className="text-[10.5px] font-semibold text-muted-foreground/80 mt-0.5">#{order.id.slice(-8)}</div>
+            <div className="text-[10.5px] font-semibold text-muted-foreground/80 mt-0.5">#{formatOrderId(order.id)}</div>
           </div>
         </div>
         <Badge variant="success">Delivered</Badge>

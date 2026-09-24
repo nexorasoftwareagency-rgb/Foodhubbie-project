@@ -15,9 +15,9 @@
     "playwright": "^1.61.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "esbuild": "^0.28.1",
-    "purgecss": "^8.0.0",
-    "@playwright/test": "^1.63.0"
+    "purgecss": "^8.0.0"
   },
   "allowScripts": {
     "esbuild@0.28.1": true

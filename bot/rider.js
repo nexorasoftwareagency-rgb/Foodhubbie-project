@@ -3,7 +3,7 @@
  * Requires: formatJid, addInAppNotification, getData.
  */
 
-const { formatJid, isSocketDead, getBroadcastDelayRangeMs, sleep, randomBetween, OutboundTracker } = require('./utils');
+const { formatJid, isSocketDead, getBroadcastDelayRangeMs, sleep, randomBetween, OutboundTracker, formatOrderId } = require('./utils');
 const { db, resolvePath } = require('./firebase');
 const { paceBurstSend } = require('./send-pacer');
 const outboundTracker = new OutboundTracker(db, resolvePath);
@@ -97,7 +97,7 @@ async function notifyRiderAssignment(sock, orderId, order, addInAppNotification)
         const riderPhone = order.riderPhone;
         const riderId = order.riderId || order.assignedRiderUid;
         if (!riderPhone) {
-            console.warn(`[RIDER] ⚠️ Cannot notify assignment: No phone number for order #${orderId.slice(-5)}`);
+            console.warn(`[RIDER] ⚠️ Cannot notify assignment: No phone number for order #${formatOrderId(order.orderId || orderId)}`);
             return;
         }
 
@@ -110,16 +110,16 @@ async function notifyRiderAssignment(sock, orderId, order, addInAppNotification)
         const msg = buildRiderOrderMessage(order, {
             title: `🔔 *NEW ORDER ASSIGNED* 🔔`,
             footer: `🚀 *Please reach the outlet for pickup!*`,
-            id: orderId.slice(-5),
+            id: formatOrderId(order.orderId || orderId),
         });
 
-        console.log(`[RIDER] 📤 Sending assignment message to rider: ${riderPhone} for #${orderId.slice(-5)}`);
+        console.log(`[RIDER] 📤 Sending assignment message to rider: ${riderPhone} for #${formatOrderId(order.orderId || orderId)}`);
         await sock.sendMessage(riderJid, { text: msg }, { _logChat: false });
         outboundTracker.trackSend(order.outlet || 'pizza', 'rider_broadcast');
         console.log(`[RIDER] ✅ Assignment notification sent to ${riderPhone}`);
 
         if (riderId) {
-            await addInAppNotification(riderId, "New Order Assigned!", `You have been assigned to order #${order.orderId || orderId.slice(-5)}.`, 'info', 'truck', order.outlet);
+            await addInAppNotification(riderId, "New Order Assigned!", `You have been assigned to order #${formatOrderId(order.orderId || orderId)}.`, 'info', 'truck', order.outlet);
         }
     } catch (err) {
         console.error("[RIDER] ❌ Rider Assignment Notify Error:", err);
@@ -141,17 +141,17 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
                 return ts && (Date.now() - ts) < RIDER_STALE_MS;
             });
 
-        console.log(`[RIDER] 📢 Broadcasting pickup for #${orderId.slice(-5)} to ${onlineRiders.length} online riders.`);
+        console.log(`[RIDER] 📢 Broadcasting pickup for #${formatOrderId(order.orderId || orderId)} to ${onlineRiders.length} online riders.`);
 
         if (onlineRiders.length === 0) {
-            console.log(`[RIDER] ⚠️ No online riders available for broadcast of #${orderId.slice(-5)}`);
+            console.log(`[RIDER] ⚠️ No online riders available for broadcast of #${formatOrderId(order.orderId || orderId)}`);
             return;
         }
 
         const msg = buildRiderOrderMessage(order, {
             title: `🔔 *PICKUP AVAILABLE* 🔔`,
             footer: `🚀 *Go to Rider Portal now to Accept!*`,
-            id: orderId.slice(-5),
+            id: formatOrderId(order.orderId || orderId),
             includeOutlet: true,
         });
 
@@ -172,7 +172,7 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
                     await paceBurstSend();
                     await _sendToRiderWithRetry(sock, riderJid, msg);
                     outboundTracker.trackSend(outlet, 'rider_broadcast');
-                    await addInAppNotification(rider.uid, "New Pickup Available!", `Order #${orderId.slice(-5)} is ready for pickup.`, 'success', 'shopping-bag', order.outlet);
+                    await addInAppNotification(rider.uid, "New Pickup Available!", `Order #${formatOrderId(order.orderId || orderId)} is ready for pickup.`, 'success', 'shopping-bag', order.outlet);
                 } catch (sendErr) {
                     console.error(`[RIDER] ❌ Failed to send broadcast to ${rider.phone}:`, sendErr.message);
                 }

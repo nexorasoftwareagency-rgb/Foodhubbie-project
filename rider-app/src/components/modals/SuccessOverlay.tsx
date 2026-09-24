@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { Check } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatOrderId } from "@/lib/utils";
 import { CONFETTI_COLORS } from "@/lib/constants";
 
 export function SuccessOverlay({
@@ -51,7 +51,7 @@ export function SuccessOverlay({
       </div>
       <h2 className="text-[21px] font-black text-center">Delivery Completed!</h2>
       <p className="text-[13px] text-muted-foreground text-center mt-1.5">
-        Great job &mdash; order #{orderId.slice(-8)} delivered
+        Great job &mdash; order #{formatOrderId(orderId)} delivered
       </p>
       <div className="text-[26px] font-black text-[#10B981] mt-3.5">+{formatCurrency(earnedAmount)}</div>
       <Button className="mt-6" size="lg" variant="default" onClick={onClose}>

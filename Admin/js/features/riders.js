@@ -1,7 +1,7 @@
 import { db, auth, getSecondaryAuth, isSecondaryAuthAvailable, Outlet, serverTimestamp, ref, get, set, push, update, runTransaction, remove, query, orderByChild, equalTo, onValue, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword } from '../firebase.js';
 import { state } from '../state.js';
 import { showDeleteConfirm } from '../ui-utils.js';
-import { showToast, haptic, escapeHtml, standardizeAuthError, logAudit, showConfirm, addRiderNotification, getSkeletonRows } from '../utils.js';
+import { showToast, haptic, escapeHtml, standardizeAuthError, logAudit, showConfirm, addRiderNotification, getSkeletonRows, formatOrderId } from '../utils.js';
 
 import { loadLucide } from '../ui.js';
 
@@ -233,7 +233,7 @@ export async function renderRiders(searchTerm = "") {
                         </div>
                     </div>
                 </div>
-                ${displayStatus === 'On Delivery' && r.currentOrder ? `<div class="active-task-v4"><i data-lucide="package" style="width:12px;"></i><span>Order #${escapeHtml(String(r.currentOrder).slice(-5))}</span></div>` : `<div class="idle-state-v4 text-muted-small"><i data-lucide="clock" style="width:12px;"></i><span>Waiting for orders...</span></div>`}
+                ${displayStatus === 'On Delivery' && r.currentOrder ? `<div class="active-task-v4"><i data-lucide="package" style="width:12px;"></i><span>Order #${escapeHtml(formatOrderId(r.currentOrder))}</span></div>` : `<div class="idle-state-v4 text-muted-small"><i data-lucide="clock" style="width:12px;"></i><span>Waiting for orders...</span></div>`}
             `;
             activeDashboard.appendChild(card);
             await loadLucide();

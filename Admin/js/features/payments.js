@@ -3,7 +3,7 @@
  * Called from orders.js renderOrders() when activeTab === 'payments'.
  */
 
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, formatOrderId } from '../utils.js';
 
 let _payData = [];
 let _paySortField = 'createdAt', _paySortDir = 'desc';
@@ -50,7 +50,7 @@ function _renderPayTable() {
     }
 
     tbody.innerHTML = sorted.map(o => {
-        const id = o.orderId || (o.id ? o.id.slice(-5).toUpperCase() : 'N/A');
+        const id = formatOrderId(o.orderId || o.id) || 'N/A';
         return `<tr>
             <td>
                 <div class="mob-td-strong">${formatDateTime(o.createdAt)}</div>

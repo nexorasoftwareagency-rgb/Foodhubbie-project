@@ -35,7 +35,7 @@ module.exports = {
       use: { ...devices['Pixel 5'] },
     },
   ],
-  reporter: [['html', { outputFolder: 'test-results/html' }], ['list']],
+  reporter: [['html', { outputFolder: 'playwright-report' }], ['list']],
   globalSetup: './tests/global-setup.js',
   globalTeardown: './tests/global-teardown.js',
 };
