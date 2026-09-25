@@ -80,6 +80,23 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260925-224237-1489] User Manual reachable from the Admin sidebar (icon → dist/manual.html)
+- TIER: 2 (build tooling + navigation entry point; no money path, no rules change)
+- STATUS: DONE
+- Started: 2026-09-25 22:30 UTC
+- Scope: user prompt "user manual on Admin Tab.. as an icon.. ? right?" — the manual shipped in `0cba776` was a markdown file in `docs/`, which no deployed app can reach (`firebase.json` admin target serves `Admin/dist` only; no hosting target points at `docs/`). Commit `9a37f10`.
+- Trace / constraints found before writing code:
+  1. `docs/` is not on any hosting target, so linking to the `.md` would 404 — the content must land in `dist`.
+  2. **No markdown library exists anywhere**: `package.json` has only playwright/esbuild/purgecss; no `marked`/`markdown-it`/`remark` in `node_modules`; nothing markdown-shaped in `tools/`, `Admin/js/`, `website/` or `SupremeAdmin/`. Adding one was ruled out (project keeps a minimal dependency set and `allowScripts` is pinned for supply-chain reasons).
+  3. `Admin/` ships no secondary HTML (only `index.html`), so there was no existing page to extend.
+  4. Firebase CSP on `**/*.html` allows `style-src 'unsafe-inline'` and `https://fonts.googleapis.com`, but `X-Frame-Options: DENY` means the page cannot be iframed into the SPA — it has to open as a top-level document.
+- Fixes: `tools/build.mjs` gained a subset markdown renderer (`mdEsc`/`mdInline`/`mdSlug`/`mdToHtml`/`manualPage`, +136 lines) that runs after the shared-copy step, admin target only, and writes `Admin/dist/manual.html` directly into dist — so `docs/MANAGER-PIN-USER-MANUAL.md` stays the single source of truth and regenerates on every build. Covers exactly the constructs that manual uses (verified by inventory: 15 headings, 98 table rows, 3 blockquotes, 3 fenced blocks, 7 bullets, 6 ordered items, 11 hrs, 1 link, 1 h2-anchor). Sidebar gets `#menu-manual` between Settings and Logout with `data-action="openManual"`, and `main.js` handles it with one `window.open('manual.html', '_blank')` case — matching the existing `chatOnWhatsapp` 2-arg pattern. Deliberately **not** added to `ASSETS_TO_CACHE` in `sw.js`: the manual is on-demand, so no cache-name bump is needed.
+- Bug caught by verification (real, would have shipped): the bold regex `\*\*([^*]+)\*\*` cannot match `**Admin app → … *Discount Approval* group**` because `[^]*` stops at the nested single star — the paragraph rendered with literal `**` around it. Fixed to `/\*\*([\s\S]+?)\*\*/g` (lazy, per-block so it cannot over-consume). A second reported failure was a **test** bug, not a code bug: the assertion used lowercase `set a ceiling` against source text `Set a ceiling`.
+- Verified: 37-check script on the generated page — structure (11 h2 / 3 h3 / 11 tables / 3 blockquotes / 3 `<pre>` / 11 hr / 1 ol / 3 ul), the `#10-limitations-you-must-know` anchor resolves to a real `<h2 id>`, zero leaked markdown (`**`, backtick, `](`, table separators), entity escaping (`&amp;` in h1, `&gt;` in table cell, `&gt;` inside `<pre>`, lone `` `>` `` inside `<code>`), 16 key strings present, `₹` count 31 = source, UTF-8 valid, FFFD 0, tag balance, and nav wiring present in `dist/index.html` + the minified `dist/js/main.js`. Then a **live browser run** over a local static server: page renders with correct title, Inter loads, table/blockquote/code styles correct; the sidebar item exists pre-auth with `lucide-book-open` rendered and ordered `… Download App, Settings, User Manual, Logout`; clicking it opened `http://localhost:8931/manual.html` in a new tab. `node --check` clean on `build.mjs` and `main.js`; check suite **9/9**; `node tools/build.mjs --admin` exit 0 printing `MANUAL: … → dist/manual.html`.
+- NOT verified / open risk: no production deploy, so `firebase deploy --only hosting:admin` has not served `manual.html` under the real CSP/HSTS headers; the sidebar click was exercised with the auth overlay forced off (the app's `.layout` is `hidden` until login), not in a logged-in session; the converter is a subset renderer — markdown constructs the manual does not currently use (nested lists, images, reference links, tables with `|` inside code spans) would not render, so add them to `mdToHtml` before using them in the source markdown.
+- Confidence: HIGH
+- Ended: 2026-09-25 22:45 UTC
+
 ### [20260925-221213-7f8c] User manual for the approval-ceiling / manager-PIN / void-PIN feature
 - TIER: 1 (documentation only — no source file touched)
 - STATUS: DONE
