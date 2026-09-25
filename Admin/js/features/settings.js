@@ -386,7 +386,6 @@ export async function saveStoreSettings() {
         // Feature toggles take effect on load — one popup, then the nuclear refresh.
         if (featureChanged) {
             state.features.discountApproval = featureEnabled;
-            applyFeatureUI();
             await completeSiteRefresh('Settings saved. A hard refresh is required to activate this feature change. Refresh now?');
         }
 
