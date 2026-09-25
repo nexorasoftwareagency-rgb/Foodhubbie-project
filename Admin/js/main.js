@@ -345,6 +345,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'editDiscount': logger.info('DISCOUNT', `Edit discount: ${el.dataset.id}`); window.__discounts?.openEditor(el.dataset.id); break;
                 case 'closeDiscountEditor': logger.info('DISCOUNT', 'Close editor'); window.__discounts?.closeEditor(); break;
                 case 'saveDiscount': logger.info('DISCOUNT', 'Save discount'); window.__discounts?.save(); break;
+                case 'discStepNext': window.__discounts?.stepNext(); break;
+                case 'discStepPrev': window.__discounts?.stepPrev(); break;
                 case 'closeTableBillReview': logger.info('TABLES', 'Close bill review'); window.__tables?.closeBillReview(); break;
                 case 'applyTableBillCoupon': logger.info('TABLES', 'Apply table bill coupon'); window.__tables?.applyBillCoupon(); break;
                 case 'clearTableBillCoupon': logger.info('TABLES', 'Clear table bill coupon'); window.__tables?.clearBillCoupon(); break;

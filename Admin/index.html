@@ -5612,11 +5612,20 @@
 
             <div class="modal-body">
 
+                <div class="disc-steps">
+                    <span class="disc-step-pip active">1 Type &amp; Value</span>
+                    <span class="disc-step-pip">2 Schedule</span>
+                    <span class="disc-step-pip">3 Limits</span>
+                    <span class="disc-step-pip">4 Review</span>
+                </div>
+
                 <form id="discountEditorForm">
+
+                <fieldset class="disc-step" data-step="1">
 
                 <div class="form-group">
 
-                    <label for="discName" data-i18n="discount.editor.name">Name (shown on receipts & invoices)</label>
+                    <label for="discName" data-i18n="discount.editor.name">Name (shown on receipts &amp; invoices)</label>
 
                     <input type="text" id="discName" maxlength="60" placeholder="Festive 5% Off" class="search-input-group">
 
@@ -5716,7 +5725,11 @@
 
                 </div>
 
+                </fieldset>
 
+
+
+                <fieldset class="disc-step hidden" data-step="2">
 
                 <div class="promo-options-grid">
 
@@ -5744,7 +5757,11 @@
 
                 </div>
 
+                </fieldset>
 
+
+
+                <fieldset class="disc-step hidden" data-step="3">
 
                 <div class="promo-options-grid">
 
@@ -5832,13 +5849,37 @@
 
                 </div>
 
+                </fieldset>
+
+
+
+                <fieldset class="disc-step hidden" data-step="4">
+
+                    <div class="disc-review-head" id="discReviewHead"></div>
+
+                    <div id="discReviewSummary"></div>
+
+                    <p class="text-muted-small mt-8">Check the summary, then click Save Discount.</p>
+
+                </fieldset>
+
+                </form>
+
             </div>
 
             <div class="modal-footer">
 
                 <button class="btn-secondary" data-action="closeDiscountEditor" data-i18n="discount.editor.cancel">Cancel</button>
 
-                <button class="btn-primary" data-action="saveDiscount" data-i18n="discount.editor.save">Save Discount</button>
+                <div class="flex-row flex-gap-8" style="margin-left:auto;">
+
+                    <button class="btn-secondary hidden" id="discStepBack" data-action="discStepPrev">Back</button>
+
+                    <button class="btn-secondary" id="discStepNext" data-action="discStepNext">Next</button>
+
+                    <button class="btn-primary hidden" id="discStepSave" data-action="saveDiscount" data-i18n="discount.editor.save">Save Discount</button>
+
+                </div>
 
             </div>
 
