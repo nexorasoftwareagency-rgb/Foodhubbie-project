@@ -99,7 +99,7 @@ function _renderCard(d) {
                     ${_typeBadge(d.type)}
                     <span class="badge badge-${status}">${escapeHtml(status)}</span>
                     ${d.stackable ? '<span class="badge badge-info">stackable</span>' : ''}
-                    ${d.channel && d.channel !== 'all' ? `<span class="badge badge-secondary">${escapeHtml(d.channel === 'whatsapp' ? 'WhatsApp' : d.channel === 'pos' ? 'POS' : d.channel === 'both' ? 'WA+POS' : d.channel)}</span>` : ''}
+                    ${d.channel && d.channel !== 'all' ? `<span class="badge badge-secondary">${escapeHtml(d.channel === 'pos' ? 'POS' : d.channel === 'table' ? 'Table' : d.channel === 'both' ? 'WA+POS' : d.channel === 'website' ? 'Webview' : d.channel === 'whatsapp' ? 'WhatsApp' : d.channel)}</span>` : ''}
                     ${expiryBadge}
                 </div>
                 <div class="text-muted-small mt-4">
@@ -376,7 +376,7 @@ function _openEditor(id) {
     el('discGlobalLimit', d?.globalLimit ?? 0);
     document.getElementById('discEnabled').checked = d ? d.enabled !== false : true;
     document.getElementById('discStackable').checked = !!d?.stackable;
-    el('discChannel', d?.channel || 'whatsapp');
+    el('discChannel', d?.channel || 'all');
     _renderCategoryChips(d?.categoryIds || []);
     _applyEditorVisibility();
     document.getElementById('discountEditorModal')?.classList.add('active');
@@ -431,7 +431,7 @@ async function _save() {
         startsAt: startsAt || 0,
         endsAt: endsAt || 0,
         enabled,
-        channel: (document.getElementById('discChannel')?.value || 'whatsapp'),
+        channel: (document.getElementById('discChannel')?.value || 'all'),
         engineVersion: 1,
         updatedAt: Date.now()
     };
