@@ -94,6 +94,52 @@ export const showConfirm = (message, title = "Confirm Action") => {
     });
 };
 
+// Manager PIN prompt for the manual-discount approval ceiling.
+// Resolves the entered PIN, or null when the operator cancels.
+// Verification lives in utils.gateManualDiscountPin — this is UI only.
+export const showPinPrompt = (message, title = "Manager Approval") => {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'dynamic-modal-overlay';
+
+        overlay.innerHTML = `
+            <div class="dynamic-modal-box">
+                <h3 class="dynamic-modal-title"></h3>
+                <p class="dynamic-modal-text"></p>
+                <input type="password" class="dynamic-modal-input" placeholder="Manager PIN"
+                    inputmode="numeric" autocomplete="off" maxlength="12">
+                <div class="dynamic-modal-actions">
+                    <button class="btn-cancel">Cancel</button>
+                    <button class="btn-confirm">Approve</button>
+                </div>
+            </div>`;
+
+        document.body.appendChild(overlay);
+        overlay.querySelector('.dynamic-modal-title').innerText = title;
+        overlay.querySelector('.dynamic-modal-text').innerText = message;
+
+        const input = overlay.querySelector('.dynamic-modal-input');
+        const confirmBtn = overlay.querySelector('.btn-confirm');
+        input.focus();
+
+        const cleanup = (val) => {
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                overlay.remove();
+                resolve(val);
+            }, 200);
+        };
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && input.value) cleanup(input.value);
+            if (e.key === 'Escape') cleanup(null);
+        });
+        confirmBtn.onclick = () => cleanup(input.value || null);
+        overlay.querySelector('.btn-cancel').onclick = () => cleanup(null);
+        overlay.onclick = (e) => { if (e.target === overlay) cleanup(null); };
+    });
+};
+
 export const showDeleteConfirm = (itemName, message = "This action cannot be undone.") => {
     return new Promise((resolve) => {
         const overlay = document.createElement('div');

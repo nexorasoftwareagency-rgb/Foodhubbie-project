@@ -2571,6 +2571,38 @@
 
 
 
+                            <div class="notification-setting-group mb-20">
+
+                                <h5 class="mb-8 text-muted-small text-upper ls-sm">Discount Approval</h5>
+
+                                <label class="form-label-small">Approval Ceiling (% of bill)</label>
+
+                                <input type="number" id="settingDiscCeilingPct" class="form-input mb-8" min="0" max="100"
+
+                                    step="1" placeholder="e.g. 15"
+
+                                    title="Manual discounts above this percentage need a manager PIN. 0 turns it off.">
+
+                                <p class="text-secondary-small note-small">* Manual discounts above this % require a
+
+                                    manager PIN. Set 0 to disable.</p>
+
+                                <label class="form-label-small">Manager PIN</label>
+
+                                <input type="password" id="settingManagerPin" class="form-input mb-8" maxlength="12"
+
+                                    inputmode="numeric" autocomplete="new-password" placeholder="e.g. 4711"
+
+                                    title="4-12 digit PIN that approves a discounted bill. Leave blank to keep the current one.">
+
+                                <p class="text-secondary-small note-small">* 4-12 digits, stored hashed. Leave blank
+
+                                    to keep the existing PIN.</p>
+
+                            </div>
+
+
+
                             <div class="divider-dashed mb-20"></div>
 
 

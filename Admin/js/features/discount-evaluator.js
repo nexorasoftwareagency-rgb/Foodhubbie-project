@@ -84,6 +84,18 @@ export function discountAllowsChannel(d, channel) {
 }
 
 /**
+ * Approval ceiling for MANUAL discounts, expressed as a % of the bill.
+ * Returns true only when a human-entered discount is above `ceilingPct`
+ * and the ceiling is switched on (>0). Auto-applied discounts are out of
+ * scope: they are author-defined and already bounded by `maxCap`.
+ * Pure on purpose — unit-checkable with no DOM or Firebase.
+ */
+export function needsPinApproval(discountValue, subtotal, ceilingPct) {
+    if (!(ceilingPct > 0) || !(subtotal > 0)) return false;
+    return (Number(discountValue) / subtotal) * 100 > ceilingPct;
+}
+
+/**
  * Builds the list of currently-eligible-for-display discounts for a
  * quick-apply offers panel: active, channel-permitted, not at its global
  * redemption cap. Coupon types sort first. Shared by POS's and Table

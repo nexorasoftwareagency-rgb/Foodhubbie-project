@@ -31,7 +31,7 @@ import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runT
 import { state } from '../state.js';
 import { showToast, showConfirm, showDeleteConfirm } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
-import { haptic, escapeHtml, playNotificationSound, logAudit, formatOrderId } from '../utils.js';
+import { haptic, escapeHtml, playNotificationSound, logAudit, formatOrderId, gateManualDiscountPin } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { evaluateDiscount, recordDiscountUsage, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
 
@@ -1651,6 +1651,10 @@ export async function confirmTableBillPayment() {
     const subtotal = _billSubtotal();
     const { discountValue, discountLabel, discountId, discountSource, discountGlobalLimit } = _billComputedDiscount(subtotal);
     const finalTotal = Math.max(0, subtotal - discountValue);
+
+    // Approval ceiling: a manual discount above settings/Security/discountCeilingPct
+    // needs a manager PIN before any payment is taken.
+    if (!await gateManualDiscountPin({ discountValue, subtotal, discountId })) return;
 
     // Use Firebase connection state (reliable) instead of navigator.onLine
     if (!isConnected()) {
