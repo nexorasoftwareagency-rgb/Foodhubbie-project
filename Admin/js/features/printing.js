@@ -227,6 +227,10 @@ function showReceiptPreview(html) {
 
     modal.classList.remove('hidden');
     modal.classList.add('active', 'flex');
+    if (!modal.__backdropWired) {
+        modal.__backdropWired = 1;
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeReceiptPreview(); });
+    }
 }
 
 export function closeReceiptPreview() {

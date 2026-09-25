@@ -224,6 +224,9 @@ export const hashPin = async (pin) => {
  * security node must never block the action it is guarding.
  */
 export async function gateManagerPin({ message, auditAction, auditDetails = {} }) {
+    // Feature off (Settings > Features) — explicit short-circuit, not a fail-open path.
+    if (!(state.features && state.features.discountApproval)) return true;
+
     let sec;
     try {
         sec = (await get(Outlet.ref('settings/Security'))).val() || {};
@@ -256,6 +259,7 @@ export async function gateManagerPin({ message, auditAction, auditDetails = {} }
  */
 export async function gateManualDiscountPin({ discountValue, subtotal, discountId }) {
     if (discountId !== 'manual:flat' && discountId !== 'manual:percent') return true;
+    if (!(state.features && state.features.discountApproval)) return true;
 
     let sec;
     try {

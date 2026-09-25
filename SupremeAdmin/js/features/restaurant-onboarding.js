@@ -217,6 +217,8 @@ async function handleSubmit(e) {
             createdAt: firebase.database.ServerValue.TIMESTAMP,
             whatsapp: { status: 'pending' },
             ...(tplDefaults || {}),
+            // Feature flags default OFF for new restaurants (user scope answer).
+            settings: { features: { discountApproval: false } },
           },
         },
       },
