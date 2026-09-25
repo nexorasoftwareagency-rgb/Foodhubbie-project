@@ -51,11 +51,10 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     });
   }, [user?.uid, rider?.outlet]);
 
-  // Subscribe to global rider stats (single node for all outlets)
+// Subscribe to global rider stats (single node for all outlets)
   useEffect(() => {
     if (!user?.uid) return;
-    // outlet param is ignored by subscribeRiderStats (uses global path)
-    const unsub = subscribeRiderStats('global', user.uid, (globalStats) => {
+    const unsub = subscribeRiderStats(user.uid, (globalStats) => {
       // Mirror global stats to all known outlets for UI compatibility
       setStatsByOutlet((prev) => {
         const next = { ...prev };
@@ -111,7 +110,10 @@ export function RiderProvider({ children }: { children: ReactNode }) {
   };
 
   // Aggregate stats from global rider stats (same for all outlets)
-  const stats: RiderStats = outlets.length > 0 ? statsByOutlet[outlets[0].id] || { totalOrders: 0, totalEarnings: 0 } : { totalOrders: 0, totalEarnings: 0 };
+  // Find first outlet that has stats (more robust than assuming outlets[0])
+  const stats: RiderStats = outlets.find(o => statsByOutlet[o.id]) 
+    ? statsByOutlet[outlets.find(o => statsByOutlet[o.id])!.id] 
+    : { totalOrders: 0, totalEarnings: 0 };
 
   return (
     <RiderContext.Provider

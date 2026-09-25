@@ -146,6 +146,15 @@ export function useOfflineQueueProcessor() {
               customerPhone: p.customerPhone,
             });
             toast.success("Synced: reached drop location");
+          } else if (action.type === "VERIFY_OTP") {
+            await orderService.verifyOtp({
+              outlet: p.outlet,
+              orderId: p.orderId,
+              enteredOtp: p.enteredOtp,
+              actualOtp: p.actualOtp,
+              backupCode: p.backupCode,
+            });
+            toast.success("Synced: OTP verified");
           }
         } catch (err: any) {
           toast.error(`Couldn't sync a queued action: ${err?.message || "unknown error"}`);

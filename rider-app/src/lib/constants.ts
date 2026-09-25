@@ -96,7 +96,7 @@ export const dbPaths = {
   riderNotifs: (rId: string) => `riders/${rId}/notifications`,
   riderLocation: (rId: string) => `riders/${rId}/location`,
   /** Global rider stats (NOT per-outlet) — matches Admin's global riderStats node. */
-  riderStats: (_outlet: OutletId, rId: string) => `riderStats/${rId}`,
+  riderStats: (rId: string) => `riderStats/${rId}`,
   orders: (outlet: OutletId) => `businesses/${getBusinessIdForOutletSync(outlet)}/outlets/${outlet}/orders`,
   singleOrder: (outlet: OutletId, orderId: string) => `businesses/${getBusinessIdForOutletSync(outlet)}/outlets/${outlet}/orders/${orderId}`,
   outletSettings: (outlet: OutletId) => `businesses/${getBusinessIdForOutletSync(outlet)}/outlets/${outlet}/settings`,
