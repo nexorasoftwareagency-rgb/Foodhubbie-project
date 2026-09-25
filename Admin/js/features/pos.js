@@ -728,7 +728,7 @@ async function _renderWalkinOffers() {
 
     const now = Date.now();
     const subtotal = _walkinSubtotal();
-    const list = getEligibleOffersForDisplay(all, { channel: 'pos', now });
+    const list = await getEligibleOffersForDisplay(all, { channel: 'pos', now, cart: Object.values(state.walkinCart) });
 
     if (list.length === 0) {
         panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';

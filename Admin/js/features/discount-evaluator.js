@@ -8,6 +8,7 @@ import { Outlet, ref, get, runTransaction, push } from '../firebase.js';
 
 const CACHE_TTL_MS = 30_000;
 const _cache = { data: null, fetchedAt: 0 };
+const _catCache = { data: null, fetchedAt: 0 };
 const FEATURE_FLAG_PATH = 'discounts/featureEnabled';
 
 const _priority = { firstOrder: 4, coupon: 3, global: 2, category: 1 };
@@ -32,6 +33,29 @@ export async function getAllDiscounts() {
 export function clearDiscountCache() {
     _cache.data = null;
     _cache.fetchedAt = 0;
+    _catCache.data = null;
+    _catCache.fetchedAt = 0;
+}
+
+/**
+ * Category push-key → name list, cached 30 s like the discounts list.
+ *
+ * Discounts store category KEYS (catalog.js creates them with `push()`),
+ * but every cart carries category NAMES — the POS walk-in cart stores
+ * `dish.category`, and QR order items store none at all. Without this
+ * bridge `_cartHasCategory` can never match and category discounts are dead.
+ */
+export async function getAllCategories() {
+    const now = Date.now();
+    if (_catCache.data && (now - _catCache.fetchedAt) < CACHE_TTL_MS) return _catCache.data;
+    try {
+        const snap = await get(Outlet.ref('categories'));
+        _catCache.data = Object.entries(snap.val() || {}).map(([id, c]) => ({ id, name: c && c.name }));
+    } catch (_) {
+        _catCache.data = _catCache.data || [];
+    }
+    _catCache.fetchedAt = now;
+    return _catCache.data;
 }
 
 /**
@@ -52,6 +76,10 @@ export function isDiscountActiveNow(d, now = Date.now()) {
 /** True if a discount's `channel` field permits it to apply on this channel. */
 export function discountAllowsChannel(d, channel) {
     return !d.channel || d.channel === 'all' || d.channel === channel
+        // Table bills settle through the POS terminal, so a POS-only discount
+        // covers them too — table billing passes channel:'table' (tables.js),
+        // while the editor can only author WhatsApp/POS/Both/Website/All.
+        || (d.channel === 'pos' && channel === 'table')
         || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos' || channel === 'table'));
 }
 
@@ -62,8 +90,12 @@ export function discountAllowsChannel(d, channel) {
  * Bill Payment's "Active offers" panels so both apply the exact same
  * eligibility rule — a discount that shows as available in one always
  * shows (or doesn't) the same way in the other.
+ *
+ * Async because it needs the category key→name map to judge category
+ * discounts (see getAllCategories). Callers must `await`.
  */
-export function getEligibleOffersForDisplay(all, { channel = 'pos', now = Date.now(), cart = [], includeNonMatchingCategories = false } = {}) {
+export async function getEligibleOffersForDisplay(all, { channel = 'pos', now = Date.now(), cart = [], includeNonMatchingCategories = false } = {}) {
+    const categories = await getAllCategories();
     const baseList = Object.entries(all || {})
         .map(([id, d]) => ({ id, ...d }))
         .filter(d => d && d.type && d.value != null)
@@ -76,7 +108,7 @@ export function getEligibleOffersForDisplay(all, { channel = 'pos', now = Date.n
         return baseList
             .filter(d => {
                 if (d.type === 'category') {
-                    const matches = _cartHasCategory(cart, d.categoryIds);
+                    const matches = _cartHasCategory(cart, d.categoryIds, categories);
                     d._categoryMatches = matches;
                     return true; // Include all category discounts
                 }
@@ -89,7 +121,7 @@ export function getEligibleOffersForDisplay(all, { channel = 'pos', now = Date.n
     return baseList
         .filter(d => {
             if (d.type === 'category') {
-                return _cartHasCategory(cart, d.categoryIds);
+                return _cartHasCategory(cart, d.categoryIds, categories);
             }
             return true;
         })
@@ -105,9 +137,25 @@ async function _isFeatureEnabled() {
     }
 }
 
-function _cartHasCategory(cart, categoryIds) {
+/**
+ * Does the cart contain anything in one of this discount's categories?
+ *
+ * `categoryIds` are Firebase push keys; `item.category` is a category NAME
+ * (POS walk-in cart stores `dish.category`) and `item.categoryId` is usually
+ * absent. Compare keys against keys, then keys (resolved via `categories`)
+ * against names — otherwise this always returns false and category
+ * discounts never fire in any channel.
+ */
+function _cartHasCategory(cart, categoryIds, categories) {
     if (!Array.isArray(cart) || !Array.isArray(categoryIds) || categoryIds.length === 0) return false;
-    return cart.some(item => categoryIds.includes(item.categoryId) || categoryIds.includes(item.category));
+    const names = new Set(
+        (categories || [])
+            .filter(c => c && categoryIds.includes(c.id))
+            .map(c => c.name)
+    );
+    return cart.some(item => categoryIds.includes(item.categoryId)
+        || categoryIds.includes(item.category)
+        || names.has(item.category));
 }
 
 // P2-9 policy (locked): base = food subtotal only (ctx.subtotal excludes tax/SC/delivery).
@@ -147,6 +195,9 @@ export async function evaluateDiscount(ctx = {}) {
     const list = Object.entries(all)
         .filter(([, d]) => d && d.type && d.value != null)
         .map(([id, d]) => ({ id, ...d }));
+    // Only touch the categories node when a category discount could win —
+    // keeps the common checkout read count unchanged.
+    const categories = list.some(d => d.type === 'category') ? await getAllCategories() : [];
 
     const customerPhone = customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : null;
 
@@ -166,7 +217,7 @@ export async function evaluateDiscount(ctx = {}) {
     const applicable = candidates.filter(d => {
         if (d.type === 'global')     return true;
         if (d.type === 'firstOrder') return !customer?.firstOrderDiscountUsed;
-        if (d.type === 'category')   return _cartHasCategory(cart, d.categoryIds);
+        if (d.type === 'category')   return _cartHasCategory(cart, d.categoryIds, categories);
         if (d.type === 'coupon')     return !!couponCode && String(couponCode).toLowerCase() === String(d.couponCode || '').toLowerCase();
         return false;
     });
