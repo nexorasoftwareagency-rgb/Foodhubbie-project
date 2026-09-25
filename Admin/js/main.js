@@ -292,6 +292,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'openOutletInNewTab': logger.info('OUTLET', 'Open outlet in new tab'); openOutletInNewTab(); break;
 
                 case 'userLogout': logger.warn('AUTH', 'User logout'); userLogout(); break;
+                case 'openManual': logger.info('HELP', 'Open user manual'); window.open('manual.html', '_blank'); break;
                 case 'installPWA': logger.info('PWA', 'Install PWA'); installPWA(); break;
                 case 'removeRow': logger.info('UI', 'Remove row'); el.closest('tr').remove(); break;
                 case 'addFeeSlab': logger.info('SETTINGS', 'Add delivery fee slab'); (await useMod('settings')).addFeeSlab(); break;
