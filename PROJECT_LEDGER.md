@@ -80,6 +80,23 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260925-215100-c8f2] void-PIN: manager PIN required before any payment void
+- TIER: 3 (money reversal path)
+- STATUS: DONE
+- Started: 2026-09-25 21:51 UTC
+- Scope: the "void-PIN" item named alongside Ceiling/PIN in the P0-3/P0-4 scope note ("Ceiling/PIN and void-PIN explicitly out of scope") — the second half of that pair, and the only remaining gap that can be named from the repo (the numbered Servkro list, items 5–8 and 10, is not in the repo). User scoped it before implementation: **same manager PIN, required on every void, no threshold**.
+- Trace / root cause:
+  1. `voidTableBill` (`tables.js:1770`) is the ONLY void path in Admin — all four callers funnel into it (`main.js:446` delegated action, `tables.js:678` button markup, `:2940` delegated action, `:2989` `window.__tables` export). POS has no void at all. So a single gate covers every void.
+  2. It ran `showConfirm` straight into the revert logic: the only authorisation was one OK click, on an action that reverses money already taken.
+- Fixes: extracted `gateManagerPin({ message, auditAction, auditDetails })` out of the discount gate — it owns the `settings/Security` read, the fail-open rules, the prompt loop, the SHA-256 compare and the `logAudit` write, so discount and void share one implementation instead of two copies of a loop that would drift. `gateManualDiscountPin` is now ceiling-logic-only and delegates to it. `voidTableBill` gates immediately after the confirm, before entering its `try`.
+- Behaviour change to already-shipped code (deliberate): the "ceiling on but no PIN" toast now uses the shared wording ("Manager PIN is required for this action but none is set — configure it in Settings."). Same action — warn and allow — different words. `gateManagerPin` also re-reads `settings/Security` even though the discount gate already read it for the ceiling test: two reads on a path that only runs for an above-ceiling discount or a void, accepted to keep the shared API to a single argument object.
+- Fail-open (unchanged, as agreed): only cancel or a wrong PIN aborts. Unreadable settings, no PIN configured, or no `crypto.subtle` → allow with a warning. The PIN is still client-side only — same honesty note as the ceiling entry: Spark plan, no Cloud Functions, so this is an accountability control (`logs/audit` records `void.pin.approved` with `tableId`/`groupId`), not authentication.
+- Deliberately NOT changed: the `showConfirm` order — confirm explains the consequence first, PIN authorises it second; the void revert logic itself; POS (no void exists).
+- Verified: `node --check` on `utils.js` and `tables.js`; check suite **9/9**; `node tools/build.mjs` exit 0; strict UTF-8 valid with FFFD 0 on both files; dist assertions — `dist/js/utils.js` carries `gateManagerPin` and the `discount.pin.approved` literal, `dist/js/features/tables.js` carries the `void.pin.approved` literal and the `gateManagerPin` call, `dist/sw.js` = `foodhubbie-erp-shell-v5.4.3`.
+- NOT verified / open risk: no live-browser E2E against real RTDB — the void PIN prompt is unexercised against a real backend. The refactor of the already-shipped discount gate is covered only by `node --check` + the build, because `utils.js` is not in the check bundle (it has module-scope `document` listeners, so it cannot be).
+- Confidence: HIGH
+- Ended: 2026-09-25 21:55 UTC
+
 ### [20260925-161900-b41e] Manual-discount approval ceiling (% of bill) + manager PIN gate at settlement
 - TIER: 3 (money path — gates settlement; security rules change; fail-open by design)
 - STATUS: DONE

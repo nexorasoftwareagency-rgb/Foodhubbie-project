@@ -31,7 +31,7 @@ import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runT
 import { state } from '../state.js';
 import { showToast, showConfirm, showDeleteConfirm } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
-import { haptic, escapeHtml, playNotificationSound, logAudit, formatOrderId, gateManualDiscountPin } from '../utils.js';
+import { haptic, escapeHtml, playNotificationSound, logAudit, formatOrderId, gateManualDiscountPin, gateManagerPin } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { evaluateDiscount, recordDiscountUsage, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
 
@@ -1777,6 +1777,15 @@ export async function voidTableBill(tableId, groupId = null) {
         'Void Payment'
     );
     if (!ok) return;
+
+    // Every void reverses money already taken, so the manager PIN is required
+    // unconditionally — no ceiling applies here. Same fail-open rules as the
+    // discount gate: only cancel or a wrong PIN aborts.
+    if (!await gateManagerPin({
+        message: `Authorise voiding this ${groupId ? 'group bill' : 'table bill'}. This cannot be undone.`,
+        auditAction: 'void.pin.approved',
+        auditDetails: { tableId, groupId: groupId || 'session' }
+    })) return;
 
     try {
         const { phone: customerPhone, orderId: representativeOrderId } = _billCustomerPhoneAndOrderId();

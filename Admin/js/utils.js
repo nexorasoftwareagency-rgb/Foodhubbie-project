@@ -199,7 +199,7 @@ export const logAudit = async (action, details = {}) => {
     }
 };
 
-// ── Manual-discount approval ceiling (% of bill) + manager PIN ──
+// ── Manager PIN gates: manual-discount approval ceiling + payment void ──
 
 /**
  * SHA-256 hex of a PIN — what gets stored at settings/Security/pinHash so
@@ -217,11 +217,42 @@ export const hashPin = async (pin) => {
 };
 
 /**
+ * Shared manager-PIN prompt: reads settings/Security and asks until the PIN
+ * matches or the operator gives up.
+ * Resolves false ONLY when the operator cancels or stops retrying a wrong
+ * PIN. Every other path fails open — an unreadable or half-configured
+ * security node must never block the action it is guarding.
+ */
+export async function gateManagerPin({ message, auditAction, auditDetails = {} }) {
+    let sec;
+    try {
+        sec = (await get(Outlet.ref('settings/Security'))).val() || {};
+    } catch (e) {
+        console.warn('[Security] approval settings unreadable:', e?.message || e);
+        return true;
+    }
+    if (!sec.pinHash) {
+        showToast('Manager PIN is required for this action but none is set — configure it in Settings.', 'warning', 5000);
+        return true;
+    }
+    for (;;) {
+        const pin = await showPinPrompt(message);
+        if (!pin) return false;
+        const hash = await hashPin(pin);
+        if (hash === null) { console.warn('[Security] PIN hashing unavailable — failing open'); return true; }
+        if (hash === sec.pinHash) {
+            logAudit(auditAction, auditDetails);
+            return true;
+        }
+        showToast('Incorrect manager PIN. Try again.', 'error', 3000, 'pin-err');
+    }
+}
+
+/**
  * Settlement gate for MANUAL discounts: above the configured % ceiling it
  * demands a manager PIN. Callers `await` this before writing payment.
- * Resolves false ONLY when the operator cancels or mistypes the PIN.
- * Every other path fails open — an unreadable or half-configured ceiling
- * must never block billing.
+ * Resolves false ONLY when the operator cancels or mistypes the PIN;
+ * every other path fails open.
  */
 export async function gateManualDiscountPin({ discountValue, subtotal, discountId }) {
     if (discountId !== 'manual:flat' && discountId !== 'manual:percent') return true;
@@ -235,28 +266,16 @@ export async function gateManualDiscountPin({ discountValue, subtotal, discountI
     }
     if (!needsPinApproval(discountValue, subtotal, sec.discountCeilingPct)) return true;
 
-    if (!sec.pinHash) {
-        showToast('Discount ceiling is on but no manager PIN is set — configure it in Settings.', 'warning', 5000);
-        return true;
-    }
-
     const pct = ((Number(discountValue) / subtotal) * 100).toFixed(1);
-    const message = `This ${pct}% discount is above the ${sec.discountCeilingPct}% approval ceiling.`;
-    for (;;) {
-        const pin = await showPinPrompt(message);
-        if (!pin) return false;
-        const hash = await hashPin(pin);
-        if (hash === null) { console.warn('[Discounts] PIN hashing unavailable — failing open'); return true; }
-        if (hash === sec.pinHash) {
-            logAudit('discount.pin.approved', {
-                discountValue: Math.round(discountValue),
-                subtotal: Math.round(subtotal),
-                ceilingPct: sec.discountCeilingPct
-            });
-            return true;
+    return gateManagerPin({
+        message: `This ${pct}% discount is above the ${sec.discountCeilingPct}% approval ceiling.`,
+        auditAction: 'discount.pin.approved',
+        auditDetails: {
+            discountValue: Math.round(discountValue),
+            subtotal: Math.round(subtotal),
+            ceilingPct: sec.discountCeilingPct
         }
-        showToast('Incorrect manager PIN. Try again.', 'error', 3000, 'pin-err');
-    }
+    });
 }
 
 export const addRiderNotification = async (uid, title, sub, type = 'info') => {
