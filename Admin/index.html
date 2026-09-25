@@ -1894,6 +1894,7 @@
                         <button class="settings-subtab" data-subtab="delivery-fee">Delivery Fee</button>
                         <button class="settings-subtab" data-subtab="receipt-dev">Receipt & Dev</button>
                         <button class="settings-subtab" data-subtab="qr-menu-offer">QR Menu Offer Control</button>
+                        <button class="settings-subtab" data-subtab="features">Features</button>
                     </div>
 
                     <div class="settings-grid">
@@ -2990,6 +2991,70 @@
                                 </button>
 
                             </div>
+
+                        </div>
+
+                        <!-- Feature Flags (Settings > Features) -->
+
+                        <div class="glass-card p-20 grid-full" data-settings-section="features">
+
+                            <div class="flex-between flex-center mb-14">
+
+                                <div>
+
+                                    <h4 class="mb-4"><i data-lucide="sliders-horizontal" class="icon-16"></i> Features</h4>
+
+                                    <p class="text-muted-small">Switch capabilities on or off for this outlet. A feature that is
+
+                                    off never prompts, never writes an approval audit row, and costs no database reads.</p>
+
+                                </div>
+
+                            </div>
+
+                            <div class="settings-section-card mb-14" style="border:1px solid var(--border-color);border-radius:12px;padding:16px;">
+
+                                <div class="flex-between flex-center mb-10" style="flex-wrap:wrap;gap:10px;">
+
+                                    <div>
+
+                                        <strong style="display:block;font-size:13px;color:var(--text-primary);">Discount
+
+                                        Approval Ceiling & Manager PIN</strong>
+
+                                        <span id="featureDiscountStatus" class="text-muted-small">Currently: Inactive</span>
+
+                                    </div>
+
+                                    <label class="toggle-switch" style="margin:0;">
+
+                                        <input type="checkbox" id="featureDiscountApproval">
+
+                                        <span class="toggle-slider"></span>
+
+                                    </label>
+
+                                </div>
+
+                                <p class="text-secondary-small note-small mb-10">Caps how much any human-typed discount can
+
+                                give away: above your chosen % of the bill a manager must enter a PIN before the payment goes
+
+                                through — and every payment void asks for the same PIN. <strong>Benefits:</strong> stops one-off
+
+                                discounts quietly eroding margin, names who approved it in the audit trail, and costs nothing
+
+                                while off.</p>
+
+                                <a href="manual.html" target="_blank" rel="noopener"><i data-lucide="book-open" class="icon-14"></i>
+
+                                Read the full manual</a>
+
+                            </div>
+
+                            <p class="text-secondary-small note-small">Turn a feature on, then <strong>Save Settings</strong> —
+
+                            a hard refresh prompt appears to activate it.</p>
 
                         </div>
 
@@ -6087,7 +6152,7 @@
 
     <div id="receiptPreviewModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Receipt Preview">
 
-        <div class="modal-content" style="max-width: 95vw; width: 95vw; max-height: 95vh;">
+        <div class="modal-content" style="max-width: 560px; width: 100%; max-height: 95vh;">
 
             <div class="modal-header">
 

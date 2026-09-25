@@ -1,7 +1,8 @@
 import { state } from '../state.js';
 import { db, Outlet, tenantPath, ref, get, update, set } from '../firebase.js';
-import { logAudit, showToast, getSkeletonRows, hashPin } from '../utils.js';
+import { logAudit, showToast, showConfirm, getSkeletonRows, hashPin } from '../utils.js';
 import { loadLucide } from '../ui.js';
+import { completeSiteRefresh } from '../pwa.js';
 
 // --- STATE & UTILS ---
 const SETTINGS_PATHS = {
@@ -9,7 +10,8 @@ const SETTINGS_PATHS = {
     DELIVERY: "settings/Delivery",
     BOT: "settings/Bot",
     DISPLAY: "settings/Display",
-    SECURITY: "settings/Security"
+    SECURITY: "settings/Security",
+    FEATURES: "settings/features"
 };
 
 function validateCoords(lat, lng) {
@@ -78,6 +80,21 @@ const val = (id) => document.getElementById(id)?.value ?? '';
 const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
 const setChecked = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v; };
 const isChecked = (id) => document.getElementById(id)?.checked ?? false;
+
+// Settings > Features: mirror the toggle into the card status and the
+// Discount Approval inputs (greyed out while the feature is off).
+function applyFeatureUI() {
+    const on = isChecked('featureDiscountApproval');
+    for (const id of ['settingDiscCeilingPct', 'settingManagerPin']) {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !on;
+    }
+    const st = document.getElementById('featureDiscountStatus');
+    if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
+}
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'featureDiscountApproval') applyFeatureUI();
+});
 const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcons({ root }));
 
 // --- CORE FUNCTIONS ---
@@ -90,12 +107,13 @@ export async function loadStoreSettings() {
     if (feeSlabsTbody) feeSlabsTbody.innerHTML = getSkeletonRows(3, 4);
 
     try {
-        const [storeSnap, delSnap, botSnap, dispSnap, secSnap] = await Promise.all([
+        const [storeSnap, delSnap, botSnap, dispSnap, secSnap, featSnap] = await Promise.all([
             get(Outlet.ref(SETTINGS_PATHS.STORE)),
             get(Outlet.ref(SETTINGS_PATHS.DELIVERY)),
             get(Outlet.ref(SETTINGS_PATHS.BOT)),
             get(Outlet.ref(SETTINGS_PATHS.DISPLAY)),
-            get(Outlet.ref(SETTINGS_PATHS.SECURITY))
+            get(Outlet.ref(SETTINGS_PATHS.SECURITY)),
+            get(Outlet.ref(SETTINGS_PATHS.FEATURES))
         ]);
 
         const store = storeSnap.val();
@@ -144,6 +162,11 @@ export async function loadStoreSettings() {
         setVal('settingManagerPin', '');
         const pinEl = document.getElementById('settingManagerPin');
         if (pinEl) pinEl.placeholder = sec.pinHash ? 'PIN set — enter a new one to change it' : 'e.g. 4711';
+
+        // 2a-1. Feature flag (settings/features). Absent node = OFF by design.
+        state.features.discountApproval = featSnap.val()?.discountApproval === true;
+        setChecked('featureDiscountApproval', state.features.discountApproval);
+        applyFeatureUI();
 
         // 2b. Dine-In Settings (tax, service charge, QR ordering base URL)
         const dineSnap = await get(Outlet.ref('dineinSettings'));
@@ -335,6 +358,11 @@ export async function saveStoreSettings() {
         updates[tenantPath(Outlet.current, 'settings/Display')] = displayData;
         updates[tenantPath(Outlet.current, 'settings/Security/discountCeilingPct')] = ceilingPct;
         if (pinHash) updates[tenantPath(Outlet.current, 'settings/Security/pinHash')] = pinHash;
+
+        // Feature flag (Settings > Features). Tracked so we can demand a hard refresh on change.
+        const featureEnabled = isChecked('featureDiscountApproval');
+        const featureChanged = featureEnabled !== state.features.discountApproval;
+        updates[tenantPath(Outlet.current, 'settings/features/discountApproval')] = featureEnabled;
         const taxRates = _readTaxRates();
         updates[tenantPath(Outlet.current, 'dineinSettings')] = {
             qrBaseUrl: val('settingQrBaseUrl'),
@@ -354,6 +382,13 @@ export async function saveStoreSettings() {
         logAudit("Settings", "Updated Store Settings", "Global");
         document.getElementById('displayCoords').innerText = `${lat}, ${lng}`;
         if (window.updateOutletStatusIndicator) window.updateOutletStatusIndicator(storeData.shopStatus);
+
+        // Feature toggles take effect on load — one popup, then the nuclear refresh.
+        if (featureChanged) {
+            state.features.discountApproval = featureEnabled;
+            applyFeatureUI();
+            await completeSiteRefresh('Settings saved. A hard refresh is required to activate this feature change. Refresh now?');
+        }
 
     } catch (e) {
         console.error("[Settings] Save Error:", e);

@@ -7,11 +7,8 @@ import { showConfirm, showToast } from './ui-utils.js';
 import { state } from './state.js';
 
 // 1. REFRESH CIRCUIT BREAKER & COMPLETE REFRESH
-export const completeSiteRefresh = async () => {
-    const ok = await showConfirm(
-        "This will purge all local caches, unregister the app, and reset UI states. You will NOT be logged out. Are you sure?",
-        "⚠️ Nuclear Refresh"
-    );
+export const completeSiteRefresh = async (message = "This will purge all local caches, unregister the app, and reset UI states. You will NOT be logged out. Are you sure?") => {
+    const ok = await showConfirm(message, "⚠️ Nuclear Refresh");
     
     if (!ok) return;
 

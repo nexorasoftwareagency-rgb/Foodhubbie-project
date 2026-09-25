@@ -46,6 +46,9 @@ export const state = {
     settingsDirty: false,      // Tracks unsaved changes in settings form
     showAllRiders: false,      // Toggle: show all riders in sidebar (including offline)
 
+    // Settings > Features toggles. Absent node reads as OFF — see docs/PLAN-FEATURES-SUBTAB.md
+    features: { discountApproval: false },
+
     // Continuous notification sound
     unacknowledgedOrders: new Set(),  // Order IDs with sound playing
     continuousSoundInterval: null,     // setInterval ID for continuous sound
