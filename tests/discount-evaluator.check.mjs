@@ -61,6 +61,9 @@ test('P0-4: discountAllowsChannel channel matrix', () => {
         [{ channel: 'whatsapp' }, 'table', false],
         [{ channel: 'website' }, 'table', false],
         [{ channel: 'both' }, 'table', true],       // unchanged
+        [{ channel: 'table' }, 'table', true],      // #9: now authorable
+        [{ channel: 'table' }, 'pos', false],       // table-only never leaks to POS
+        [{ channel: 'table' }, 'website', false],
         [{ channel: 'all' }, 'table', true],
         [{}, 'table', true],
         [{ channel: '' }, 'table', true],
