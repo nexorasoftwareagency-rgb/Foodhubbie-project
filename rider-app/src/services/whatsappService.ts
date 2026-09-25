@@ -11,7 +11,8 @@ import { cleanPhoneDigits } from "@/lib/utils";
 async function sendGenericMessage(outlet: OutletId, phone: string, message: string): Promise<void> {
   const cleanPhone = cleanPhoneDigits(phone);
   if (!cleanPhone) return; // no phone on file — skip silently, not fatal to the delivery flow
-  const cmdRef = ref(db, dbPaths.botCommands(outlet));
+  const cmdPath = dbPaths.botCommands(outlet);
+  const cmdRef = ref(db, cmdPath);
   await push(cmdRef, {
     action: "SEND_GENERIC_MESSAGE",
     phone: cleanPhone,

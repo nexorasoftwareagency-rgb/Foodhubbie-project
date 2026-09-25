@@ -65,7 +65,7 @@ async function notifyRiderPickup(sock, order, addInAppNotification) {
     try {
         if (!sock || isSocketDead(sock)) return;
         const riderPhone = order.riderPhone;
-        const riderId = order.riderId || order.assignedRiderUid;
+        const riderId = order.riderId || order.assignedRider;
         if (!riderPhone) return;
 
         const riderJid = formatJid(riderPhone);
@@ -95,7 +95,7 @@ async function notifyRiderAssignment(sock, orderId, order, addInAppNotification)
     try {
         if (!sock || isSocketDead(sock)) return;
         const riderPhone = order.riderPhone;
-        const riderId = order.riderId || order.assignedRiderUid;
+        const riderId = order.riderId || order.assignedRider;
         if (!riderPhone) {
             console.warn(`[RIDER] ⚠️ Cannot notify assignment: No phone number for order #${formatOrderId(order.orderId || orderId)}`);
             return;
@@ -136,7 +136,9 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
         const onlineRiders = Object.entries(riders)
             .map(([uid, data]) => ({ uid, ...data }))
             .filter(r => {
-                if (r.status !== "Online" || !r.phone) return false;
+                if (!r.phone) return false;
+                const status = String(r.status || '').toLowerCase();
+                if (status !== "online") return false;
                 const ts = r.lastSeen || r.location?.ts || 0;
                 return ts && (Date.now() - ts) < RIDER_STALE_MS;
             });
@@ -183,4 +185,31 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
     }
 }
 
-module.exports = { notifyRiderPickup, notifyRiderAssignment, broadcastPickupAvailable };
+async function notifyCustomerArrived(sock, order) {
+    try {
+        if (!sock || isSocketDead(sock)) return;
+        const customerPhone = order.phone;
+        if (!customerPhone) return;
+
+        const customerJid = formatJid(customerPhone);
+        if (!customerJid) {
+            console.warn(`[RIDER] ⚠️ Cannot notify arrival: Invalid JID for phone ${customerPhone}`);
+            return;
+        }
+
+        // Use the ARRIVED template (no OTP, just arrival confirmation)
+        const msg = buildRiderOrderMessage(order, {
+            title: `📍 *ARRIVED AT YOUR LOCATION* 📍`,
+            footer: `I'm here with your order! Please have your OTP ready.`,
+            id: formatOrderId(order.orderId || order.id),
+            includeOutlet: true,
+        });
+
+        await sock.sendMessage(customerJid, { text: msg }, { _logChat: false });
+        console.log(`[RIDER] ✅ Customer arrival notification sent to ${customerPhone}`);
+    } catch (err) {
+        console.error("[RIDER] ❌ Customer Arrival Notify Error:", err);
+    }
+}
+
+module.exports = { notifyRiderPickup, notifyRiderAssignment, broadcastPickupAvailable, notifyCustomerArrived };

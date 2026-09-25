@@ -77,33 +77,47 @@ export async function loadOutlets(): Promise<OutletInfo[]> {
   const businessesSnap = await get(ref(db, "businesses"));
   const businesses = (businessesSnap.val() || {}) as Record<string, any>;
   
-  const results: OutletInfo[] = [];
-  
+  // Collect all outlet refs first, then batch-read all settings in one Promise.all
+  const outletRefs: Array<{ bid: string; oid: string; outletData: any }> = [];
   for (const [bid, business] of Object.entries(businesses)) {
     const outlets = business.outlets || {};
     for (const [oid, outlet] of Object.entries(outlets)) {
-      const [storeSnap, deliverySnap] = await Promise.all([
-        get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Store`)),
-        get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Delivery`)),
-      ]);
-      const store = (storeSnap.val() || {}) as OutletSettings["Store"];
-      const delivery = (deliverySnap.val() || {}) as OutletSettings["Delivery"];
-      const outletData = outlet as Record<string, any>;
-      
-      // Get display name from outlet settings or use outlet ID
-      const displayName = outletData.name || outletData.id || oid;
-      
-      results.push({
-        id: oid,
-        name: displayName,
-        icon: "🏪",
-        color: "#E84908",
-        lat: parseFloat(store.lat as any) || 25.887944,
-        lng: parseFloat(store.lng as any) || 85.026194,
-        backupCode: delivery.backupCode || "",
-        businessId: bid,
-      });
+      outletRefs.push({ bid, oid, outletData: outlet });
     }
+  }
+  
+  // Batch read all Store + Delivery settings in parallel
+  const settingsPromises = outletRefs.map(({ bid, oid }) =>
+    Promise.all([
+      get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Store`)),
+      get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Delivery`)),
+    ]).then(([storeSnap, deliverySnap]) => ({ bid, oid, storeSnap, deliverySnap }))
+  );
+  
+  const allSettings = await Promise.all(settingsPromises);
+  
+  const results: OutletInfo[] = [];
+  for (let i = 0; i < outletRefs.length; i++) {
+    const { bid, oid, outletData: outletMeta } = outletRefs[i];
+    const { storeSnap, deliverySnap } = allSettings[i];
+    
+    const store = (storeSnap.val() || {}) as OutletSettings["Store"];
+    const delivery = (deliverySnap.val() || {}) as OutletSettings["Delivery"];
+    const outletMetaData = outletMeta as Record<string, any>;
+    
+    // Get display name from outlet settings or use outlet ID
+    const displayName = outletMetaData.name || outletMetaData.id || oid;
+    
+    results.push({
+      id: oid,
+      name: displayName,
+      icon: "🏪",
+      color: "#E84908",
+      lat: parseFloat(store.lat as any) || 25.887944,
+      lng: parseFloat(store.lng as any) || 85.026194,
+      backupCode: delivery.backupCode || "",
+      businessId: bid,
+    });
   }
   return results;
 }
@@ -120,7 +134,7 @@ export function subscribeAvailableOrders(
 
   const emit = () => {
     const list: AvailableOrder[] = Object.values(cache)
-      .filter((o: any) => o.status === "Ready" && !isGhostOrder(o.createdAt, false))
+      .filter((o: any) => o.status === "Ready" && !o.assignedRider && !isGhostOrder(o.createdAt, false))
       .map((o: any) => ({
         id: o.id,
         outlet: o.outlet,
@@ -143,15 +157,15 @@ export function subscribeAvailableOrders(
     callback(list);
   };
 
-  outlets.forEach(({ id, name, icon, color, lat, lng }) => {
-    const q = query(ref(db, dbPaths.orders(id)), orderByChild("assignedRider"), equalTo(null));
+  for (const { id, name, icon, color, lat, lng } of outlets) {
+    const ordersPath = dbPaths.orders(id);
+    const q = query(ref(db, ordersPath), orderByChild("assignedRider"), equalTo(null));
     const handler = onValue(
       q,
       (snap) => {
         const val = snap.val() || {};
-        Object.keys(cache).forEach((key) => {
-          if (cache[key].outlet === id && !cache[key].assignedRider) delete cache[key];
-        });
+        // Do NOT delete from cache on assignedRider change — filter at emit time instead.
+        // This ensures orders reappear if assignedRider is later cleared (cancellation/reassignment).
         Object.entries(val).forEach(([orderId, data]) => {
           cache[`${id}:${orderId}`] = {
             ...(data as RiderOrder),
@@ -169,7 +183,7 @@ export function subscribeAvailableOrders(
       (err) => onError?.(err as unknown as Error)
     );
     unsubs.push(() => off(q, "value", handler));
-  });
+  }
 
   return () => unsubs.forEach((fn) => fn());
 }
@@ -198,8 +212,9 @@ export function subscribeActiveOrders(
     callback(list as any);
   };
 
-  outlets.forEach(({ id, name, icon, color, lat, lng, backupCode }) => {
-    const q = query(ref(db, dbPaths.orders(id)), orderByChild("assignedRider"), equalTo(riderEmail.toLowerCase()));
+  for (const { id, name, icon, color, lat, lng, backupCode } of outlets) {
+    const ordersPath = dbPaths.orders(id);
+    const q = query(ref(db, ordersPath), orderByChild("assignedRider"), equalTo(riderEmail.toLowerCase()));
     const handler = onValue(
       q,
       (snap) => {
@@ -225,7 +240,7 @@ export function subscribeActiveOrders(
       (err) => onError?.(err as unknown as Error)
     );
     unsubs.push(() => off(q, "value", handler));
-  });
+  }
 
   return () => unsubs.forEach((fn) => fn());
 }
@@ -246,8 +261,9 @@ export function subscribeOrderHistory(
     callback(list as any);
   };
 
-  outlets.forEach(({ id, name, icon }) => {
-    const q = query(ref(db, dbPaths.orders(id)), orderByChild("assignedRider"), equalTo(riderEmail.toLowerCase()));
+  for (const { id, name, icon } of outlets) {
+    const ordersPath = dbPaths.orders(id);
+    const q = query(ref(db, ordersPath), orderByChild("assignedRider"), equalTo(riderEmail.toLowerCase()));
     const handler = onValue(
       q,
       (snap) => {
@@ -263,7 +279,7 @@ export function subscribeOrderHistory(
       (err) => onError?.(err as unknown as Error)
     );
     unsubs.push(() => off(q, "value", handler));
-  });
+  }
 
   return () => unsubs.forEach((fn) => fn());
 }
@@ -277,11 +293,6 @@ export async function acceptOrder(params: {
   riderUid: string;
   riderPhone: string;
   riderName: string;
-  riderLat: number;
-  riderLng: number;
-  outletLat: number;
-  outletLng: number;
-  accuracy?: number;
   customerPhone?: string;
 }): Promise<void> {
   const { outlet, orderId, riderEmail, riderUid, riderPhone, riderName, customerPhone } = params;
@@ -335,7 +346,8 @@ export async function markReachedOutlet(params: {
 }): Promise<void> {
   const { outlet, orderId, riderLat, riderLng, outletLat, outletLng, accuracy } = params;
   assertProximity(riderLat, riderLng, outletLat, outletLng, PROXIMITY.PICKUP_RADIUS_KM, accuracy);
-  await update(ref(db, dbPaths.singleOrder(outlet, orderId)), {
+  const singleOrderPath = dbPaths.singleOrder(outlet, orderId);
+  await update(ref(db, singleOrderPath), {
     status: "Arrived at Restaurant",
     arrivedAtRestaurantAt: serverTimestamp(),
   });
@@ -361,7 +373,8 @@ export async function confirmPickup(params: {
   const { outlet, orderId, riderLat, riderLng, outletLat, outletLng, riderPhone, customerPhone, accuracy } = params;
   assertProximity(riderLat, riderLng, outletLat, outletLng, PROXIMITY.PICKUP_RADIUS_KM, accuracy);
 
-  await update(ref(db, dbPaths.singleOrder(outlet, orderId)), {
+  const singleOrderPath = dbPaths.singleOrder(outlet, orderId);
+  await update(ref(db, singleOrderPath), {
     status: "Picked Up",
     pickedUpAt: serverTimestamp(),
   });
@@ -382,7 +395,8 @@ export async function markReachedDrop(params: {
 }): Promise<void> {
   const { outlet, orderId } = params;
 
-  await update(ref(db, dbPaths.singleOrder(outlet, orderId)), {
+  const singleOrderPath = dbPaths.singleOrder(outlet, orderId);
+  await update(ref(db, singleOrderPath), {
     status: "Reached Drop Location",
     reachedDropAt: serverTimestamp(),
   });
@@ -399,8 +413,9 @@ export async function verifyOtp(params: {
   enteredOtp: string;
   actualOtp: string;
   backupCode?: string;
+  isAdmin?: boolean; // required for backup code fallback
 }): Promise<{ success: boolean; verifiedBy: "OTP" | "ADMIN_FALLBACK"; attemptsRemaining?: number }> {
-  const { outlet, orderId, enteredOtp, actualOtp, backupCode } = params;
+  const { outlet, orderId, enteredOtp, actualOtp, backupCode, isAdmin = false } = params;
   const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
 
   const existingSnap = await get(ref(db, attemptsPath));
@@ -411,10 +426,9 @@ export async function verifyOtp(params: {
   }
 
   const isCorrect = enteredOtp === actualOtp;
-  // Matches app.js: fallback works regardless of isAdmin flag as long as a backup
-  // code is configured — the emergency-override BUTTON is admin-gated in the UI,
-  // but the code itself doesn't require it. Kept consistent here for parity.
-  const isFallback = Boolean(backupCode && enteredOtp === backupCode);
+  // Admin gate for backup code fallback: only allow fallback if isAdmin=true
+  // The emergency-override BUTTON is admin-gated in the UI, and now the API enforces it too.
+  const isFallback = Boolean(isAdmin && backupCode && enteredOtp === backupCode);
 
   if (isCorrect || isFallback) {
     await remove(ref(db, attemptsPath));
@@ -463,9 +477,10 @@ export async function resendOtp(params: { outlet: OutletId; orderId: string }): 
   }
 
   const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
+  const singleOrderPath = dbPaths.singleOrder(outlet, orderId);
   await update(ref(db), {
-    [dbPaths.singleOrder(outlet, orderId) + "/deliveryOTP"]: newOtp,
-    [dbPaths.singleOrder(outlet, orderId) + "/otp"]: newOtp,
+    [singleOrderPath + "/deliveryOTP"]: newOtp,
+    [singleOrderPath + "/otp"]: newOtp,
     [attemptsPath + "/resendCount"]: (existing?.resendCount || 0) + 1,
     [attemptsPath + "/lastResend"]: now,
   });
@@ -477,7 +492,8 @@ export async function getOtpAttemptsStatus(
   outlet: OutletId,
   orderId: string
 ): Promise<{ blockedUntilMs: number; resendAvailableAtMs: number }> {
-  const snap = await get(ref(db, dbPaths.otpAttempts(outlet, orderId)));
+  const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
+  const snap = await get(ref(db, attemptsPath));
   const val = (snap.val() as OtpAttemptRecord | null) || null;
   const now = Date.now();
   return {
@@ -504,7 +520,8 @@ export async function completeDelivery(params: {
 }): Promise<void> {
   const { outlet, orderId, riderId, deliveryFee, paymentMethod, verifiedBy } = params;
 
-  const result = await runTransaction(ref(db, dbPaths.riderStats(outlet, riderId)), (current) => {
+  const riderStatsPath = dbPaths.riderStats(outlet, riderId);
+  const result = await runTransaction(ref(db, riderStatsPath), (current) => {
     if (!current) return { totalOrders: 1, totalEarnings: deliveryFee };
     return {
       ...current,
@@ -514,7 +531,8 @@ export async function completeDelivery(params: {
   });
   if (!result.committed) throw new Error("Failed to update rider earnings");
 
-  await update(ref(db, dbPaths.singleOrder(outlet, orderId)), {
+  const singleOrderPath = dbPaths.singleOrder(outlet, orderId);
+  await update(ref(db, singleOrderPath), {
     status: "Delivered",
     deliveredAt: serverTimestamp(),
     verifiedBy,
@@ -535,7 +553,8 @@ export function subscribeRiderStats(
   uid: string,
   callback: (stats: { totalOrders: number; totalEarnings: number }) => void
 ) {
-  const statsRef = ref(db, dbPaths.riderStats(outlet, uid));
+  const statsPath = dbPaths.riderStats(outlet, uid);
+  const statsRef = ref(db, statsPath);
   const handler = onValue(statsRef, (snap) => {
     callback(snap.val() || { totalOrders: 0, totalEarnings: 0 });
   });

@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation as useWouterLocation } from "wouter";
 import { MapPin, Navigation2 } from "lucide-react";
 import { useRiderContext } from "@/contexts/RiderContext";
-import { useLocationContext } from "@/contexts/LocationContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useAvailableOrders } from "@/hooks/useAvailableOrders";
 import { useActiveOrder } from "@/hooks/useActiveOrder";
@@ -24,7 +23,6 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 42;
 export function PingModal() {
   const { isOnline, rider } = useRiderContext();
   const { user } = useAuth();
-  const { location } = useLocationContext();
   const { orders } = useAvailableOrders();
   const { activeOrder } = useActiveOrder();
   const playAlert = useAlertSound();
@@ -112,9 +110,7 @@ export function PingModal() {
     }
 
     try {
-      const riderLat = location?.lat ?? current.outletLat;
-      const riderLng = location?.lng ?? current.outletLng;
-      await acceptOrder({ ...payload, riderLat, riderLng, accuracy: location?.accuracy });
+      await acceptOrder(payload);
       toast.success("Order Accepted!", { description: "Head to the outlet to pick it up." });
       setCurrent(null);
       navigate("/active");

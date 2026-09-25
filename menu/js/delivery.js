@@ -435,6 +435,9 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
     if (!address) { UI.showToast('Please enter your delivery address', 'error'); return; }
 
     M._placing = true;
+    // ponytail: invalidate token IMMEDIATELY on click to prevent double-submit race
+    // (guard at line 425 checks _tokenValid; doing it here beats any race to the write)
+    if (M.token) M._tokenValid = false;
     const btn = document.getElementById('btnPlaceOrder');
     btn.disabled = true;
     const originalLabel = btn.textContent;

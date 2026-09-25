@@ -101,10 +101,11 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         status: 'Placed',
         paymentMethod: 'COD', paymentStatus: 'Pending',
         createdAt: new Date().toISOString(),
-        // assignedRider intentionally ABSENT (not ""): the rider app's
+        // assignedRider explicitly null (not absent, not ""): the rider app's
         // "New Order Available" list queries orderByChild("assignedRider").
         // equalTo(null), and RTDB only matches that on missing/null keys —
         // an empty string would make unassigned orders invisible to riders.
+        assignedRider: null,
         items,
         stockDeducted: false,          // bot deducts stock on pickup (see child_added hook)
         note: note || '',

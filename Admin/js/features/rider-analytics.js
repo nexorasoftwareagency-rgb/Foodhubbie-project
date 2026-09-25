@@ -3,7 +3,7 @@
  * Analytics and performance monitoring for delivery personnel.
  */
 
-import { Outlet, tenantRef, db, ref, get, query, orderByChild, equalTo, startAt, endAt, push, set, serverTimestamp } from '../firebase.js';
+import { Outlet, tenantRef, db, ref, get, query, orderByChild, equalTo, startAt, endAt, push, set, serverTimestamp, BUSINESS_BY_OUTLET } from '../firebase.js';
 import { state } from '../state.js';
 import { escapeHtml, showToast, formatDate, getISTDateString, getSkeletonDivs, formatOrderId } from '../utils.js';
 import { settleRiderWallet } from './riders.js';
@@ -51,7 +51,7 @@ export async function generateRiderPerformanceReport() {
         const qEnd = `${to}T23:59:59.999Z`;
 
         const orders = [];
-        const outlets = ['pizza', 'cake'];
+        const outlets = Object.keys(BUSINESS_BY_OUTLET);
         for (const outlet of outlets) {
             const snap = await get(query(tenantRef(outlet, 'orders'), orderByChild('createdAt'), startAt(qStart), endAt(qEnd)));
             if (snap.exists()) {

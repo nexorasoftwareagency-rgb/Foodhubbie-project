@@ -26,7 +26,12 @@ export function useActiveOrder() {
       (list) => {
         const withSteps = list
           .map((o) => ({ ...o, step: getDeliveryStep(o) }))
-          .sort((a, b) => (a.acceptedAt || 0) - (b.acceptedAt || 0));
+          .sort((a, b) => {
+            // Sort by step descending (lower step = more urgent), then by acceptedAt for tiebreaking
+            const stepDiff = (a.step || 0) - (b.step || 0);
+            if (stepDiff !== 0) return stepDiff;
+            return (a.acceptedAt || 0) - (b.acceptedAt || 0);
+          });
         setActiveOrders(withSteps as ActiveOrder[]);
         setLoading(false);
       },

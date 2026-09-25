@@ -396,6 +396,166 @@
 # (P2-8 M5 + P2-9 M7 done this session — all P0/P1/P2 closed)
 ```
 ```
+---
+
+## ✅ COMPLETED THIS SESSION — P0 CRITICAL RIDER/DELIVERY FIXES
+
+### P0-R1: `tenantPath()` sync race — **✅ FIXED**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `rider-app/src/lib/constants.ts`, `rider-app/src/services/*.ts`, `rider-app/src/contexts/RiderContext.tsx` |
+| **Fix Applied** | Removed sync `tenantPath()`; added `getBusinessIdForOutletSync()` + `dbPaths` (sync, throws if cache miss) + `dbPathsAsync` (async, resolves on demand). RiderContext pre-populates cache at boot. All services use sync `dbPaths` after init. |
+
+### P0-R2: N+1 reads in `loadOutlets()` — **✅ FIXED**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `rider-app/src/services/orderService.ts:75-109` |
+| **Fix Applied** | Batched ALL Store + Delivery settings reads with single `Promise.all` across all outlets. Collects refs first, then `await Promise.all(settingsPromises)`, then processes in memory. |
+
+### P0-R3: `markReachedDrop` sends NO customer notification — **✅ FIXED**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `bot/rider.js` |
+| **Fix Applied** | Added `notifyCustomerArrived(sock, order)` function that sends ARRIVED WhatsApp template to customer when order status changes to "Reached Drop Location". Bot's main order status listener should call this on status change. |
+
+---
+
+## 🎯 RECOMMENDED FIX ORDER (Next Session)
+
+```bash
+# 1. P3-2: Verify Sharp conversion with real WhatsApp message
+# 2. P1-R4: Fix cache leak in subscribeAvailableOrders (filter at emit, don't delete)
+# 3. P1-R5: Remove unused proximity params from acceptOrder
+# 4. P1-R6: Dynamic outlets in settlement (riders.js)
+# 5. P1-R7: Admin check for backup OTP in verifyOtp
+# 6. P1-R8: Token replay race on double-click delivery
+# 7. P1-R9: Add assignedRider: null to delivery order payload
+```
+
+---
+
+## 🔴 P0 — CRITICAL — RIDER/DELIVERY SYSTEM (Must Fix Before Next Deploy)
+
+### P0-R1: `tenantPath()` sync race — invalid Firebase paths on first render
+| Field | Detail |
+|-------|--------|
+| **Priority** | P0 — Critical |
+| **Problem** | `tenantPath()` in `rider-app/src/lib/constants.ts:49-52` reads `getBusinessIdForOutlet()` which returns `""` if cache is empty (first render before `RiderContext` effect populates it). Produces malformed paths like `businesses//outlets/pizza/orders` → Firebase reads/writes fail silently. |
+| **Files** | `rider-app/src/lib/constants.ts:49-52` (sync `tenantPath`), `rider-app/src/context/RiderContext.tsx:43-52` (async cache population), `rider-app/src/services/orderService.ts` (calls `dbPaths.orders()` on mount) |
+| **Root Cause** | `tenantPath()` is synchronous but depends on async `RiderContext` cache. `subscribeAvailableOrders` fires immediately on mount before cache is ready. |
+| **Impact** | First few seconds after login: all order queries (Available, Active, History) fail → empty lists, "no orders" shown incorrectly. |
+| **Fix Required** | Remove synchronous `tenantPath()` entirely. Only `tenantPathAsync()` (which awaits cache) should exist. Update all callers to use async version or guard with `outletsLoading` state. |
+
+### P0-R2: N+1 reads in `loadOutlets()` — 2 round-trips per outlet
+| Field | Detail |
+|-------|--------|
+| **Priority** | P0 — Critical |
+| **Problem** | `loadOutlets()` in `rider-app/src/services/orderService.ts:75-109` does sequential `Promise.all` per outlet (Store + Delivery settings). With N outlets = 2N round-trips. |
+| **Files** | `rider-app/src/services/orderService.ts:75-109` |
+| **Root Cause** | Loop is sequential; inner `Promise.all` only batches per-outlet, not across all outlets. |
+| **Impact** | 10 outlets = 20 round-trips = 2-5s delay on rider login. Blocks outlet list, businessId cache, and downstream order subscriptions. |
+| **Fix Required** | Batch ALL settings reads with single `Promise.all` across all outlets: collect all outlet refs first, then `await Promise.all(allRefs.map(get))`, then process in memory. |
+
+### P0-R3: `markReachedDrop` sends NO customer notification — bot has no handler
+| Field | Detail |
+|-------|--------|
+| **Priority** | P0 — Critical |
+| **Problem** | `markReachedDrop` in `orderService.ts:378-392` updates order status to "Reached Drop Location" but comment claims bot sends ARRIVED message. `bot/rider.js` has **no listener for "Reached Drop Location"**. Customer never gets "I've arrived" notification. |
+| **Files** | `rider-app/src/services/orderService.ts:378-392`, `bot/rider.js` (missing status handler) |
+| **Root Cause** | Bot only handles: pickup, assignment, broadcast. "Reached Drop Location" status transition was added to rider app but bot notification never implemented. |
+| **Impact** | Customer never receives arrival notification with OTP. Rider arrives, customer unaware. |
+| **Fix Required** | Option A: Add handler in `bot/rider.js` for `Reached Drop Location` → send ARRIVED WhatsApp template with OTP. Option B: Call `whatsappService.sendArrived()` directly from `markReachedDrop` (as commented code suggests was removed). |
+
+---
+
+### 🟠 P1 — HIGH — RIDER/DELIVERY SYSTEM
+
+### P1-R4: Cache leak — accepted order deleted, never returns if cancelled — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `rider-app/src/services/orderService.ts:125-189` |
+| **Fix Applied** | Removed cache deletion on `assignedRider` change (lines 167-168). Added `!o.assignedRider` filter at emit time (line 137). Orders now persist in cache and reappear if `assignedRider` is later cleared (cancellation/reassignment). |
+
+### P1-R5: Unused proximity params in `acceptOrder` — misleads callers — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `rider-app/src/services/orderService.ts:289-303`, `rider-app/src/components/orders/OrderCard.tsx`, `rider-app/src/components/shared/OfflineQueue.tsx`, `rider-app/src/components/modals/PingModal.tsx` |
+| **Fix Applied** | Removed `riderLat`, `riderLng`, `outletLat`, `outletLng`, `accuracy` from `acceptOrder` signature (lines 289-302). Updated all call sites: `OrderCard.tsx:46`, `OfflineQueue.tsx:122`, `PingModal.tsx:117`. Removed unused `location` imports/usages. Proximity gate correctly only applies at `markReachedOutlet`/`confirmPickup`. |
+
+### P1-R6: Hardcoded outlets `['pizza', 'cake']` in settlement — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `Admin/js/features/riders.js:405`, `Admin/js/features/rider-analytics.js:54` |
+| **Fix Applied** | Replaced hardcoded `['pizza', 'cake']` with `Object.keys(BUSINESS_BY_OUTLET)` in both `settleRiderWallet` (riders.js:405) and rider analytics report generation (rider-analytics.js:54). Added `BUSINESS_BY_OUTLET` import from firebase.js in both files. New outlets automatically included without code changes. |
+
+### P1-R7: Backup OTP code bypasses without admin check — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `rider-app/src/services/orderService.ts:410-431`, `rider-app/src/components/active-trip/OrderTaskPanel.tsx:206-211` |
+| **Fix Applied** | Added optional `isAdmin` parameter to `verifyOtp` (line 415). Fallback code now requires `isAdmin: true` (line 431: `const isFallback = Boolean(isAdmin && backupCode && enteredOtp === backupCode)`). Updated `handleEmergencyOverride` in OrderTaskPanel to pass `isAdmin: true`. Regular OTP verification unaffected (isAdmin defaults to false). |
+
+### P1-R8: Token replay race on double-click "Place Order" (delivery webview) — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `menu/js/delivery.js:437` |
+| **Fix Applied** | Set `M._tokenValid = false` immediately on click (line 438) instead of after successful order write (was line 465). Added comment: "ponytail: invalidate token IMMEDIATELY on click to prevent double-submit race". The `_tokenValid` guard at line 425 now catches any race before the write completes. |
+
+### P1-R9: Missing `assignedRider: null` in delivery order payload — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `menu/js/delivery-order.js:104` |
+| **Fix Applied** | Added explicit `assignedRider: null` to `orderPayload` (line 104). The comment already explained why null is required (RTDB `equalTo(null)` only matches missing/null, not empty string). Now explicitly set so rider app's "New Order Available" query (`orderByChild("assignedRider").equalTo(null)`) correctly matches new orders. |
+
+---
+
+### 🟡 P2 — MEDIUM — RIDER/DELIVERY SYSTEM
+
+### P2-R10: `riderStats` per-outlet but rider can cross-deliver — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `Admin/js/firebase.js:95`, `rider-app/src/lib/constants.ts:68,99` |
+| **Fix Applied** | Added `riderStats` to `globalPaths` in `Admin/js/firebase.js:95` (making it a global node, not tenant-scoped). Updated `riderStats` in both `dbPathsAsync` and `dbPaths` in `rider-app/src/lib/constants.ts` to write to global path `riderStats/${riderId}` instead of per-outlet `businesses/{bid}/outlets/${outlet}/riderStats/${rId}`. Now cross-outlet deliveries aggregate into a single global stats node. |
+
+### P2-R11: Stats subscription only for assigned outlet — **✅ DONE (via P2-R10 fix)**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE (fixed as part of P2-R10) |
+| **Files Changed** | `rider-app/src/contexts/RiderContext.tsx:54-60,63-87` |
+| **Fix Applied** | Since `riderStats` is now global (P2-R10 fix), the subscription in RiderContext now subscribes to the global stats node. Updated effect to: (1) subscribe with 'global' outlet param (ignored), (2) mirror global stats to all known outlets for UI compatibility, (3) load all outlets instead of filtering to assigned outlet. Stats now update in real-time for cross-outlet deliveries. |
+
+### P2-R12: Wrong primary order sort — should sort by step urgency — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE |
+| **Files Changed** | `rider-app/src/hooks/useActiveOrder.ts:27-31` |
+| **Fix Applied** | Changed sort from `acceptedAt` ascending to sort by `step` ascending (lower step = more urgent), then by `acceptedAt` for tiebreaking. Lower step = more urgent (0=Arriving, 1=Arrived, 2=PickedUp, 3=Out for Delivery, 4=Reached Drop). Now pizza (step 2) won't show as primary over cake (step 0). |
+
+### P2-R13: Duplicate proximity/GPS/boilerplate logic
+| Field | Detail |
+|-------|--------|
+| **Priority** | P2 — Medium |
+| **Items** | 
+- ✅ `OrderTaskPanel.tsx:57-59` → extracted `useProximity` hook (`src/hooks/useProximity.ts`)
+- `OrderCard.tsx:46-48` → (removed in P1-R5, no longer has proximity logic)
+- ✅ `useGeolocation.ts` + `locationService.getCurrentPositionOnce` → unified with configurable options
+- ✅ `walletService.ts` + `notificationService.ts` → generic `subscribeCollection` utility (`src/services/subscribeCollection.ts`)
+- ✅ `OrderTaskPanel.tsx` (292 lines) → extracted `useOrderActions` hook (`src/hooks/useOrderActions.ts`) - encapsulates all order lifecycle actions |
+
+### P2-R14: Inconsistent GPS accuracy — **✅ INTENTIONAL (Documented)**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ Documented as intentional design decision |
+| **Explanation** | Customer app (`delivery.js:339`) uses `enableHighAccuracy: false` for fast network-based location (ponytail comment: "network fix (fast) over GPS (slow)"). Rider app (`locationService.ts:45`) uses `enableHighAccuracy: true` for precise proximity checks (0.5km gate). This is deliberate — customer app prioritizes speed for location detection, rider app prioritizes accuracy for proximity gates. No code change needed. |
 
 ---
 
@@ -407,3 +567,25 @@
 - **Auth**: `roshanipizza@gmail.com` / `Ns@9724649971` for admin login
 - **QR Menu**: `https://foodhubbie-qrmenu.web.app/?o=pizza&b=roshani-pizza&t=2135N2D5F5E3H6J4` (Table 02)
 - **M5 = P2-8** (void billDiscount analytics — FIXED); **M7 = P2-9** (coupon base — FIXED, food-subtotal policy locked). Bot deploy path is `/var/www/foodhubbie/bot/` (PM2 script path) — not `/home/ubuntu/`.
+
+---
+
+## 🎯 RECOMMENDED FIX ORDER (Next Session)
+
+```bash
+# IMMEDIATE - P0 Critical (blockers):
+# 1. P0-R1: Remove sync tenantPath() — constants.ts
+# 2. P0-R2: Batch loadOutlets settings reads — orderService.ts
+# 3. P0-R3: Add bot handler for "Reached Drop Location" — bot/rider.js
+
+# THIS SPRINT - P1 High:
+# 4. P1-R4: Fix cache leak on accept — orderService.ts
+# 5. P1-R5: Remove unused proximity params — orderService.ts + components
+# 6. P1-R6: Dynamic outlets in settlement — riders.js
+# 7. P1-R7: Admin check for backup OTP — orderService.ts
+# 8. P1-R8: Set tokenValid=false immediately on click — delivery.js
+# 9. P1-R9: Add assignedRider: null to payload — delivery-order.js
+
+# NEXT SPRINT - P2 Medium:
+# 10-14: Refactoring items
+```

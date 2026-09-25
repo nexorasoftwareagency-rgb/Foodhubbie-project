@@ -1,6 +1,7 @@
 // === src/services/notificationService.ts ===
-import { db, ref, get, push, update, remove, onValue, off, getMessagingInstance, getToken, onMessage } from "@/lib/firebase";
+import { db, ref, get, push, update, remove, getMessagingInstance, getToken, onMessage } from "@/lib/firebase";
 import { dbPaths } from "@/lib/constants";
+import { subscribeCollection } from "./subscribeCollection";
 import type { RiderNotification } from "@/types";
 import { updateFcmToken } from "@/services/riderService";
 import { toast } from "@/hooks/use-toast";
@@ -12,27 +13,25 @@ export function subscribeNotifications(
   callback: (notifs: Array<RiderNotification & { id: string }>) => void,
   onError?: (err: Error) => void
 ) {
-  const notifRef = ref(db, dbPaths.riderNotifs(uid));
-  const handler = onValue(
-    notifRef,
-    (snap) => {
-      const val = snap.val() || {};
-      const list = Object.entries(val)
-        .map(([id, n]) => ({ id, ...(n as RiderNotification) }))
+  return subscribeCollection<RiderNotification>(
+    dbPaths.riderNotifs(uid),
+    (list) => {
+      const sorted = list
         .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-      callback(list);
+      callback(sorted as Array<RiderNotification & { id: string }>);
     },
-    (err) => onError?.(err as unknown as Error)
+    onError
   );
-  return () => off(notifRef, "value", handler);
 }
 
 export async function markNotificationRead(uid: string, notifId: string): Promise<void> {
-  await update(ref(db, `${dbPaths.riderNotifs(uid)}/${notifId}`), { read: true });
+  const notifPath = dbPaths.riderNotifs(uid);
+  await update(ref(db, `${notifPath}/${notifId}`), { read: true });
 }
 
 export async function clearAllNotifications(uid: string): Promise<void> {
-  await remove(ref(db, dbPaths.riderNotifs(uid)));
+  const notifPath = dbPaths.riderNotifs(uid);
+  await remove(ref(db, notifPath));
 }
 
 /** Writes a real in-app notification record — used both for locally-detected events
@@ -42,7 +41,8 @@ export async function createLocalNotification(
   uid: string,
   notif: { title: string; body: string; type?: "info" | "success" | "warning"; icon?: string }
 ): Promise<void> {
-  await push(ref(db, dbPaths.riderNotifs(uid)), {
+  const notifPath = dbPaths.riderNotifs(uid);
+  await push(ref(db, notifPath), {
     title: notif.title,
     body: notif.body,
     type: notif.type || "info",
@@ -87,7 +87,8 @@ export async function registerPushNotifications(uid: string): Promise<void> {
 }
 
 export async function getUnreadCount(uid: string): Promise<number> {
-  const snap = await get(ref(db, dbPaths.riderNotifs(uid)));
+  const notifPath = dbPaths.riderNotifs(uid);
+  const snap = await get(ref(db, notifPath));
   const val = snap.val() || {};
   return Object.values(val).filter((n: any) => !n.read).length;
 }

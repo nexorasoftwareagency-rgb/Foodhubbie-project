@@ -12,7 +12,7 @@ export function useGeolocation() {
     setLoading(true);
     setError(null);
     try {
-      const pos = await getCurrentPositionOnce();
+      const pos = await getCurrentPositionOnce({ enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
       setPosition(pos);
       return pos;
     } catch (err: any) {
