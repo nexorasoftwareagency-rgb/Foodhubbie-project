@@ -382,6 +382,7 @@ function _openEditor(id) {
     el('discChannel', d?.channel || 'all');
     _renderCategoryChips(d?.categoryIds || []);
     _applyEditorVisibility();
+    _showStep(1);
     document.getElementById('discountEditorModal')?.classList.add('active');
 }
 
@@ -400,6 +401,69 @@ function _applyEditorVisibility() {
 function _closeEditor() {
     document.getElementById('discountEditorModal')?.classList.remove('active');
     _editingId = null;
+}
+
+let _step = 1;
+
+function _showStep(n) {
+    _step = Math.min(4, Math.max(1, n));
+    document.querySelectorAll('#discountEditorForm .disc-step').forEach(s => s.classList.toggle('hidden', Number(s.dataset.step) !== _step));
+    document.querySelectorAll('#discountEditorModal .disc-step-pip').forEach((p, i) => p.classList.toggle('active', i === _step - 1));
+    document.getElementById('discStepBack')?.classList.toggle('hidden', _step === 1);
+    document.getElementById('discStepNext')?.classList.toggle('hidden', _step === 4);
+    document.getElementById('discStepSave')?.classList.toggle('hidden', _step !== 4);
+    if (_step === 4) _renderReview();
+}
+
+function _validateStep1() {
+    const name = (document.getElementById('discName')?.value || '').trim();
+    if (!name) { showToast('Please enter a name', 'warning'); return false; }
+    const type = document.getElementById('discType')?.value;
+    const mode = document.getElementById('discMode')?.value;
+    const value = Number(document.getElementById('discValue')?.value);
+    if (!value || value <= 0) { showToast('Please enter a positive value', 'warning'); return false; }
+    if (mode === 'percent' && value > 100) { showToast('Percent cannot exceed 100', 'warning'); return false; }
+    if (type === 'category' && !document.querySelector('#discCategoryList .disc-cat-chip.selected')) { showToast('Pick at least one category', 'warning'); return false; }
+    if (type === 'coupon' && !(document.getElementById('discCouponCode')?.value || '').trim()) { showToast('Coupon code is required for coupon type', 'warning'); return false; }
+    return true;
+}
+
+function _stepNext() { if (_step === 1 && !_validateStep1()) return; _showStep(_step + 1); }
+function _stepPrev() { _showStep(_step - 1); }
+
+function _renderReview() {
+    const head = document.getElementById('discReviewHead');
+    const el = document.getElementById('discReviewSummary');
+    if (!head || !el) return;
+    const v = id => document.getElementById(id)?.value ?? '';
+    const checked = id => !!document.getElementById(id)?.checked;
+    const typeLabels = { global: 'Global (entire menu)', category: 'Category-specific', firstOrder: 'New customer (first order)', coupon: 'Coupon code' };
+    const num = Number(v('discValue')) || 0;
+    const valueLine = (v('discMode') === 'percent' ? `${num}% off` : `₹${num} off`) + ' subtotal'
+        + (Number(v('discMaxCap')) ? ` (cap ₹${Number(v('discMaxCap'))})` : '');
+    const fmt = s => s ? new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'now';
+    const type = v('discType');
+    const windowLine = type === 'firstOrder' ? 'Always on for new customers'
+        : `${fmt(v('discStartsAt'))} → ${checked('discNoEnd') || !v('discEndsAt') ? 'no end' : fmt(v('discEndsAt'))}`;
+    const cats = Array.from(document.querySelectorAll('#discCategoryList .disc-cat-chip.selected')).map(c => c.textContent.trim()).join(', ');
+    const channelSel = document.getElementById('discChannel');
+    const rows = [
+        ['Name', v('discName')],
+        ['Type', typeLabels[type] || type],
+        ['Discount', valueLine],
+        type === 'coupon' ? ['Coupon code', (v('discCouponCode') || '').toUpperCase()] : null,
+        type === 'category' ? ['Categories', cats] : null,
+        ['Window', windowLine],
+        ['Channel', channelSel?.selectedOptions[0]?.textContent || 'All channels'],
+        Number(v('discMinSubtotal')) ? ['Min subtotal', `₹${Number(v('discMinSubtotal'))}`] : null,
+        v('discExclusiveGroup') ? ['Exclusive group', v('discExclusiveGroup')] : null,
+        Number(v('discPerCustomerLimit')) ? ['Per-customer limit', v('discPerCustomerLimit')] : null,
+        Number(v('discGlobalLimit')) ? ['Global limit', v('discGlobalLimit')] : null,
+        ['Stackable', checked('discStackable') ? 'Yes' : 'No'],
+        ['Status', checked('discEnabled') ? 'Enabled' : 'Disabled']
+    ].filter(Boolean);
+    head.innerHTML = `<strong>${escapeHtml(v('discName') || 'Untitled')}</strong> · ${escapeHtml(valueLine)}`;
+    el.innerHTML = rows.map(([k, val]) => `<div class="disc-review-row"><span>${escapeHtml(String(k))}</span><strong>${escapeHtml(String(val))}</strong></div>`).join('');
 }
 
 async function _save() {
@@ -542,4 +606,4 @@ _attachListener();
     ['discType','discMode','discNoEnd'].forEach(id => { const el = document.getElementById(id); if (el) { el.removeEventListener('change', _applyEditorVisibility); el.addEventListener('change', _applyEditorVisibility); } });
 }
 
-window.__discounts = { openEditor: _openEditor, closeEditor: _closeEditor, save: _save, toggle: _toggle, remove: _delete, applyVisibility: _applyEditorVisibility, switchList: _switchList, renderUsageList: _renderUsageList };
+window.__discounts = { openEditor: _openEditor, closeEditor: _closeEditor, save: _save, toggle: _toggle, remove: _delete, applyVisibility: _applyEditorVisibility, switchList: _switchList, renderUsageList: _renderUsageList, stepNext: _stepNext, stepPrev: _stepPrev };
