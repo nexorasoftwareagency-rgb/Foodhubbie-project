@@ -5,7 +5,6 @@ import { MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useRiderContext } from "@/contexts/RiderContext";
-import { useLocationContext } from "@/contexts/LocationContext";
 import { acceptOrder, OrderTakenError, ProximityError } from "@/services/orderService";
 import { enqueueOfflineAction } from "@/components/shared/OfflineQueue";
 import { logRiderError } from "@/services/auditService";
@@ -16,7 +15,6 @@ import type { AvailableOrder } from "@/types";
 export function OrderCard({ order }: { order: AvailableOrder }) {
   const { user } = useAuth();
   const { rider } = useRiderContext();
-  const { location } = useLocationContext();
   const [, navigate] = useLocation();
   const [accepting, setAccepting] = useState(false);
 
@@ -43,9 +41,7 @@ export function OrderCard({ order }: { order: AvailableOrder }) {
     }
 
     try {
-      const riderLat = location?.lat ?? order.outletLat;
-      const riderLng = location?.lng ?? order.outletLng;
-      await acceptOrder({ ...payload, riderLat, riderLng, accuracy: location?.accuracy });
+      await acceptOrder(payload);
       toast.success("Order Accepted!", { description: "Head to the outlet to pick it up." });
       navigate("/active");
     } catch (err) {

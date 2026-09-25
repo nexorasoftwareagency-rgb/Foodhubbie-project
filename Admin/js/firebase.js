@@ -92,7 +92,7 @@ export const Outlet = {
     ref(path) {
         if (!path) return ref(db);
         // Platform-level nodes that remain at root (NOT tenant-scoped)
-        const globalPaths = ['admins', 'riders', 'logs', 'migrationStatus', 'settlements', 'menuBank'];
+        const globalPaths = ['admins', 'riders', 'logs', 'migrationStatus', 'settlements', 'menuBank', 'riderStats'];
         const cleanPath = path.startsWith('/') ? path.slice(1) : path;
         const firstSegment = cleanPath.split('/')[0];
         if (globalPaths.includes(firstSegment)) {

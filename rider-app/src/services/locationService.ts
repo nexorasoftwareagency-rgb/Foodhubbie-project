@@ -45,13 +45,15 @@ export function startLocationTracking(
     { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
   );
 
-  const locRef = ref(db, dbPaths.riderLocation(uid));
+  const locPath = dbPaths.riderLocation(uid);
+  const locRef = ref(db, locPath);
   onDisconnect(locRef).update({ signalLost: true, lastSeen: serverTimestamp() });
 
   const intervalId = window.setInterval(() => {
     if (latest && isOnline()) {
       update(locRef, latest).catch(() => {});
-      update(ref(db, dbPaths.rider(uid)), { lastSeen: serverTimestamp() }).catch(() => {});
+      const riderPath = dbPaths.rider(uid);
+      update(ref(db, riderPath), { lastSeen: serverTimestamp() }).catch(() => {});
     }
   }, LOCATION_SYNC_INTERVAL_MS);
 
@@ -65,7 +67,11 @@ export function startLocationTracking(
 }
 
 /** One-off current position read (e.g. before accepting an order if watch hasn't reported yet) */
-export function getCurrentPositionOnce(): Promise<{ lat: number; lng: number; accuracy: number }> {
+export function getCurrentPositionOnce(options?: {
+  enableHighAccuracy?: boolean;
+  maximumAge?: number;
+  timeout?: number;
+}): Promise<{ lat: number; lng: number; accuracy: number }> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       reject(new Error("Geolocation unsupported"));
@@ -75,7 +81,7 @@ export function getCurrentPositionOnce(): Promise<{ lat: number; lng: number; ac
       (pos) =>
         resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
       (err) => reject(err),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000, ...options }
     );
   });
 }

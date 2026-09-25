@@ -118,13 +118,7 @@ export function useOfflineQueueProcessor() {
           const p: any = action.payload;
 
           if (action.type === "ACCEPT_ORDER") {
-            const pos = await getCurrentPositionOnce().catch(() => null);
-            await orderService.acceptOrder({
-              ...p,
-              riderLat: pos?.lat ?? p.outletLat,
-              riderLng: pos?.lng ?? p.outletLng,
-              accuracy: pos?.accuracy,
-            });
+            await orderService.acceptOrder(p);
             toast.success(`Order #${formatOrderId(p.orderId)} accepted (synced)`);
           } else if (action.type === "REACHED_OUTLET") {
             const pos = await getCurrentPositionOnce().catch(() => null);

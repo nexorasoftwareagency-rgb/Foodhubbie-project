@@ -253,11 +253,7 @@ export const switchTab = async (tabId, skipHistory = false) => {
                     loadReports();
                     break;
                 }
-                case 'lostSales': {
-                    const { loadLostSales } = await mod('lost-sales');
-                    loadLostSales();
-                    break;
-                }
+                
                 case 'inventory': {
                     const { loadInventory } = await mod('inventory');
                     loadInventory();

@@ -1,18 +1,14 @@
+// === src/hooks/useOrderActions.ts ===
+// Encapsulates all order lifecycle actions for the active trip panel.
+// Returns action functions and state for UI components.
+
 import { useState } from "react";
-import { useLocation as useWouterLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { useRiderContext } from "@/contexts/RiderContext";
 import { useLocationContext } from "@/contexts/LocationContext";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useProximity } from "@/hooks/useProximity";
-import { TaskCard } from "@/components/active-trip/TaskCard";
-import { VerificationModal } from "@/components/modals/VerificationModal";
-import { OTPSheet } from "@/components/modals/OTPSheet";
-import { PaymentSheet } from "@/components/modals/PaymentSheet";
-import { SuccessOverlay } from "@/components/modals/SuccessOverlay";
 import {
   markReachedOutlet,
-  confirmPickup,
   markReachedDrop,
   verifyOtp as verifyOtpService,
   resendOtp as resendOtpService,
@@ -23,18 +19,41 @@ import { logRiderError } from "@/services/auditService";
 import { enqueueOfflineAction } from "@/components/shared/OfflineQueue";
 import { toast } from "@/hooks/use-toast";
 import type { ActiveOrder } from "@/hooks/useActiveOrder";
+import { useLocation } from "wouter";
 
-export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
+interface UseOrderActionsResult {
+  // State
+  sliderLoading: boolean;
+  verifyOpen: boolean;
+  otpOpen: boolean;
+  payOpen: boolean;
+  payLoading: boolean;
+  successOpen: boolean;
+  verifiedBy: "OTP" | "ADMIN_FALLBACK";
+  setVerifiedBy: (v: "OTP" | "ADMIN_FALLBACK") => void;
+  // Setters for state (needed by UI)
+  setVerifyOpen: (v: boolean) => void;
+  setOtpOpen: (v: boolean) => void;
+  setPayOpen: (v: boolean) => void;
+  setPayLoading: (v: boolean) => void;
+  setSuccessOpen: (v: boolean) => void;
+  // Actions
+  handleSlideComplete: () => Promise<void>;
+  handleVerifyOtp: (code: string) => Promise<{ success: boolean } | undefined>;
+  handleResendOtp: () => Promise<void>;
+  handleEmergencyOverride: () => void;
+  handleConfirmPayment: (method: "CASH" | "UPI") => Promise<void>;
+}
+
+export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
   const { user } = useAuth();
-  const { rider } = useRiderContext();
   const { location } = useLocationContext();
   const { requestPosition } = useGeolocation();
-  const { distanceKm, proximityOk, gated } = useProximity(order);
-  const [, navigate] = useWouterLocation();
+  const { } = useProximity(order);
+  const [, navigate] = useLocation();
 
   const [sliderLoading, setSliderLoading] = useState(false);
   const [verifyOpen, setVerifyOpen] = useState(false);
-  const [verifyLoading, setVerifyLoading] = useState(false);
   const [otpOpen, setOtpOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [payLoading, setPayLoading] = useState(false);
@@ -42,16 +61,6 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
   const [verifiedBy, setVerifiedBy] = useState<"OTP" | "ADMIN_FALLBACK">("OTP");
 
   const step = order.step;
-
-  const target = gated
-    ? { label: order.outletName, address: `${order.outletName} outlet`, lat: order.outletLat, lng: order.outletLng, phone: undefined }
-    : {
-        label: order.customerName || "Customer",
-        address: order.address,
-        lat: order.lat,
-        lng: order.lng,
-        phone: order.customerPhone || order.phone,
-      };
 
   async function resolvePosition(): Promise<{ lat: number; lng: number; accuracy?: number }> {
     if (location) return location;
@@ -112,58 +121,15 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
         toast.success("Reached drop location", { description: "Customer notified via WhatsApp." });
         setOtpOpen(true);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof ProximityError) {
-        toast.error("Too far away", { description: err.message });
+        toast.error("Too far from location", { description: err.message });
       } else {
-        toast.error((err as Error)?.message || "Action failed. Please try again.");
-        if (user?.uid) logRiderError(user.uid, `ActiveTripView.step${step}`, err);
+        const message = err instanceof Error ? err.message : "Please try again.";
+        toast.error("Action failed", { description: message });
       }
     } finally {
       setSliderLoading(false);
-    }
-  }
-
-  async function handleConfirmPickup() {
-    setVerifyLoading(true);
-    try {
-      if (!navigator.onLine) {
-        enqueueOfflineAction("UPDATE_STATUS", {
-          subtype: "confirmPickup",
-          outlet: order.outlet,
-          orderId: order.id,
-          outletLat: order.outletLat,
-          outletLng: order.outletLng,
-          riderPhone: rider?.phone || "",
-          customerPhone: order.customerPhone || order.phone,
-        });
-        toast.warning("You're offline", { description: "Pickup will be confirmed automatically once you're back online." });
-        setVerifyOpen(false);
-        return;
-      }
-      const pos = await resolvePosition();
-      await confirmPickup({
-        outlet: order.outlet,
-        orderId: order.id,
-        riderLat: pos.lat,
-        riderLng: pos.lng,
-        accuracy: pos.accuracy,
-        outletLat: order.outletLat,
-        outletLng: order.outletLng,
-        riderPhone: rider?.phone || "",
-        customerPhone: order.customerPhone || order.phone,
-      });
-      toast.success("Order picked up!", { description: "Navigate to the customer now." });
-      setVerifyOpen(false);
-    } catch (err) {
-      if (err instanceof ProximityError) {
-        toast.error("Too far from outlet", { description: err.message });
-      } else {
-        toast.error((err as Error)?.message || "Could not confirm pickup.");
-        if (user?.uid) logRiderError(user.uid, "ActiveTripView.confirmPickup", err);
-      }
-    } finally {
-      setVerifyLoading(false);
     }
   }
 
@@ -193,7 +159,7 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
     await resendOtpService({ outlet: order.outlet, orderId: order.id });
   }
 
-function handleEmergencyOverride() {
+  function handleEmergencyOverride() {
     if (!order.backupCode) {
       toast.error("No backup code configured for this outlet.");
       return;
@@ -204,7 +170,7 @@ function handleEmergencyOverride() {
       enteredOtp: order.backupCode,
       actualOtp: order.deliveryOTP || order.otp || "",
       backupCode: order.backupCode,
-      isAdmin: true, // Admin gate enforced at API level
+      isAdmin: true,
     }).then((result) => {
       if (result.success) {
         setVerifiedBy("ADMIN_FALLBACK");
@@ -230,59 +196,34 @@ function handleEmergencyOverride() {
         paymentMethod: method,
         verifiedBy,
       });
-      setPayOpen(false);
-      setSuccessOpen(true);
+      toast.success("Delivery completed!");
+      navigate("/active");
     } catch (err) {
-      toast.error("Could not complete delivery. Please try again.");
+      toast.error("Could not complete delivery");
       if (user?.uid) logRiderError(user.uid, "ActiveTripView.completeDelivery", err);
     } finally {
       setPayLoading(false);
     }
   }
 
-  const sliderLabel = step === 0 ? "SLIDE TO REACH OUTLET" : step === 1 ? "SLIDE TO PICK UP" : "SLIDE TO REACH CUSTOMER";
-
-  return (
-    <>
-      <TaskCard
-        order={order}
-        step={step}
-        targetLabel={target.label}
-        targetAddress={target.address}
-        distanceKm={distanceKm}
-        proximityOk={proximityOk}
-        sliderLabel={sliderLabel}
-        sliderLocked={step >= 3}
-        sliderLoading={sliderLoading}
-        onSlideComplete={handleSlideComplete}
-        onReopenOtp={() => setOtpOpen(true)}
-        contactPhone={target.phone}
-        destLat={target.lat}
-        destLng={target.lng}
-      />
-
-      <VerificationModal open={verifyOpen} onOpenChange={setVerifyOpen} items={order.items} onConfirm={handleConfirmPickup} loading={verifyLoading} />
-      <OTPSheet
-        open={otpOpen}
-        onOpenChange={setOtpOpen}
-        outlet={order.outlet}
-        orderId={order.id}
-        onVerify={handleVerifyOtp}
-        onResend={handleResendOtp}
-        onLater={() => setOtpOpen(false)}
-        onEmergencyOverride={handleEmergencyOverride}
-        isAdmin={rider?.isAdmin}
-      />
-      <PaymentSheet open={payOpen} onOpenChange={setPayOpen} total={order.total} onConfirm={handleConfirmPayment} loading={payLoading} />
-      <SuccessOverlay
-        open={successOpen}
-        orderId={order.id}
-        earnedAmount={order.deliveryFee}
-        onClose={() => {
-          setSuccessOpen(false);
-          navigate("/dashboard");
-        }}
-      />
-    </>
-  );
+return {
+    sliderLoading,
+    verifyOpen,
+    setVerifyOpen,
+    otpOpen,
+    setOtpOpen,
+    payOpen,
+    setPayOpen,
+    payLoading,
+    setPayLoading,
+    successOpen,
+    setSuccessOpen,
+    verifiedBy,
+    setVerifiedBy,
+    handleSlideComplete,
+    handleVerifyOtp,
+    handleResendOtp,
+    handleEmergencyOverride,
+    handleConfirmPayment,
+  };
 }

@@ -27,7 +27,7 @@ export async function getRiderProfile(uid: string): Promise<Rider | null> {
 }
 
 export async function setRiderStatus(uid: string, status: RiderStatus): Promise<void> {
-  await update(ref(db, dbPaths.rider(uid)), {
+await update(ref(db, dbPaths.rider(uid)), {
     status,
     lastSeen: serverTimestamp(),
   });

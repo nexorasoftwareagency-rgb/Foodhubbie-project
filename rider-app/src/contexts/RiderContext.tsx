@@ -16,11 +16,11 @@ type RiderContextValue = {
   riderError: Error | null;
   isOnline: boolean;
   toggleOnline: () => Promise<void>;
-  /** Combined totals across the rider's assigned outlet. */
+  /** Combined totals across all outlets (global rider stats). */
   stats: RiderStats;
-  /** Per-outlet breakdown — only includes the rider's assigned outlet. */
+  /** Per-outlet breakdown — mirrored from global stats for UI compatibility. */
   statsByOutlet: Record<OutletId, RiderStats>;
-  /** Only the rider's assigned outlet. */
+  /** All outlets the rider can access. */
   outlets: OutletInfo[];
   outletsLoading: boolean;
   outletsError: Error | null;
@@ -43,7 +43,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user?.uid || !rider?.outlet) return;
     const outlet = rider.outlet;
-    // Pre-populate cache so tenantPath() works synchronously
+    // Pre-populate cache so async path helpers work without extra round-trips
     resolveBusinessIdForOutlet(outlet).then(bid => {
       console.log('[RiderContext] Cached businessId for', outlet, ':', bid);
     }).catch(err => {
@@ -51,15 +51,22 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     });
   }, [user?.uid, rider?.outlet]);
 
-  // Subscribe to rider stats for the rider's assigned outlet only
+  // Subscribe to global rider stats (single node for all outlets)
   useEffect(() => {
-    if (!user?.uid || !rider?.outlet) return;
-    const outlet = rider.outlet;
-    const unsub = subscribeRiderStats(outlet, user.uid, (s) => setStatsByOutlet((prev) => ({ ...prev, [outlet]: s })));
+    if (!user?.uid) return;
+    // outlet param is ignored by subscribeRiderStats (uses global path)
+    const unsub = subscribeRiderStats('global', user.uid, (globalStats) => {
+      // Mirror global stats to all known outlets for UI compatibility
+      setStatsByOutlet((prev) => {
+        const next = { ...prev };
+        outlets.forEach((o) => { next[o.id] = globalStats; });
+        return next;
+      });
+    });
     return () => { unsub(); };
-  }, [user?.uid, rider?.outlet]);
+  }, [user?.uid, outlets]);
 
-  // Load only the rider's assigned outlet
+  // Load all outlets the rider can access (for cross-outlet delivery)
   useEffect(() => {
     if (!user?.uid) return;
     let cancelled = false;
@@ -67,11 +74,8 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     setOutletsError(null);
     loadOutlets()
       .then((list) => {
-        if (!cancelled && rider?.outlet) {
-          const filtered = list.filter(o => o.id === rider.outlet);
-          setOutlets(filtered);
-        } else if (!cancelled) {
-          setOutlets([]);
+        if (!cancelled) {
+          setOutlets(list);
         }
       })
       .catch((err) => {
@@ -84,7 +88,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setOutletsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [user?.uid, rider?.outlet, retryTick]);
+  }, [user?.uid, retryTick]);
 
   const isOnline = rider?.status === "Online";
 
@@ -106,15 +110,8 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Aggregate stats across the rider's assigned outlet(s)
-  const assignedOutlets = Object.keys(statsByOutlet) as OutletId[];
-  const stats: RiderStats = assignedOutlets.reduce(
-    (acc, oid) => ({
-      totalOrders: acc.totalOrders + (statsByOutlet[oid]?.totalOrders || 0),
-      totalEarnings: acc.totalEarnings + (statsByOutlet[oid]?.totalEarnings || 0),
-    }),
-    { totalOrders: 0, totalEarnings: 0 }
-  );
+  // Aggregate stats from global rider stats (same for all outlets)
+  const stats: RiderStats = outlets.length > 0 ? statsByOutlet[outlets[0].id] || { totalOrders: 0, totalEarnings: 0 } : { totalOrders: 0, totalEarnings: 0 };
 
   return (
     <RiderContext.Provider

@@ -421,6 +421,7 @@ The sidebar is organized into 5 groups with 20 navigation items:
 #### Insights
 | Menu Item | Tab Target | Icon | Description |
 |---|---|---|---|
+| Lost Sales | `lostSales` | `shopping-bag` | Abandoned checkout tracking |
 | Analytics | `reports` | `bar-chart-3` | Sales reports with Chart.js + Excel/PDF export |
 | Rider Insights | `riderAnalytics` | `trending-up` | Per-rider performance analytics |
 | Feedback | `feedback` | `star` | Customer ratings and reviews |
@@ -619,6 +620,21 @@ The sidebar is organized into 5 groups with 20 navigation items:
 - **Sortable Grid** — `#customerDataTable` with columns: #, Customer (name + joined date), WhatsApp link, Address (with map link), Orders count, Lifetime Value
 
 **Functions:** `loadCustomers()`, `filterCustomers()`
+
+---
+
+### 10. Lost Sales (`tab-lostSales`)
+
+**Data loaded on switch:** orders filtered for lost sales
+
+**Components:**
+- **Outlet Filter** — `#lostSalesOutletFilter` (All Outlets, Pizza, Cake)
+- **Revenue Badge** — `#lostSalesTotalRevenue` (potential lost revenue sum)
+- **Count Badge** — `#lostSalesCount`
+- **Clear Button** — `#btnClearLostSales`
+- **Table** — `#lostSalesTableBody` (abandoned checkouts)
+
+**Functions:** `loadLostSales()`, `clearLostSales()`
 
 ---
 

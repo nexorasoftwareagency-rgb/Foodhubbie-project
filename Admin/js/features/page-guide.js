@@ -306,30 +306,7 @@ title: 'Contact Customer',
 body: 'Click the <strong>phone icon</strong> to open WhatsApp chat with the customer in a new tab. Click the <strong>mail icon</strong> to open your default email client. Use this for follow-ups, complaint resolution, or personalized offers.'
 },
 ],
-
-lostSales: [
-{
-icon: 'shopping-bag',
-title: 'Lost Order List',
-body: 'The Lost Sales table shows abandoned checkouts — orders that were started but never completed. Each entry shows: customer name, phone, items in cart, cart total, timestamp, and the checkout page where they dropped off.'
-},
-{
-icon: 'eye',
-title: 'View Cart Contents',
-body: 'Click any lost sale row to see exactly what items were in the abandoned cart — including sizes, addons, quantities, and prices. This helps understand what the customer was interested in and why they might have left.'
-},
-{
-icon: 'phone-forwarded',
-title: 'Contact Customer',
-body: 'Click the <strong>Contact</strong> button to open WhatsApp with a pre-filled recovery message. The message template includes the items they left behind and an incentive to complete the order (if configured). Customize the recovery message in Settings.'
-},
-{
-icon: 'check-circle',
-title: 'Mark Recovered',
-body: 'After successfully following up, click <strong>Mark Recovered</strong> to record that the sale was recovered. Recovered orders are moved to a separate view for tracking recovery rate. Use this to measure the effectiveness of your follow-up outreach.'
-},
-],
-
+ 
 reports: [
 {
 icon: 'calendar',

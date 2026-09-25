@@ -45,10 +45,6 @@
           ".validate": "newData.hasChildren(['action', 'timestamp']) && !data.exists()"
         }
       },
-      "lostSales": {
-        ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
-        ".write": "auth != null && (root.child('admins').child(auth.uid).exists())"
-      },
       "riderErrors": {
         "$riderId": {
           ".read": "auth != null && (auth.uid == $riderId || root.child('admins').child(auth.uid).exists())",
@@ -143,10 +139,6 @@
               "$phone": {
                 ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || newData.child('lastOutlet').val() == $outletId)"
               }
-            },
-            "lostSales": {
-              ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
-              ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)"
             },
             "logs": {
               ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
@@ -291,7 +283,7 @@
             "tableSessionsContact": {
               ".read": "auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
               "$sessionId": {
-                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (newData.exists() && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true)",
+                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('outlet').val() == $outletId || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)) || (!data.exists() && newData.exists() && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true)",
                 ".validate": "newData.hasChildren(['customerPhone','guestPhone'])",
                 "customerName": { ".validate": "newData.isString()" },
                 "customerPhone": { ".validate": "newData.isString()" },
