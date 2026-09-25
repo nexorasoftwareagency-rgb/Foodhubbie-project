@@ -174,8 +174,9 @@ function printWithIframe(html) {
 }
 
 /**
- * RECEIPT PREVIEW MODAL
- * Shows the rendered receipt in a modal for review before printing.
+ * RECEIPT PREVIEW MODAL — Inline responsive renderer
+ * Renders receipt HTML directly into modal (no iframe scaling hacks),
+ * fills viewport, maintains 80mm aspect ratio.
  */
 function showReceiptPreview(html) {
     _previewHtml = html;
@@ -186,34 +187,42 @@ function showReceiptPreview(html) {
         return;
     }
 
-    // Write receipt HTML into the iframe
-    frame.src = 'about:blank';
-    frame.onload = function scaleAndShow() {
-        const doc = frame.contentDocument;
-        doc.open();
-        doc.write(html);
-        doc.close();
+    // Extract body content from full HTML document
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const bodyContent = doc.body.innerHTML;
+    const styles = Array.from(doc.head.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map(el => el.outerHTML).join('');
 
-        // On narrow screens, scale the 80mm receipt to fit
-        if (window.innerWidth < 420) {
-            frame.style.width = '125%';
-            frame.style.height = '125%';
-            frame.style.transform = 'scale(0.8)';
-            frame.style.transformOrigin = 'top left';
+    // Inject styles + body into iframe (keeps print() working)
+    frame.src = 'about:blank';
+    frame.onload = () => {
+        const fDoc = frame.contentDocument;
+        fDoc.open();
+        fDoc.write(`<!DOCTYPE html><html><head>${styles}</head><body>${bodyContent}</body></html>`);
+        fDoc.close();
+
+        // Responsive: scale to fit viewport while maintaining 80mm aspect ratio
+        const container = document.getElementById('receiptPreviewContainer');
+        const receipt = fDoc.querySelector('body > *') || fDoc.body;
+        const maxW = container.clientWidth * 0.95;
+        const maxH = container.clientHeight * 0.95;
+        const scale = Math.min(
+            maxW / 304,  // 80mm ≈ 304px at 96dpi
+            maxH / receipt.scrollHeight
+        );
+        if (scale < 1) {
+            receipt.style.transform = `scale(${scale})`;
+            receipt.style.transformOrigin = 'top center';
+            receipt.style.width = '304px'; // lock 80mm width
+        } else {
+            receipt.style.transform = 'none';
+            receipt.style.width = 'auto';
         }
     };
-    // If iframe already loaded 'about:blank', onload won't fire again
-    if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
-        const doc = frame.contentDocument;
-        doc.open();
-        doc.write(html);
-        doc.close();
-        if (window.innerWidth < 420) {
-            frame.style.width = '125%';
-            frame.style.height = '125%';
-            frame.style.transform = 'scale(0.8)';
-            frame.style.transformOrigin = 'top left';
-        }
+    // Fallback if onload already fired
+    if (frame.contentDocument?.readyState === 'complete') {
+        frame.onload();
     }
 
     modal.classList.remove('hidden');
@@ -235,6 +244,29 @@ export function printReceiptFromPreview() {
     if (html) {
         printWithIframe(html);
     }
+}
+
+export async function downloadReceiptPdf() {
+    await loadJSPDF();
+    const html = _previewHtml;
+    if (!html) return;
+
+    const { jsPDF } = window.jspdf;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const body = doc.body.cloneNode(true);
+
+    // Remove QR images for cleaner PDF
+    body.querySelectorAll('img').forEach(img => img.remove());
+
+    const pdf = new jsPDF({ unit: 'mm', format: [80, 297], orientation: 'p' }); // 80mm x 297mm
+    await pdf.html(body, {
+        callback: (pdf) => {
+            pdf.save(`receipt-${Date.now()}.pdf`);
+            closeReceiptPreview();
+        },
+        x: 3, y: 3
+    });
 }
 
 /**

@@ -568,6 +568,27 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
         baileysSendTracker.trackSend(phone);
     }
     const finalMsg = skipContact ? text : await appendContactInfo(text, outlet);
+
+    // FAST PATH: Pre-converted PNG base64 — skip fetch + Sharp entirely
+    // Format: "data:image/png;base64,..." (stored as imgPlacedPng, imgConfirmedPng, etc.)
+    if (typeof image === 'string' && image.startsWith('data:image/png;base64,')) {
+        if (!image) {
+            // handled below
+        } else {
+            try {
+                const pngBuf = Buffer.from(image.split(',')[1], 'base64');
+                await sock.sendMessage(to, { image: pngBuf, caption: finalMsg });
+                outboundTracker.trackSend(outlet, trackType);
+                _onSendSuccess();
+                console.log(`[SEND OK] to ${maskJid(to)} type=image trackType=${trackType} (pre-converted PNG)`);
+                return true;
+            } catch (err) {
+                console.warn(`[SEND IMAGE] Pre-converted PNG send failed, falling back: ${err.message}`);
+                // fall through to normal path
+            }
+        }
+    }
+
     if (!image) {
         try {
             await sock.sendMessage(to, { text: finalMsg });
@@ -753,108 +774,9 @@ async function addInAppNotification(uid, title, body, type = 'info', icon = 'bel
     } catch (err) { console.error("Notification Error:", err); }
 }
 
-async function sendInvalidInputHelp(sock, sender, user) {
-    let helpMsg = "⚠️ *Invalid Selection.* ";
-    switch (user.step) {
-        case "CATEGORY":
-            helpMsg += "Please reply with a *Category Number* from the list above.\n════════════════════════\n🛒 *9* View Cart\n🏠 *0* Main Menu";
-            break;
-        case "DISH":
-            helpMsg += "Please reply with an *Item Number* from the list above.\n════════════════════════\n🛒 *9* View Cart\n🔙 *0* Back to Categories";
-            break;
-        case "SIZE":
-            helpMsg += "Please select a *Size Number* (1, 2, etc.) from the options above.";
-            break;
-        case "ADDONS":
-            helpMsg += "Reply with an *Add-on Number* to add it, or *0* (Zero) if you are *DONE*.";
-            break;
-        case "QUANTITY":
-            helpMsg += "Please enter a quantity between *1* and *50*.";
-            break;
-        case "LOCATION":
-            helpMsg += "You *must* share your location to proceed.\n\n📍 *How to share:*\n1️⃣ Tap 📎 (Paperclip) or *+* → *Location* → *Send Your Current Location*\n\n⚙️ *If Location option is missing:*\n→ *Settings > Apps > WhatsApp > Permissions > Location* → Allow\n→ Turn ON *GPS/Location Services* in phone settings";
-            break;
-        case "CONFIRM_PAY":
-            helpMsg += "Please reply with *1* to Confirm Order or *2* to Cancel.";
-            break;
-        case "PLACE_ORDER":
-            helpMsg += "Please reply with *1* for Cash or *2* for UPI.";
-            break;
-        case "CART_VIEW":
-            helpMsg += "Please reply with *1* to Proceed to Checkout or *2* to Clear Cart.";
-            break;
-        case "AWAIT_COUPON":
-            helpMsg += "If you have a coupon code, reply with it. Otherwise reply *0* to skip and continue.";
-            break;
-        case "REUSE_PROFILE":
-            helpMsg += "Please reply with *1* to use your saved details or *2* to enter new ones.";
-            break;
-        default:
-            helpMsg += "Please follow the instructions in the message above or reply *RESET* to start over.";
-    }
-    try {
-        const result = await sock.sendMessage(sender, { text: helpMsg });
-        console.log(`[SEND OK] to ${maskJid(sender)} id=${result?.key?.id} fromMe=${result?.key?.fromMe}`);
-    } catch (err) {
-        console.error(`[SEND ERR] to ${maskJid(sender)}:`, err.message);
-    }
-}
-
 // =============================
 // 3. CORE BOT LOGIC (SOCKET WRAPPER)
 // =============================
-
-async function sendCategories(sock, sender, user) {
-    const outlet = user.outlet || 'outlet';
-    const [categories, botSettings, storeSettings] = await Promise.all([
-        getData('categories', outlet),
-        getData("settings/Bot", outlet).catch(() => ({})),
-        getData("settings/Store", outlet).catch(() => ({}))
-    ]);
-    if (!categories) return sock.sendMessage(sender, { text: "❌ No categories available right now." });
-
-    user.categoryList = Object.entries(categories).map(([id, val]) => ({ id, ...val }));
-
-    const storeName = storeSettings.storeName || 'Our Restaurant';
-    const emoji = '🏪';
-    const headerEmoji = '🔥';
-
-    let msg = `✨ *${storeName.toUpperCase()}* ✨\n`;
-    msg += `🍽️ *SELECT CATEGORY - ${outlet.toUpperCase()}*\n`;
-
-    user.categoryList.forEach((c, i) => {
-        msg += `${i + 1}️⃣  ${c.name}\n`;
-    });
-
-    msg += `🛒 *9* View Cart\n0️⃣ *Take one step Back* 🔙\n`;
-    msg += `_Reply with a number to browse_`;
-
-    user.step = "CATEGORY";
-    const menuImg = botSettings.menuImage || storeSettings.bannerImage;
-    await sendImage(sock, sender, menuImg, msg, undefined, false, 'menu_browse');
-}
-
-async function sendCartView(sock, sender, user, isAdded = false) {
-    if (!user.cart || user.cart.length === 0) {
-        let msg = `🛒 *YOUR CART IS EMPTY*\n`;
-        msg += `You haven't added anything to your cart yet. 🍽️\n`;
-        msg += `1️⃣  *Browse Menu* 🍽️\n`;
-        msg += `🏠 *0* Main Menu`;
-        user.step = "EMPTY_CART_VIEW";
-        return sock.sendMessage(sender, { text: msg });
-    }
-    const { lines, subtotal } = formatCartSummary(user.cart);
-    let msg = `${isAdded ? `✅ *ADDED TO CART!* 🛒` : `🛒 *YOUR CART SUMMARY*`}\n`;
-    msg += lines;
-    msg += `------------------------\n💰 *Subtotal: ₹${subtotal}*\n`;
-    msg += `1️⃣  *Add another item* 🍽️\n`;
-    msg += `2️⃣  *Proceed to Checkout* 🚀\n`;
-    msg += `3️⃣  *Clear Cart* 🗑️\n`;
-    msg += `0️⃣  *Back* 🔙\n`;
-    msg += `_Reply with 1, 2, 3 or 0_`;
-    user.step = "CART_VIEW";
-    return sock.sendMessage(sender, { text: await appendContactInfo(msg, user.outlet) });
-}
 
 async function sendFCMToAdmins(orderId, order) {
     try {
@@ -1068,14 +990,14 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
 
             const botSettings = await getData("settings/Bot", order.outlet) || {};
             const storeSettings = await getData("settings/Store", order.outlet) || {};
-            // Fallback chain: specific status image -> menu image -> banner image -> 1x1 transparent PNG base64 (never fails)
+            // Fallback chain: pre-converted PNG -> specific status image URL -> menu image -> banner image -> 1x1 transparent PNG base64 (never fails)
             const fallbackImg = botSettings.menuImage || storeSettings.bannerImage || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
             let msg = "";
             let img = null;
 
             if (statusLower === "placed") {
                 msg = `🎉 *ORDER PLACED!* ${OUTLET_EMOJI}\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}We've received your order and our team is reviewing it now. ⏳\nYou'll get an update as soon as it's confirmed! ❤️`;
-                img = botSettings.imgPlaced || botSettings.imgConfirmed || fallbackImg;
+                img = botSettings.imgPlacedPng || botSettings.imgPlaced || botSettings.imgConfirmedPng || botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "confirmed") {
                 if (isDineIn && isNew) {
                     const outletName = order.outlet?.toUpperCase() || 'OUR RESTAURANT';
@@ -1083,17 +1005,20 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 } else {
                     msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}Your order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")}`;
                 }
-                img = botSettings.imgConfirmed || fallbackImg;
+                img = botSettings.imgConfirmedPng || botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "ready" || statusLower === "packed") {
                 msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${formatOrderId(order.orderId || id)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")}`;
-                img = botSettings.imgReady || fallbackImg;
+                img = botSettings.imgReadyPng || botSettings.imgReady || fallbackImg;
 
                 if (!isDineIn) {
-                    if (order.riderPhone) {
+                    // Only notify if a rider is actually assigned (has riderId)
+                    if (order.riderId && order.riderPhone) {
                         await riderNotify.notifyRiderPickup(sock, order, addInAppNotification);
-                    } else {
+                    } else if (!order.riderId) {
+                        // No rider assigned yet — broadcast to available riders
                         await riderNotify.broadcastPickupAvailable(sock, id, order, getData, addInAppNotification);
                     }
+                    // If riderId exists but no riderPhone, skip (data inconsistency)
                 }
             } else if (statusLower === "arriving at restaurant") {
                 // Rider accepted -> restaurant staff should know the rider is en route
@@ -1114,7 +1039,16 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 let riderInfoText = "";
                 const riderId = order.riderId || order.assignedRider;
                 if (riderId) {
-                    const rider = (riderId.includes('@')) ? await getRiderByEmail(riderId, order.outlet || 'outlet') : { name: order.riderName, phone: order.riderPhone };
+                    // Distinguish email (user@domain.com) from JID (phone@s.whatsapp.net)
+                    // Email has a domain part with dot, JID has known WhatsApp domains
+                    const isEmail = riderId.includes('@') && 
+                        !riderId.includes('@s.whatsapp.net') && 
+                        !riderId.includes('@g.us') && 
+                        !riderId.includes('@broadcast') &&
+                        riderId.split('@')[1]?.includes('.');
+                    const rider = isEmail 
+                        ? await getRiderByEmail(riderId, order.outlet || 'outlet') 
+                        : { name: order.riderName, phone: order.riderPhone };
                     if (rider) {
                         riderInfoText = `\n📞 *Rider:* ${rider.name || "Delivery Partner"} (${rider.phone || ""})`;
                     }
@@ -1125,7 +1059,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 } else {
                     msg = `🛵 *OUT FOR DELIVERY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nOur rider is on the way to your location! 🛵💨\n🆔 Order: #${formatOrderId(order.orderId || id)}\n🔑 *OTP:* ${otp} (Share with rider only)${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n${getFoodFunnyProgress("Out for Delivery")}`;
                 }
-                img = botSettings.imgOut || fallbackImg;
+                img = botSettings.imgOutPng || botSettings.imgOut || fallbackImg;
             } else if (statusLower === "reached drop location") {
                 let otp = storedOTP;
                 if (!otp) {
@@ -1133,10 +1067,10 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
                 msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${formatOrderId(order.orderId || id)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nKripya order lene ke liye taiyar rahein. Shukriya! 🙏`;
-                img = botSettings.imgOut || fallbackImg;
+                img = botSettings.imgOutPng || botSettings.imgOut || fallbackImg;
             } else if (statusLower === "delivered" || statusLower === "served") {
                 msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${formatOrderId(order.orderId || id)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
-                img = botSettings.imgDelivered || fallbackImg;
+                img = botSettings.imgDeliveredPng || botSettings.imgDelivered || fallbackImg;
             } else if (statusLower === "cancelled") {
                 msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nAapka order #${formatOrderId(order.orderId || id)} cancel ho gaya hai. 😔\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nKoi sawaal ho toh humse baat karein. 🙏`;
             }
@@ -1643,12 +1577,9 @@ async function sendDailyReportSafely(dateOverride = null) {
         if (!currentProcessedStatus && isNewOrder) {
             // --- WEBVIEW DELIVERY ORDER: server-side finalization ---
             // The delivery webview (menu/delivery.html) writes the order
-            // straight to Firebase (no chat round-trip). The bot never ran
-            // processOrderPlacement() for this order, so the side effects
-            // that function normally handles — stock deduction and saving
-            // the customer's profile/record — haven't happened yet. Do them
-            // here, reusing the SAME functions processOrderPlacement uses,
-            // before the "Order Placed" message goes out below.
+            // straight to Firebase (no chat round-trip). The side effects
+            // (stock deduction, customer profile save, discount usage logging)
+            // are handled inline here before the "Order Placed" message.
             if (order.source === "webview_delivery" && !order.stockDeducted) {
                 try {
                     // --- SAFEST-FIRST: server-side discount re-validation ---
@@ -2073,12 +2004,10 @@ async function sendDailyReportSafely(dateOverride = null) {
                     }
 
                     // SAFEST-FIRST: never blast the order-link/menu-image CTA at a
-                    // first-time contact on spec. If their first message already
-                    // shows order intent, go straight to the full flow (no added
-                    // friction for a customer who's ready to order). Otherwise send
-                    // ONLY a plain greeting + an explicit ask, and wait for them to
-                    // say the word before any promotional content goes out.
-                    if (/^(menu|order|food|khana|start|hi+|hello+|hey+)$/i.test(text.trim())) {
+                    // first-time contact on spec. Only explicit order-intent words
+                    // (menu/order) trigger the full flow. Greetings like
+                    // hi/hello/hey get a plain welcome with Hinglish instructions.
+                    if (/^(menu|order)$/i.test(text.trim())) {
                         await sendOrderFlow(sock, sender, pushName, user);
                         user.step = "WEBVIEW";
                         return;
@@ -2086,21 +2015,17 @@ async function sendDailyReportSafely(dateOverride = null) {
 
                     let plainWelcome = (user?.hasProfile && user?.name)
                         ? `Namaste *${user.name}* ji! 👋 *${OUTLET_NAME}* mein wapas aane ke liye shukriya.`
-                        : `Namaste *${pushName}*! 👋 Yeh *${OUTLET_NAME}* ka WhatsApp ordering bot hai.\nJab bhi order karna ho, *menu* type kar dena — koi jhanjhat nahi! 🙏`;
-                    plainWelcome += `\n\nKhana order karne ke liye *Menu*, *Order*, ya *Food* type karein — link turant bhej denge.`;
+                        : `Namaste *${pushName}*! 👋 Yeh *${OUTLET_NAME}* ka WhatsApp ordering bot hai.`;
+                    plainWelcome += `\n\n🍽️ *Khana order karne ke liye:* **Menu** ya **Order** type karein — menu + link turant milega.`;
                     await sock.sendMessage(sender, { text: plainWelcome });
                     user.step = "AWAITING_ORDER_INTENT";
                     return;
                 }
 
                 // AWAITING_ORDER_INTENT: greeted, but hasn't confirmed they want to
-                // order yet. Only an explicit trigger word escalates to the full
-                // menu/order-link flow — anything else gets at most a quiet repeat
-                // of the same ask, never the promotional CTA. This is the gate that
-                // stops a confused/annoyed reply ("who is this", "not interested")
-                // from ever reaching the order-link send.
+                // order yet. Only explicit order-intent words trigger the full flow.
                 if (user.step === "AWAITING_ORDER_INTENT") {
-                    if (/^(menu|order|food|khana|start|hi+|hello+|hey+)$/i.test(text.trim())) {
+                    if (/^(menu|order)$/i.test(text.trim())) {
                         const store = await getData("settings/Store", OUTLET);
                         await resendMenuCTA(sock, sender, user, store, null);
                         user.step = "WEBVIEW";
@@ -2108,520 +2033,25 @@ async function sendDailyReportSafely(dateOverride = null) {
                     }
                     // Already handled by the opt-out/rejection block above for exact
                     // matches; anything else just gets one quiet nudge, no CTA.
-                    return sock.sendMessage(sender, { text: `Jab bhi order karna ho, *Menu* type kar dena — koi jhanjhat nahi! 🙏` });
+                    return sock.sendMessage(sender, { text: `🍽️ *Khana order karne ke liye:* **Menu** ya **Order** type karein — link turant milega! 🙏` });
                 }
 
-                // WEBVIEW STEP: User is ordering via webview link
+// WEBVIEW STEP: User is ordering via webview link
                 // Every message triggers the full flow (greeting + menu + order button),
                 // reusing this phone's token within 30 min of generation.
                 if (user.step === "WEBVIEW") {
-                    // C4: If they send "track" or "status", check for recent orders
-                    if (/^(track|status|where)$/i.test(text)) {
-                        return sock.sendMessage(sender, { text: "📋 Type *status* to check your order status, or tap the menu link above to order again." });
-                    }
                     // C3: Menu keywords → resend just the menu CTA
                     if (/^(order|menu|food|start|restart|hi+|hello+|hey+)$/i.test(text)) {
                         return resendMenuCTA(sock, sender, user);
+                    }
+                    // C4: Track/status keywords → nudge to use webview
+                    if (/^(track|status|where)$/i.test(text)) {
+                        return sock.sendMessage(sender, { text: "📋 Tap the menu link above to order again. Your recent orders will show in the webview." });
                     }
                     // C5: Anything else → nudge + resend the menu CTA
                     return resendMenuCTA(sock, sender, user, null, null, `💡 *Tap below to browse & order!*`);
                 }
 
-
-                if (user.step === "CATEGORY") {
-                    try {
-                        if (text === "0") {
-                            user.step = "START";
-                            return sock.sendMessage(sender, { text: `🏠 *Main Menu* — Send any message to restart.` });
-                        }
-                        if (text === "9") return sendCartView(sock, sender, user);
-                        const cat = user.categoryList[parseInt(text) - 1];
-                        if (!cat) return sendInvalidInputHelp(sock, sender, user);
-
-                        const dishes = await getData(`dishes`, user.outlet) || {};
-                        user.dishList = Object.entries(dishes)
-                            .filter(([id, d]) => d.category === cat.name && d.stock !== false)
-                            .map(([id, d]) => ({ id, ...d }));
-
-                        if (user.dishList.length === 0) return sock.sendMessage(sender, { text: "❌ No items in this category." });
-
-                        let dMsg = `🍽️ *${cat.name.toUpperCase()}*\n`;
-                        user.dishList.forEach((d, i) => { dMsg += `${i + 1}️⃣  *${d.name}*\n`; });
-                        dMsg += `🛒 *9* View Cart\n0️⃣ *Take one step Back* 🔙`;
-                        user.step = "DISH";
-                        return await sendImage(sock, sender, cat.image, dMsg, undefined, false, 'menu_browse');
-                    } catch (catErr) {
-                        console.error("[CATEGORY ERR]", catErr);
-                        return sock.sendMessage(sender, { text: "❌ Something went wrong. Please try again." });
-                    }
-                }
-
-                if (user.step === "DISH") {
-                    if (text === "0") return sendCategories(sock, sender, user);
-                    if (text === "9") return sendCartView(sock, sender, user);
-                    const dish = user.dishList[parseInt(text) - 1];
-                    if (!dish) return sendInvalidInputHelp(sock, sender, user);
-
-                    user.current = { dish };
-                    user.sizeList = Object.entries(dish.sizes || { "Regular": dish.price });
-                    let sMsg = `📏 *SELECT SIZE*\n`;
-                    user.sizeList.forEach(([s, p], i) => { sMsg += `${i + 1}️⃣  ${s} — ₹${p}\n`; });
-                    sMsg += `0️⃣ *Take one step Back* 🔙`;
-                    user.step = "SIZE";
-                    return await sendImage(sock, sender, dish.image, sMsg, undefined, false, 'menu_browse');
-                }
-
-                if (user.step === "SIZE") {
-                    if (text === "0") {
-                        const dishList = user.dishList || [];
-                        if (dishList.length === 0) return sendCategories(sock, sender, user);
-
-                        let dMsg = `🍽️ *${(dishList[0]?.category || "ITEMS").toUpperCase()}*\n`;
-                        dishList.forEach((d, i) => { dMsg += `${i + 1}️⃣  *${d.name}*\n`; });
-                        dMsg += `🛒 *9* View Cart\n0️⃣ *Take one step Back* 🔙`;
-                        user.step = "DISH";
-                        return sock.sendMessage(sender, { text: dMsg });
-                    }
-                    const [size, price] = user.sizeList[parseInt(text) - 1] || [];
-                    if (!size) return sendInvalidInputHelp(sock, sender, user);
-
-                    user.current.size = size;
-                    user.current.unitPrice = price;
-                    user.current.addons = [];
-
-                    user.step = "QUANTITY";
-                    let qtyMsg = `🔢 *STEP 4: ENTER QUANTITY* 🏪\n`;
-                    qtyMsg += `*How many of this item would you like to order?*\n`;
-                    qtyMsg += `_Example: Reply with 1, 2, 5, etc._\n`;
-                    qtyMsg += `0️⃣ *Take one step Back* 🔙`;
-                    return sock.sendMessage(sender, { text: await appendContactInfo(qtyMsg, user.outlet) });
-                }
-
-                if (user.step === "QUANTITY") {
-                    const qty = parseInt(text);
-                    if (text === "0") {
-                        const dish = user.current.dish;
-                        user.sizeList = Object.entries(dish.sizes || { "Regular": dish.price });
-                        let sMsg = `📏 *SELECT SIZE*\n`;
-                        user.sizeList.forEach(([s, p], i) => { sMsg += `${i + 1}️⃣  ${s} — ₹${p}\n`; });
-                        sMsg += `0️⃣ *Take one step Back* 🔙`;
-                        user.step = "SIZE";
-                        return sock.sendMessage(sender, { text: sMsg });
-                    }
-                    if (isNaN(qty) || qty < 1 || qty > 50) return sendInvalidInputHelp(sock, sender, user);
-
-                    const addonTotal = user.current.addons.reduce((s, a) => s + a.price, 0);
-                    user.cart.push({
-                        name: user.current.dish.name,
-                        size: user.current.size,
-                        unitPrice: user.current.unitPrice,
-                        addons: user.current.addons,
-                        quantity: qty,
-                        total: (user.current.unitPrice + addonTotal) * qty,
-                        outlet: OUTLET
-                    });
-
-                    user.step = "ADDED_TO_CART";
-                    return sendCartView(sock, sender, user, true);
-                }
-
-                if (user.step === "ADDED_TO_CART") {
-                    if (text === "1") return sendCategories(sock, sender, user);
-                    if (text === "2") return sendCartView(sock, sender, user);
-                    if (text === "0") {
-                        // Back to SIZE selection for the current dish
-                        const dish = user.current.dish;
-                        user.sizeList = Object.entries(dish.sizes || { "Regular": dish.price });
-                        let sMsg = `📏 *SELECT SIZE*\n`;
-                        user.sizeList.forEach(([s, p], i) => { sMsg += `${i + 1}️⃣  ${s} — ₹${p}\n`; });
-                        sMsg += `0️⃣ *Take one step Back* 🔙`;
-                        user.step = "SIZE";
-                    return await sendImage(sock, sender, dish.image, sMsg, undefined, false, 'menu_browse');
-                    }
-                    return sock.sendMessage(sender, { text: "⚠️ Reply *1* to add more, *2* to view cart or *0* to go back." });
-                }
-
-                if (user.step === "EMPTY_CART_VIEW") {
-                    if (text === "1") return sendCategories(sock, sender, user);
-                    if (text === "0") { return sendCategories(sock, sender, user); }
-                    return sock.sendMessage(sender, { text: "⚠️ Reply *1* to browse menu or *0* to go back." });
-                }
-
-                if (user.step === "CART_VIEW") {
-                    if (text === "1") return sendCategories(sock, sender, user);
-                    if (text === "2") {
-                        // New: optional coupon step
-                        user.step = "AWAIT_COUPON";
-                        let couponMsg = `🎟️ *HAVE A COUPON CODE?* 🎟️\n`;
-                        couponMsg += `If you have a discount code, reply with it now.\n`;
-                        couponMsg += `Otherwise, reply *0* to skip and continue to checkout.\n`;
-                        couponMsg += `0️⃣ *Skip — continue to checkout*`;
-                        return sock.sendMessage(sender, { text: await appendContactInfo(couponMsg, user.outlet) });
-                    }
-                    if (text === "3") {
-                        user.step = "START"; user.current = {}; user.cart = [];
-                        return sock.sendMessage(sender, { text: await appendContactInfo("🗑️ Cart cleared. Reply with any message to start again.", user.outlet) });
-                    }
-                    if (text === "0") {
-                        return sendCategories(sock, sender, user);
-                    }
-                    return sendInvalidInputHelp(sock, sender, user);
-                }
-
-                if (user.step === "AWAIT_COUPON") {
-                    if (text === "0") {
-                        // Skip coupon; go to REUSE_PROFILE or NAME
-                        if (user.profile && user.profile.name) {
-                            user.step = "REUSE_PROFILE";
-                            let profileMsg = `👤 *REUSE YOUR SAVED DETAILS?*\n`;
-                            profileMsg += `Name: ${user.profile.name}\n`;
-                            profileMsg += `Phone: ${user.profile.phone}\n`;
-                            profileMsg += `Address: ${user.profile.address || "N/A"}\n`;
-                            profileMsg += `1️⃣ Yes, use these details\n`;
-                            profileMsg += `2️⃣ No, enter new details\n`;
-                            profileMsg += `0️⃣ *Take one step Back* 🔙`;
-                            return sock.sendMessage(sender, { text: await appendContactInfo(profileMsg, user.outlet) });
-                        }
-                        user.step = "NAME";
-                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n`;
-                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n`;
-                        nameMsg += `_Example: Rajesh Kumar_\n`;
-                        nameMsg += `0️⃣ *Take one step Back* 🔙`;
-                        return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
-                    }
-                    // Validate coupon
-                    try {
-                        const matched = await discountEngine.validateCouponCode(user.outlet, text.trim());
-                        if (matched && matched.status === 'valid') {
-                            user.couponCode = matched.couponCode;
-                            await sock.sendMessage(sender, { text: `✅ Coupon *${matched.couponCode}* accepted! Continuing to checkout…` });
-                        } else if (matched && matched.status === 'expired') {
-                            user.couponCode = null;
-                            await sock.sendMessage(sender, { text: `⏰ Coupon *${text.trim()}* has expired. Reply *0* to skip or try another code.` });
-                            return;
-                        } else if (matched && matched.status === 'not_started') {
-                            user.couponCode = null;
-                            await sock.sendMessage(sender, { text: `📅 Coupon *${text.trim()}* is not active yet. Reply *0* to skip or try another code.` });
-                            return;
-                        } else if (matched && matched.status === 'disabled') {
-                            user.couponCode = null;
-                            await sock.sendMessage(sender, { text: `❌ Coupon *${text.trim()}* is no longer active. Reply *0* to skip or try another code.` });
-                            return;
-                        } else {
-                            user.couponCode = null;
-                            await sock.sendMessage(sender, { text: `❌ Invalid code *${text.trim()}*. Reply *0* to skip or try another code.` });
-                            return; // stay on AWAIT_COUPON
-                        }
-                    } catch (e) {
-                        console.error('[BOT] Coupon validation error:', e);
-                        user.couponCode = null;
-                    }
-                    // Proceed to REUSE_PROFILE or NAME
-                    if (user.profile && user.profile.name) {
-                        user.step = "REUSE_PROFILE";
-                        let profileMsg = `👤 *REUSE YOUR SAVED DETAILS?*\n`;
-                        profileMsg += `Name: ${user.profile.name}\n`;
-                        profileMsg += `Phone: ${user.profile.phone}\n`;
-                        profileMsg += `Address: ${user.profile.address || "N/A"}\n`;
-                        profileMsg += `1️⃣ Yes, use these details\n`;
-                        profileMsg += `2️⃣ No, enter new details\n`;
-                        profileMsg += `0️⃣ *Take one step Back* 🔙`;
-                        return sock.sendMessage(sender, { text: await appendContactInfo(profileMsg, user.outlet) });
-                    }
-                    user.step = "NAME";
-                    let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n`;
-                    nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n`;
-                    nameMsg += `_Example: Rajesh Kumar_\n`;
-                    nameMsg += `0️⃣ *Take one step Back* 🔙`;
-                    return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
-                }
-
-                if (user.step === "REUSE_PROFILE") {
-                    if (text === "1") {
-                        user.name = user.profile.name;
-                        user.phone = user.profile.phone;
-                        user.address = user.profile.address;
-                        saveUserProfile(sender, { name: user.name, phone: user.phone, address: user.address }, user.outlet || OUTLET).catch(() => {});
-                        // Note: We intentionally DO NOT reuse user.location here as per request
-
-                        user.step = "LOCATION";
-                        let locMsg = `📍 *SHARE YOUR LOCATION* 🌍\n`;
-                        locMsg += `Please share your *Live* or *Current* Location so we can calculate the delivery fee.\n`;
-                        locMsg += `*How to share:*\n`;
-                        locMsg += `1️⃣ Tap the 📎 (Paperclip) or *+* button in WhatsApp\n`;
-                        locMsg += `2️⃣ Tap *Location*\n`;
-                        locMsg += `3️⃣ Tap *Send Your Current Location*\n`;
-                        locMsg += `------------------------\n`;
-                        locMsg += `⚙️ *Location option missing?*\n`;
-                        locMsg += `→ *Settings > Apps > WhatsApp > Permissions > Location* → Allow\n`;
-                        locMsg += `→ Also turn ON *GPS/Location Services* in phone settings\n`;
-                        locMsg += `------------------------\n`;
-                        locMsg += `⚠️ *Order cannot be placed without location.*\n`;
-                        locMsg += `0️⃣ *Take one step Back* 🔙`;
-                        return sock.sendMessage(sender, { text: await appendContactInfo(locMsg, user.outlet) });
-                    }
-                    if (text === "2") {
-                        user.step = "NAME";
-                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n`;
-                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n`;
-                        nameMsg += `_Example: Rajesh Kumar_\n`;
-                        nameMsg += `0️⃣ *Take one step Back* 🔙`;
-                        return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
-                    }
-                    if (text === "0") {
-                        user.step = "CART_VIEW";
-                        return sendCartView(sock, sender, user);
-                    }
-                    return sendInvalidInputHelp(sock, sender, user);
-                }
-                if (user.step === "NAME") {
-                    if (text === "0") {
-                        user.step = "CART_VIEW";
-                        return sendCartView(sock, sender, user);
-                    }
-                    user.name = text;
-                    user.step = "PHONE";
-                    if (user.name) {
-                        saveUserProfile(sender, { name: user.name, phone: user.phone || "", address: user.address || "" }, user.outlet || OUTLET).catch(() => {});
-                    }
-                    return sock.sendMessage(sender, { text: await appendContactInfo("📞 *STEP 2: ENTER YOUR 10 DIGIT MOBILE NUMBER*\n_Example: 9876543210. We will use this to contact you regarding your order._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
-                }
-
-                if (user.step === "PHONE") {
-                    if (text === "0") {
-                        user.step = "NAME";
-                        let nameMsg = `👤 *STEP 1: ENTER YOUR FULL NAME* ✨\n`;
-                        nameMsg += `Please provide your name so we can address you correctly and prepare your order.\n`;
-                        nameMsg += `_Example: Rajesh Kumar_\n`;
-                        nameMsg += `0️⃣ *Take one step Back* 🔙`;
-                        return sock.sendMessage(sender, { text: await appendContactInfo(nameMsg, user.outlet) });
-                    }
-                    user.phone = text;
-                    saveUserProfile(sender, { name: user.name || "", phone: user.phone }, user.outlet || OUTLET).catch(() => {});
-                    user.step = "ADDRESS";
-                    return sock.sendMessage(sender, { text: await appendContactInfo("🏠 *STEP 3: ENTER YOUR DELIVERY ADDRESS*\n_Please provide your complete address including landmark, house number, etc._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
-                }
-
-                if (user.step === "ADDRESS") {
-                    if (text === "0") {
-                        user.step = "PHONE";
-                        return sock.sendMessage(sender, { text: await appendContactInfo("📞 *STEP 2: ENTER YOUR 10 DIGIT MOBILE NUMBER*\n_Example: 9876543210. We will use this to contact you regarding your order._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
-                    }
-                    user.address = text;
-                    saveUserProfile(sender, { name: user.name || "", phone: user.phone || "", address: user.address }, user.outlet || OUTLET).catch(() => {});
-                    user.step = "LOCATION";
-                    let locMsg = `📍 *SHARE YOUR LOCATION* 🌍\n`;
-                    locMsg += `Please share your *Live* or *Current* Location so we can calculate the delivery fee.\n`;
-                    locMsg += `*How to share:*\n`;
-                    locMsg += `1️⃣ Tap the 📎 (Paperclip) or *+* button in WhatsApp\n`;
-                    locMsg += `2️⃣ Tap *Location*\n`;
-                    locMsg += `3️⃣ Tap *Send Your Current Location*\n`;
-                    locMsg += `------------------------\n`;
-                    locMsg += `⚙️ *Location option missing?*\n`;
-                    locMsg += `→ *Settings > Apps > WhatsApp > Permissions > Location* → Allow\n`;
-                    locMsg += `→ Also turn ON *GPS/Location Services* in phone settings\n`;
-                    locMsg += `------------------------\n`;
-                    locMsg += `⚠️ *Order cannot be placed without location.*\n`;
-                    locMsg += `0️⃣ *Take one step Back* 🔙`;
-                    return sock.sendMessage(sender, { text: await appendContactInfo(locMsg, user.outlet) });
-                }
-
-                if (user.step === "LOCATION") {
-                    if (text === "0") {
-                        user.step = "ADDRESS";
-                        return sock.sendMessage(sender, { text: await appendContactInfo("🏠 *STEP 3: ENTER YOUR DELIVERY ADDRESS*\n_Please provide your complete address including landmark, house number, etc._\n0️⃣ *Take one step Back* 🔙", user.outlet) });
-                    }
-                    const loc = msg.message?.locationMessage;
-                    if (!loc) {
-                        return sock.sendMessage(sender, { text: await appendContactInfo("❌ *LOCATION REQUIRED — Cannot proceed without it!*\n\n📍 Please share your location using the steps below:\n\n1️⃣ Tap the 📎 (Paperclip) or *+* button\n2️⃣ Tap *Location*\n3️⃣ Tap *Send Your Current Location*\n\n⚙️ *If Location option is missing:*\n→ Go to your phone *Settings > Apps > WhatsApp > Permissions*\n→ Set *Location* to *Allow*\n→ Also enable *GPS/Location Services* in your phone settings\n\n🔄 Try again after enabling — we cannot deliver without your location.\n0️⃣ *Take one step Back* 🔙", user.outlet) });
-                    }
-                    user.location = { lat: loc.degreesLatitude, lng: loc.degreesLongitude };
-                    saveUserProfile(sender, { name: user.name || "", phone: user.phone || "", address: user.address || "", location: user.location }, user.outlet || OUTLET).catch(() => {});
-                    return handleCheckoutFinal(sock, sender, user);
-                }
-
-                if (user.step === "CONFIRM_PAY") {
-                    if (text === "0") {
-                        user.step = "CART_VIEW";
-                        return sendCartView(sock, sender, user);
-                    }
-                    if (text === "2") {
-                        // Record Lost Sale — complete data for analytics
-                        const lostId = "L-" + Date.now();
-                        const { lines, subtotal } = formatCartSummary(user.cart);
-                        const deliveryFee = user.deliveryFee || 0;
-                        const total = subtotal + deliveryFee - (user.discount || 0);
-                        const lostData = {
-                            cancelledAt: new Date().toISOString(),
-                            customerName: user.name || "Anonymous",
-                            phone: user.phone || "N/A",
-                            address: user.address || "",
-                            location: user.location || null,
-                            total,
-                            subtotal,
-                            deliveryFee,
-                            discount: user.discount || 0,
-                            discountLabel: user.discountLabel || null,
-                            cart: user.cart || [],
-                            sourceStep: "CONFIRM_PAY",
-                            reason: "Cancelled at final invoice step",
-                            outlet: user.outlet || "outlet",
-                            channel: "whatsapp"
-                        };
-
-                        await setData(`logs/lostSales/${lostId}`, lostData);
-
-                        // Save lost-sale customer to customer database for follow-up
-                        if (user.phone) {
-                            const cleanPhone = String(user.phone).replace(/\D/g, '').slice(-10);
-                            const custRef = db.ref(resolvePath(`customers/${cleanPhone}`, user.outlet));
-                            custRef.transaction((existing) => {
-                                const base = existing || {};
-                                return {
-                                    ...base,
-                                    name: user.name || base.name,
-                                    phone: cleanPhone,
-                                    address: user.address || base.address || "",
-                                    location: user.location || base.location || null,
-                                    lastSeen: Date.now(),
-                                    lostSaleCount: (base.lostSaleCount || 0) + 1,
-                                    lastLostSaleAt: new Date().toISOString(),
-                                    promotionalConsent: base.promotionalConsent ?? true
-                                };
-                            }).catch(() => {});
-                        }
-
-                        // Notify Admin
-                        await notifyAdmin(sock, lostId, {
-                            customerName: user.name || "Anonymous",
-                            phone: user.phone || "N/A",
-                            total,
-                            outlet: user.outlet || "outlet"
-                        }, 'CANCELLED');
-
-                        const outlet = user.outlet;
-                        user = null; // Mark session for deletion in Redis 
-                        return sock.sendMessage(sender, { text: await appendContactInfo("❌ Order Cancelled. We hope to serve you next time! 🙏", outlet) });
-                    }
-                    if (text === "1") {
-                        await processOrderPlacement(sock, sender, user, "COD");
-                        user = null;
-                        return;
-                    }
-                    return sendInvalidInputHelp(sock, sender, user);
-                }
-
-                async function processOrderPlacement(sock, sender, user, method) {
-                    try {
-                        const orderId = await generateOrderId(user.outlet);
-                        const { subtotal } = formatCartSummary(user.cart);
-
-                        const deliveryFee = user.deliveryFee || 0;
-                        const finalOrder = {
-                            orderId, outlet: user.outlet,
-                            type: "Online", // Explicitly tag as Online order
-                            customerName: user.name,
-                            phone: user.phone,
-                            whatsappNumber: sender, // Save sender JID for status updates
-                            address: user.address,
-                            lat: user.location.lat, lng: user.location.lng,
-                            subtotal, deliveryFee, total: subtotal + deliveryFee - (user.discount || 0),
-                            distanceKm: user.distanceKm,
-                            status: "Placed", paymentMethod: method, paymentStatus: "Pending",
-                            createdAt: new Date().toISOString(),
-                            assignedRider: "",
-                            items: user.cart,
-                            stockDeducted: true,
-                            // New discount tracking fields
-                            discount: user.discount || 0,
-                            discountId: user.discountId || null,
-                            discountLabel: user.discountLabel || null,
-                            discountSource: user.discountSource || (user.discount ? 'manual' : 'none'),
-                            discountMode: user.discountMode || 'fixed',
-                            discountValue: user.discountValue || 0,
-                            discountGlobalLimit: user.discountGlobalLimit || 0,
-                            _fcmSent: true
-                        };
-
-                        await setData(`orders/${orderId}`, finalOrder, user.outlet);
-
-                        // Send confirmation to user IMMEDIATELY (fastest possible response)
-                        let successMsg = `🎉 *ORDER PLACED SUCCESSFULLY!* 🎉\n`;
-                        successMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                        successMsg += `🆔 *Order ID:* #${formatOrderId(finalOrder.orderId || orderId)}\n`;
-                        successMsg += `🏪 *Shop:* ${OUTLET_NAME}\n`;
-                        successMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                        successMsg += `*Please wait while the admin confirms your order!* ⏳\n`;
-                        successMsg += `Total: ₹${finalOrder.total}`;
-                        await sock.sendMessage(sender, { text: await appendContactInfo(successMsg, user.outlet) });
-
-                        // Fire-and-forget: all side effects (non-blocking)
-                        notifyAdmin(sock, orderId, finalOrder, 'NEW').catch(() => {});
-                        sendFCMToAdmins(orderId, finalOrder).catch(() => {});
-                        saveUserProfile(sender, {
-                            name: user.name, phone: user.phone,
-                            address: user.address, location: user.location,
-                            lastOutlet: user.outlet
-                        }, user.outlet || OUTLET).catch(() => {});
-
-                        // Save complete profile to outlet's customers node
-                        if (user.phone) {
-                            const cleanPhone = String(user.phone).replace(/\D/g, '').slice(-10);
-                            const mapsLink = user.location ? `https://maps.google.com/?q=${user.location.lat},${user.location.lng}` : "";
-                            const isFirstOrderDiscount = user.discountSource === 'firstOrder' && user.discountId;
-                            const custRef = db.ref(resolvePath(`customers/${cleanPhone}`, user.outlet));
-                            custRef.transaction((existing) => {
-                                const base = existing || {};
-                                const merged = {
-                                    ...base,
-                                    name: user.name || base.name,
-                                    phone: cleanPhone,
-                                    address: user.address || base.address || "",
-                                    location: user.location || base.location || null,
-                                    mapsLink: mapsLink || base.mapsLink || "",
-                                    lastOrderDate: new Date().toISOString(),
-                                    promotionalConsent: true,
-                                    orderCount: (base.orderCount || 0) + 1,
-                                    totalSpent: (base.totalSpent || 0) + (user.total || 0),
-                                    lastSeen: Date.now()
-                                };
-                                if (isFirstOrderDiscount) {
-                                    merged.firstOrderDiscountUsed = Date.now();
-                                    merged.firstOrderDiscountId = user.discountId;
-                                }
-                                if (user.discountId && user.discount > 0) {
-                                    merged.discountUsage = merged.discountUsage || {};
-                                    merged.discountUsage[user.discountId] = (merged.discountUsage[user.discountId] || 0) + 1;
-                                }
-                                return merged;
-                            }).catch(() => {});
-                        }
-
-                        // Log discount usage (best-effort)
-                        if (finalOrder.discount > 0 && finalOrder.discountId) {
-                            discountEngine.recordDiscountUsage({
-                                OUTLET: user.outlet,
-                                discountId: finalOrder.discountId,
-                                orderId,
-                                customerPhone: finalOrder.phone,
-                                amountGiven: finalOrder.discount,
-                                channel: 'whatsapp',
-                                globalLimit: finalOrder.discountGlobalLimit,
-                                discountLabel: finalOrder.discountLabel,
-                                discountSource: finalOrder.discountSource
-                            }).catch(() => {});
-                        }
-
-                        // Fire-and-forget: deduct stock AFTER user gets reply
-                        deductInventoryStock(sock, finalOrder.items, user.outlet).catch(e =>
-                            console.error("[BOT] Stock deduction failed:", e)
-                        );
-
-                    } catch (e) {
-                        console.error("Order Placement Error:", e);
-                        await sock.sendMessage(sender, { text: "❌ Error placing your order. Please try again." });
-                    }
-                }
 
             })(); // <-- End of Message Handler IIFE
 
@@ -2636,89 +2066,6 @@ async function sendDailyReportSafely(dateOverride = null) {
         await sock.start();
     }
 }
-
-async function handleCheckoutFinal(sock, sender, user) {
-    try {
-        const cleanPhone = String(user.phone || '').replace(/\D/g, '').slice(-10);
-        const [delSettings, storeSettings, customerSnap] = await Promise.all([
-            getData("settings/Delivery", user.outlet) || {},
-            getData("settings/Store", user.outlet) || {},
-            cleanPhone ? getData(`customers/${cleanPhone}`, user.outlet) : null
-        ]);
-
-        const outletCoords = {
-            lat: parseFloat(storeSettings?.lat || 0),
-            lng: parseFloat(storeSettings?.lng || 0)
-        };
-
-        let dist = 0;
-        let fee = 0;
-        if (user.location && outletCoords.lat && outletCoords.lng) {
-            dist = calculateDistance(user.location.lat, user.location.lng, outletCoords.lat, outletCoords.lng);
-            fee = getFeeFromSlabs(dist, delSettings.slabs || []);
-        }
-
-        user.distanceKm = dist;
-        user.deliveryFee = fee;
-        const { lines, subtotal } = formatCartSummary(user.cart);
-
-        // Auto-evaluate discount (best of: firstOrder / coupon / global / category)
-        try {
-            const discountEval = await discountEngine.evaluateDiscount({
-                OUTLET: user.outlet,
-                customer: customerSnap,
-                subtotal,
-                couponCode: user.couponCode || null,
-                cart: user.cart,
-                channel: 'whatsapp'
-            });
-            if (discountEval) {
-                user.discount = discountEval.amount;
-                user.discountId = discountEval.discount.id;
-                user.discountLabel = discountEval.label;
-                user.discountSource = discountEval.source;
-                user.discountMode = discountEval.discount.mode || 'fixed';
-                user.discountValue = discountEval.discount.value || 0;
-                user.discountGlobalLimit = discountEval.discount.globalLimit || 0;
-            } else {
-                user.discount = 0;
-                user.discountId = null;
-                user.discountLabel = null;
-                user.discountSource = null;
-                user.discountMode = null;
-                user.discountValue = 0;
-            }
-        } catch (e) {
-            console.error('[BOT] Discount evaluation failed:', e?.message || e);
-            user.discount = 0;
-        }
-
-        user.step = "CONFIRM_PAY";
-
-        let sum = `🧾 *INVOICE*\n`;
-        sum += `━━━━━━━━━━━━━━━━━━━━\n`;
-        sum += `${lines}`;
-        sum += `━━━━━━━━━━━━━━━━━━━━\n`;
-        sum += `💰 Subtotal: ₹${subtotal}\n`;
-        sum += `🚚 Delivery (${dist.toFixed(1)}km): ₹${fee}\n`;
-        if (user.discount) {
-            const discLabel = user.discountMode === 'percent' && user.discountValue
-                ? `${user.discountLabel || ''} ${user.discountValue}% off`.trim()
-                : user.discountLabel || '';
-            sum += `🎁 Discount (${discLabel}): -₹${user.discount}\n`;
-        }
-        sum += `💵 *TOTAL: ₹${subtotal + fee - (user.discount || 0)}*\n`;
-        sum += `1️⃣ Confirm Order\n`;
-        sum += `2️⃣ Cancel\n`;
-        sum += `0️⃣ *Take one step Back* 🔙`;
-
-        return sock.sendMessage(sender, { text: await appendContactInfo(sum, user.outlet) });
-    } catch (e) {
-        console.error("Checkout Final Error:", e);
-        return sock.sendMessage(sender, { text: "❌ Error calculating delivery fee. Please try again." });
-    }
-}
-
 
 // Watch for new orders from non-WA sources (QR menu, REST API) → send FCM to admins
 function initFCMWatcher() {
@@ -2744,19 +2091,38 @@ function initFCMWatcher() {
   // (QR/menu orders don't have an 'outlet' field on the record)
   // Use the bot's configured outlet for FCM payload
   const botOutlet = resolveOutletId();
-  ordersRef.on('child_changed', (snap) => {
+  ordersRef.on('child_changed', async (snap) => {
     const after = snap.val() || {};
     const orderId = snap.key;
     const before = orderState.get(orderId) || {};
     orderState.set(orderId, { riderId: after.riderId, status: after.status });
     if (after.riderId && after.riderId !== before.riderId) {
-      sendFCMToRider(after.riderId, 'New Order Assigned!', `Order #${formatOrderId(after.orderId || orderId)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: './index.html' });
+      // Resolve rider UID for FCM token lookup (riderId on order may be email or UID)
+      let riderUid = after.riderId;
+      if (riderUid && !riderUid.includes('@') && riderUid.length > 20) {
+        // Likely already a UID (long Firebase UID)
+      } else if (riderUid && riderUid.includes('@') && !riderUid.includes('@s.whatsapp.net') && !riderUid.includes('@g.us') && !riderUid.includes('@broadcast')) {
+        // Looks like an email - resolve to UID
+        const rider = await getRiderByEmail(riderUid, botOutlet);
+        riderUid = rider?.uid || riderUid;
+      }
+      if (riderUid) {
+        sendFCMToRider(riderUid, 'New Order Assigned!', `Order #${formatOrderId(after.orderId || orderId)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: './index.html' });
+      }
     } else if (after.riderId && after.status && after.status !== before.status) {
       const s = String(after.status).toLowerCase();
+      // Resolve rider UID for status change FCM
+      let riderUid = after.riderId;
+      if (riderUid && !riderUid.includes('@') && riderUid.length > 20) {
+        // Likely already a UID
+      } else if (riderUid && riderUid.includes('@') && !riderUid.includes('@s.whatsapp.net') && !riderUid.includes('@g.us') && !riderUid.includes('@broadcast')) {
+        const rider = await getRiderByEmail(riderUid, botOutlet);
+        riderUid = rider?.uid || riderUid;
+      }
       if (['ready', 'packed', 'cooked'].includes(s)) {
-        sendFCMToRider(after.riderId, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} is ready for pickup!`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
+        if (riderUid) sendFCMToRider(riderUid, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} is ready for pickup!`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
       } else if (s === 'cancelled') {
-        sendFCMToRider(after.riderId, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} has been cancelled.`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
+        if (riderUid) sendFCMToRider(riderUid, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} has been cancelled.`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
       }
     }
   });
