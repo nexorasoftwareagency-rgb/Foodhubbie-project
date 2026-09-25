@@ -148,7 +148,7 @@ export type Settlement = {
 };
 
 export type OfflineAction = {
-  type: "ACCEPT_ORDER" | "UPDATE_STATUS" | "REACHED_OUTLET";
+  type: "ACCEPT_ORDER" | "UPDATE_STATUS" | "REACHED_OUTLET" | "VERIFY_OTP";
   payload: any;
   queuedAt: number;
   id: string;

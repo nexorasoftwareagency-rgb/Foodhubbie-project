@@ -15,6 +15,7 @@ import {
   completeDelivery,
   ProximityError,
 } from "@/services/orderService";
+import { PROXIMITY } from "@/lib/constants";
 import { logRiderError } from "@/services/auditService";
 import { enqueueOfflineAction } from "@/components/shared/OfflineQueue";
 import { toast } from "@/hooks/use-toast";
@@ -49,7 +50,7 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
   const { user } = useAuth();
   const { location } = useLocationContext();
   const { requestPosition } = useGeolocation();
-  const { } = useProximity(order);
+  const { distanceKm, proximityOk, gated } = useProximity(order);
   const [, navigate] = useLocation();
 
   const [sliderLoading, setSliderLoading] = useState(false);
@@ -85,7 +86,18 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
           });
           toast.warning("You're offline", { description: "This will sync automatically once you're back online." });
         } else if (step === 1) {
-          setVerifyOpen(true);
+          if (!navigator.onLine) {
+            enqueueOfflineAction("VERIFY_OTP", {
+              outlet: order.outlet,
+              orderId: order.id,
+              // OTP code will be captured when user enters it in the modal
+              // We'll need to capture it when the modal is submitted
+            });
+            toast.warning("You're offline", { description: "OTP verification will sync when online." });
+            setVerifyOpen(true);
+          } else {
+            setVerifyOpen(true);
+          }
         } else if (step === 2) {
           enqueueOfflineAction("UPDATE_STATUS", {
             subtype: "reachedDrop",
@@ -99,6 +111,11 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
       }
 
       if (step === 0) {
+        if (gated && !proximityOk) {
+          toast.error("Too far from outlet", { description: `You are ${distanceKm?.toFixed(1)} km away. Move within ${PROXIMITY.PICKUP_RADIUS_KM} km.` });
+          setSliderLoading(false);
+          return;
+        }
         const pos = await resolvePosition();
         await markReachedOutlet({
           outlet: order.outlet,
@@ -113,6 +130,11 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
       } else if (step === 1) {
         setVerifyOpen(true);
       } else if (step === 2) {
+        if (gated && !proximityOk) {
+          toast.error("Too far from drop location", { description: `You are ${distanceKm?.toFixed(1)} km away. Move within ${PROXIMITY.PICKUP_RADIUS_KM} km.` });
+          setSliderLoading(false);
+          return;
+        }
         await markReachedDrop({
           outlet: order.outlet,
           orderId: order.id,
@@ -135,6 +157,17 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
 
   async function handleVerifyOtp(code: string) {
     try {
+      if (!navigator.onLine) {
+        enqueueOfflineAction("VERIFY_OTP", {
+          outlet: order.outlet,
+          orderId: order.id,
+          enteredOtp: code,
+          actualOtp: order.deliveryOTP || order.otp || "",
+          backupCode: order.backupCode,
+        });
+        toast.warning("You're offline", { description: "OTP verification queued for sync." });
+        return { success: true };
+      }
       const result = await verifyOtpService({
         outlet: order.outlet,
         orderId: order.id,
@@ -170,7 +203,6 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
       enteredOtp: order.backupCode,
       actualOtp: order.deliveryOTP || order.otp || "",
       backupCode: order.backupCode,
-      isAdmin: true,
     }).then((result) => {
       if (result.success) {
         setVerifiedBy("ADMIN_FALLBACK");

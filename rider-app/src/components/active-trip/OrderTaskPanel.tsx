@@ -204,7 +204,6 @@ function handleEmergencyOverride() {
       enteredOtp: order.backupCode,
       actualOtp: order.deliveryOTP || order.otp || "",
       backupCode: order.backupCode,
-      isAdmin: true, // Admin gate enforced at API level
     }).then((result) => {
       if (result.success) {
         setVerifiedBy("ADMIN_FALLBACK");

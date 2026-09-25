@@ -3000,7 +3000,19 @@
                 <div class="mob-card mob-table-card" style="margin:0;">
                     <div class="mob-section-head-row">
                         <h3 class="mob-card-title">Customer Database</h3>
-                        <input type="text" id="customerSearch" placeholder="Search..." class="search-input-group" style="max-width:220px;" aria-label="Search customers">
+                        <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
+                            <input type="text" id="customerSearch" placeholder="Search..." class="search-input-group" style="max-width:220px;" aria-label="Search customers">
+                            <div class="mob-export-row" style="display:flex; gap:8px;">
+                                <button type="button" class="mob-export-banner mob-export-excel" data-action="custExportExcel" title="Export to Excel">
+                                    <i data-lucide="file-spreadsheet" class="icon-18"></i>
+                                    <span>Excel</span>
+                                </button>
+                                <button type="button" class="mob-export-banner mob-export-pdf" data-action="custExportPDF" title="Export to PDF">
+                                    <i data-lucide="file-text" class="icon-18"></i>
+                                    <span>PDF</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     <div class="mob-table-scroll">
                         <table class="mob-data-table" id="customerDataTable">
@@ -3015,16 +3027,6 @@
                             </thead>
                             <tbody id="customerDataTableBody"></tbody>
                         </table>
-                    </div>
-                    <div class="mob-export-row" style="margin-top:14px;">
-                        <button type="button" class="mob-export-banner mob-export-excel" data-action="custExportExcel">
-                            <i data-lucide="file-spreadsheet" class="icon-18"></i>
-                            <span>Excel</span>
-                        </button>
-                        <button type="button" class="mob-export-banner mob-export-pdf" data-action="custExportPDF">
-                            <i data-lucide="file-text" class="icon-18"></i>
-                            <span>PDF</span>
-                        </button>
                     </div>
                 </div>
 
@@ -4984,7 +4986,7 @@
 
                     class="btn-primary flex-center flex-gap-8 w-150">
 
-                    <i data-lucide="check-circle"></i> Save Rider
+                    <i data-lucide="check-circle"></i> <span id="saveRiderBtnText">Save Rider</span>
 
                 </button>
 
@@ -6315,7 +6317,7 @@
 
     <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous" defer></script>
 
-    <!-- XLSX loaded lazily via utils.js loadXLSX() -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js" crossorigin="anonymous" defer></script>
 
     <script type="module" src="js/bot-status.js?v=5.3.29"></script>
 

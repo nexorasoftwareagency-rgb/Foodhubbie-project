@@ -80,6 +80,19 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260925-221213-7f8c] User manual for the approval-ceiling / manager-PIN / void-PIN feature
+- TIER: 1 (documentation only — no source file touched)
+- STATUS: DONE
+- Started: 2026-09-25 22:12 UTC
+- Scope: user request "also add - User Manual for it.. explaining every possible outcome with examples." Deliverable: `docs/MANAGER-PIN-USER-MANUAL.md` (251 lines), committed `0cba776`, covering the two gates shipped in `9e0bff7` (ceiling/PIN) and `d17f2de` (void-PIN). `docs/` was chosen after surveying `docs/`, `GUIDEs/` and the root — `docs/` holds the SCREAMING-KEBAB plan/report docs and is the existing home for feature documentation.
+- Contents: configuration and **every save outcome** (clamp to 0–100, blank PIN keeps the existing hash, bad PIN aborts the whole save so the ceiling is not written either); the ceiling formula with worked examples at ceiling 15% / ₹1,000 showing that **exactly-at-ceiling passes** because the test is strictly `>`; a 16-row outcome table for the discount gate and a 6-row table for the void gate, both covering cancel / Esc / overlay-click / empty-Approve; a message-reference table with the exact toast strings; the audit-row schema for `discount.pin.approved` and `void.pin.approved`; the fail-open contract; and a limitations section stating plainly that this is client-side accountability (no Cloud Functions on Spark), that a 4-digit SHA-256 hash is brute-forceable by anyone who can read it, that settings are per outlet, and that both fields must be set together.
+- Verification: **28 quoted strings cross-checked verbatim** against `utils.js`, `settings.js`, `pos.js`, `tables.js`, `ui-utils.js` and `index.html` — a script asserted each appears in the named file, and every long quoted string in the manual traces back to source. Strict UTF-8 valid, FFFD 0, U+20B9 present.
+- Four errors caught by that check before commit: (a) the three gate toasts use **em dash U+2014**, not ASCII hyphen — a first "correction pass" turned them into hyphens and was wrong, reverted; (b) the manual had written `Max cap (?, optional)` by hand when the label is `Max cap (₹, optional)`; (c) `Processing…` in prose vs the literal `Processing...` at `pos.js:812`; (d) two prompt messages existed in code and were missing from the manual — `This {pct}% discount is above the {ceiling}% approval ceiling.` (`utils.js:270`, pct via `.toFixed(1)`) and `Authorise voiding this {table|group} bill. This cannot be undone.` (`tables.js:1785`).
+- Console-mangling hazard (recurring): PowerShell renders U+20B9 / U+2014 / U+2192 / U+2026 as `?` / `-` / `-` / `.`, so console output is never evidence of a file's bytes — a `Select-String` line looked like it proved an ASCII hyphen while the file held an em dash. Node byte dumps were the authority, same as the earlier `?`-vs-`₹` checks on `Admin/index.html`.
+- NOT verified / open risk: no live run of the flows the manual describes — it documents behaviour by tracing code, and the gates themselves remain unexercised end-to-end against real RTDB (the same open risk recorded in `d17f2de`).
+- Confidence: HIGH for string fidelity (machine-checked), MEDIUM for behavioural completeness (traced, not executed).
+- Ended: 2026-09-25 22:16 UTC
+
 ### [20260925-215100-c8f2] void-PIN: manager PIN required before any payment void
 - TIER: 3 (money reversal path)
 - STATUS: DONE

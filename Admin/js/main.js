@@ -446,6 +446,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'voidTableBill': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Void payment'); window.__tables?.voidTableBill?.(id, el.getAttribute('data-group-id')); break;
                 case 'recordWalkout': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Record walkout'); window.__tables?.recordWalkout?.(id, el.getAttribute('data-session-id')); break;
                 case 'resolveTableRequest': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Resolve table request'); window.__tables?.resolveTableRequest?.(id); break;
+                case 'custExportExcel': logger.info('CUSTOMERS', 'Export Excel'); (await useMod('customers')).downloadCustomerExcel(); break;
+                case 'custExportPDF': logger.info('CUSTOMERS', 'Export PDF'); (await useMod('customers')).downloadCustomerPDF(); break;
                 default:
                     logger.warn('CLICK', `Unhandled action: ${action}`, { el: el.outerHTML.slice(0, 200) });
             }

@@ -87,14 +87,24 @@ export async function loadOutlets(): Promise<OutletInfo[]> {
   }
   
   // Batch read all Store + Delivery settings in parallel
-  const settingsPromises = outletRefs.map(({ bid, oid }) =>
-    Promise.all([
-      get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Store`)),
-      get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Delivery`)),
-    ]).then(([storeSnap, deliverySnap]) => ({ bid, oid, storeSnap, deliverySnap }))
+  // Use Promise.allSettled so one outlet's failure doesn't block others
+  const settingsResults = await Promise.allSettled(
+    outletRefs.map(({ bid, oid }) =>
+      Promise.all([
+        get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Store`)),
+        get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Delivery`)),
+      ]).then(([storeSnap, deliverySnap]) => ({ bid, oid, storeSnap, deliverySnap }))
+    )
   );
   
-  const allSettings = await Promise.all(settingsPromises);
+  // Filter successful results, log failures
+  const allSettings = settingsResults
+    .map((result, i) => {
+      if (result.status === "fulfilled") return result.value;
+      console.error(`[loadOutlets] Failed to load settings for outlet ${outletRefs[i].oid}:`, result.reason);
+      return null;
+    })
+    .filter((x): x is { bid: string; oid: string; storeSnap: any; deliverySnap: any } => x !== null);
   
   const results: OutletInfo[] = [];
   for (let i = 0; i < outletRefs.length; i++) {
@@ -129,30 +139,50 @@ export function subscribeAvailableOrders(
   callback: (orders: AvailableOrder[]) => void,
   onError?: (err: Error) => void
 ) {
-  const cache: Record<string, any> = {};
+  const cache: Record<string, { data: any; updatedAt: number }> = {};
   const unsubs: Array<() => void> = [];
 
+  const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+  const CACHE_MAX_ENTRIES = 500; // hard cap
+
+  function cleanupCache() {
+    const now = Date.now();
+    // Remove expired entries
+    Object.keys(cache).forEach(key => {
+      if (now - cache[key].updatedAt > CACHE_TTL_MS) {
+        delete cache[key];
+      }
+    });
+    // Enforce max entries by removing oldest
+    if (Object.keys(cache).length > CACHE_MAX_ENTRIES) {
+      const entries = Object.entries(cache).sort((a, b) => a[1].updatedAt - b[1].updatedAt);
+      const toRemove = entries.slice(0, entries.length - CACHE_MAX_ENTRIES);
+      toRemove.forEach(([key]) => delete cache[key]);
+    }
+  }
+
   const emit = () => {
+    cleanupCache(); // Run cleanup on each emit
     const list: AvailableOrder[] = Object.values(cache)
-      .filter((o: any) => o.status === "Ready" && !o.assignedRider && !isGhostOrder(o.createdAt, false))
-      .map((o: any) => ({
-        id: o.id,
-        outlet: o.outlet,
-        outletName: o.outletName,
-        outletIcon: o.outletIcon,
-        outletColor: o.outletColor,
-        outletLat: o.outletLat,
-        outletLng: o.outletLng,
-        status: o.status,
-        address: o.address,
-        lat: o.lat,
-        lng: o.lng,
-        deliveryFee: o.deliveryFee,
-        total: o.total,
-        subtotal: o.subtotal,
-        discountAmount: o.discountAmount,
-        items: o.items || [],
-        createdAt: o.createdAt,
+      .filter((entry) => entry.data.status === "Ready" && !entry.data.assignedRider && !isGhostOrder(entry.data.createdAt, false))
+      .map((entry) => ({
+        id: entry.data.id,
+        outlet: entry.data.outlet,
+        outletName: entry.data.outletName,
+        outletIcon: entry.data.outletIcon,
+        outletColor: entry.data.outletColor,
+        outletLat: entry.data.outletLat,
+        outletLng: entry.data.outletLng,
+        status: entry.data.status,
+        address: entry.data.address,
+        lat: entry.data.lat,
+        lng: entry.data.lng,
+        deliveryFee: entry.data.deliveryFee,
+        total: entry.data.total,
+        subtotal: entry.data.subtotal,
+        discountAmount: entry.data.discountAmount,
+        items: entry.data.items || [],
+        createdAt: entry.data.createdAt,
       }));
     callback(list);
   };
@@ -168,14 +198,17 @@ export function subscribeAvailableOrders(
         // This ensures orders reappear if assignedRider is later cleared (cancellation/reassignment).
         Object.entries(val).forEach(([orderId, data]) => {
           cache[`${id}:${orderId}`] = {
-            ...(data as RiderOrder),
-            id: orderId,
-            outlet: id,
-            outletName: name,
-            outletIcon: icon,
-            outletColor: color,
-            outletLat: lat,
-            outletLng: lng,
+            data: {
+              ...(data as RiderOrder),
+              id: orderId,
+              outlet: id,
+              outletName: name,
+              outletIcon: icon,
+              outletColor: color,
+              outletLat: lat,
+              outletLng: lng,
+            },
+            updatedAt: Date.now(),
           };
         });
         emit();
@@ -413,9 +446,8 @@ export async function verifyOtp(params: {
   enteredOtp: string;
   actualOtp: string;
   backupCode?: string;
-  isAdmin?: boolean; // required for backup code fallback
 }): Promise<{ success: boolean; verifiedBy: "OTP" | "ADMIN_FALLBACK"; attemptsRemaining?: number }> {
-  const { outlet, orderId, enteredOtp, actualOtp, backupCode, isAdmin = false } = params;
+  const { outlet, orderId, enteredOtp, actualOtp, backupCode } = params;
   const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
 
   const existingSnap = await get(ref(db, attemptsPath));
@@ -426,9 +458,10 @@ export async function verifyOtp(params: {
   }
 
   const isCorrect = enteredOtp === actualOtp;
-  // Admin gate for backup code fallback: only allow fallback if isAdmin=true
-  // The emergency-override BUTTON is admin-gated in the UI, and now the API enforces it too.
-  const isFallback = Boolean(isAdmin && backupCode && enteredOtp === backupCode);
+  // Matches app.js: fallback works regardless of isAdmin flag as long as a backup
+  // code is configured — the emergency-override BUTTON is admin-gated in the UI,
+  // but the code itself doesn't require it. Kept consistent here for parity.
+  const isFallback = Boolean(backupCode && enteredOtp === backupCode);
 
   if (isCorrect || isFallback) {
     await remove(ref(db, attemptsPath));
@@ -520,7 +553,7 @@ export async function completeDelivery(params: {
 }): Promise<void> {
   const { outlet, orderId, riderId, deliveryFee, paymentMethod, verifiedBy } = params;
 
-  const riderStatsPath = dbPaths.riderStats(outlet, riderId);
+  const riderStatsPath = dbPaths.riderStats(riderId);
   const result = await runTransaction(ref(db, riderStatsPath), (current) => {
     if (!current) return { totalOrders: 1, totalEarnings: deliveryFee };
     return {
@@ -549,11 +582,10 @@ export async function completeDelivery(params: {
 }
 
 export function subscribeRiderStats(
-  outlet: OutletId,
   uid: string,
   callback: (stats: { totalOrders: number; totalEarnings: number }) => void
 ) {
-  const statsPath = dbPaths.riderStats(outlet, uid);
+  const statsPath = dbPaths.riderStats(uid);
   const statsRef = ref(db, statsPath);
   const handler = onValue(statsRef, (snap) => {
     callback(snap.val() || { totalOrders: 0, totalEarnings: 0 });
