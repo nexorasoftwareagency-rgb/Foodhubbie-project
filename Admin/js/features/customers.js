@@ -148,15 +148,6 @@ export function initCustomerTable() {
             _renderCustomerTable();
         });
     });
-
-    const root = document.getElementById('tab-customers');
-    if (!root) return;
-    root.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action]');
-        if (!btn) return;
-        if (btn.dataset.action === 'custExportExcel') downloadCustomerExcel();
-        if (btn.dataset.action === 'custExportPDF') downloadCustomerPDF();
-    });
 }
 
 export function downloadCustomerExcel() {
@@ -192,28 +183,61 @@ export async function downloadCustomerPDF() {
 
     showToast('Generating PDF...', 'info');
 
-    doc.setFontSize(20);
-    doc.text('Customer Database', 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
-    doc.text(`Total customers: ${_filteredData.length}`, 14, 36);
+    let storeName = 'FoodHubbie';
+    try {
+        const snap = await get(Outlet.ref('settings/Store'));
+        if (snap.exists() && snap.val().storeName) storeName = snap.val().storeName;
+    } catch (_) {}
+
+    const primaryColor = [232, 73, 8]; // #E84908
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 14;
 
     const tableData = _filteredData.map(c => [
         c.name || 'Anonymous',
         c.displayPhone || '',
-        c.address || '',
+        c.addressFull || c.address || '',
         String(c.orderCount || 0),
-        `Rs.${c.ltv || 0}`
+        'Rs.' + Number(c.ltv || 0).toLocaleString('en-IN')
     ]);
 
     doc.autoTable({
-        startY: 42,
         head: [['Customer', 'Phone', 'Address', 'Orders', 'Total Value']],
         body: tableData,
         theme: 'grid',
-        headStyles: { fillColor: [232, 73, 8] },
-        columnStyles: { 4: { cellWidth: 50 } }
+        headStyles: { fillColor: primaryColor, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 8, textColor: [51, 51, 51] },
+        alternateRowStyles: { fillColor: [250, 250, 250] },
+        columnStyles: { 4: { cellWidth: 34, halign: 'right' } },
+        margin: { top: 38, left: margin, right: margin, bottom: 16 },
+        tableLineColor: [230, 230, 230],
+        tableLineWidth: 0.3,
+        didDrawPage: () => {
+            doc.setFillColor(...primaryColor);
+            doc.rect(0, 0, pageWidth, 30, 'F');
+            doc.setFillColor(255, 179, 71); // #FFB347
+            doc.circle(pageWidth - 22, 15, 7, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            doc.text('Customer Database', margin, 13);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(storeName, margin, 21);
+            doc.setFontSize(7.5);
+            doc.text(`Generated ${new Date().toLocaleString()}  |  ${_filteredData.length} customers`, margin, 27);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.text('FH', pageWidth - 22, 17, { align: 'center' });
+
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(7.5);
+            doc.setTextColor(150);
+            doc.text('Powered by FoodHubbie ERP', pageWidth / 2, pageHeight - 7, { align: 'center' });
+            doc.text(`Page ${doc.internal.getCurrentPageInfo().pageNumber}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
+        },
     });
+
     doc.save(`Customers_${new Date().toISOString().split('T')[0]}.pdf`);
 }
