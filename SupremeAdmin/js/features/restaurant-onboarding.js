@@ -218,7 +218,8 @@ async function handleSubmit(e) {
             whatsapp: { status: 'pending' },
             ...(tplDefaults || {}),
             // Feature flags default OFF for new restaurants (user scope answer).
-            settings: { features: { discountApproval: false } },
+            // Merge first so a template's own settings survive; our flag still wins.
+            settings: { ...(tplDefaults?.settings || {}), features: { discountApproval: false } },
           },
         },
       },
