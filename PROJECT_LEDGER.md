@@ -19,11 +19,15 @@ Fragile Files before starting ANY task.
 - [2026-08-04 10:00 UTC] PowerShell version-bump/edits on files with non-ASCII (emoji, ₹, typography) MUST use the UTF-8-safe pattern: `[System.IO.File]::ReadAllText(path, UTF8)` + `WriteAllText(path, content, UTF8Encoding($false))`. NEVER `Get-Content`/`Set-Content` — the 5.3.16 bump corrupted every emoji in Admin/index.html + sw.js (mojibake "ðŸ�½ï¸�"). Signature of corruption = C1 control chars U+0080–U+009F.
 - [2026-08-04 10:00 UTC] ALL tables now use `mob-data-table` (payments, feedback, inventory, lost-sales). Tabulator CDN + `Admin/js/tabulator-setup.js` removed. New/rewritten tables must reuse the mob-data-table pattern, never reintroduce Tabulator.
 - [2026-08-03 19:39 UTC] Runtime-composed CSS classes (built as \mob-badge-pay-*\/\mob-badge-status-*\ in JS) MUST be safelisted in tools/build.mjs PurgeCSS config, or PurgeCSS strips them from dist. Root cause of invisible payment badges. Add any new runtime-composed class family to the /^mob-/ (or matching) safelist regex.
+- [2026-09-25] **LOST SALES FEATURE REMOVED** — Complete removal of "Lost Sales" tab from Admin Dashboard. Deleted `Admin/js/features/lost-sales.js`, removed sidebar nav (`data-tab="lostSales"`), tab content (`#tab-lostSales`), `loadLostSales()` call in `ui.js`, `btnClearLostSales` listener in `main.js`, mobile CSS styles, DB rules (`logs/lostSales` + `outlets/$oid/lostSales`), page guide entries, and documentation references. Feature no longer exists in codebase.
 - Rider app: `rider-app/` is the new production target (old `rider-old/` deleted)
 - PII in `tableSessionsContact` only
 - `_effectiveTotal()` canonical
 - `equalTo(null)` canonical
 - Firebase v12 auto-persistence
+- [2026-09-25 13:44 UTC] **Discount category matching is KEY→NAME**: `discount.categoryIds` are Firebase push keys (`catalog.js` uses `push()`), but carts carry category **names** (POS stores `dish.category`) or **nothing at all** (QR order items are `{name,qty,price,addons,instructions}`). Any category matcher must resolve keys through `getAllCategories()` in `discount-evaluator.js` — comparing keys against names returns false silently, with no error anywhere.
+- [2026-09-25 13:44 UTC] **`channel:'pos'` also covers `channel:'table'`** (`discountAllowsChannel`, one additive clause). Table bills settle through the POS terminal, but the discount editor's `<select id="discChannel">` cannot author a `table` value. Usage is still *recorded* as `channel:'table'` and therefore still buckets under "Other" in `discountsReports.js` — reports split is a separate, open gap.
+- [2026-09-25 13:44 UTC] **Bump `Admin/sw.js` `CACHE_NAME` whenever any file in `ASSETS_TO_CACHE` changes.** The `js/features/*` entries carry no `?v=` query and the fetch handler is stale-while-revalidate, so a stale/new module pair (e.g. a sync export + a caller that now `await`s it) can serve together until the cache name forces a clean re-cache.
 <!-- STANDING_DECISIONS_END -->
 
 ## Fragile Files
@@ -43,6 +47,8 @@ Fragile Files before starting ANY task.
 - Admin/js/features/orders.js — STATUS_SEQUENCES alignment
 - firebase.json — 3-target hosting, CSP divergence
 - rider-app/src/services/orderService.ts — delivery lifecycle
+- `Admin/js/features/discount-evaluator.js` — shared money path for POS *and* table billing. `getEligibleOffersForDisplay()` is **async** (it needs the category key→name map); every caller must `await` it — exactly 2 exist (`pos.js` `_renderWalkinOffers`, `tables.js` `_renderTableBillOffers`). `bot/discount-engine.js` is a deliberate near-mirror that is intentionally NOT kept in lockstep on channel/category (see task 20260925-134422-4e70).
+- `Admin/sw.js` — precache list; see Standing Decision 2026-09-25 on bumping `CACHE_NAME`.
 <!-- FRAGILE_FILES_END -->
 
 ## Task Log
@@ -74,7 +80,23 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
-### [20260819-105729-174e] Fix rider FCM push notifications (functions dead path) � move rider push into bot + repoint functions triggers
+### [20260925-134422-4e70] P0-3/P0-4: category discounts never fired + "POS only" discount never applied to table bills
+- TIER: 2 (medium-risk — money path, Admin-only, no rules/schema/deploy-target change)
+- STATUS: DONE
+- Started: 2026-09-25 13:44 UTC
+- Scope: fixes ONLY P0-3 and P0-4 from the Servkro competitor gap list. Ceiling/PIN and void-PIN explicitly out of scope.
+- Root causes:
+  1. **P0-3** — `discount.categoryIds` are push keys (`catalog.js:129` `push(Outlet.ref('categories'))`) but every cart carries category *names*: POS `walkinCart` stores `dish.category` (`pos.js:349`), QR order items store none (`menu/js/order.js:80-89` writes `{name,qty,price,addons,instructions}`), and `pos.js:647/906` passed `categories: i.categories` which was never set. `_cartHasCategory` therefore returned false **100% of the time, in all three engines** — category discounts were dead in every channel.
+  2. **P0-4** — table billing passes `channel:'table'` (`tables.js:1476`, `1529`) while `discountAllowsChannel` only matched `all`/exact/`both`, so a `channel:'pos'` discount returned false. The editor (`Admin/index.html` `#discChannel`) offers only whatsapp/pos/both/website/all. (Stale comment at `tables.js:930` still described the old "channel is 'pos' for table billing" intent; comment at `:937` claimed `cart` was passed empty — both rewritten.)
+- Files touched: Admin/js/features/discount-evaluator.js, Admin/js/features/pos.js, Admin/js/features/tables.js, Admin/sw.js, tests/discount-evaluator.check.mjs (new)
+- Fix: `getAllCategories()` (30 s cached key→name bridge, cleared by `clearDiscountCache`); `_cartHasCategory(cart, categoryIds, categories)` matches key OR resolved name; `getEligibleOffersForDisplay()` made async (fetches the map once per call); `evaluateDiscount` fetches it **only if a category discount exists in the list** (checkout read count unchanged); `discountAllowsChannel` gained `|| (d.channel==='pos' && channel==='table')`; `pos.js:731` now passes `cart` (panel previously never showed category offers); `openTableBillReview` fetches `dishes` in its existing `Promise.all` and `_billCart` backfills missing `category` via `_dishCategoryFor` (strips the QR menu's `" (Large)"` suffix) — retroactive on already-placed orders; `sw.js` `CACHE_NAME` v5.4.0 → v5.4.1.
+- Deliberately NOT touched: `bot/discount-engine.js` (mirror copy) — its only 2 callers pass `channel:'website'`, and the guest menu can only submit `type:'coupon'`, so both fixes are unreachable there. Changing it would let the bot start auto-applying category discounts at QR-order time, which **stack** on staff-applied bill discounts (order-level is baked into `o.total`, bill-level subtracts from Σ `o.total`). `menu/js/discount.js` (coupon-only, gates `all`/`website`) and `SupremeAdmin` (no discount files) also unaffected.
+- Verified: `node tests/discount-evaluator.check.mjs` → **8/8, exit 0** (bundles the REAL source with esbuild + a Firebase stub; no re-implementation). **Mutation-tested**: reverting both fixes produced exactly 3 targeted failures / exit 1, then restored to a SHA256-identical file → 8/8 again, proving the check is not vacuous. `node --check` clean on all 4 files. `node tools/build.mjs --admin` clean; inspected the minified dist and confirmed `e.channel==="pos"&&n==="table"`, the `Set` name-matching, `await ve(...)` / `await pn(...)`, and the dish backfill + `/\s*\([^)]*\)$/` helper. Encoding per Standing Decision 2026-08-04: 0 C1 U+0080–009F, 0 U+FFFD, ₹ intact across all 4; `git diff` showed only the intended hunks (no collateral re-encoding). `SupremeAdmin` checked for a parallel copy — none.
+- NOT verified / open risk: no live-browser E2E against real RTDB (no Playwright run); `discountsReports.js` still buckets `channel:'table'` usage under "Other" (`channelCounts` = whatsapp/pos/manual/other) — pre-existing, left alone because P0-4 was scoped to channel *matching*, not reports. New check is named `*.check.mjs` on purpose so Playwright's `testDir './tests'` default `*.test.*` matcher does not try to load it.
+- Confidence: HIGH
+- Ended: 2026-09-25 13:45 UTC
+
+### [20260819-105729-174e] Fix rider FCM push notifications (functions dead path) � move rider push into bot + repoint functions triggers
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-08-19 10:57 UTC

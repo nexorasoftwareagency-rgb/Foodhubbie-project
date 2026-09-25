@@ -927,18 +927,17 @@ async function _makePaymentForGroup(tableId, groupId) {
 //   discount), not the gross subtotal — it should reflect money actually
 //   collected.
 //
-// - Channel is 'pos' for table billing (same bucket as Walk-in), not a
-//   new channel value — the discount editor's Channel field only has
-//   three options (WhatsApp / POS / Both) and introducing a fourth would
-//   touch the editor UI, the evaluator, and the reports channel-split.
-//   If you want table-billing redemptions tracked separately from
-//   walk-in in the P&L reports later, that's the place to start.
+// - Table billing passes channel:'table' to the evaluator, and
+//   discountAllowsChannel() maps a 'pos'-scoped discount onto it — a
+//   POS-only offer covers bills settled at the terminal. Usage is recorded
+//   as channel:'table', but the discount editor can't author a 'table'
+//   value and discountsReports.js buckets those rows under "Other". If you
+//   want table-billing redemptions tracked separately from walk-in in the
+//   P&L reports, that's the place to start.
 //
-// - Category-type discounts may not correctly auto-evaluate here: order
-//   records in this session don't carry category IDs the way a live POS
-//   cart does, so `cart` is passed empty. Coupon, storewide, and
-//   first-order discounts are unaffected — only category-scoped
-//   discounts are the gap, and it's a real one, not silently patched.
+// - Category discounts work here: _billCart() supplies the cart, and order
+//   items that carry no category (QR orders are written with name/qty/price
+//   only) are backfilled from the dish list cached when the bill opened.
 //
 // - The discount-usage audit log's "view order" link expects a real
 //   order id, not a session id (a table bill isn't one). We record
@@ -963,6 +962,7 @@ let _billAutoDiscount = null; // evaluateDiscount() result: { discount, amount, 
 let _billCouponCode = null;
 let _billDine = {};         // dineinSettings cache for tax/SC labels on invoice
 let _billContact = {};      // tableSessionsContact cache (customerName/customerPhone)
+let _billDishCategory = {}; // dish name → category name (QR order items carry no category)
 let _billReviewConnUnsub = null; // connection change unsubscribe for bill review modal
 let _billSplitActive = false;
 let _billSplitMethod = 'Cash'; // which method the primary input controls
@@ -1088,12 +1088,22 @@ export async function openTableBillReview(tableId, groupId = null) {
 
     // Cache dine settings + customer contact for the invoice breakdown (awaited so first render is complete)
     const _sid = _sessionForTable(tableId)?.sessionId || _tables[tableId]?.currentSession;
-    const [_dineSnap, _contactSnap] = await Promise.all([
+    const [_dineSnap, _contactSnap, _dishesSnap] = await Promise.all([
         get(_settingsRef()).catch(() => null),
-        _sid ? get(Outlet.ref(`tableSessionsContact/${_sid}`)).catch(() => null) : Promise.resolve(null)
+        _sid ? get(Outlet.ref(`tableSessionsContact/${_sid}`)).catch(() => null) : Promise.resolve(null),
+        get(Outlet.ref('dishes')).catch(() => null)
     ]);
     if (_dineSnap?.exists()) _billDine = _dineSnap.val() || {};
     if (_contactSnap?.exists()) _billContact = _contactSnap.val() || {};
+    // QR order items are written with {name, qty, price} only — no category —
+    // so category discounts couldn't see them. Build the dish→category lookup
+    // used by _billCart to backfill. Works for already-placed orders too.
+    _billDishCategory = {};
+    if (_dishesSnap?.exists()) {
+        Object.values(_dishesSnap.val() || {}).forEach(d => {
+            if (d && d.name) _billDishCategory[d.name] = d.category || '';
+        });
+    }
 
     // Reset split section
     document.getElementById('billSplitSection')?.classList.add('hidden');
@@ -1431,7 +1441,7 @@ function _billCart() {
                 cart.push({
                     name: it.name || 'Item',
                     price: Number(it.price || 0),
-                    category: it.category || '',
+                    category: it.category || _dishCategoryFor(it.name),
                     categoryId: it.categoryId || '',
                     size: it.size || '',
                     addon: it.addon || ''
@@ -1440,6 +1450,18 @@ function _billCart() {
         });
     });
     return cart;
+}
+
+// POS-origin order items already carry `category`; QR-origin ones don't.
+// Resolve via the dish list cached when the bill opened. The QR menu
+// appends " (Large)" to the display name, so strip one trailing group
+// when the exact name misses.
+function _dishCategoryFor(name) {
+    if (!name || !_billDishCategory) return '';
+    const exact = _billDishCategory[name];
+    if (exact != null) return exact;
+    const stripped = name.replace(/\s*\([^)]*\)$/, '');
+    return stripped === name ? '' : (_billDishCategory[stripped] || '');
 }
 
 export async function applyTableBillCoupon() {
@@ -1526,7 +1548,7 @@ async function _renderTableBillOffers() {
 
     const subtotal = _billSubtotal();
     const cart = _billCart();
-    const list = getEligibleOffersForDisplay(all, { channel: 'table', cart, includeNonMatchingCategories: true });
+    const list = await getEligibleOffersForDisplay(all, { channel: 'table', cart, includeNonMatchingCategories: true });
 
     if (list.length === 0) {
         panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';

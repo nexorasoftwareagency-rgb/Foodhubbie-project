@@ -178,7 +178,7 @@ async function renderReport() {
     }
 
     // Channel split
-    const channelCounts = { whatsapp: 0, pos: 0, manual: 0, other: 0 };
+    const channelCounts = { whatsapp: 0, pos: 0, table: 0, manual: 0, other: 0 };
     for (const u of filtered) {
         const ch = String(u.channel || '').toLowerCase();
         if (channelCounts[ch] !== undefined) channelCounts[ch] += 1;
@@ -193,6 +193,7 @@ async function renderReport() {
             const ch = [
                 { key: 'whatsapp', label: 'WhatsApp', color: '#25D366' },
                 { key: 'pos',      label: 'POS',      color: '#1d4ed8' },
+                { key: 'table',    label: 'Table',    color: '#d97706' },
                 { key: 'manual',   label: 'Manual',   color: '#64748b' },
                 { key: 'other',    label: 'Other',    color: '#a3a3a3' }
             ];

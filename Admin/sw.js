@@ -36,7 +36,10 @@ firebase.messaging().onBackgroundMessage((payload) => {
 
 // This SW handles caching, navigation, and offline support only.
 
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.4.0';
+// Bumped whenever any precached app file changes: the fetch handler is
+// stale-while-revalidate, so mixed old/new module pairs can serve until the
+// name changes force a clean re-cache (getEligibleOffersForDisplay went async).
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.4.1';
 const ASSETS_TO_CACHE = [
   './index.html',
   './style.css?v=5.3.29',
