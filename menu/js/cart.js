@@ -8,46 +8,85 @@
  *
  * Cart is persisted to sessionStorage so navigation / accidental
  * refresh does not lose the user's lineup.
+ * Storage is scoped per context (QR sessionId, Webview token) to avoid
+ * cross-contamination between dine-in and delivery flows.
  */
 
-const STORAGE_KEY = 'foodhubbie_cart';
+const DEFAULT_STORAGE_KEY = 'foodhubbie_cart';
 
-function persistCart() {
-    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(Cart.lines)); } catch (e) { console.warn('[Cart] Storage error:', e); }
+/**
+ * Get the storage key for the QR dine-in flow.
+ * Scoped to the table sessionId so cart persists across refreshes
+ * for the same table session, but is isolated from other tables/sessions.
+ */
+export function getQRStorageKey() {
+    const sessionId = (typeof Session !== 'undefined' && Session.sessionId) || '';
+    return sessionId ? `foodhubbie_cart_qr_${sessionId}` : DEFAULT_STORAGE_KEY;
+}
+
+/**
+ * Get the storage key for the Webview delivery flow.
+ * Scoped to the one-time webview token so each delivery link
+ * gets its own isolated cart.
+ */
+export function getWebviewStorageKey(token) {
+    return token ? `foodhubbie_cart_webview_${token}` : DEFAULT_STORAGE_KEY;
+}
+
+/**
+ * Internal: persist cart to a specific storage key.
+ */
+function _persistCart(key) {
+    try { sessionStorage.setItem(key, JSON.stringify(Cart.lines)); } catch (e) { console.warn('[Cart] Storage error:', e); }
 }
 
 export const Cart = {
     lines: {},   // { lineId: { dishId, name, img, size, addons:[names], qty, unitPrice, instructions } }
 };
 
-export function restoreCart() {
+/**
+ * Restore cart from sessionStorage using the provided key.
+ * Falls back to default key if no key provided (backward compatibility).
+ */
+export function restoreCart(key) {
+    const storageKey = key || DEFAULT_STORAGE_KEY;
     try {
-        const saved = sessionStorage.getItem(STORAGE_KEY);
+        const saved = sessionStorage.getItem(storageKey);
         if (saved) Cart.lines = JSON.parse(saved);
+        else Cart.lines = {};
     } catch { Cart.lines = {}; }
 }
 
-export function addLine(line) {
+/**
+ * Add a line to the cart and persist using the provided key.
+ */
+export function addLine(line, key) {
     const lineId = `${line.dishId}_${line.size}_${(line.addons || []).join('-')}_${Date.now()}`;
     const unitPrice = typeof line.unitPrice === 'number' ? line.unitPrice : 0;
     const qty = typeof line.qty === 'number' && line.qty > 0 ? line.qty : 1;
     Cart.lines[lineId] = { ...line, unitPrice, qty };
-    persistCart();
+    _persistCart(key || DEFAULT_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent('cart:changed'));
     return lineId;
 }
 
-export function setQty(lineId, qty) {
+/**
+ * Update quantity for a line and persist using the provided key.
+ */
+export function setQty(lineId, qty, key) {
     if (!Cart.lines[lineId]) return;
     if (qty <= 0) { delete Cart.lines[lineId]; }
     else { Cart.lines[lineId].qty = qty; }
-    persistCart();
+    _persistCart(key || DEFAULT_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent('cart:changed'));
 }
 
-export function clearCart() {
+/**
+ * Clear the in-memory cart and remove from sessionStorage using the provided key.
+ */
+export function clearCart(key) {
     Cart.lines = {};
-    sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(key || DEFAULT_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent('cart:changed'));
 }
 

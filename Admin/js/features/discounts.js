@@ -23,6 +23,7 @@ let _editingId = null;
 let _connUnsub = null;
 
 function _ref(path) { return Outlet.ref(path); }
+function _setBadge(id, n) { const el = document.getElementById(id); if (el) el.textContent = String(n); }
 function _discRef(sub) { return Outlet.ref(`discounts/${sub}`); }
 function _toLocalInputValue(ms) {
     if (!ms) return '';
@@ -153,10 +154,12 @@ async function _renderList() {
     fill('discountListScheduled', groups.scheduled, 'No scheduled discounts.');
     fill('discountListExpired',  groups.expired,  'No expired or disabled discounts.');
 
-    const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = String(n); };
-    set('discountCountActive',    groups.active.length);
-    set('discountCountScheduled', groups.scheduled.length);
-    set('discountCountExpired',   groups.expired.length);
+    _setBadge('discountCountActive',    groups.active.length);
+    _setBadge('discountCountScheduled', groups.scheduled.length);
+    _setBadge('discountCountExpired',   groups.expired.length);
+    get(_ref('discountsUsage'))
+        .then(s => _setBadge('discountCountUsage', Object.keys(s.val() || {}).length))
+        .catch(() => {});
 
     await loadLucide();
     window.lucide.createIcons({ root: document.getElementById('tab-discounts') });
@@ -254,6 +257,7 @@ async function _renderUsageList() {
         }
 
         async function render() {
+            _setBadge('discountCountUsage', usageEntries.length);
             el.innerHTML = `
                 <div class="flex-between flex-center mb-16 flex-wrap" style="gap:8px;">
                     <h3 class="panel-title fs-14" style="margin:0;">Usage / Allotments <span class="badge">${usageEntries.length}</span></h3>
@@ -292,11 +296,10 @@ async function _renderUsageList() {
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;"><span class="channel-chip channel-${escapeHtml(channel)}">${escapeHtml(channel)}</span></td>
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${orderLink}</td>
                                         <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9;">${escapeHtml(dateStr)}</td>
-                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:center;">
-                                            <button type="button" class="btn-text" data-action="viewReceiptFromUsage" data-order-id="${escapeHtml(u.orderId)}" data-discount-label="${escapeHtml(u.discountLabel)}" data-amount="${u.amountGiven}" title="View Receipt" style="font-size:11px;">
+                                        <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:center;">${u.orderId ? `
+                                            <button type="button" class="btn-text" data-action="viewReceiptFromUsage" data-order-id="${escapeHtml(u.orderId)}" title="View Receipt" style="font-size:11px;">
                                                 <i data-lucide="receipt"></i> View
-                                            </button>
-                                        </td>
+                                            </button>` : '—'}</td>
                                     </tr>
                                 `;
                             }).join('')}

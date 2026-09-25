@@ -6,7 +6,7 @@
  * (menu/js/delivery-order.js) instead of a table-session attach.
  */
 import { outletRef, get, set as fbSet, OUTLET } from './firebase.js';
-import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart } from './cart.js';
+import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getWebviewStorageKey } from './cart.js';
 import * as UI from './ui.js';
 import { haptic } from './ui.js';
 import { validateCoupon } from './discount.js';
@@ -42,7 +42,9 @@ const M = {
 // ---------------------------------------------------------------
 async function boot() {
     try {
-        restoreCart();
+        // Restore cart scoped to this webview token (isolated from QR and other webview links)
+        const webviewKey = getWebviewStorageKey(M.token);
+        restoreCart(webviewKey);
         try {
             const nameSnap = await get(outletRef('settings/Store/storeName'));
             if (nameSnap.exists()) UI.applyBrand(nameSnap.val());
@@ -66,7 +68,9 @@ async function boot() {
                 return;
             }
             const ageMs = Date.now() - new Date(tokenData.createdAt).getTime();
-            if (ageMs > 60 * 60 * 1000) {
+            // Match bot's WEBVIEW_TOKEN_REUSE_MS (30 min) — token not reused after this,
+            // and client should enforce same window for consistency.
+            if (ageMs > 30 * 60 * 1000) {
                 _showTokenError('This link has expired. Please ask for a new link from the bot.');
                 return;
             }
@@ -458,7 +462,9 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
             webviewToken: M.token,
         });
 
-        clearCart();
+        // Clear cart scoped to this webview token
+        const webviewKey = getWebviewStorageKey(M.token);
+        clearCart(webviewKey);
         M.appliedDiscount = null;
         haptic([10, 30, 10]);
 

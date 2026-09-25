@@ -227,6 +227,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     (await useMod('orders')).openOrderDrawer(id);
                     break;
                 }
+                case 'viewReceiptFromUsage': {
+                    const orderId = el.getAttribute('data-order-id');
+                    logger.info('DISCOUNT', `View receipt from usage: ${orderId || '(none)'}`);
+                    if (orderId) (await useMod('printing')).printReceiptById(orderId);
+                    else showToast('No order linked to this discount usage', 'info');
+                    break;
+                }
                 case 'markAsPaid': logger.info('ORDERS', `Mark paid: ${id}`); (await useMod('orders')).markAsPaid(id); break;
                 case 'deleteCategory': logger.info('CATALOG', `Delete category: ${id}`); (await useMod('catalog')).deleteCategory(id); break;
                 case 'removeParent': logger.info('UI', 'Remove parent element'); el.parentElement.remove(); break;

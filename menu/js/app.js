@@ -5,7 +5,7 @@
  */
 import { outletRef, get, onValue, push, set, OUTLET, isConnected } from './firebase.js';
 import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled } from './session.js';
-import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart } from './cart.js';
+import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getQRStorageKey } from './cart.js';
 import { placeOrder } from './order.js';
 import { validateCoupon } from './discount.js';
 import * as UI from './ui.js';
@@ -191,17 +191,18 @@ async function boot() {
 
         await loadMenu();
 
-        // Restore cart from sessionStorage (survives soft refresh / navigate-back)
-        restoreCart();
-
         // Auto-rejoin: if this table already has an active session, create/join
         // it immediately so returning users see their orders without delay.
         // Token validation already set Session.table. If currentSession exists,
         // ensureSession() will find it and restore the user's group context.
         if (Session.table?.currentSession) {
             const sessResult = await ensureSession();
+            const qrKey = getQRStorageKey(); // sessionId now available after ensureSession()
             if (sessResult.isNewSession) {
-                clearCart(); // old expired session's cart has no place in the new one
+                clearCart(qrKey); // old expired session's cart has no place in the new one
+            } else {
+                // Joining an existing session — restore the cart for this session
+                restoreCart(qrKey);
             }
             if (sessResult.ok) {
                 _bootReady = true;
@@ -226,7 +227,7 @@ async function boot() {
             }
         }
 
-        // No existing session — anything in the cart is stale from a prior visit
+        // No existing session — first visit, start with empty cart
         clearCart();
         document.getElementById('loadingOverlay').style.display = 'none';
         UI.showScreen('screenWelcome');
@@ -336,6 +337,8 @@ document.getElementById('btnStartOwnGroup')?.addEventListener('click', async () 
             UI.showToast('Could not create group. Please try again.');
             return;
         }
+        // New group = fresh cart for this group
+        clearCart(getQRStorageKey());
         document.getElementById('loadingOverlay').style.display = '';
         await loadMenu();
         UI.showScreen('screenMenu');
@@ -351,7 +354,9 @@ document.getElementById('btnStartOwnGroup')?.addEventListener('click', async () 
 });
 
 function onSessionUpdated(session) {
-    if (session.status === 'expired') {
+    if (session.status === 'expired' || session.status === 'closed') {
+        // Session ended (expired or closed by admin) — clear cart and show expired screen
+        cleanupSession();
         UI.showScreen('screenSessionExpired');
         return;
     }

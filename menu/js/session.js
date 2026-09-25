@@ -10,6 +10,7 @@
  *       Load Active Session → (join or create) → Load Menu
  */
 import { db, OUTLET, outletRef, ref, get, onValue, set, push, update, runTransaction } from './firebase.js';
+import { clearCart, getQRStorageKey } from './cart.js';
 
 export const Session = {
     table: null,      // { id, number, capacity, status, token, currentSession, ... }
@@ -478,6 +479,8 @@ export function cleanupSession() {
     if (Session._sessionUnsub) { Session._sessionUnsub(); Session._sessionUnsub = null; }
     if (Session.sessionId) {
         sessionStorage.removeItem(`_pizza_group_${Session.sessionId}`);
+        // Clear the session-scoped cart when session ends
+        clearCart(getQRStorageKey());
     }
     sessionStorage.removeItem('_pizza_draft');
     Session.sessionId = null;

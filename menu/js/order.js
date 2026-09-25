@@ -24,7 +24,7 @@
  */
 import { outletRef, set, update, get, runTransaction } from './firebase.js';
 import { Session, attachOrderToSession, ensureSession, assertOutletEnabled } from './session.js';
-import { Cart, clearCart, subtotal as cartSubtotal } from './cart.js';
+import { Cart, clearCart, subtotal as cartSubtotal, getQRStorageKey } from './cart.js';
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
@@ -156,7 +156,7 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
     }
 
     // Clear cart immediately so the user can start a new order
-    clearCart();
+    clearCart(getQRStorageKey());
 
     // Write order-level guest record (fire-and-forget; must not reject the caller)
     const cleanPhone = (customerPhone || '').replace(/[^\d]/g, '');
