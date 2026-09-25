@@ -1,5 +1,6 @@
 import { Outlet, auth, serverTimestamp, ref, db, get, set, push, update, runTransaction } from './firebase.js';
 import { state } from './state.js';
+import { needsPinApproval } from './features/discount-evaluator.js';
 
 export const haptic = (val = 10) => {
     if (window.navigator && window.navigator.vibrate) {
@@ -44,7 +45,7 @@ export function formatOrderId(o) {
     return String(id).slice(-6).toUpperCase();
 }
 
-import { showToast, showConfirm } from './ui-utils.js';
+import { showToast, showConfirm, showPinPrompt } from './ui-utils.js';
 export { showToast, showConfirm };
 
 // ── Audio (pre-created, unlocked on first user interaction) ──
@@ -197,6 +198,66 @@ export const logAudit = async (action, details = {}) => {
         }
     }
 };
+
+// ── Manual-discount approval ceiling (% of bill) + manager PIN ──
+
+/**
+ * SHA-256 hex of a PIN — what gets stored at settings/Security/pinHash so
+ * the DB never holds a readable credential.
+ * ponytail: a short numeric PIN hash is still brute-forceable by anyone who
+ * can read it, so this is leak-hygiene, not a security boundary. Real
+ * enforcement needs a server; Spark plan means no Cloud Functions here.
+ * Returns null when crypto.subtle is unavailable (non-secure context) so
+ * callers can decide whether to fail open instead of throwing.
+ */
+export const hashPin = async (pin) => {
+    if (!globalThis.crypto?.subtle) return null;
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+/**
+ * Settlement gate for MANUAL discounts: above the configured % ceiling it
+ * demands a manager PIN. Callers `await` this before writing payment.
+ * Resolves false ONLY when the operator cancels or mistypes the PIN.
+ * Every other path fails open — an unreadable or half-configured ceiling
+ * must never block billing.
+ */
+export async function gateManualDiscountPin({ discountValue, subtotal, discountId }) {
+    if (discountId !== 'manual:flat' && discountId !== 'manual:percent') return true;
+
+    let sec;
+    try {
+        sec = (await get(Outlet.ref('settings/Security'))).val() || {};
+    } catch (e) {
+        console.warn('[Discounts] approval settings unreadable:', e?.message || e);
+        return true;
+    }
+    if (!needsPinApproval(discountValue, subtotal, sec.discountCeilingPct)) return true;
+
+    if (!sec.pinHash) {
+        showToast('Discount ceiling is on but no manager PIN is set — configure it in Settings.', 'warning', 5000);
+        return true;
+    }
+
+    const pct = ((Number(discountValue) / subtotal) * 100).toFixed(1);
+    const message = `This ${pct}% discount is above the ${sec.discountCeilingPct}% approval ceiling.`;
+    for (;;) {
+        const pin = await showPinPrompt(message);
+        if (!pin) return false;
+        const hash = await hashPin(pin);
+        if (hash === null) { console.warn('[Discounts] PIN hashing unavailable — failing open'); return true; }
+        if (hash === sec.pinHash) {
+            logAudit('discount.pin.approved', {
+                discountValue: Math.round(discountValue),
+                subtotal: Math.round(subtotal),
+                ceilingPct: sec.discountCeilingPct
+            });
+            return true;
+        }
+        showToast('Incorrect manager PIN. Try again.', 'error', 3000, 'pin-err');
+    }
+}
 
 export const addRiderNotification = async (uid, title, sub, type = 'info') => {
     if (!uid) return;

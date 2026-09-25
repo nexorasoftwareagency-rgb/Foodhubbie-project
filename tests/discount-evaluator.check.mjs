@@ -74,6 +74,19 @@ test('P0-4: discountAllowsChannel channel matrix', () => {
     }
 });
 
+test('ceiling: needsPinApproval fires only above an active ceiling', () => {
+    // ceiling switched off → never asks for a PIN
+    assert.equal(mod.needsPinApproval(900, 1000, 0), false);
+    assert.equal(mod.needsPinApproval(900, 1000, undefined), false);
+    // exactly at the ceiling passes without a PIN
+    assert.equal(mod.needsPinApproval(150, 1000, 15), false);
+    // above the ceiling → PIN required
+    assert.equal(mod.needsPinApproval(151, 1000, 15), true);
+    // degenerate inputs must never block billing
+    assert.equal(mod.needsPinApproval(500, 0, 15), false);
+    assert.equal(mod.needsPinApproval(null, 1000, 15), false);
+});
+
 test('P0-3: category discount matches a cart carrying the category NAME', async () => {
     const list = await mod.getEligibleOffersForDisplay(
         { cat1: DISCOUNTS.cat1 }, { channel: 'table', cart: DRINKS_CART });

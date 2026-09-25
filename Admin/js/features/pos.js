@@ -5,7 +5,7 @@
 
 import { state } from '../state.js';
 import { db, auth, Outlet, tenantRef, serverTimestamp, get, set, runTransaction, ref, isConnected, onConnectionChange } from '../firebase.js';
-import { standardizeOrderData, haptic, escapeHtml, playSuccessSound, logAudit } from '../utils.js';
+import { standardizeOrderData, haptic, escapeHtml, playSuccessSound, logAudit, gateManualDiscountPin } from '../utils.js';
 import { autoDeductStock } from './inventory.js';
 import { ui, loadLucide } from '../ui.js';
 import { printOrderReceipt } from './printing.js';
@@ -918,6 +918,11 @@ export async function submitWalkinSale() {
             }
         }
         discountValue = Math.max(0, Math.round(discountValue));
+
+        // Approval ceiling: a manual discount above settings/Security/discountCeilingPct
+        // needs a manager PIN before the sale is written.
+        if (!await gateManualDiscountPin({ discountValue, subtotal, discountId })) return;
+
         const total = Math.max(0, subtotal + tax + sc - discountValue);
 
         const today = new Date();

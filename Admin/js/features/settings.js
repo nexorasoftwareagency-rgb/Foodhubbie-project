@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { db, Outlet, tenantPath, ref, get, update, set } from '../firebase.js';
-import { logAudit, showToast, getSkeletonRows } from '../utils.js';
+import { logAudit, showToast, getSkeletonRows, hashPin } from '../utils.js';
 import { loadLucide } from '../ui.js';
 
 // --- STATE & UTILS ---
@@ -8,7 +8,8 @@ const SETTINGS_PATHS = {
     STORE: "settings/Store",
     DELIVERY: "settings/Delivery",
     BOT: "settings/Bot",
-    DISPLAY: "settings/Display"
+    DISPLAY: "settings/Display",
+    SECURITY: "settings/Security"
 };
 
 function validateCoords(lat, lng) {
@@ -89,17 +90,19 @@ export async function loadStoreSettings() {
     if (feeSlabsTbody) feeSlabsTbody.innerHTML = getSkeletonRows(3, 4);
 
     try {
-        const [storeSnap, delSnap, botSnap, dispSnap] = await Promise.all([
+        const [storeSnap, delSnap, botSnap, dispSnap, secSnap] = await Promise.all([
             get(Outlet.ref(SETTINGS_PATHS.STORE)),
             get(Outlet.ref(SETTINGS_PATHS.DELIVERY)),
             get(Outlet.ref(SETTINGS_PATHS.BOT)),
-            get(Outlet.ref(SETTINGS_PATHS.DISPLAY))
+            get(Outlet.ref(SETTINGS_PATHS.DISPLAY)),
+            get(Outlet.ref(SETTINGS_PATHS.SECURITY))
         ]);
 
         const store = storeSnap.val();
         const del = delSnap.val();
         const bot = botSnap.val();
         const disp = dispSnap.val();
+        const sec = secSnap.val() || {};
 
         // 1. Store Info
         const s = store || {};
@@ -133,6 +136,14 @@ export async function loadStoreSettings() {
         setVal('settingAdminPhone', d.notifyPhone || '');
         setVal('settingDeliveryBackupCode', d.backupCode || '');
         renderFeeSlabs(d.slabs || []);
+
+        // 2a. Discount approval ceiling (settings/Security).
+        // The stored value is a hash, so it never round-trips into the field;
+        // an empty field on save means "keep the PIN that is already set".
+        setVal('settingDiscCeilingPct', typeof sec.discountCeilingPct === 'number' ? sec.discountCeilingPct : 0);
+        setVal('settingManagerPin', '');
+        const pinEl = document.getElementById('settingManagerPin');
+        if (pinEl) pinEl.placeholder = sec.pinHash ? 'PIN set — enter a new one to change it' : 'e.g. 4711';
 
         // 2b. Dine-In Settings (tax, service charge, QR ordering base URL)
         const dineSnap = await get(Outlet.ref('dineinSettings'));
@@ -304,12 +315,26 @@ export async function saveStoreSettings() {
         ];
         checks.forEach(id => { displayData[id] = isChecked(id); });
 
+        // Discount approval ceiling + optional manager PIN (settings/Security).
+        // Written as two sub-paths instead of the whole node so a blank PIN
+        // field preserves the existing hash rather than wiping it.
+        const ceilingPct = Math.max(0, Math.min(100, parseFloat(val('settingDiscCeilingPct')) || 0));
+        const pinVal = val('settingManagerPin').trim();
+        let pinHash = null;
+        if (pinVal) {
+            if (!/^\d{4,12}$/.test(pinVal)) return showToast('Manager PIN must be 4 to 12 digits.', 'error');
+            pinHash = await hashPin(pinVal);
+            if (!pinHash) return showToast('PIN could not be hashed — the app must run over HTTPS.', 'error');
+        }
+
         // 3. Atomic multi-path update
         const updates = {};
         updates[tenantPath(Outlet.current, 'settings/Store')] = storeData;
         updates[tenantPath(Outlet.current, 'settings/Delivery')] = deliveryData;
         updates[tenantPath(Outlet.current, 'settings/Bot')] = { ...botData, blockedNumbers: _blockedNumbersCache.length > 0 ? _blockedNumbersCache : null };
         updates[tenantPath(Outlet.current, 'settings/Display')] = displayData;
+        updates[tenantPath(Outlet.current, 'settings/Security/discountCeilingPct')] = ceilingPct;
+        if (pinHash) updates[tenantPath(Outlet.current, 'settings/Security/pinHash')] = pinHash;
         const taxRates = _readTaxRates();
         updates[tenantPath(Outlet.current, 'dineinSettings')] = {
             qrBaseUrl: val('settingQrBaseUrl'),
