@@ -367,63 +367,110 @@ async function _renderLiveOrdersList() {
 }
 
 // ---------------------------------------------------------------------
-// RENDER: Kitchen Display System (KDS)
+// RENDER: Kitchen Display System (KDS) — 3-column grid: Confirm | Preparing | Ready
 // ---------------------------------------------------------------------
 function _elapsedLabel(createdAt) {
     const diff = Math.max(0, Date.now() - _ms(createdAt));
     return `${Math.floor(diff / 60000)}:${_pad2(Math.floor((diff % 60000) / 1000))}`;
 }
 
-function _kdsCard(o) {
-    const t = _tables[o.tableId];
-    const tNum = t ? escapeHtml(t.number) : (o.table || '--');
-    const itemsLines = Object.values(o.items || {}).map(it => `<div class="kds-item-line">${it.qty || 1} × ${escapeHtml(it.name || 'Item')}</div>`).join('');
-    const mins = Math.floor((Date.now() - _ms(o.createdAt)) / 60000);
-    const urgentCls = mins >= 15 ? 'kds-card-urgent' : (mins >= 8 ? 'kds-card-warn' : '');
-    const st = o.status || 'Placed';
-    // Look up group label from session data
-    let groupLabel = '';
-    if (o.orderGroupId && o.sessionId && _sessions[o.sessionId]?.orderGroups?.[o.orderGroupId]) {
-        groupLabel = _sessions[o.sessionId].orderGroups[o.orderGroupId].label || '';
+/** Build item lines with size for kitchen card */
+function _kdsItemLines(o) {
+    return Object.values(o.items || {}).map(it => {
+        const size = it.size && it.size !== 'Regular' ? ` (${escapeHtml(it.size)})` : '';
+        const addons = it.addons && it.addons.length ? ` + ${escapeHtml(it.addons.join(', '))}` : '';
+        return `<div class="kitchen-item-line">${it.qty || 1} × ${escapeHtml(it.name || 'Item')}${size}${addons}</div>`;
+    }).join('');
+}
+
+/** Source badge for kitchen card */
+function _sourceBadge(o) {
+    const isOnline = o.type === 'Online' || o.source === 'webview_delivery';
+    const isDineIn = o.type === 'Dine-in' || o.source === 'QR';
+    const isPOS = o.type === 'Walk-in' || o.source === 'POS';
+    if (isOnline) return '<span class="source-badge source-online">ONLINE</span>';
+    if (isDineIn) {
+        const t = _tables[o.tableId];
+        const tNum = t ? escapeHtml(t.number) : (o.table || '--');
+        return `<span class="source-badge source-dinein">TABLE ${tNum}</span>`;
     }
+    if (isPOS) return '<span class="source-badge source-pos">POS</span>';
+    return '<span class="source-badge">—</span>';
+}
+
+/** Kitchen card for an order — rectangular box with items + one-click action */
+function _kitchenCard(o) {
+    const st = o.status || 'Placed';
+    const orderId = escapeHtml(formatOrderId(o.orderId || o.id));
+    const elapsed = _elapsedLabel(o.createdAt);
+    const timeStr = new Date(o.createdAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const itemsHtml = _kdsItemLines(o);
+    const sourceHtml = _sourceBadge(o);
+
+    // Determine action button based on current status
     let actionBtn = '';
     if (st === 'Placed') {
-        actionBtn = `<button class="kds-btn kds-btn-accept" data-action="advanceTableOrder" data-id="${escapeHtml(o.id)}" data-next="Confirmed">Accept</button>`;
+        actionBtn = `<button class="kitchen-btn kitchen-btn-confirm" data-action="advanceTableOrder" data-id="${escapeHtml(o.id)}" data-next="Confirmed">
+            <i data-lucide="check" class="icon-14"></i> MARK CONFIRM
+        </button>`;
     } else if (st === 'Confirmed' || st === 'Preparing') {
-        actionBtn = `<button class="kds-btn kds-btn-ready" data-action="advanceTableOrder" data-id="${escapeHtml(o.id)}" data-next="Ready">Mark Ready</button>`;
+        actionBtn = `<button class="kitchen-btn kitchen-btn-preparing" data-action="advanceTableOrder" data-id="${escapeHtml(o.id)}" data-next="Ready">
+            <i data-lucide="chef-hat" class="icon-14"></i> MARK READY
+        </button>`;
     } else if (st === 'Ready') {
-        actionBtn = `<button class="kds-btn kds-btn-serve" data-action="advanceTableOrder" data-id="${escapeHtml(o.id)}" data-next="Served">Serve</button>`;
+        actionBtn = `<button class="kitchen-btn kitchen-btn-ready" data-action="advanceTableOrder" data-id="${escapeHtml(o.id)}" data-next="Served">
+            <i data-lucide="check-check" class="icon-14"></i> MARK SERVED
+        </button>`;
     }
+
+    // Urgency classes based on elapsed time
+    const mins = Math.floor((Date.now() - _ms(o.createdAt)) / 60000);
+    const urgentCls = mins >= 15 ? 'kitchen-card-urgent' : (mins >= 8 ? 'kitchen-card-warn' : '');
+
     return `
-    <div class="kds-card ${urgentCls}" data-order-id="${escapeHtml(o.id)}">
-        <div class="kds-card-top">
-            <span class="kds-card-table">Table ${tNum}${groupLabel ? ` <span class="kds-card-group">· ${escapeHtml(groupLabel)}</span>` : ''}</span>
-            <span class="kds-card-id">#${escapeHtml(formatOrderId(o.orderId || o.id))}</span>
+    <div class="kitchen-card ${urgentCls}" data-order-id="${escapeHtml(o.id)}" data-status="${st}">
+        <div class="kitchen-card-header">
+            <span class="kitchen-order-id">#${orderId}</span>
+            ${sourceHtml}
         </div>
-        <div class="kds-card-items">${itemsLines}</div>
-        <div class="kds-card-actions">${actionBtn}</div>
-        <div class="kds-card-footer">
-            <span class="kds-elapsed" data-created-at="${_ms(o.createdAt)}">${_elapsedLabel(o.createdAt)}</span>
-            <span class="kds-time-label">${new Date(o.createdAt || Date.now()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+        <div class="kitchen-card-items">${itemsHtml}</div>
+        <div class="kitchen-card-footer">
+            <span class="kitchen-elapsed" data-created-at="${_ms(o.createdAt)}">${elapsed}</span>
+            <span class="kitchen-time">${timeStr}</span>
         </div>
+        <div class="kitchen-card-action">${actionBtn}</div>
     </div>`;
 }
 
+/** Render all three columns as responsive grids (3 cards per row) */
 function _renderKDS() {
     const newCol = document.getElementById('kdsColumnNew');
     const prepCol = document.getElementById('kdsColumnPreparing');
     const readyCol = document.getElementById('kdsColumnReady');
     if (!newCol || !prepCol || !readyCol) return;
 
+    // Get all active orders, prioritize: Online first, then by createdAt desc (newest first)
+    const allOrders = _dineInOrders().sort((a, b) => {
+        const aOnline = a.type === 'Online' || a.source === 'webview_delivery';
+        const bOnline = b.type === 'Online' || b.source === 'webview_delivery';
+        if (aOnline !== bOnline) return aOnline ? -1 : 1; // Online first
+        return _ms(b.createdAt) - _ms(a.createdAt); // Newest first
+    });
+
     const groups = { New: [], Confirmed: [], Ready: [] };
-    _dineInOrders().forEach(o => {
+    allOrders.forEach(o => {
         const st = o.status || 'Placed';
         if (st === 'Placed') groups.New.push(o);
         else if (st === 'Confirmed' || st === 'Preparing') groups.Confirmed.push(o);
         else if (st === 'Ready') groups.Ready.push(o);
     });
-    const fill = (col, list, emptyMsg) => { col.innerHTML = list.length ? list.map(_kdsCard).join('') : `<p class="text-muted-small kds-empty">${emptyMsg}</p>`; };
-    fill(newCol, groups.New, 'No new orders');
+
+    const fill = (col, list, emptyMsg) => {
+        col.innerHTML = list.length
+            ? `<div class="kitchen-grid">${list.map(_kitchenCard).join('')}</div>`
+            : `<p class="text-muted-small kds-empty">${emptyMsg}</p>`;
+    };
+    fill(newCol, groups.New, 'No orders to confirm');
     fill(prepCol, groups.Confirmed, 'Nothing preparing');
     fill(readyCol, groups.Ready, 'Nothing ready');
 
@@ -485,14 +532,14 @@ async function _policeExpiredSessions() {
 }
 
 function _tickKDS() {
-    document.querySelectorAll('.kds-elapsed').forEach(el => {
+    document.querySelectorAll('.kitchen-elapsed').forEach(el => {
         const created = Number(el.getAttribute('data-created-at')) || Date.now();
         el.textContent = _elapsedLabel(created);
         const mins = Math.floor((Date.now() - created) / 60000);
-        const card = el.closest('.kds-card');
+        const card = el.closest('.kitchen-card');
         if (card) {
-            card.classList.toggle('kds-card-warn', mins >= 8 && mins < 15);
-            card.classList.toggle('kds-card-urgent', mins >= 15);
+            card.classList.toggle('kitchen-card-warn', mins >= 8 && mins < 15);
+            card.classList.toggle('kitchen-card-urgent', mins >= 15);
         }
     });
     if (_drawerTableId) _renderDrawerSessionMeta();

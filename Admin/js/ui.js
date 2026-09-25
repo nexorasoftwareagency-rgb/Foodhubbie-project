@@ -194,15 +194,18 @@ export const switchTab = async (tabId, skipHistory = false) => {
         window.__adminLogger?.data('TAB', `Loading data for: ${tabId}`);
         try {
             switch (tabId) {
-                case 'dashboard':
-                case 'orders':
-                case 'live': {
+                case 'dashboard': {
                     const [{ loadRiders: lr }, { renderOrders, loadOrdersPage }] = await Promise.all([
                         mod('riders'), mod('orders')
                     ]);
                     lr();
                     renderOrders(state.lastOrdersSnap);
                     if (tabId === 'orders') loadOrdersPage(true);
+                    break;
+                }
+                case 'live': {
+                    const { loadTableManagement } = await mod('tables');
+                    loadTableManagement();
                     break;
                 }
                 case 'liveTracker': {

@@ -9039,6 +9039,45 @@ body.pos-selection-mode .walkin-picker {
 .kds-btn-serve { background:#3b82f6;color:#fff; }
 .kds-btn-serve:hover { background:#2563eb; }
 
+/* ---------- Kitchen Grid (vertical list inside KDS column) ---------- */
+.kitchen-grid { display:grid; grid-template-columns:1fr; gap:12px; }
+
+.kitchen-card { background:#fff; border:1px solid var(--border-color, #e2e8f0); border-radius:12px; padding:12px; box-shadow:0 2px 6px rgba(0,0,0,.06); display:flex; flex-direction:column; min-height:180px; transition:border-color .2s, box-shadow .2s, background .2s; }
+.kitchen-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.08); }
+
+.kitchen-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--border-color, #e2e8f0); }
+.kitchen-order-id { font-size:14px; font-weight:800; color:var(--text-primary, #0f172a); font-family:'Courier New', monospace; }
+.source-badge { font-size:10px; font-weight:800; padding:2px 8px; border-radius:6px; text-transform:uppercase; letter-spacing:.03em; }
+.source-online { background:rgba(59,130,246,.12); color:#1d4ed8; }
+.source-dinein { background:rgba(232,73,8,.12); color:#c23b0f; }
+.source-pos { background:rgba(139,92,246,.12); color:#7c3aed; }
+
+.kitchen-card-items { flex:1; display:flex; flex-direction:column; gap:4px; margin-bottom:8px; min-height:60px; }
+.kitchen-item-line { font-size:12px; color:var(--text-secondary, #64748b); line-height:1.4; font-weight:500; }
+
+.kitchen-card-footer { display:flex; align-items:center; justify-content:space-between; padding-top:8px; border-top:1px dashed var(--border-color, #e2e8f0); margin-bottom:8px; }
+.kitchen-elapsed { font-size:12px; font-weight:800; color:var(--text-secondary, #64748b); font-family:'Courier New', monospace; }
+.kitchen-time { font-size:10px; color:var(--text-tertiary, #94a3b8); }
+
+.kitchen-card-action { display:flex; justify-content:center; }
+.kitchen-btn { width:100%; padding:10px 16px; border:none; border-radius:10px; font-size:12px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:6px; transition:transform .12s, box-shadow .12s, background .12s; }
+.kitchen-btn:active { transform:scale(.97); }
+.kitchen-btn-confirm { background:#22c55e; color:#fff; }
+.kitchen-btn-confirm:hover { background:#16a34a; }
+.kitchen-btn-preparing { background:#f59e0b; color:#fff; }
+.kitchen-btn-preparing:hover { background:#d97706; }
+.kitchen-btn-ready { background:#3b82f6; color:#fff; }
+.kitchen-btn-ready:hover { background:#2563eb; }
+
+/* Urgency states for kitchen cards */
+.kitchen-card-warn { border-color:rgba(245,158,11,.6); }
+.kitchen-card-warn .kitchen-elapsed { color:#b45309; }
+.kitchen-card-urgent { border-color:rgba(239,68,68,.7); background:rgba(239,68,68,.04); box-shadow:0 0 0 2px rgba(239,68,68,.15); }
+.kitchen-card-urgent .kitchen-elapsed { color:#991b1b; }
+.kitchen-card-urgent .kitchen-card-footer { animation:kitchenUrgentPulse 1.4s ease-in-out infinite; }
+@keyframes kitchenUrgentPulse { 0%, 100% { opacity:1; } 50% { opacity:.55; } }
+@media (prefers-reduced-motion: reduce) { .kitchen-card-urgent .kitchen-card-footer { animation:none; } }
+
 /* ---------- Table Drawer ---------- */
 .table-drawer-content { background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%); }
 @media (min-width: 1025px) {
