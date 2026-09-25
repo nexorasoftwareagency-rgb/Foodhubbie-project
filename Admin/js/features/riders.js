@@ -1,4 +1,4 @@
-import { db, auth, getSecondaryAuth, isSecondaryAuthAvailable, Outlet, serverTimestamp, ref, get, set, push, update, runTransaction, remove, query, orderByChild, equalTo, onValue, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword } from '../firebase.js';
+import { db, auth, getSecondaryAuth, isSecondaryAuthAvailable, Outlet, serverTimestamp, ref, get, set, push, update, runTransaction, remove, query, orderByChild, equalTo, onValue, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword, BUSINESS_BY_OUTLET } from '../firebase.js';
 import { state } from '../state.js';
 import { showDeleteConfirm } from '../ui-utils.js';
 import { showToast, haptic, escapeHtml, standardizeAuthError, logAudit, showConfirm, addRiderNotification, getSkeletonRows, formatOrderId } from '../utils.js';
@@ -261,22 +261,38 @@ export function showRiderModal() {
     state.isEditRiderMode = false;
     state.currentEditingRiderId = null;
     document.getElementById('riderModalTitle').innerText = "Add New Rider";
-    document.getElementById('saveRiderBtn').innerText = "Create Account";
+    document.getElementById('saveRiderBtnText').innerText = "Create Account";
     document.getElementById('riderEmail').disabled = false;
     document.getElementById('riderPassHint').classList.add('hidden');
-    document.getElementById('riderPassLabel').innerText = "Secret Access Code (Password)";
-    const fields = ['riderName', 'riderEmail', 'riderPhone', 'riderFatherName', 'riderAge', 'riderAadharNo', 'riderQual', 'riderAddress', 'riderPass'];
+    document.getElementById('riderPassLabel').innerText = "Portal Password";
+
+    const fields = ['riderName', 'riderEmail', 'riderPhone', 'riderAltPhone', 'riderFatherName', 'riderAge', 'riderAadharNo', 'riderQual', 'riderAddress', 'riderPass'];
     fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
-    const placeholder = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150' viewBox='0 0 150 150'%3E%3Crect width='100%25' height='100%25' fill='%23eee'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='12' fill='%23999%3ENo Photo%3C/text%3E%3C/svg%3E";
+
+    const SVG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150' viewBox='0 0 150 150'%3E%3Crect width='100%25' height='100%25' fill='%23eee'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='12' fill='%23999%3ENo Photo%3C/text%3E%3C/svg%3E";
+    const AADHAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120' viewBox='0 0 200 120'%3E%3Crect width='100%25' height='100%25' fill='%23eee'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='12' fill='%23999%3EAadhar%3C/text%3E%3C/svg%3E";
+
     const profilePreview = document.getElementById('riderProfilePreview');
     const aadharPreview = document.getElementById('aadharPreview');
-    if (profilePreview) profilePreview.src = placeholder;
-    if (aadharPreview) aadharPreview.src = placeholder;
+    if (profilePreview) profilePreview.src = SVG_PLACEHOLDER;
+    if (aadharPreview) aadharPreview.src = AADHAR_PLACEHOLDER;
+
     const photoUrl = document.getElementById('riderPhotoUrl');
     const aadharUrl = document.getElementById('aadharUrl');
     if (photoUrl) photoUrl.value = "";
     if (aadharUrl) aadharUrl.value = "";
+
+    document.getElementById('riderModalTitle').innerText = "Add New Rider";
+    document.getElementById('saveRiderBtnText').innerText = "Create Account";
+    document.getElementById('riderEmail').disabled = false;
+    document.getElementById('riderPassHint').classList.add('hidden');
+    document.getElementById('riderPassLabel').innerText = "Portal Password";
+    document.getElementById('riderPass').value = "";
     document.getElementById('riderModal').classList.add('active');
+
+    // Show progress steps
+    document.getElementById('riderModalSteps').style.display = 'flex';
+    updateStepIndicator(1);
 }
 
 export function editRider(id) {
@@ -284,37 +300,64 @@ export function editRider(id) {
     if (!r) return;
     state.isEditRiderMode = true;
     state.currentEditingRiderId = id;
+
     document.getElementById('riderModalTitle').innerText = "Edit Rider Details";
-    document.getElementById('saveRiderBtn').innerText = "Update Rider";
+    document.getElementById('saveRiderBtnText').innerText = "Update Rider";
     document.getElementById('riderEmail').disabled = true;
     document.getElementById('riderPassHint').classList.remove('hidden');
     document.getElementById('riderPassLabel').innerText = "Update Password (Optional)";
+
     document.getElementById('riderName').value = r.name || "";
     document.getElementById('riderEmail').value = r.email || "";
     document.getElementById('riderPhone').value = r.phone || "";
+    document.getElementById('riderAltPhone').value = r.altPhone || "";
     document.getElementById('riderFatherName').value = r.fatherName || "";
     document.getElementById('riderAge').value = r.age || "";
     document.getElementById('riderAadharNo').value = r.aadharNo || "";
     document.getElementById('riderQual').value = r.qualification || "";
     document.getElementById('riderAddress').value = r.address || "";
     document.getElementById('riderPass').value = "";
-    const SVG_PLACEHOLDER = "data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23ccc%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20x%3D%223%22%20y%3D%223%22%20width%3D%2218%22%20height%3D%2218%22%20rx%3D%222%22%20ry%3D%222%22%3E%3C%2Frect%3E%3Cline%20x1%3D%223%22%20y1%3D%2221%22%20x2%3D%2221%22%20y2%3D%223%22%3E%3C%2Fline%3E%3C%2Fsvg%3E";
+
+    const SVG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150' viewBox='0 0 150 150'%3E%3Crect width='100%25' height='100%25' fill='%23eee'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='12' fill='%23999%3ENo Photo%3C/text%3E%3C/svg%3E";
+    const AADHAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120' viewBox='0 0 200 120'%3E%3Crect width='100%25' height='100%25' fill='%23eee'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='12' fill='%23999%3EAadhar%3C/text%3E%3C/svg%3E";
+
     document.getElementById('riderProfilePreview').src = r.profilePhoto || SVG_PLACEHOLDER;
     document.getElementById('riderPhotoUrl').value = r.profilePhoto || "";
-    document.getElementById('aadharPreview').src = r.aadharPhoto || SVG_PLACEHOLDER;
+    document.getElementById('aadharPreview').src = r.aadharPhoto || AADHAR_PLACEHOLDER;
     document.getElementById('aadharUrl').value = r.aadharPhoto || "";
+
+    document.getElementById('riderModalTitle').innerText = "Edit Rider Details";
+    document.getElementById('saveRiderBtnText').innerText = "Update Rider";
+    document.getElementById('riderEmail').disabled = true;
+    document.getElementById('riderPassHint').classList.remove('hidden');
+    document.getElementById('riderPassLabel').innerText = "Update Password (Optional)";
+    document.getElementById('riderPass').value = "";
+
     document.getElementById('riderModal').classList.add('active');
+    document.getElementById('riderModalSteps').style.display = 'flex';
+    updateStepIndicator(1);
 }
 
 export function hideRiderModal() {
     const modal = document.getElementById('riderModal');
     if (modal) modal.classList.remove('active');
+    document.getElementById('riderModalSteps').style.display = 'none';
+}
+
+function updateStepIndicator(step) {
+    document.querySelectorAll('.step-indicator').forEach((el, idx) => {
+        const num = idx + 1;
+        el.classList.remove('active', 'completed');
+        if (num < step) el.classList.add('completed');
+        else if (num === step) el.classList.add('active');
+    });
 }
 
 export async function saveRiderAccount() {
     const name = document.getElementById('riderName').value.trim();
     let email = document.getElementById('riderEmail').value.trim().toLowerCase();
     const phone = document.getElementById('riderPhone').value.trim();
+    const altPhone = document.getElementById('riderAltPhone').value.trim();
     let pass = document.getElementById('riderPass').value;
     if (!email) { showToast("Please provide a valid email address.", "error"); return; }
     if (!state.isEditRiderMode && !pass) {
@@ -330,6 +373,7 @@ export async function saveRiderAccount() {
     let aadharPhoto = document.getElementById('aadharUrl').value;
     if (!name || !email || (!state.isEditRiderMode && !pass)) { showToast("Name, Email, and Password are required.", "error"); return; }
     if (phone && !/^\d{10}$/.test(phone)) { closePasswordModal(); showToast("Invalid Phone Number! Must be 10 digits.", "error"); return; }
+    if (altPhone && !/^\d{10}$/.test(altPhone)) { closePasswordModal(); showToast("Invalid Alternate Phone Number! Must be 10 digits.", "error"); return; }
     if (!/^\d{12}$/.test(aadharNo)) { closePasswordModal(); showToast("Invalid Aadhar Number! It must be exactly 12 digits.", "error"); return; }
 
     const profileFile = document.getElementById('riderPhotoInput').files[0];
@@ -342,9 +386,14 @@ export async function saveRiderAccount() {
         if (aadharFile) aadharPhoto = await uploadImage(aadharFile, `riders/aadhar_${Date.now()}`);
         if (statusLabel) statusLabel.classList.add('hidden');
 
+        const riderData = {
+            name, email, phone, altPhone, fatherName, age, aadharNo, qualification, address,
+            profilePhoto, aadharPhoto, updatedAt: Date.now()
+        };
+
         if (state.isEditRiderMode) {
             const riderId = state.currentEditingRiderId;
-            await update(ref(db, `riders/${riderId}`), { name, phone, fatherName, age, aadharNo, qualification, address, profilePhoto, aadharPhoto, updatedAt: Date.now() });
+            await update(ref(db, `riders/${riderId}`), riderData);
             logAudit("Riders", `Updated Rider: ${name}`, riderId);
             showToast("Rider updated successfully!", "success");
             hideRiderModal();
@@ -402,7 +451,7 @@ export async function settleRiderWallet(riderId, riderName, customTimeLimit = nu
         const timeLimit = customTimeLimit || (Date.now() - (48 * 60 * 60 * 1000));
         let pendingCash = 0;
         let ordersToSettle = [];
-        const outlets = ['pizza', 'cake'];
+        const outlets = Object.keys(BUSINESS_BY_OUTLET);
         for (const outlet of outlets) {
             const snap = await get(query(ref(db, `${outlet}/orders`), orderByChild('riderId'), equalTo(riderId)));
             if (snap.exists()) {

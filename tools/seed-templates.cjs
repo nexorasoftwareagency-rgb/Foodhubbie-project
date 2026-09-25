@@ -12,6 +12,16 @@ admin.initializeApp({
 
 const db = admin.database();
 
+// Default status update images (hosted on Firebase Hosting assets)
+// These are used as fallbacks when no custom image is set
+const DEFAULT_STATUS_IMAGES = {
+  imgPlaced: 'https://foodhubbie-assets.web.app/images/status/placed.jpg',
+  imgConfirmed: 'https://foodhubbie-assets.web.app/images/status/confirmed.jpg',
+  imgReady: 'https://foodhubbie-assets.web.app/images/status/ready.jpg',
+  imgOut: 'https://foodhubbie-assets.web.app/images/status/out.jpg',
+  imgDelivered: 'https://foodhubbie-assets.web.app/images/status/delivered.jpg',
+};
+
 const templates = {
   pizza: {
     name: 'Pizza restaurant',
@@ -54,7 +64,7 @@ const templates = {
         d10: { name: 'Chocolate Brownie', category: 'Desserts', price: 149, stock: true, order: 1 },
         d11: { name: 'Choco Lava Cake', category: 'Desserts', price: 179, stock: true, order: 2 },
       },
-      bot: { transport: 'baileys' },
+      bot: { transport: 'baileys', ...DEFAULT_STATUS_IMAGES },
     },
   },
   cake: {
@@ -71,7 +81,7 @@ const templates = {
         cakes: { name: 'Cakes', order: 1 },
         cupcakes: { name: 'Cupcakes', order: 2 },
       },
-      bot: { transport: 'baileys' },
+      bot: { transport: 'baileys', ...DEFAULT_STATUS_IMAGES },
     },
   },
   kitchen: {
@@ -88,7 +98,7 @@ const templates = {
         mains: { name: 'Mains', order: 1 },
         snacks: { name: 'Snacks', order: 2 },
       },
-      bot: { transport: 'baileys' },
+      bot: { transport: 'baileys', ...DEFAULT_STATUS_IMAGES },
     },
   },
 };

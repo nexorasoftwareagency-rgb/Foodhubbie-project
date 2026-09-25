@@ -223,6 +223,40 @@ async function handleSubmit(e) {
       ...bankUpdates,
     });
 
+    // Auto-convert default status images to PNG base64 for fast sending
+    // (non-blocking — failures just mean status updates will use URL fallback)
+    if (tplDefaults?.bot) {
+      const statusImageKeys = ['imgPlaced', 'imgConfirmed', 'imgReady', 'imgOut', 'imgDelivered'];
+      const imagesToConvert = statusImageKeys
+        .filter(k => tplDefaults.bot[k])
+        .map(k => ({ key: `${k}Png`, url: tplDefaults.bot[k] }));
+      if (imagesToConvert.length > 0) {
+        try {
+          const token = await firebase.auth().currentUser.getIdToken();
+          const res = await fetch(`${TUNNEL_URL}/api/images/convert-batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ images: imagesToConvert }),
+          });
+          if (res.ok) {
+            const { results } = await res.json();
+            const pngUpdates = {};
+            for (const [key, result] of Object.entries(results)) {
+              if (result.ok) {
+                pngUpdates[`businesses/${bid}/outlets/${oid}/bot/${key}`] = result.base64;
+              }
+            }
+            if (Object.keys(pngUpdates).length > 0) {
+              await db.ref().update(pngUpdates);
+              console.log(`[Onboarding] Pre-converted ${Object.keys(pngUpdates).length} status images for ${bid}/${oid}`);
+            }
+          }
+        } catch (e) {
+          console.warn('[Onboarding] Image pre-conversion failed (non-fatal):', e.message);
+        }
+      }
+    }
+
     showToast('Restaurant created. Creating admin login…', 'success');
 
     // Create the restaurant's real Firebase Auth admin (username = email).

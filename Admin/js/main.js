@@ -135,6 +135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'printKotById': logger.info('PRINT', `Print KOT: ${id}`); (await useMod('printing')).printKotById(id); break;
                 case 'closeReceiptPreview': logger.info('PRINT', 'Close receipt preview'); (await useMod('printing')).closeReceiptPreview(); break;
                 case 'printReceiptFromPreview': logger.info('PRINT', 'Print from preview'); (await useMod('printing')).printReceiptFromPreview(); break;
+                case 'downloadReceiptPdf': logger.info('PRINT', 'Download receipt PDF'); (await useMod('printing')).downloadReceiptPdf(); break;
                 case 'updateStatus': { const v = val || (el.tagName === 'SELECT' ? el.value : null); logger.info('ORDERS', `Update status: ${id} → ${v}`); (await useMod('orders')).updateStatus(id, v); break; }
                 case 'toggleStatus': {
                     const dd = el.closest('.status-dropdown');
@@ -537,9 +538,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('btnClearNotificationsBottom')?.addEventListener('click', async () => {
             (await useMod('notifications')).clearAllNotifications();
         });
-        document.getElementById('btnClearLostSales')?.addEventListener('click', async () => {
-            (await useMod('lost-sales')).clearLostSales();
-        });
+        
         document.getElementById('btnEnableNotif')?.addEventListener('click', async () => {
             (await useMod('notifications')).requestNotificationPermission();
         });

@@ -25,6 +25,7 @@ const waGraph = require('./whatsapp-graph');
 const { pm2, connectOnce } = require('./pm2-client');
 const { startStatusWatcher } = require('./status-watcher');
 const { startOrchestrator } = require('./orchestrator');
+const sharp = require('sharp');
 
 const PORT = process.env.BOT_CONTROL_PORT || 4000;
 
@@ -646,6 +647,69 @@ app.get('/api/whatsapp/quota/:bid/:oid', async (req, res) => {
     console.error('quota lookup failed', err);
     res.status(500).json({ error: 'Could not fetch WhatsApp quota' });
   }
+});
+
+// Image conversion endpoint — fetches URL, converts to PNG via Sharp, returns base64
+// Used by Supreme Admin for auto-converting status images on upload, and by
+// onboarding to pre-convert template default images.
+app.post('/api/images/convert', requireSuperOnly, async (req, res) => {
+  const { imageUrl, maxWidth = 800, quality = 85 } = req.body || {};
+  if (!imageUrl || !/^https?:\/\//.test(imageUrl)) {
+    return res.status(400).json({ error: 'imageUrl must be a valid http(s) URL' });
+  }
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const resp = await fetch(imageUrl, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!resp.ok) throw new Error(`Image fetch ${resp.status}`);
+    const inputBuf = Buffer.from(await resp.arrayBuffer());
+    const pngBuf = await sharp(inputBuf)
+      .resize({ width: maxWidth, withoutEnlargement: true })
+      .png({ quality, compressionLevel: 9 })
+      .toBuffer();
+    const base64 = `data:image/png;base64,${pngBuf.toString('base64')}`;
+    res.json({ ok: true, base64, size: pngBuf.length });
+  } catch (err) {
+    console.error('Image conversion failed:', err);
+    res.status(500).json({ error: `Conversion failed — ${err.message}` });
+  }
+});
+
+// Batch convert multiple images (used during onboarding for template defaults)
+app.post('/api/images/convert-batch', requireSuperOnly, async (req, res) => {
+  const { images } = req.body || {}; // [{ key, url }]
+  if (!Array.isArray(images) || images.length === 0) {
+    return res.status(400).json({ error: 'images array required' });
+  }
+  const results = {};
+  for (const img of images) {
+    const { key, url } = img;
+    if (!key || !url || !/^https?:\/\//.test(url)) {
+      results[key] = { error: 'Invalid key or URL' };
+      continue;
+    }
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      const resp = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error(`Image fetch ${resp.status}`);
+      const inputBuf = Buffer.from(await resp.arrayBuffer());
+      const pngBuf = await sharp(inputBuf)
+        .resize({ width: 800, withoutEnlargement: true })
+        .png({ quality: 85, compressionLevel: 9 })
+        .toBuffer();
+      results[key] = {
+        ok: true,
+        base64: `data:image/png;base64,${pngBuf.toString('base64')}`,
+        size: pngBuf.length
+      };
+    } catch (err) {
+      results[key] = { error: err.message };
+    }
+  }
+  res.json({ results });
 });
 
 // Message templates on the outlet's WABA (plan C3).
