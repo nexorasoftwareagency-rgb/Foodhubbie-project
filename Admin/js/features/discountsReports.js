@@ -3,7 +3,7 @@
  * Renders per-discount performance analytics in a modal:
  *   - KPI cards (redemptions, total saved, active count, average)
  *   - Per-discount breakdown (count, total saved, average)
- *   - Channel split (whatsapp vs pos vs manual)
+ *   - Channel split (pos vs table vs webview vs other)
  *   - Recent redemptions list (last 50)
  *   - CSV export of the per-discount summary
  */
@@ -178,7 +178,7 @@ async function renderReport() {
     }
 
     // Channel split
-    const channelCounts = { whatsapp: 0, pos: 0, table: 0, manual: 0, other: 0 };
+    const channelCounts = { pos: 0, table: 0, webview: 0, other: 0 };
     for (const u of filtered) {
         const ch = String(u.channel || '').toLowerCase();
         if (channelCounts[ch] !== undefined) channelCounts[ch] += 1;
@@ -191,10 +191,9 @@ async function renderReport() {
             channelsEl.innerHTML = '<div class="discount-report-empty">No channel data in this range.</div>';
         } else {
             const ch = [
-                { key: 'whatsapp', label: 'WhatsApp', color: '#25D366' },
                 { key: 'pos',      label: 'POS',      color: '#1d4ed8' },
                 { key: 'table',    label: 'Table',    color: '#d97706' },
-                { key: 'manual',   label: 'Manual',   color: '#64748b' },
+                { key: 'webview',  label: 'Webview',  color: '#25D366' },
                 { key: 'other',    label: 'Other',    color: '#a3a3a3' }
             ];
             channelsEl.innerHTML = ch.filter(c => channelCounts[c.key] > 0).map(c => {

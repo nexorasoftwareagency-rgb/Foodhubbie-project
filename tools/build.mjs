@@ -74,7 +74,7 @@ async function buildTarget(name, { src: srcDir, dist: distDir, shared }) {
             /^flex$/, /^dragover$/, /^swal2-/, /^modal-/, /^toast-/, /^notif-/,
             /^tab-/, /^sidebar-/, /^menu-/, /^dropdown-/, /^drawer-/,
             /^order-/, /^table-/, /^kds-/, /^pos-/, /^mob-/, /^rider-/,
-            /^btn-/, /^icon-/, /^admin-/, /^report-/, /^discount-/,
+            /^btn-/, /^icon-/, /^admin-/, /^report-/, /^discount-/, /^channel-/,
             /^promo-/, /^settings-/, /^catalog-/, /^inventory-/, /^chat-/,
             /^dynamic-modal/, 'dynamic-modal-overlay', 'dynamic-modal-box',
             'dynamic-modal-title', 'dynamic-modal-text', 'dynamic-modal-actions',

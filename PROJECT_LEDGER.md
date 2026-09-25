@@ -26,7 +26,7 @@ Fragile Files before starting ANY task.
 - `equalTo(null)` canonical
 - Firebase v12 auto-persistence
 - [2026-09-25 13:44 UTC] **Discount category matching is KEY→NAME**: `discount.categoryIds` are Firebase push keys (`catalog.js` uses `push()`), but carts carry category **names** (POS stores `dish.category`) or **nothing at all** (QR order items are `{name,qty,price,addons,instructions}`). Any category matcher must resolve keys through `getAllCategories()` in `discount-evaluator.js` — comparing keys against names returns false silently, with no error anywhere.
-- [2026-09-25 13:44 UTC] **`channel:'pos'` also covers `channel:'table'`** (`discountAllowsChannel`, one additive clause). Table bills settle through the POS terminal, but the discount editor's `<select id="discChannel">` cannot author a `table` value. Usage is still *recorded* as `channel:'table'` and therefore still buckets under "Other" in `discountsReports.js` — reports split is a separate, open gap.
+- [2026-09-25 13:44 UTC] **`channel:'pos'` also covers `channel:'table'`** (`discountAllowsChannel`, one additive clause). Table bills settle through the POS terminal, but the discount editor's `<select id="discChannel">` cannot author a `table` value. Reports split closed 2026-09-25: `channelCounts` = pos/table/webview/other — the `whatsapp` and `manual` buckets were deleted because no code writes them, and `webview` (the bot's QR/delivery channel, written as `channel:"webview"` at `bot/index.js:1686`) had been hiding in "Other". `.channel-*` chip colors also need `/^channel-/` in the `tools/build.mjs` PurgeCSS safelist or every modifier is stripped from dist (only `channel-chip` survives, because that literal is the only one that appears in source).
 - [2026-09-25 13:44 UTC] **Bump `Admin/sw.js` `CACHE_NAME` whenever any file in `ASSETS_TO_CACHE` changes.** The `js/features/*` entries carry no `?v=` query and the fetch handler is stale-while-revalidate, so a stale/new module pair (e.g. a sync export + a caller that now `await`s it) can serve together until the cache name forces a clean re-cache.
 <!-- STANDING_DECISIONS_END -->
 
@@ -80,6 +80,23 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260925-141500-6c2a] Discount reports channel split, PurgeCSS `channel-` safelist, ledger invalid-byte repair
+- TIER: 1 (low-risk — report presentation, build safelist, markdown encoding; no money path, no rules/schema change)
+- STATUS: DONE
+- Started: 2026-09-25 14:15 UTC
+- Scope: gaps 1–4 and 11 from the post-P0-3/P0-4 review, explicitly requested.
+- Trace / root cause:
+  1. `channelCounts` carried `whatsapp` and `manual` keys that **no code ever writes**. Every `recordDiscountUsage` caller enumerated: `pos.js:983` → `'pos'`, `tables.js:1697/1750/1822/1888` → `'table'`, `bot/index.js:1686` → `"webview"` — nothing else. Those two buckets were provably always 0, while every bot QR/delivery redemption (`webview`) fell into "Other".
+  2. `.channel-*` chip modifiers never reach `dist`: they are only ever built at runtime (`channel-${escapeHtml(channel)}` at `discountsReports.js:240/399` and `discounts.js:292`), so PurgeCSS never sees them. The `tools/build.mjs` safelist had `/^discount-/`, `/^report-/` … but no `/^channel-/`, and the only literal `channel-*` in any content file is `channel-chip`. Hence `dist/style.css` held exactly **one** rule and every channel chip shipped with no background and no color — pre-existing for all channels, not just `table`.
+- Fixes: `channelCounts` → `{pos,table,webview,other}` and labels → POS/Table/Webview/Other; `/^channel-/` added to the safelist; `.channel-table` + `.channel-webview` added to `Admin/style.css`; `discountsReports.js:6` header comment updated; `PROJECT_LEDGER.md` byte `0x97` (offset 14670) rewritten to `E2 80 94`.
+- Data safety: totals preserved — unknown channel values still increment `other`, so `totalCh` and every percentage are unchanged; legacy `whatsapp`/`manual` rows simply re-bucket to "Other". The CSV export carries no channel column, so exports are unaffected.
+- Encoding: `PROJECT_LEDGER.md` **failed strict UTF-8** (`Unable to translate bytes [97] at index 14669`) before the fix and passes after; raw `0x97` count now 0. That byte was the cause of phantom diffs on any UTF-8 read/write round-trip of the ledger — the file is now safe for the `edit` tool.
+- Shared-file hazard: another process holds unrelated inventory-card edits in `Admin/style.css` (lines 7287–7316, 9463–9614). Staged via a filtered `git apply --cached` patch so only the `@@ -8265` hunk entered the index; their edits remain unstaged. Their working copy was backed up to `%TEMP%\style_theirs_backup.css`.
+- Verified: strict UTF-8 valid on all 4 files; `node --check` clean on the JS and on `build.mjs`; `node tests/discount-evaluator.check.mjs` → **8/8, exit 0**; build clean; dist inspected — `dist/style.css` went 1 → 7 `.channel-*` rules, and dist JS contains `{pos:0,table:0,webview:0,other:0}` with 0 `whatsapp` references and 0 `manual:0`.
+- NOT verified / open risk: still no live-browser E2E against real RTDB; `Admin/style.css` remains dirty with someone else's work — a later whole-file `git add Admin/style.css` would sweep their inventory edits into a commit.
+- Confidence: HIGH
+- Ended: 2026-09-25 14:20 UTC
+
 ### [20260925-134422-4e70] P0-3/P0-4: category discounts never fired + "POS only" discount never applied to table bills
 - TIER: 2 (medium-risk — money path, Admin-only, no rules/schema/deploy-target change)
 - STATUS: DONE
@@ -129,7 +146,7 @@ Fragile Files before starting ANY task.
 - Confidence: HIGH
 - Ended: 2026-08-19 02:47 UTC
 
-### [20260818-155605-53f7] 17-GATE: complete multi-tenant refactor � seed DB, repoint apps, verify live gate
+### [20260818-155605-53f7] 17-GATE: complete multi-tenant refactor — seed DB, repoint apps, verify live gate
 - TIER: 3 (high-risk)
 - STATUS: DONE
 - Started: 2026-08-18 15:56 UTC
