@@ -442,12 +442,14 @@ function _kitchenCard(o) {
     </div>`;
 }
 
-/** Render all three columns as responsive grids (3 cards per row) */
+/** Render all three columns as responsive grids (3 cards per row).
+ *  KDS block exists in both Kitchen (tab-live) and Tables (tab-tables) tabs —
+ *  fill every instance via data-kds-col (IDs must stay unique). */
 function _renderKDS() {
-    const newCol = document.getElementById('kdsColumnNew');
-    const prepCol = document.getElementById('kdsColumnPreparing');
-    const readyCol = document.getElementById('kdsColumnReady');
-    if (!newCol || !prepCol || !readyCol) return;
+    const newCols = document.querySelectorAll('[data-kds-col="new"]');
+    const prepCols = document.querySelectorAll('[data-kds-col="preparing"]');
+    const readyCols = document.querySelectorAll('[data-kds-col="ready"]');
+    if (!newCols.length) return;
 
     // Get all active orders, prioritize: Online first, then by createdAt desc (newest first)
     const allOrders = _dineInOrders().sort((a, b) => {
@@ -465,19 +467,20 @@ function _renderKDS() {
         else if (st === 'Ready') groups.Ready.push(o);
     });
 
-    const fill = (col, list, emptyMsg) => {
-        col.innerHTML = list.length
+    const fill = (cols, list, emptyMsg) => {
+        const html = list.length
             ? `<div class="kitchen-grid">${list.map(_kitchenCard).join('')}</div>`
             : `<p class="text-muted-small kds-empty">${emptyMsg}</p>`;
+        cols.forEach(col => { col.innerHTML = html; });
     };
-    fill(newCol, groups.New, 'No orders to confirm');
-    fill(prepCol, groups.Confirmed, 'Nothing preparing');
-    fill(readyCol, groups.Ready, 'Nothing ready');
+    fill(newCols, groups.New, 'No orders to confirm');
+    fill(prepCols, groups.Confirmed, 'Nothing preparing');
+    fill(readyCols, groups.Ready, 'Nothing ready');
 
-    const setCount = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = String(n); };
-    setCount('kdsCountNew', groups.New.length);
-    setCount('kdsCountPreparing', groups.Confirmed.length);
-    setCount('kdsCountReady', groups.Ready.length);
+    const setCount = (key, n) => document.querySelectorAll(`[data-kds-count="${key}"]`).forEach(el => { el.textContent = String(n); });
+    setCount('new', groups.New.length);
+    setCount('preparing', groups.Confirmed.length);
+    setCount('ready', groups.Ready.length);
 }
 
 async function _policeExpiredSessions() {

@@ -1243,56 +1243,31 @@
 
                     </div>
 
-                    <div class="scroll-x">
+                </div>
 
-                        <table class="premium-table-v4">
-
-                            <thead>
-
-                                <tr class="table-header-row">
-
-
-
-                                    <th>Order ID</th>
-
-                                    <th>Customer</th>
-
-                                    <th>Items</th>
-
-                                    <th>Total</th>
-
-                                    <th>Status</th>
-
-                                    <th>Assign Rider</th>
-
-                                    <th>Actions</th>
-
-                                </tr>
-
-                            </thead>
-
-                            <tbody id="liveOrdersTable">
-
-                                <tr class="skeleton-row"><td colspan="7"><div class="skeleton" style="height:40px;width:100%"></div></td></tr>
-
-                                <tr class="skeleton-row"><td colspan="7"><div class="skeleton" style="height:40px;width:100%"></div></td></tr>
-
-                                <tr class="skeleton-row"><td colspan="7"><div class="skeleton" style="height:40px;width:100%"></div></td></tr>
-
-                            </tbody>
-
-                        </table>
-
+                <!-- KITCHEN DISPLAY (KDS) -->
+                <div class="glass-card mt-20">
+                    <h4 class="section-card-heading"><i data-lucide="chef-hat" class="icon-14"></i> Kitchen Display (KDS)</h4>
+                    <div class="kds-columns">
+                        <div class="kds-column">
+                            <div class="kds-column-header kds-header-new"><span>Confirm</span> <span data-kds-count="new" class="kds-count">0</span></div>
+                            <div data-kds-col="new" class="kds-column-body"></div>
+                        </div>
+                        <div class="kds-column">
+                            <div class="kds-column-header kds-header-preparing"><span>Preparing</span> <span data-kds-count="preparing" class="kds-count">0</span></div>
+                            <div data-kds-col="preparing" class="kds-column-body"></div>
+                        </div>
+                        <div class="kds-column">
+                            <div class="kds-column-header kds-header-ready"><span>Ready</span> <span data-kds-count="ready" class="kds-count">0</span></div>
+                            <div data-kds-col="ready" class="kds-column-body"></div>
+                        </div>
                     </div>
-
                 </div>
 
             </div>
 
 
-
             <!-- MENU TAB -->
-
             <div id="tab-menu" class="tab-content hidden">
 
                 <div class="panel">
@@ -4650,19 +4625,20 @@
                         <h4 class="section-card-heading"><i data-lucide="chef-hat" class="icon-14"></i> Kitchen Display (KDS)</h4>
                         <div class="kds-columns">
                             <div class="kds-column">
-                                <div class="kds-column-header kds-header-new"><span>Confirm</span> <span id="kdsCountNew" class="kds-count">0</span></div>
-                                <div id="kdsColumnNew" class="kds-column-body"></div>
+                                <div class="kds-column-header kds-header-new"><span>Confirm</span> <span data-kds-count="new" class="kds-count">0</span></div>
+                                <div data-kds-col="new" class="kds-column-body"></div>
                             </div>
                             <div class="kds-column">
-                                <div class="kds-column-header kds-header-preparing"><span>Preparing</span> <span id="kdsCountPreparing" class="kds-count">0</span></div>
-                                <div id="kdsColumnPreparing" class="kds-column-body"></div>
+                                <div class="kds-column-header kds-header-preparing"><span>Preparing</span> <span data-kds-count="preparing" class="kds-count">0</span></div>
+                                <div data-kds-col="preparing" class="kds-column-body"></div>
                             </div>
                             <div class="kds-column">
-                                <div class="kds-column-header kds-header-ready"><span>Ready</span> <span id="kdsCountReady" class="kds-count">0</span></div>
-                                <div id="kdsColumnReady" class="kds-column-body"></div>
+                                <div class="kds-column-header kds-header-ready"><span>Ready</span> <span data-kds-count="ready" class="kds-count">0</span></div>
+                                <div data-kds-col="ready" class="kds-column-body"></div>
                             </div>
                         </div>
                     </div>
+
                 </div>
             </div>
         </main>
