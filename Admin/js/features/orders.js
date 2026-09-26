@@ -455,12 +455,17 @@ export async function renderOrders(snap) {
         'payments': document.createDocumentFragment()
     };
 
-    // For orders tab with no paginated data yet, show loading/empty state
-    if (activeTab === 'orders' && state.ordersPageData.length === 0 && containers['orders']) {
+    // For orders tab with no rows to show (nothing loaded, or date filter excluded all), show loading/empty state
+    if (activeTab === 'orders' && sortedOrders.length === 0 && containers['orders']) {
         if (state.ordersPageLoading) {
             containers['orders'].innerHTML = '<tr><td colspan="7"><div class="flex-center p-20"><div class="spinner"></div><span class="text-muted ml-10">Loading orders...</span></div></td></tr>';
         } else {
-            containers['orders'].innerHTML = '<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><i data-lucide="inbox"></i><p>No orders yet</p><span>New orders will appear here in real-time</span></div></td></tr>';
+            const _from = document.getElementById('orderFrom')?.value;
+            const _to = document.getElementById('orderTo')?.value;
+            const _emptyMsg = (_from && _to)
+                ? `<p>No orders in date range</p><span>${_from} to ${_to}</span>`
+                : '<p>No orders yet</p><span>New orders will appear here in real-time</span>';
+            containers['orders'].innerHTML = `<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><i data-lucide="inbox"></i>${_emptyMsg}</div></td></tr>`;
             await loadLucide();
             window.lucide.createIcons();
         }
@@ -701,7 +706,7 @@ export async function renderOrders(snap) {
 
     // Add Load More Button for cursor-based pagination
     if (activeTab === 'orders') {
-        if (state.hasMoreOrders) {
+        if (state.hasMoreOrders && state.ordersPageData.length > 0) {
             const fullTable = containers['orders'];
             let footer = document.getElementById('loadMoreContainer');
             if (!footer && fullTable) {
@@ -716,16 +721,19 @@ export async function renderOrders(snap) {
         } else {
             const existingContainer = document.getElementById('loadMoreContainer');
             if (existingContainer) existingContainer.remove();
+            const fullTable = containers['orders'];
+            let hint = document.getElementById('allOrdersLoadedHint');
             if (state.ordersPageData.length > 0) {
                 // Show "all loaded" hint once at the bottom
-                const fullTable = containers['orders'];
-                if (fullTable && !document.getElementById('allOrdersLoadedHint')) {
-                    const hint = document.createElement('div');
+                if (fullTable && !hint) {
+                    hint = document.createElement('div');
                     hint.id = 'allOrdersLoadedHint';
                     hint.className = 'flex-center p-10';
-                    hint.innerHTML = `<span class="text-muted-small">All ${state.ordersPageData.length} orders loaded</span>`;
                     fullTable.parentNode.appendChild(hint);
                 }
+                if (hint) hint.innerHTML = `<span class="text-muted-small">All ${state.ordersPageData.length} orders loaded</span>`;
+            } else if (hint) {
+                hint.remove();
             }
         }
     }

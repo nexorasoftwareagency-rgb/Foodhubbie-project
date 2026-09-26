@@ -195,12 +195,16 @@ export const switchTab = async (tabId, skipHistory = false) => {
         try {
             switch (tabId) {
                 case 'dashboard': {
-                    const [{ loadRiders: lr }, { renderOrders, loadOrdersPage }] = await Promise.all([
+                    const [{ loadRiders: lr }, { renderOrders }] = await Promise.all([
                         mod('riders'), mod('orders')
                     ]);
                     lr();
                     renderOrders(state.lastOrdersSnap);
-                    if (tabId === 'orders') loadOrdersPage(true);
+                    break;
+                }
+                case 'orders': {
+                    const { loadOrdersPage } = await mod('orders');
+                    loadOrdersPage(true);
                     break;
                 }
                 case 'live': {
