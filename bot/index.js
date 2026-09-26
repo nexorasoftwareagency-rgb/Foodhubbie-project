@@ -1662,6 +1662,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                             const base = existing || {};
                             return {
                                 ...base,
+                                registeredAt: base.registeredAt || Date.now(),
                                 name: order.customerName || base.name,
                                 phone: cleanPhone,
                                 address: order.address || base.address || "",

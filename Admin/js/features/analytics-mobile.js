@@ -31,18 +31,21 @@
  *   Repeat Customer  = a customer who placed an order in the selected range
  *                      AND whose `registeredAt` is BEFORE the range start —
  *                      i.e. an existing customer who came back, not a new one.
+ *   Phone per order resolves order.phone (delivery/POS) → tableSessionsContact
+ *                      (QR); registeredAt is backfilled from earliest order on
+ *                      first load if no creator ever wrote it.
  *   Delivered/Cancelled/Pending = computed from the SAME unfiltered order set
  *                      analytics.js already fetches (salesData), using the
  *                      same status strings orders.js's STATUS_MAPPING
  *                      already treats as canonical.
  * ============================================================================
  */
-import { Outlet, tenantRef, get, ref, db, push, set, serverTimestamp } from '../firebase.js';
+import { Outlet, tenantRef, get, ref, db, push, set, update, serverTimestamp } from '../firebase.js';
 import { escapeHtml, showToast, formatOrderId } from '../utils.js';
 
 let sparkRevenue = null, sparkOrders = null, sparkAvg = null, sparkNewCust = null;
 let overviewChart = null, paymentDonut = null;
-let _customersCache = null, _customersFetchFailed = false;
+let _customersCache = null, _customersContacts = null, _customersFetchFailed = false, _registeredAtBackfilled = false;
 let _reportSummary = null;
 let _reportSending = false;
 
@@ -69,10 +72,41 @@ function deltaOf(cur, prev) {
     return ((cur - prev) / prev) * 100;
 }
 
+const _pk = raw => String(raw || '').replace(/\D/g, '').slice(-10);
+
 async function fetchCustomers() {
     const snap = await get(Outlet.ref('customers'));
-    const map = {};
-    snap.forEach(child => { map[child.key] = child.val() || {}; });
+    const map = {}, writeKeys = {};
+    snap.forEach(child => {
+        const pk = _pk(child.key);
+        if (!pk) return;
+        const val = child.val() || {};
+        if (!map[pk] || (val.registeredAt && !map[pk].registeredAt)) { map[pk] = val; writeKeys[pk] = child.key; }
+    });
+    // One-time backfill: registeredAt was never written by any creator before this fix.
+    const missing = Object.keys(map).filter(k => !map[k].registeredAt);
+    if (missing.length && !_registeredAtBackfilled) {
+        _registeredAtBackfilled = true;
+        try {
+            const [ordSnap, conSnap] = await Promise.all([get(Outlet.ref('orders')), get(Outlet.ref('tableSessionsContact'))]);
+            const contacts = conSnap.val() || {};
+            const earliest = {};
+            ordSnap.forEach(child => {
+                const o = child.val() || {};
+                const c = contacts[o.sessionId] || {};
+                const pk = _pk(o.phone || o.customerPhone || c.customerPhone || c.guestPhone);
+                const t = typeof o.createdAt === 'string' ? Date.parse(o.createdAt) : Number(o.createdAt || 0);
+                if (pk && t && (!earliest[pk] || t < earliest[pk])) earliest[pk] = t;
+            });
+            for (const pk of missing) {
+                const c = map[pk];
+                const t = earliest[pk] || (Number(c.orderCount) === 1 && c.lastSeen ? Number(c.lastSeen) : 0);
+                if (!t) continue;
+                c.registeredAt = t;
+                await update(Outlet.ref(`customers/${writeKeys[pk]}`), { registeredAt: t });
+            }
+        } catch (e) { console.warn('[AnalyticsMobile] registeredAt backfill failed', e); }
+    }
     return map;
 }
 
@@ -136,12 +170,17 @@ export async function renderMobileAnalytics(salesData, prevPeriodData) {
     if (!_customersCache) {
         try { _customersCache = await fetchCustomers(); _customersFetchFailed = false; } catch (e) { _customersCache = {}; _customersFetchFailed = true; console.error('[AnalyticsMobile] customers fetch failed', e); }
     }
+    if (!_customersContacts) {
+        try { const cs = await get(Outlet.ref('tableSessionsContact')); _customersContacts = cs.val() || {}; } catch (e) { _customersContacts = {}; console.warn('[AnalyticsMobile] contacts fetch failed', e); }
+    }
     const fromEl = document.getElementById('reportFrom');
     const toEl = document.getElementById('reportTo');
     const rangeFrom = fromEl?.value || dayKey(Date.now() - 7 * 86400000);
     const rangeTo = toEl?.value || dayKey(Date.now());
 
-    const phonesInRange = new Set(delivered.map(o => o.phone).filter(Boolean));
+    // Phone per order: order.phone (delivery/POS) → tableSessionsContact[sessionId] (QR); normalized to last 10 digits.
+    const orderPhone = o => _pk(o.phone || o.customerPhone || (_customersContacts[o.sessionId] || {}).customerPhone || (_customersContacts[o.sessionId] || {}).guestPhone) || null;
+    const phonesInRange = new Set(delivered.map(orderPhone).filter(Boolean));
     let newCustCount = 0, repeatCustCount = 0;
     phonesInRange.forEach(phone => {
         const c = _customersCache[phone];
@@ -149,7 +188,7 @@ export async function renderMobileAnalytics(salesData, prevPeriodData) {
         if (registeredDate && registeredDate >= rangeFrom && registeredDate <= rangeTo) newCustCount++;
         else if (registeredDate && registeredDate < rangeFrom) repeatCustCount++;
     });
-    const prevPhonesInRange = new Set(prevDelivered.map(o => o.phone).filter(Boolean));
+    const prevPhonesInRange = new Set(prevDelivered.map(orderPhone).filter(Boolean));
     const periodMs = new Date(rangeTo).getTime() - new Date(rangeFrom).getTime();
     const pFromKey = dayKey(new Date(rangeFrom).getTime() - periodMs - 86400000);
     const pToKey = dayKey(new Date(rangeFrom).getTime() - 86400000);
@@ -173,11 +212,12 @@ export async function renderMobileAnalytics(salesData, prevPeriodData) {
     revSeries.keys.forEach(k => { newCustByDay[k] = 0; });
     const firstOrderByPhone = {};
     delivered.forEach(o => {
-        if (!o.phone) return;
+        const p = orderPhone(o);
+        if (!p) return;
         const _ms = v => typeof v === 'string' ? new Date(v).getTime() : (v || 0);
         const ot = _ms(o.createdAt);
-        if (!firstOrderByPhone[o.phone] || ot < firstOrderByPhone[o.phone]) {
-            firstOrderByPhone[o.phone] = ot;
+        if (!firstOrderByPhone[p] || ot < firstOrderByPhone[p]) {
+            firstOrderByPhone[p] = ot;
         }
     });
     Object.entries(firstOrderByPhone).forEach(([phone, firstTs]) => {
