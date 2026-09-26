@@ -162,7 +162,7 @@ async function _syncCustomerFromOrder(o) {
     try {
         await runTransaction(custRef, (c) => {
             if (!c) {
-                return { name, phone, orderCount: 1, totalSpent: total, lastSeen: Date.now(), lastAddress: tableLabel };
+                return { name, phone, registeredAt: Date.now(), orderCount: 1, totalSpent: total, lastSeen: Date.now(), lastAddress: tableLabel };
             }
             return {
                 ...c,

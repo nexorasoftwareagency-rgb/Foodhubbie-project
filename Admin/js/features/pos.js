@@ -956,6 +956,7 @@ export async function submitWalkinSale() {
             paymentStatus: "Paid",
             customerName: name,
             customerNote: combinedNote,
+            phone,
             tableNo: tableNo,
             status: "Delivered",
             type: "Dine-in",
@@ -1001,7 +1002,7 @@ export async function submitWalkinSale() {
             const isFirstOrderDiscount = discountSource === 'firstOrder' && discountId;
             await runTransaction(custRef, c => {
                 if (!c) {
-                    const fresh = { name, phone, orderCount: 1, totalSpent: total, lastSeen: Date.now(), lastAddress: 'Walk-in' };
+                    const fresh = { name, phone, registeredAt: Date.now(), orderCount: 1, totalSpent: total, lastSeen: Date.now(), lastAddress: 'Walk-in' };
                     if (isFirstOrderDiscount) {
                         fresh.firstOrderDiscountUsed = Date.now();
                         fresh.firstOrderDiscountId = discountId;
