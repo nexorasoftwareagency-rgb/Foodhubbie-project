@@ -1,5 +1,5 @@
 // === src/services/riderService.ts ===
-import { db, ref, get, update, onValue, off, serverTimestamp } from "@/lib/firebase";
+import { db, ref, get, update, onValue, serverTimestamp } from "@/lib/firebase";
 import { dbPaths } from "@/lib/constants";
 import type { Rider, RiderStatus } from "@/types";
 
@@ -17,7 +17,7 @@ export function subscribeRiderProfile(
     },
     (err) => onError?.(err as unknown as Error)
   );
-  return () => off(riderRef, "value", handler);
+  return handler;
 }
 
 export async function getRiderProfile(uid: string): Promise<Rider | null> {

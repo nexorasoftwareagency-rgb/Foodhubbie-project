@@ -40,6 +40,11 @@ export function formatOrderId(o) {
 }
 
 // Daily atomic sequence → DDMMYY-N (unpadded). Path key also DDMMYY.
+// SECURITY NOTE (accepted 2026-09-27): this ID is guessable (date + small
+// counter) and database.rules.json allows unauthenticated reads of source=='QR'
+// orders — so the order ID functions as the tracking secret (address/name/OTP
+// readable to anyone who guesses it). Hardening options if this ever matters:
+// append a random suffix at generation, or gate reads behind a trackToken query.
 export async function generateOrderId() {
     const now = new Date();
     const dd = String(now.getDate()).padStart(2, '0');

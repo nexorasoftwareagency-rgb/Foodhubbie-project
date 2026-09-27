@@ -9,7 +9,7 @@
 // already imports from OfflineQueue.tsx, so keeping this hook there would
 // create a circular import between the two.
 import { useEffect, useState } from "react";
-import { db, ref, onValue, off } from "@/lib/firebase";
+import { db, ref, onValue } from "@/lib/firebase";
 
 export function useFirebaseConnection(): boolean {
   const [connected, setConnected] = useState(true);
@@ -19,7 +19,7 @@ export function useFirebaseConnection(): boolean {
     const handler = onValue(connRef, (snap) => {
       setConnected(snap.val() === true);
     });
-    return () => off(connRef, "value", handler);
+    return handler;
   }, []);
 
   return connected;

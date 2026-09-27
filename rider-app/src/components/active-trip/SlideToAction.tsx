@@ -42,9 +42,14 @@ export function SlideToAction({
     if (maxX <= 0) return;
     if (x.get() >= maxX * 0.8) {
       animate(x, maxX, { duration: 0.2 });
-      setCompleted(true);
       haptic(40);
-      await onComplete();
+      try {
+        await onComplete();
+        setCompleted(true);
+      } catch {
+        // failed step → slide back so the rider can retry (or fix the error)
+        animate(x, 0, { duration: 0.25 });
+      }
     } else {
       animate(x, 0, { duration: 0.25 });
     }

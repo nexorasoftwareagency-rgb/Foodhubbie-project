@@ -2,7 +2,7 @@
 // Generic real-time listener utility for Firebase collections.
 // Reduces boilerplate in walletService.ts, notificationService.ts, etc.
 
-import { ref, onValue, off, Unsubscribe } from "firebase/database";
+import { ref, onValue, Unsubscribe } from "firebase/database";
 import { db } from "@/lib/firebase";
 
 export type CollectionItem<T> = { id: string } & T;
@@ -29,7 +29,7 @@ export function subscribeCollection<T>(
     },
     (err) => onError?.(err as unknown as Error)
   );
-  return () => off(collectionRef, "value", handler);
+  return handler;
 }
 
 /**
@@ -53,5 +53,5 @@ export function subscribeDocument<T>(
     },
     (err) => onError?.(err as unknown as Error)
   );
-  return () => off(docRef, "value", handler);
+  return handler;
 }

@@ -77,7 +77,7 @@ export function TaskCard({
       <ActionButtons phone={contactPhone} destLat={destLat} destLng={destLng} />
 
       {!sliderLocked ? (
-        <SlideToAction label={sliderLabel} onComplete={onSlideComplete} loading={sliderLoading} />
+        <SlideToAction key={step} label={sliderLabel} onComplete={onSlideComplete} loading={sliderLoading} />
       ) : (
         <button
           onClick={onReopenOtp}

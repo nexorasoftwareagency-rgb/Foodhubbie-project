@@ -16,7 +16,6 @@ import {
   orderByChild,
   equalTo,
   onValue,
-  off,
   serverTimestamp,
   serverNow,
   waitForServerTimeOffset,
@@ -100,19 +99,19 @@ export async function loadOutlets(): Promise<OutletInfo[]> {
     )
   );
   
-  // Filter successful results, log failures
-  const allSettings = settingsResults
-    .map((result, i) => {
-      if (result.status === "fulfilled") return result.value;
-      console.error(`[loadOutlets] Failed to load settings for outlet ${outletRefs[i].oid}:`, result.reason);
-      return null;
-    })
-    .filter((x): x is { bid: string; oid: string; storeSnap: any; deliverySnap: any } => x !== null);
-  
+  // Keep null placeholders so index i stays aligned with outletRefs[i].
+  const allSettings = settingsResults.map((result, i) => {
+    if (result.status === "fulfilled") return result.value;
+    console.error(`[loadOutlets] Failed to load settings for outlet ${outletRefs[i].oid}:`, result.reason);
+    return null;
+  });
+
   const results: OutletInfo[] = [];
   for (let i = 0; i < outletRefs.length; i++) {
+    const settings = allSettings[i];
+    if (!settings) continue;
     const { bid, oid, outletData: outletMeta } = outletRefs[i];
-    const { storeSnap, deliverySnap } = allSettings[i];
+    const { storeSnap, deliverySnap } = settings;
     
     const store = (storeSnap.val() || {}) as OutletSettings["Store"];
     const delivery = (deliverySnap.val() || {}) as OutletSettings["Delivery"];
@@ -192,13 +191,20 @@ export function subscribeAvailableOrders(
 
   for (const { id, name, icon, color, lat, lng } of outlets) {
     const ordersPath = dbPaths.orders(id);
-    const q = query(ref(db, ordersPath), orderByChild("assignedRider"), equalTo(null));
+    // Query by bound literal (status == Ready) instead of equalTo(null): RTDB
+    // rules cannot distinguish an unbounded query from equalTo(null), which
+    // would let any rider dump every order of every outlet. Ready-status is
+    // still indexed (.indexOn has "status").
+    const q = query(ref(db, ordersPath), orderByChild("status"), equalTo("Ready"));
     const handler = onValue(
       q,
       (snap) => {
         const val = snap.val() || {};
-        // Do NOT delete from cache on assignedRider change — filter at emit time instead.
-        // This ensures orders reappear if assignedRider is later cleared (cancellation/reassignment).
+        // Prune orders that left this outlet's Ready set (accepted/cancelled)
+        // so they vanish from the list immediately instead of going stale.
+        Object.keys(cache).forEach((key) => {
+          if (cache[key]?.data?.outlet === id) delete cache[key];
+        });
         Object.entries(val).forEach(([orderId, data]) => {
           cache[`${id}:${orderId}`] = {
             data: {
@@ -218,7 +224,7 @@ export function subscribeAvailableOrders(
       },
       (err) => onError?.(err as unknown as Error)
     );
-    unsubs.push(() => off(q, "value", handler));
+    unsubs.push(handler);
   }
 
   return () => unsubs.forEach((fn) => fn());
@@ -275,7 +281,7 @@ export function subscribeActiveOrders(
       },
       (err) => onError?.(err as unknown as Error)
     );
-    unsubs.push(() => off(q, "value", handler));
+    unsubs.push(handler);
   }
 
   return () => unsubs.forEach((fn) => fn());
@@ -314,7 +320,7 @@ export function subscribeOrderHistory(
       },
       (err) => onError?.(err as unknown as Error)
     );
-    unsubs.push(() => off(q, "value", handler));
+    unsubs.push(handler);
   }
 
   return () => unsubs.forEach((fn) => fn());
@@ -566,13 +572,19 @@ export async function completeDelivery(params: {
 }): Promise<void> {
   const { outlet, orderId, riderId, deliveryFee, paymentMethod, verifiedBy } = params;
 
+  // Per-order idempotency flag inside the stats node: a retry after a partial
+  // failure (stats committed, order update didn't) can never double-count.
+  const flagKey = orderId.replace(/[.#$/[\]]/g, "");
   const riderStatsPath = dbPaths.riderStats(riderId);
   const result = await runTransaction(ref(db, riderStatsPath), (current) => {
-    if (!current) return { totalOrders: 1, totalEarnings: deliveryFee };
+    if (current?.deliveredOrders?.[flagKey]) return current; // already counted
+    const deliveredOrders = { ...(current?.deliveredOrders || {}), [flagKey]: true };
+    if (!current) return { totalOrders: 1, totalEarnings: deliveryFee, deliveredOrders };
     return {
       ...current,
       totalOrders: (current.totalOrders || 0) + 1,
       totalEarnings: (current.totalEarnings || 0) + deliveryFee,
+      deliveredOrders,
     };
   });
   if (!result.committed) throw new Error("Failed to update rider earnings");
@@ -603,5 +615,5 @@ export function subscribeRiderStats(
   const handler = onValue(statsRef, (snap) => {
     callback(snap.val() || { totalOrders: 0, totalEarnings: 0 });
   });
-  return () => off(statsRef, "value", handler);
+  return handler;
 }

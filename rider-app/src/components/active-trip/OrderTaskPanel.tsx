@@ -119,6 +119,7 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
         toast.error((err as Error)?.message || "Action failed. Please try again.");
         if (user?.uid) logRiderError(user.uid, `ActiveTripView.step${step}`, err);
       }
+      throw err; // let SlideToAction reset the slider for retry
     } finally {
       setSliderLoading(false);
     }
@@ -181,7 +182,13 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
       if (result.success) {
         setVerifiedBy(result.verifiedBy);
         setOtpOpen(false);
-        setPayOpen(true);
+        // Already paid online → skip the payment sheet entirely so the rider
+        // can't flip the recorded method to CASH (Admin settlement reads it).
+        if (order.paymentStatus === "Paid") {
+          await finishPayment(order.paymentMethod ?? "UPI", result.verifiedBy);
+        } else {
+          setPayOpen(true);
+        }
       }
       return result;
     } catch (err) {
@@ -206,11 +213,15 @@ function handleEmergencyOverride() {
       enteredOtp: order.backupCode,
       actualOtp: order.deliveryOTP || order.otp || "",
       backupCode: order.backupCode,
-    }).then((result) => {
+      }).then((result) => {
       if (result.success) {
         setVerifiedBy("ADMIN_FALLBACK");
         setOtpOpen(false);
-        setPayOpen(true);
+        if (order.paymentStatus === "Paid") {
+          void finishPayment(order.paymentMethod ?? "UPI", "ADMIN_FALLBACK");
+        } else {
+          setPayOpen(true);
+        }
         toast.warning("Emergency override used", { description: "This is logged for audit." });
       }
     }).catch((err) => {
@@ -219,7 +230,7 @@ function handleEmergencyOverride() {
     });
   }
 
-  async function handleConfirmPayment(method: "CASH" | "UPI") {
+  async function finishPayment(method: "CASH" | "UPI" | "CARD", via?: "OTP" | "ADMIN_FALLBACK") {
     if (!user?.uid) return;
     setPayLoading(true);
     try {
@@ -229,7 +240,7 @@ function handleEmergencyOverride() {
         riderId: user.uid,
         deliveryFee: order.deliveryFee,
         paymentMethod: method,
-        verifiedBy,
+        verifiedBy: via ?? verifiedBy,
       });
       setPayOpen(false);
       setSuccessOpen(true);
@@ -240,6 +251,8 @@ function handleEmergencyOverride() {
       setPayLoading(false);
     }
   }
+
+  const handleConfirmPayment = (method: "CASH" | "UPI") => finishPayment(method);
 
   const sliderLabel = step === 0 ? "SLIDE TO REACH OUTLET" : step === 1 ? "SLIDE TO PICK UP" : "SLIDE TO REACH CUSTOMER";
 
