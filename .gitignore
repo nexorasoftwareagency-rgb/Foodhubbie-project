@@ -62,6 +62,23 @@ Desktop.ini
 test-results/
 tmp_check.js
 
+# Root scratch scripts from ad-hoc fix/check runs — never commit
+/check_*.js
+/fix_*.js
+/update_*.js
+/insert_feature*.js
+/debug_*.js
+/find_marker.js
+/receipt_*.js
+/receipt_*.html
+/expenses_*.html
+/expenses_*.md
+/EXPENSES_EXAMPLES.md
+/new_*.html
+/old_*.html
+/temp*.diff
+Admin/js/auth.js.tmp
+
 # Audit temp files
 _audit_tmp/
 

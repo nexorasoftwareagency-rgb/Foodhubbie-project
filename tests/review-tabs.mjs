@@ -13,7 +13,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const ADMIN_URL = process.env.ADMIN_URL || 'https://foodhubbie-admins.web.app';
 const EMAIL = 'roshanipizza@gmail.com';
-const PASSWORD = 'REDACTED-PASSWORD-ROTATE-ME';
+const PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 const log = (...a) => console.log('[Review]', ...a);
 
