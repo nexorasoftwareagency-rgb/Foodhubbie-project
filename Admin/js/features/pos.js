@@ -258,7 +258,15 @@ export async function openPOSSelectionModal(dishId) {
         modal.classList.remove('hidden');
         modal.classList.add('active', 'side-panel-active');
         document.body.classList.add('pos-selection-mode');
-        
+        modal._kbLastFocus = document.activeElement;
+        modal._kbRestore = () => {
+            const el = document.querySelector(`.pos-dish-btn-v4[data-id="${CSS.escape(String(dish.id))}"]`);
+            (el || (modal._kbLastFocus?.isConnected ? modal._kbLastFocus : null))?.focus();
+        };
+        modal._kbClose = hidePOSSelectionModal;
+        requestAnimationFrame(() => {
+            modal.querySelector('button, input, select, [tabindex]')?.focus();
+        });
         // Ensure all icons (including ones in headers and the button) are rendered
         await loadLucide();
         window.lucide.createIcons({ root: modal });
@@ -272,6 +280,7 @@ export function hidePOSSelectionModal() {
     if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('active', 'side-panel-active');
+        modal._kbRestore?.();
         document.body.classList.remove('pos-selection-mode');
         logger.info('POS', 'Selection modal closed');
     }
@@ -975,7 +984,8 @@ export async function submitWalkinSale() {
         // Get sequence from database
         const seqSnap = await runTransaction(tenantRef(Outlet.current, `metadata/orderSequence/${dateStr}`), (current) => (current || 0) + 1);
         const seqNum = seqSnap.snapshot.val() || 1;
-        const orderId = `${dateStr}-${seqNum}`;
+        const oid = /^\d+$/.test(Outlet.current) ? String(Outlet.current).padStart(2, '0') : Outlet.current;
+        const orderId = `${oid}-${dateStr}-${seqNum}`;
         logger.firebase('POS', `Generated order ID: ${orderId}`);
 
         const orderData = {

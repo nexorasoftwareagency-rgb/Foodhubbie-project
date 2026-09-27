@@ -22,25 +22,25 @@
  * for how to change this if you would rather standardize on "DineIn"
  * and update orders.js's STATUS_SEQUENCES key to match.
  */
-import { outletRef, set, update, get, runTransaction } from './firebase.js';
+import { outletRef, OUTLET, set, update, get, runTransaction } from './firebase.js';
 import { Session, attachOrderToSession, ensureSession, assertOutletEnabled } from './session.js';
 import { Cart, clearCart, subtotal as cartSubtotal, getQRStorageKey } from './cart.js';
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
 // Unified order ID → display string. Callers add "#".
-// Same logic as Admin/js/utils.js, bot/utils.js, SupremeAdmin, rider utils.
+// DDMMYY-N and OUTLET-DDMMYY-N pass through; legacy YYYYMMDD-NNNN → DDMMYY-N; push-keys → last-6 upper.
 export function formatOrderId(o) {
     const id = typeof o === 'string' ? o : (o && (o.orderId || o.id)) || '';
     if (!id) return 'N/A';
-    if (/^\d{6}-\d+$/.test(id)) return id;
+    if (/^(?:.+-)?\d{6}-\d+$/.test(id)) return id;
     const m = String(id).match(/^(\d{4})(\d{2})(\d{2})-(\d+)$/);
     if (m) return `${m[3]}${m[2]}${m[1].slice(2)}-${Number(m[4])}`;
     return String(id).slice(-6).toUpperCase();
 }
 
-// Daily atomic sequence → DDMMYY-N (unpadded). Path key also DDMMYY.
-// SECURITY NOTE (accepted 2026-09-27): this ID is guessable (date + small
+// Daily atomic sequence → OUTLET-DDMMYY-N (e.g. 03-161126-12). Path key also DDMMYY.
+// SECURITY NOTE (accepted 2026-09-27): this ID is guessable (outlet + date + small
 // counter) and database.rules.json allows unauthenticated reads of source=='QR'
 // orders — so the order ID functions as the tracking secret (address/name/OTP
 // readable to anyone who guesses it). Hardening options if this ever matters:
@@ -54,7 +54,8 @@ export async function generateOrderId() {
     const seqRef = outletRef(`metadata/orderSequence/${dateStr}`);
     const result = await runTransaction(seqRef, (current) => (current || 0) + 1);
     const seqNum = (result.snapshot && result.snapshot.val()) || 1;
-    return `${dateStr}-${seqNum}`;
+    const oid = /^\d+$/.test(OUTLET) ? OUTLET.padStart(2, '0') : OUTLET;
+    return `${oid}-${dateStr}-${seqNum}`;
 }
 
 /**
