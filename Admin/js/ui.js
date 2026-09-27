@@ -51,7 +51,38 @@ export const closeSidebar = () => {
 };
 
 
+// --- ROLE-BASED TAB ACCESS ---
+// Minimum role level per tab (unlisted tab = open to every role).
+// Levels: supreme/super admin 4, owner 3, manager 2, cashier 1, waiter 0.
+const TAB_MIN_ROLE = {
+    settings: 3, // owner+
+    expenses: 2, discounts: 2, reports: 2, promotions: 2, // manager+
+    menu: 2, categories: 2, 'menu-browser': 2, inventory: 2,
+    riders: 2, customers: 2, chat: 2, payments: 2, riderAnalytics: 2, feedback: 2, liveTracker: 2,
+    dashboard: 1, walkin: 1, tables: 1 // cashier+
+    // orders, live (kitchen), notifications stay open to all — waiter lands here
+};
+const ROLE_LEVEL = { 'supreme admin': 4, 'super admin': 3, owner: 3, manager: 2, cashier: 1, waiter: 0 };
+
+let _roleWarned = false;
+export const canAccessTab = (tabId) => {
+    const min = TAB_MIN_ROLE[tabId];
+    if (min === undefined) return true;
+    const role = (state.adminData?.role || '').toLowerCase().trim();
+    if (role in ROLE_LEVEL) return ROLE_LEVEL[role] >= min;
+    if (!_roleWarned) {
+        _roleWarned = true;
+        console.warn(`[RoleAccess] Missing/unknown role "${role}" — tab gates inactive for this session`);
+    }
+    return true; // never lock out an unrecognized account
+};
+
 export const switchTab = async (tabId, skipHistory = false) => {
+    if (!canAccessTab(tabId)) {
+        window.__adminLogger?.warn?.('NAV', `Blocked by role: ${tabId}`);
+        showToast(`You don't have access to that section`, 'warning');
+        return;
+    }
     if (state.currentActiveTab === tabId) {
         window.__adminLogger?.info('NAV', `Tab already active: ${tabId}`);
         return;
@@ -373,21 +404,23 @@ if (document.readyState === 'loading') {
 
 window.addEventListener('resize', applyDataLabels);
 
-// --- BROWSER HISTORY ORCHESTRATION ---
-async function updateExpenseNavVisibility() {
+// --- NAV VISIBILITY (role gates + expense feature flag) ---
+async function refreshNavVisibility() {
     const { state } = await import('./state.js');
-    const navBtn = document.getElementById('nav-expenses');
-    const menuItem = document.getElementById('menu-expenses');
-    const isEnabled = state.features?.expense === true;
-    if (navBtn) navBtn.style.display = isEnabled ? '' : 'none';
-    if (menuItem) menuItem.style.display = isEnabled ? '' : 'none';
+    const expenseOn = state.features?.expense === true;
+    Object.keys(TAB_MIN_ROLE).forEach(tab => {
+        const show = canAccessTab(tab) && (tab !== 'expenses' || expenseOn);
+        const li = document.getElementById(`menu-${tab}`);
+        if (li) li.style.display = show ? '' : 'none';
+        document.querySelectorAll(`.nav-item[data-tab="${tab}"]`).forEach(b => b.style.display = show ? '' : 'none');
+    });
 }
 
 let _featureWatchInterval = null;
 function startFeatureFlagWatcher() {
     if (_featureWatchInterval) return;
     _featureWatchInterval = setInterval(() => {
-        updateExpenseNavVisibility().catch(console.error);
+        refreshNavVisibility().catch(console.error);
     }, 500);
 }
 function stopFeatureFlagWatcher() {
@@ -398,7 +431,7 @@ function stopFeatureFlagWatcher() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await updateExpenseNavVisibility();
+    await refreshNavVisibility();
     startFeatureFlagWatcher();
 });
 
