@@ -87,6 +87,7 @@ GUIDEs/SERVER-ACCESS-GUIDE.md
 
 # Local credentials (never commit)
 foodhubbie-10-firebase-adminsdk-*.json
+firebase-service-account.json
 nilesh-admin_*.csv
 
 
