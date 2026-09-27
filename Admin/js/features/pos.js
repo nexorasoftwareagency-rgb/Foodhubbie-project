@@ -984,7 +984,9 @@ export async function submitWalkinSale() {
         // Get sequence from database
         const seqSnap = await runTransaction(tenantRef(Outlet.current, `metadata/orderSequence/${dateStr}`), (current) => (current || 0) + 1);
         const seqNum = seqSnap.snapshot.val() || 1;
-        const oid = /^\d+$/.test(Outlet.current) ? String(Outlet.current).padStart(2, '0') : Outlet.current;
+        let outletNo = '';
+        try { outletNo = (await get(tenantRef(Outlet.current, 'outletNo'))).val() || ''; } catch (_) {}
+        const oid = outletNo || (/^\d+$/.test(Outlet.current) ? String(Outlet.current).padStart(2, '0') : Outlet.current);
         const orderId = `${oid}-${dateStr}-${seqNum}`;
         logger.firebase('POS', `Generated order ID: ${orderId}`);
 

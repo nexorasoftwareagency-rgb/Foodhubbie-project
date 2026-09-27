@@ -75,6 +75,13 @@
         ".write": "auth != null && root.child('admins').child(auth.uid).child('isSuper').val() === true"
       }
     },
+    "meta": {
+      "outletCounter": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
+        ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+      }
+    },
     "menuBank": {
       ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
       "categories": {
@@ -101,9 +108,10 @@
         "outlets": {
           "$outletId": {
             "disabled": { ".read": "true" },
+            "outletNo": { ".read": "true" },
             "billing": {
               ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
-              ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)"
+              ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)"
             },
             "otpAttempts": {
               "$orderId": {

@@ -39,12 +39,15 @@ export function formatOrderId(o) {
     return String(id).slice(-6).toUpperCase();
 }
 
-// Daily atomic sequence → OUTLET-DDMMYY-N (e.g. 03-161126-12). Path key also DDMMYY.
+// Daily atomic sequence → outletNo-DDMMYY-N (e.g. 03-161126-12). Path key also DDMMYY.
+// outletNo = platform-wide outlet number from Supreme onboarding; falls back to
+// the raw outlet id when missing (legacy outlets before backfill).
 // SECURITY NOTE (accepted 2026-09-27): this ID is guessable (outlet + date + small
 // counter) and database.rules.json allows unauthenticated reads of source=='QR'
 // orders — so the order ID functions as the tracking secret (address/name/OTP
 // readable to anyone who guesses it). Hardening options if this ever matters:
 // append a random suffix at generation, or gate reads behind a trackToken query.
+let _outletNo = null;
 export async function generateOrderId() {
     const now = new Date();
     const dd = String(now.getDate()).padStart(2, '0');
@@ -54,7 +57,11 @@ export async function generateOrderId() {
     const seqRef = outletRef(`metadata/orderSequence/${dateStr}`);
     const result = await runTransaction(seqRef, (current) => (current || 0) + 1);
     const seqNum = (result.snapshot && result.snapshot.val()) || 1;
-    const oid = /^\d+$/.test(OUTLET) ? OUTLET.padStart(2, '0') : OUTLET;
+    if (_outletNo === null) {
+        try { _outletNo = (await get(outletRef('outletNo'))).val() || ''; }
+        catch (_) { _outletNo = ''; }
+    }
+    const oid = _outletNo || (/^\d+$/.test(OUTLET) ? OUTLET.padStart(2, '0') : OUTLET);
     return `${oid}-${dateStr}-${seqNum}`;
 }
 

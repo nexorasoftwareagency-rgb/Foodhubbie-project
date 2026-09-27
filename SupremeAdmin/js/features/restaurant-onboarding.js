@@ -171,6 +171,18 @@ async function handleSubmit(e) {
     const bid = db.ref('businesses').push().key.toLowerCase();
     const oid = db.ref(`businesses/${bid}/outlets`).push().key.toLowerCase();
 
+    // Platform-wide outlet number used in order IDs (e.g. 03-161126-12).
+    // Counter-first: a crash between here and the atomic update below only
+    // leaves a number gap. Failure is non-fatal — order IDs fall back to the
+    // raw outlet id.
+    let outletNo = null;
+    try {
+      const noSnap = await db.ref('meta/outletCounter').runTransaction(cur => (cur || 0) + 1);
+      outletNo = String(noSnap.snapshot.val() || '').padStart(2, '0') || null;
+    } catch (e) {
+      console.warn('[Onboarding] outletCounter failed (non-fatal):', e.message);
+    }
+
     // Mirror the chosen template's categories + dishes into the platform-wide
     // menu bank (menuBank/{categories,dishes}), deduped by slug. Same atomic
     // update so the bank entries land with the restaurant or not at all.
@@ -215,8 +227,19 @@ async function handleSubmit(e) {
             name: data.outletName.trim(),
             contactPhone: data.contactPhone.trim(),
             createdAt: firebase.database.ServerValue.TIMESTAMP,
+            ...(outletNo ? { outletNo } : {}),
             whatsapp: { status: 'pending' },
             ...(tplDefaults || {}),
+            // Billing defaults + 15 free welcome tokens — same shape and values
+            // as tools/seed-billing-defaults.cjs (which skips outlets that
+            // already have billing, so this stays idempotent with it).
+            billing: {
+              mode: 'per_order',
+              rates: { QR: 2, POS: 2, webview_delivery: 3, WA: 3, other: 2, promo: 0.86, commission1pct: 0.01 },
+              setup: { amount: 500, status: 'refundable', date: new Date().toISOString() },
+              tokens: { balance: 15, updatedAt: firebase.database.ServerValue.TIMESTAMP },
+              tokenPacks: { welcome: { qty: 15, priceRs: 0, note: 'Free welcome pack', grantedAt: firebase.database.ServerValue.TIMESTAMP, grantedBy: 'system' } },
+            },
             // Feature flags default OFF for new restaurants (user scope answer).
             // Merge first so a template's own settings survive; our flag still wins.
             settings: { ...(tplDefaults?.settings || {}), features: { discountApproval: false } },
