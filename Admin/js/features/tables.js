@@ -2823,13 +2823,6 @@ function _wireBillReviewModal() {
         couponClear.addEventListener('click', clearTableBillCoupon);
     }
 
-    // Wire up offers toggle
-    const offersBtn = document.querySelector('.bill-offers-btn');
-    if (offersBtn && !offersBtn.dataset.listener) {
-        offersBtn.dataset.listener = '1';
-        offersBtn.addEventListener('click', toggleTableBillOffersPanel);
-    }
-
     // Wire up confirm button
     const confirmBtn = document.getElementById('billConfirmBtn');
     if (confirmBtn && !confirmBtn.dataset.listener) {
