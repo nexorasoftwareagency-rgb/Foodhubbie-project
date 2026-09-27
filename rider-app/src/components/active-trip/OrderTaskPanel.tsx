@@ -136,6 +136,7 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
           outletLng: order.outletLng,
           riderPhone: rider?.phone || "",
           customerPhone: order.customerPhone || order.phone,
+          riderUid: user?.uid,
         });
         toast.warning("You're offline", { description: "Pickup will be confirmed automatically once you're back online." });
         setVerifyOpen(false);
@@ -152,6 +153,7 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
         outletLng: order.outletLng,
         riderPhone: rider?.phone || "",
         customerPhone: order.customerPhone || order.phone,
+        riderUid: user?.uid,
       });
       toast.success("Order picked up!", { description: "Navigate to the customer now." });
       setVerifyOpen(false);

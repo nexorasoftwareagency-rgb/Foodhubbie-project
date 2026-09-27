@@ -187,6 +187,8 @@ export const switchTab = async (tabId, skipHistory = false) => {
         if (tabId !== 'tables') cleanupTasks.push(mod('tables').then(m => m.cleanupTables?.()));
         if (tabId !== 'chat') cleanupTasks.push(mod('chat').then(m => m.cleanupChat?.()));
         if (tabId !== 'menu-browser') cleanupTasks.push(mod('menu-browser').then(m => m.cleanupMenuBrowser?.()));
+        if (tabId !== 'expenses') cleanupTasks.push(mod('expenses').then(m => m.cleanupExpenses?.()));
+        if (tabId !== 'security-audit') cleanupTasks.push(mod('security-audit').then(m => m.cleanupSecurityAudit?.()));
         await Promise.allSettled(cleanupTasks);
         console.log(`[SWITCH] cleanup done for ${tabId}`);
 
@@ -272,6 +274,20 @@ export const switchTab = async (tabId, skipHistory = false) => {
                     break;
                 }
                 case 'payments': { const { renderOrders } = await mod('orders'); renderOrders(state.lastOrdersSnap); break; }
+                case 'expenses': {
+                    const { state } = await import('./state.js');
+                    if (!state.features?.expense) {
+                        showToast('Expense feature is disabled. Enable it in Settings > Features.', 'info');
+                        // Switch back to previous tab or dashboard
+                        const prevTab = document.querySelector('.nav-btn.active')?.dataset.tab || 'dashboard';
+                        document.querySelector(`[data-tab="${prevTab}"]`)?.click();
+                        return;
+                    }
+                    const { loadExpenses, initExpenseModals } = await mod('expenses');
+                    loadExpenses();
+                    initExpenseModals();
+                    break;
+                }
                 case 'promotions': {
                     const { loadPromotions } = await mod('promotions');
                     loadPromotions();
@@ -358,6 +374,34 @@ if (document.readyState === 'loading') {
 window.addEventListener('resize', applyDataLabels);
 
 // --- BROWSER HISTORY ORCHESTRATION ---
+async function updateExpenseNavVisibility() {
+    const { state } = await import('./state.js');
+    const navBtn = document.getElementById('nav-expenses');
+    const menuItem = document.getElementById('menu-expenses');
+    const isEnabled = state.features?.expense === true;
+    if (navBtn) navBtn.style.display = isEnabled ? '' : 'none';
+    if (menuItem) menuItem.style.display = isEnabled ? '' : 'none';
+}
+
+let _featureWatchInterval = null;
+function startFeatureFlagWatcher() {
+    if (_featureWatchInterval) return;
+    _featureWatchInterval = setInterval(() => {
+        updateExpenseNavVisibility().catch(console.error);
+    }, 500);
+}
+function stopFeatureFlagWatcher() {
+    if (_featureWatchInterval) {
+        clearInterval(_featureWatchInterval);
+        _featureWatchInterval = null;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await updateExpenseNavVisibility();
+    startFeatureFlagWatcher();
+});
+
 window.addEventListener('popstate', (event) => {
     const state = event.state;
     

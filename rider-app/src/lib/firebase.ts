@@ -90,6 +90,55 @@ export function getMessagingInstance(): Messaging | null {
   return messaging;
 }
 
+// Corrects for client device clock drift/manipulation using Firebase's own
+// server-vs-client offset feed. Used anywhere a rate limit or lockout window
+// is enforced (e.g. OTP attempt blocking) so a wrong or deliberately changed
+// device clock can't bypass or falsely trigger those limits. This is a
+// client-side mitigation only — the authoritative enforcement still belongs
+// in Security Rules / a Cloud Function if OTP abuse becomes a real concern.
+let serverTimeOffsetMs = 0;
+let serverTimeOffsetReady = false;
+let serverTimeOffsetResolve: () => void = () => {};
+const serverTimeOffsetPromise = new Promise<void>((resolve) => {
+    serverTimeOffsetResolve = resolve;
+});
+
+if (typeof window !== "undefined") {
+    // Prime the offset with a one-time get() to avoid race condition
+    get(ref(db, ".info/serverTimeOffset")).then((snap) => {
+        const val = snap.val();
+        if (typeof val === "number") {
+            serverTimeOffsetMs = val;
+        }
+        serverTimeOffsetReady = true;
+        serverTimeOffsetResolve();
+    }).catch(() => {
+        serverTimeOffsetReady = true;
+        serverTimeOffsetResolve();
+    });
+
+    // Keep listening for updates
+    onValue(ref(db, ".info/serverTimeOffset"), (snap) => {
+        const val = snap.val();
+        if (typeof val === "number") serverTimeOffsetMs = val;
+    });
+}
+
+/** Wait for server time offset to be ready (resolves immediately if already ready) */
+export async function waitForServerTimeOffset(): Promise<void> {
+    if (serverTimeOffsetReady) return;
+    await serverTimeOffsetPromise;
+}
+
+/** Best-effort server-corrected "now", falling back to Date.now() before the
+ *  offset has loaded (offset starts at 0, so this is identical to Date.now()
+ *  until the first `.info/serverTimeOffset` snapshot arrives). */
+export function serverNow(): number {
+    if (!serverTimeOffsetReady) {
+        console.warn("[serverNow] called before serverTimeOffset ready — using local time");
+    }
+    return Date.now() + serverTimeOffsetMs;
+}
 export {
   app,
   db,

@@ -19,7 +19,7 @@ let _reportSending = false;
 
 async function loadChartJS() {
     if (_chartJSPromise) return _chartJSPromise;
-    _chartJSPromise = import('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/+esm').then(m => {
+    _chartJSPromise = import('chart.js').then(m => {
         const C = m.Chart;
         if (C && C.register && m.CategoryScale) {
             C.register(m.CategoryScale, m.LinearScale, m.BarElement, m.BarController, m.Tooltip, m.Legend);

@@ -3308,3 +3308,154 @@
     white-space: nowrap;
 }
 
+/* ================================================================
+   EXPENSES SUB-TABS & CATEGORY CHIPS
+   ================================================================ */
+.expense-subtabs {
+    display: flex;
+    gap: 4px;
+    background: var(--glass-bg, rgba(255,255,255,0.05));
+    padding: 4px;
+    border-radius: 10px;
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+}
+.expense-subtab-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary, #9ca3af);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+.expense-subtab-btn:hover {
+    background: var(--glass-bg, rgba(255,255,255,0.08));
+    color: var(--text-primary, #f8fafc);
+}
+.expense-subtab-btn.active {
+    background: var(--primary, #E84908);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(232, 73, 8, 0.3);
+}
+.expense-subtab-btn i { font-size: 13px; }
+.expense-subtab-content { animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+.expense-today-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+}
+.expense-today-total {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.expense-today-total .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary, #9ca3af);
+}
+.expense-today-total .value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--primary, #E84908);
+    font-variant-numeric: tabular-nums;
+}
+.expense-category-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.expense-category-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 2px solid;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: default;
+    transition: all 0.2s ease;
+}
+.expense-category-chip .chip-amount {
+    margin-left: 4px;
+    font-size: 11px;
+    opacity: 0.8;
+}
+.expense-category-chip i { font-size: 11px; }
+
+.expense-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--glass-bg, rgba(255,255,255,0.05));
+    border-radius: 10px;
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+}
+.expense-filter-bar input,
+.expense-filter-bar select {
+    background: var(--input-bg, rgba(255,255,255,0.08));
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.15));
+    color: var(--text-primary, #f8fafc);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.expense-reports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+}
+.expense-reports-grid canvas {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 300px;
+}
+
+.expense-category-item {
+    padding: 12px;
+    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+}
+.expense-category-item:last-child { border-bottom: none; }
+.expense-category-item .flex-row { align-items: center; }
+
+@media (max-width: 768px) {
+    .expense-subtabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+    .expense-subtab-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    .expense-today-total .value { font-size: 22px; }
+    .expense-category-chip { padding: 4px 10px; font-size: 11px; }
+    .expense-filter-bar { gap: 6px; }
+    .expense-filter-bar input,
+    .expense-filter-bar select {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    .expense-reports-grid { grid-template-columns: 1fr; }
+    .expense-reports-grid canvas { max-height: 250px; }
+}
+

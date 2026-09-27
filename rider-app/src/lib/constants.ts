@@ -28,6 +28,12 @@ export async function resolveBusinessIdForOutlet(outletId: OutletId): Promise<st
   }
   // Fallback to first business (should not happen in production)
   const firstBid = Object.keys(businesses)[0];
+  if (!firstBid) {
+    // The `businesses` node is empty — refuse to cache `undefined`, which would
+    // otherwise silently poison every future tenantPath() call for this outlet
+    // (producing paths like `businesses/undefined/outlets/...`) until reload.
+    throw new Error(`resolveBusinessIdForOutlet: no businesses found in Firebase for outlet "${outletId}"`);
+  }
   outletBusinessIdCache.set(outletId, firstBid);
   return firstBid;
 }

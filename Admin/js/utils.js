@@ -46,7 +46,7 @@ export function formatOrderId(o) {
 }
 
 import { showToast, showConfirm, showPinPrompt } from './ui-utils.js';
-export { showToast, showConfirm };
+export { showToast, showConfirm, showPinPrompt };
 
 // ── Audio (pre-created, unlocked on first user interaction) ──
 let _alertAudio = null;
@@ -256,8 +256,9 @@ export async function gateManagerPin({ message, auditAction, auditDetails = {} }
  * demands a manager PIN. Callers `await` this before writing payment.
  * Resolves false ONLY when the operator cancels or mistypes the PIN;
  * every other path fails open.
+ * Uses per-person ceiling from staff record, with outlet-level fallback.
  */
-export async function gateManualDiscountPin({ discountValue, subtotal, discountId }) {
+export async function gateManualDiscountPin({ discountValue, subtotal, discountId, staffUid }) {
     if (discountId !== 'manual:flat' && discountId !== 'manual:percent') return true;
     if (!(state.features && state.features.discountApproval)) return true;
 
@@ -268,16 +269,19 @@ export async function gateManualDiscountPin({ discountValue, subtotal, discountI
         console.warn('[Discounts] approval settings unreadable:', e?.message || e);
         return true;
     }
-    if (!needsPinApproval(discountValue, subtotal, sec.discountCeilingPct)) return true;
+    
+    // GET PER-PERSON CEILING
+    const effectiveCeiling = await getEffectiveCeiling(staffUid || state.adminData?.uid);
+    if (!needsPinApproval(discountValue, subtotal, effectiveCeiling)) return true;
 
     const pct = ((Number(discountValue) / subtotal) * 100).toFixed(1);
     return gateManagerPin({
-        message: `This ${pct}% discount is above the ${sec.discountCeilingPct}% approval ceiling.`,
+        message: `This ${pct}% discount is above the ${effectiveCeiling}% approval ceiling.`,
         auditAction: 'discount.pin.approved',
         auditDetails: {
             discountValue: Math.round(discountValue),
             subtotal: Math.round(subtotal),
-            ceilingPct: sec.discountCeilingPct
+            ceilingPct: effectiveCeiling
         }
     });
 }
@@ -359,4 +363,223 @@ export function getSkeletonDivs(count = 5) {
     return Array.from({ length: count }, () =>
         `<div class="skeleton" style="height:44px;width:100%;border-radius:6px;margin:3px 0"></div>`
     ).join('');
+}
+
+// ─── Counter PIN Shift Sign-In ───
+
+/**
+ * Verifies a 4-digit Counter PIN against staff records using reverse index.
+ * Returns staff UID on success, null on failure/cancel.
+ */
+export async function verifyCounterPin(enteredPin) {
+    if (!enteredPin || enteredPin.length < 4) return null;
+    
+    const hash = await hashPin(enteredPin);
+    if (!hash) return null;
+    
+    try {
+        // Use reverse index: counterPinIndex/{hash} -> staffUid
+        // This avoids reading all staff records and prevents timing attacks
+        const indexRef = Outlet.ref(`counterPinIndex/${hash}`);
+        const indexSnap = await get(indexRef);
+        if (!indexSnap.exists()) return null;
+        
+        const staffUid = indexSnap.val();
+        
+        // Verify the staff member is still active and PIN hasn't changed
+        const staffSnap = await get(Outlet.staff(staffUid));
+        if (!staffSnap.exists()) return null;
+        
+        const staff = staffSnap.val();
+        if (staff.isActive === false || staff.counterPinHash !== hash) return null;
+        
+        return staffUid;
+    } catch (e) {
+        console.error('[Utils] Counter PIN verification failed:', e);
+        return null;
+    }
+}
+
+/**
+ * Prompts for Counter PIN to start a shift.
+ * Returns staff UID on success, null on cancel.
+ */
+export async function promptCounterPinSignIn() {
+    const pin = await showPinPrompt('Enter your 4-digit Counter PIN to start your shift', 'Shift Sign-In');
+    if (!pin) return null;
+    
+    const staffUid = await verifyCounterPin(pin);
+    if (!staffUid) {
+        showToast('Invalid Counter PIN', 'error');
+        return null;
+    }
+    
+    // Store in session for this shift
+    sessionStorage.setItem('counterStaffUid', staffUid);
+    
+    // Update lastSignedIn timestamp
+    try {
+        await update(Outlet.staff(staffUid), { lastSignedIn: new Date().toISOString() });
+    } catch (e) {
+        console.warn('[Utils] Failed to update lastSignedIn:', e);
+    }
+    
+    showToast('Shift started', 'success');
+    return staffUid;
+}
+
+/**
+ * Clears the counter staff session (end of shift / logout)
+ */
+export function clearCounterStaffSession() {
+    sessionStorage.removeItem('counterStaffUid');
+}
+
+/**
+ * Gets the current counter staff UID (for POS discount ceiling)
+ */
+export function getCounterStaffUid() {
+    return sessionStorage.getItem('counterStaffUid') || null;
+}
+
+/**
+ * SHA-256 hex of an email — used for emailIndex lookup.
+ * Normalizes email to lowercase before hashing.
+ * Throws if crypto.subtle is unavailable (requires secure context).
+ */
+export const hashEmail = async (email) => {
+    if (!globalThis.crypto?.subtle) throw new Error('Email hashing requires secure context (HTTPS)');
+    const normalized = String(email).toLowerCase().trim();
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+/**
+ * Audit log for staff changes.
+ * Written to outlets/{oid}/audit/staffChanges/{pushId}
+ */
+export async function logStaffChange(action, targetStaffUid, oldValue, newValue, note = '') {
+    const adminData = state.adminData;
+    if (!adminData) return;
+
+    try {
+        await push(Outlet.ref('audit/staffChanges'), {
+            action,
+            targetStaffUid,
+            oldValue,
+            newValue,
+            actorUid: adminData.uid,
+            actorRole: adminData.role,
+            actorName: adminData.name || adminData.email,
+            timestamp: serverTimestamp(),
+            note
+        });
+    } catch (e) {
+        console.warn('[Utils] staffChanges write failed:', e);
+    }
+}
+
+/**
+ * Shows a modal with a generated PIN that the user can copy.
+ * Returns a promise that resolves when the user clicks "Done".
+ */
+export function showPinModal(message, pin) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'dynamic-modal-overlay';
+        overlay.innerHTML = `
+            <div class="dynamic-modal-box">
+                <h3 class="dynamic-modal-title">Counter PIN Generated</h3>
+                <p class="dynamic-modal-text">${message}</p>
+                <div class="pin-display" style="font-size:28px;font-weight:700;letter-spacing:8px;font-family:monospace;background:var(--bg-subtle);padding:16px;border-radius:12px;margin:16px 0;text-align:center;color:var(--primary);">${pin}</div>
+                <p class="text-secondary-small" style="text-align:center;">Share this securely. It will not be shown again.</p>
+                <div class="dynamic-modal-actions">
+                    <button class="btn-primary btn-copy-pin"><i data-lucide="copy" class="icon-14"></i> Copy</button>
+                    <button class="btn-confirm">Done</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        loadLucide().then(() => window.lucide?.createIcons({ root: overlay }));
+        
+        overlay.querySelector('.btn-copy-pin').onclick = () => {
+            navigator.clipboard.writeText(pin).then(() => showToast('Copied!', 'success'));
+        };
+        overlay.querySelector('.btn-confirm').onclick = () => {
+            overlay.style.opacity = '0';
+            setTimeout(() => { overlay.remove(); resolve(); }, 200);
+        };
+        overlay.onclick = (e) => { if (e.target === overlay) { overlay.style.opacity = '0'; setTimeout(() => { overlay.remove(); resolve(); }, 200); } };
+    });
+}
+
+/**
+ * Capitalizes the first letter of a string.
+ */
+export function capitalize(str) {
+    return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+}
+
+/**
+ * Formats a timestamp as relative time (e.g., "2h ago", "3d ago").
+ */
+export function formatRelativeTime(isoString) {
+    try {
+        const date = new Date(isoString);
+        const diff = Date.now() - date.getTime();
+        const mins = Math.floor(diff / 60000);
+        const hours = Math.floor(diff / 3600000);
+        const days = Math.floor(diff / 86400000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        if (days < 7) return `${days}d ago`;
+        return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+    } catch {
+        return 'Unknown';
+    }
+}
+
+/**
+ * Switches to the Staff Management tab in Settings.
+ */
+export function switchToStaffManagementTab() {
+    const settingsTab = document.querySelector('[data-tab="settings"]');
+    if (settingsTab && !settingsTab.classList.contains('active')) {
+        settingsTab.click();
+    }
+    setTimeout(() => {
+        const subTab = document.querySelector('[data-subtab="staff-management"]');
+        if (subTab && !subTab.classList.contains('active')) {
+            subTab.click();
+        }
+    }, 100);
+}
+
+/**
+ * Gets the effective discount ceiling for a staff member.
+ * Priority: 1) per-person ceiling on staff record, 2) explicit override in settings/Security/staffCeilings,
+ * 3) legacy outlet-level ceiling from settings/Security/discountCeilingPct.
+ * Returns 0 if no ceiling configured (no approval needed).
+ */
+export async function getEffectiveCeiling(staffUid) {
+    if (!staffUid) return 0;
+    
+    // 1. Try per-person ceiling (denormalized on staff record for fast POS read)
+    const staffSnap = await get(Outlet.staff(staffUid));
+    if (staffSnap.exists()) {
+        const staff = staffSnap.val();
+        if (staff.isActive !== false && typeof staff.discountCeilingPct === 'number' && staff.discountCeilingPct > 0) {
+            return staff.discountCeilingPct;
+        }
+    }
+    
+    // 2. Try explicit override in staffCeilings
+    const ceilingSnap = await get(Outlet.ref(`settings/Security/staffCeilings/${staffUid}`));
+    if (ceilingSnap.exists()) {
+        return ceilingSnap.val().ceilingPct || 0;
+    }
+    
+    // 3. Fallback to outlet-level legacy ceiling
+    const secSnap = await get(Outlet.ref('settings/Security'));
+    return secSnap.val()?.discountCeilingPct || 0;
 }

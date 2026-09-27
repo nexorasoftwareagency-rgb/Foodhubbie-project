@@ -3,38 +3,38 @@
 // the actual RTDB socket status, which is more reliable than navigator.onLine alone
 // (e.g. a rider can have wifi but no path to Firebase's servers).
 import { useEffect, useState } from "react";
-import { db, ref, onValue, off } from "@/lib/firebase";
 import { toast } from "@/hooks/use-toast";
 import { WifiOff, RefreshCw } from "lucide-react";
 import { useOnlineStatus, getOfflineQueue } from "@/components/shared/OfflineQueue";
+import { useFirebaseConnection } from "@/hooks/useFirebaseConnection";
 
-export function useFirebaseConnection() {
-  const [connected, setConnected] = useState(true);
+// Re-exported for backward compatibility with any existing import of
+// `useFirebaseConnection` from this file — the implementation now lives in
+// src/hooks/useFirebaseConnection.ts so OfflineQueue.tsx can use it too
+// without a circular import. This wrapper restores the "Connection
+// Restored" / "Connection Lost" toasts that used to live inline here.
+export function useFirebaseConnectionWithToast(): boolean {
+  const connected = useFirebaseConnection();
+  const [hasFiredOnce, setHasFiredOnce] = useState(false);
 
   useEffect(() => {
-    const connRef = ref(db, ".info/connected");
-    let firstFire = true;
-    const handler = onValue(connRef, (snap) => {
-      const isConnected = snap.val() === true;
-      setConnected(isConnected);
-      if (firstFire) {
-        firstFire = false;
-        return;
-      }
-      if (isConnected) {
-        toast.success("Connection Restored");
-      } else {
-        toast.warning("Connection Lost", { description: "Reconnecting..." });
-      }
-    });
-    return () => off(connRef, "value", handler);
-  }, []);
+    if (!hasFiredOnce) {
+      setHasFiredOnce(true);
+      return;
+    }
+    if (connected) {
+      toast.success("Connection Restored");
+    } else {
+      toast.warning("Connection Lost", { description: "Reconnecting..." });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
 
   return connected;
 }
 
 export function SyncIndicator() {
-  const connected = useFirebaseConnection();
+  const connected = useFirebaseConnectionWithToast();
   const online = useOnlineStatus();
   const [queueLength, setQueueLength] = useState(0);
 

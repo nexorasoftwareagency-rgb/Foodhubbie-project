@@ -98,7 +98,7 @@ export function PingModal() {
       riderName: rider?.name || "Your rider",
       outletLat: current.outletLat,
       outletLng: current.outletLng,
-      customerPhone: (current as any).phone || (current as any).customerPhone,
+      customerPhone: current.phone || current.customerPhone,
     };
 
     if (!navigator.onLine) {

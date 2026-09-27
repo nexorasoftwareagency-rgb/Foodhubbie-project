@@ -299,13 +299,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'openOutletInNewTab': logger.info('OUTLET', 'Open outlet in new tab'); openOutletInNewTab(); break;
 
                 case 'userLogout': logger.warn('AUTH', 'User logout'); userLogout(); break;
-                case 'openManual': logger.info('HELP', 'Open user manual'); window.open('manual.html', '_blank'); break;
                 case 'installPWA': logger.info('PWA', 'Install PWA'); installPWA(); break;
                 case 'removeRow': logger.info('UI', 'Remove row'); el.closest('tr').remove(); break;
                 case 'addFeeSlab': logger.info('SETTINGS', 'Add delivery fee slab'); (await useMod('settings')).addFeeSlab(); break;
                 case 'migrateAddons': logger.warn('CATALOG', 'Migrate addons to categories'); (await useMod('catalog')).migrateAddonsToCategories(); break;
                 case 'runImageMigration': logger.warn('CATALOG', 'Run image migration'); (await useMod('catalog')).runImageMigration(); break;
                 case 'clearWalkinCart': logger.info('POS', 'Clear walkin cart'); (await useMod('pos')).clearWalkinCart(); break;
+                case 'endShift': logger.info('POS', 'End shift'); (await useMod('pos')).endShift(); break;
                 case 'submitWalkinSale': logger.info('POS', 'Submit walkin sale'); (await useMod('pos')).submitWalkinSale(); break;
                 case 'addCategory': logger.info('CATALOG', 'Add category'); (await useMod('catalog')).addCategory(); break;
 
@@ -458,6 +458,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'resolveTableRequest': if (e.target.closest('#tab-tables')) break; logger.info('TABLES', 'Resolve table request'); window.__tables?.resolveTableRequest?.(id); break;
                 case 'custExportExcel': logger.info('CUSTOMERS', 'Export Excel'); (await useMod('customers')).downloadCustomerExcel(); break;
                 case 'custExportPDF': logger.info('CUSTOMERS', 'Export PDF'); (await useMod('customers')).downloadCustomerPDF(); break;
+                case 'expExportExcel': logger.info('EXPENSES', 'Export Excel'); (await useMod('expenses')).downloadExpenseExcel(); break;
+                case 'expExportPDF': logger.info('EXPENSES', 'Export PDF'); (await useMod('expenses')).downloadExpensePDF(); break;
+                case 'expReportExportExcel': logger.info('EXPENSES', 'Export Report Excel'); (await useMod('expenses')).downloadExpenseExcel(); break;
+                case 'expReportExportPDF': logger.info('EXPENSES', 'Export Report PDF'); (await useMod('expenses')).downloadExpensePDF(); break;
+                case 'openAddExpense': logger.info('EXPENSES', 'Open Add Expense'); (await useMod('expenses')).openAddExpenseModal(); break;
+                case 'closeExpenseModal': logger.info('EXPENSES', 'Close Expense Modal'); (await useMod('expenses')).closeExpenseModal(); break;
+                case 'openExpenseCategories': logger.info('EXPENSES', 'Open Categories'); (await useMod('expenses')).openExpenseCategoryModal(); break;
+                case 'closeExpenseCategoryModal': logger.info('EXPENSES', 'Close Categories'); (await useMod('expenses')).closeExpenseCategoryModal(); break;
+                case 'saveExpenseSettings': logger.info('EXPENSES', 'Save Settings'); (await useMod('expenses')).saveExpenseSettings(); break;
+                case 'closeExpenseReceiptPreview': logger.info('EXPENSES', 'Close Receipt Preview'); (await useMod('expenses')).closeReceiptPreview(); break;
+                case 'seedExpenseCategories': logger.info('EXPENSES', 'Seed Categories'); (await useMod('expenses')).seedExpenseCategories(); break;
                 default:
                     logger.warn('CLICK', `Unhandled action: ${action}`, { el: el.outerHTML.slice(0, 200) });
             }

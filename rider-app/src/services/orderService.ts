@@ -18,8 +18,11 @@ import {
   onValue,
   off,
   serverTimestamp,
+  serverNow,
+  waitForServerTimeOffset,
 } from "@/lib/firebase";
 import { dbPaths, PROXIMITY, OTP_LIMITS, type OutletId } from "@/lib/constants";
+import { logRiderError } from "@/services/auditService";
 import { getDistanceKm, isGhostOrder, formatOrderId } from "@/lib/utils";
 import { whatsappService } from "@/services/whatsappService";
 import type { AvailableOrder, OtpAttemptRecord, OutletSettings, RiderOrder } from "@/types";
@@ -362,7 +365,9 @@ export async function acceptOrder(params: {
   }
 
   if (customerPhone) {
-    await whatsappService.sendAccepted(outlet, customerPhone, riderName, formatOrderId(orderId)).catch(() => {});
+    await whatsappService
+      .sendAccepted(outlet, customerPhone, riderName, formatOrderId(orderId))
+      .catch((err) => logRiderError(riderUid, "orderService.acceptOrder.sendAccepted", err));
   }
 }
 
@@ -402,8 +407,9 @@ export async function confirmPickup(params: {
   riderPhone: string;
   accuracy?: number;
   customerPhone?: string;
+  riderUid?: string;
 }): Promise<void> {
-  const { outlet, orderId, riderLat, riderLng, outletLat, outletLng, riderPhone, customerPhone, accuracy } = params;
+  const { outlet, orderId, riderLat, riderLng, outletLat, outletLng, riderPhone, customerPhone, accuracy, riderUid } = params;
   assertProximity(riderLat, riderLng, outletLat, outletLng, PROXIMITY.PICKUP_RADIUS_KM, accuracy);
 
   const singleOrderPath = dbPaths.singleOrder(outlet, orderId);
@@ -413,7 +419,11 @@ export async function confirmPickup(params: {
   });
 
   if (customerPhone) {
-    await whatsappService.sendPickedUp(outlet, customerPhone, riderPhone, formatOrderId(orderId)).catch(() => {});
+    await whatsappService
+      .sendPickedUp(outlet, customerPhone, riderPhone, formatOrderId(orderId))
+      .catch((err) => {
+        if (riderUid) logRiderError(riderUid, "orderService.confirmPickup.sendPickedUp", err);
+      });
   }
 }
 
@@ -441,18 +451,19 @@ export async function markReachedDrop(params: {
 /** ─── OTP verification — matches window.verifyOTP exactly (10 attempts / 60s block) */
 
 export async function verifyOtp(params: {
-  outlet: OutletId;
-  orderId: string;
-  enteredOtp: string;
-  actualOtp: string;
-  backupCode?: string;
+    outlet: OutletId;
+    orderId: string;
+    enteredOtp: string;
+    actualOtp: string;
+    backupCode?: string;
 }): Promise<{ success: boolean; verifiedBy: "OTP" | "ADMIN_FALLBACK"; attemptsRemaining?: number }> {
-  const { outlet, orderId, enteredOtp, actualOtp, backupCode } = params;
-  const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
+    const { outlet, orderId, enteredOtp, actualOtp, backupCode } = params;
+    const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
 
-  const existingSnap = await get(ref(db, attemptsPath));
-  const existing = (existingSnap.val() as OtpAttemptRecord | null) || null;
-  const now = Date.now();
+    await waitForServerTimeOffset();
+    const existingSnap = await get(ref(db, attemptsPath));
+    const existing = (existingSnap.val() as OtpAttemptRecord | null) || null;
+    const now = serverNow();
   if (existing?.blockedUntil && existing.blockedUntil > now) {
     throw new OtpBlockedError(existing.blockedUntil - now);
   }
@@ -498,11 +509,12 @@ export async function verifyOtp(params: {
  *  alert instead." Replicated faithfully: this never touches whatsappService. */
 
 export async function resendOtp(params: { outlet: OutletId; orderId: string }): Promise<{ otp: string }> {
-  const { outlet, orderId } = params;
-  const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
-  const snap = await get(ref(db, attemptsPath));
-  const existing = (snap.val() as OtpAttemptRecord | null) || null;
-  const now = Date.now();
+    const { outlet, orderId } = params;
+    const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
+    const snap = await get(ref(db, attemptsPath));
+    const existing = (snap.val() as OtpAttemptRecord | null) || null;
+    await waitForServerTimeOffset();
+    const now = serverNow();
 
   if (existing?.lastResend && now - existing.lastResend < OTP_LIMITS.RESEND_COOLDOWN_MS) {
     const remaining = OTP_LIMITS.RESEND_COOLDOWN_MS - (now - existing.lastResend);
@@ -522,13 +534,14 @@ export async function resendOtp(params: { outlet: OutletId; orderId: string }): 
 }
 
 export async function getOtpAttemptsStatus(
-  outlet: OutletId,
-  orderId: string
+    outlet: OutletId,
+    orderId: string
 ): Promise<{ blockedUntilMs: number; resendAvailableAtMs: number }> {
-  const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
-  const snap = await get(ref(db, attemptsPath));
-  const val = (snap.val() as OtpAttemptRecord | null) || null;
-  const now = Date.now();
+    const attemptsPath = dbPaths.otpAttempts(outlet, orderId);
+    const snap = await get(ref(db, attemptsPath));
+    const val = (snap.val() as OtpAttemptRecord | null) || null;
+    await waitForServerTimeOffset();
+    const now = serverNow();
   return {
     blockedUntilMs: val?.blockedUntil && val.blockedUntil > now ? val.blockedUntil - now : 0,
     resendAvailableAtMs:

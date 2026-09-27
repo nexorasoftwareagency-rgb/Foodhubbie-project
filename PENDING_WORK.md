@@ -374,6 +374,13 @@
 | **Files** | `bot/index.js` (one line) |
 | **Verified** | n/a — comment-only change, `node --check` + `grep` suffice |
 
+### P3-8: Firebase Free-Plan Capability Analysis + 5-Council Verdict — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Status** | ✅ DONE — `PLAN/P3-8-FIREBASE-FREE-PLAN-5-COUNCIL-VERDICT.md` |
+| **Verdict** | Spark fails at ~3 busy restaurants (100-connection cap first, 10 GB/mo download second); 100s of restaurants viable on Blaze ~$60–100/mo; enable Blaze + fix base64 images in RTDB (730 KB menu → 75 KB) before scaling |
+| **Evidence** | Live DB measured via `bot/p38-measure.js` + `bot/p38-payload.js`: 4.81 MB, 37,734 nodes, 121 orders, 667 B/order, 657 KB base64 images, logs = 67% of nodes |
+
 ---
 
 ## 📊 SUMMARY MATRIX
@@ -383,9 +390,9 @@
 | **P0** | 6 | ✅ YES (all 6 — P0-4/5/6 fixed this session) |
 | **P1** | 6 | ✅ YES (all 6) |
 | **P2** | 9 | ⚠️ Recommended (9/9 done) |
-| **P3** | 7 | 📋 Backlog (5/7 done) |
+| **P3** | 8 | 📋 Backlog (6/8 done) |
 
-**Total Active Issues: 14** (0 P0 + 0 P1 + 0 P2 open + 2 P3 remaining)
+**Total Active Issues: 15** (0 P0 + 0 P1 + 0 P2 open + 2 P3 remaining)
 
 ---
 

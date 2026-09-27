@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { PackageX } from "lucide-react";
 import type { OfflineAction } from "@/types";
 import { formatOrderId } from "@/lib/utils";
+import { useFirebaseConnection } from "@/hooks/useFirebaseConnection";
 
 const QUEUE_KEY = "foodhubbie_offline_queue";
 
@@ -99,10 +100,18 @@ export function OfflineQueueIndicator() {
  */
 export function useOfflineQueueProcessor() {
   const online = useOnlineStatus();
+  const firebaseConnected = useFirebaseConnection();
+  // Gate on BOTH signals: navigator.onLine can be true with no real path to
+  // Firebase's servers (captive portal, flaky connection), which is exactly
+  // the case .info/connected exists to catch. Requiring both avoids firing
+  // replay attempts — and the "Couldn't sync a queued action" error toast —
+  // during a window where the device thinks it's online but Firebase isn't
+  // actually reachable yet.
+  const canProcess = online && firebaseConnected;
   const processingRef = useRef(false);
 
   useEffect(() => {
-    if (!online || processingRef.current) return;
+    if (!canProcess || processingRef.current) return;
     const queue = readQueue();
     if (queue.length === 0) return;
 
@@ -164,5 +173,5 @@ export function useOfflineQueueProcessor() {
       }
       processingRef.current = false;
     })();
-  }, [online]);
+  }, [canProcess]);
 }

@@ -5,7 +5,7 @@
 
 import { state } from '../state.js';
 import { db, auth, Outlet, tenantRef, serverTimestamp, get, set, runTransaction, ref, isConnected, onConnectionChange } from '../firebase.js';
-import { standardizeOrderData, haptic, escapeHtml, playSuccessSound, logAudit, gateManualDiscountPin } from '../utils.js';
+import { standardizeOrderData, haptic, escapeHtml, playSuccessSound, logAudit, gateManualDiscountPin, promptCounterPinSignIn, clearCounterStaffSession, getCounterStaffUid } from '../utils.js';
 import { autoDeductStock } from './inventory.js';
 import { ui, loadLucide } from '../ui.js';
 import { printOrderReceipt } from './printing.js';
@@ -39,6 +39,15 @@ export async function loadWalkinMenu() {
     }
 
     try {
+        // Check for Counter PIN sign-in (shift start)
+        if (!getCounterStaffUid()) {
+            const signedIn = await promptCounterPinSignIn();
+            if (!signedIn) {
+                grid.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">🔐</div><h4>Shift Sign-In Required</h4><p>Enter your Counter PIN to start your shift.</p><button class="btn-primary mt-16" onclick="location.reload()">Retry</button></div>';
+                return;
+            }
+        }
+
         grid.innerHTML = '<div class="pos-loader">Loading Menu...</div>';
         logger.info('POS', 'Fetching walkin menu from Firebase...');
         const snap = await get(Outlet.ref("dishes"));
@@ -400,6 +409,16 @@ export function clearWalkinCart() {
     if (document.getElementById('walkinCouponClearBtn')) document.getElementById('walkinCouponClearBtn').classList.add('hidden');
     logger.info('POS', `Cart cleared (${count} items removed)`);
     renderWalkinCart();
+}
+
+export function endShift() {
+    clearCounterStaffSession();
+    clearWalkinCart();
+    ui.showToast('Shift ended. Counter PIN cleared.', 'success');
+    // Only reload walkin menu if a counter staff was signed in (they need to re-enter PIN)
+    if (sessionStorage.getItem('counterStaffUid')) {
+        loadWalkinMenu();
+    }
 }
 
 export async function renderWalkinCart() {
@@ -921,7 +940,9 @@ export async function submitWalkinSale() {
 
         // Approval ceiling: a manual discount above settings/Security/discountCeilingPct
         // needs a manager PIN before the sale is written.
-        if (!await gateManualDiscountPin({ discountValue, subtotal, discountId })) return;
+        // Use per-person ceiling from counterStaffUid (shift sign-in) or current admin.
+        const counterStaffUid = sessionStorage.getItem('counterStaffUid') || state.adminData?.uid;
+        if (!await gateManualDiscountPin({ discountValue, subtotal, discountId, staffUid: counterStaffUid })) return;
 
         const total = Math.max(0, subtotal + tax + sc - discountValue);
 
@@ -1050,6 +1071,11 @@ export async function submitWalkinSale() {
     } catch (e) {
         logger.error('POS', `Sale failed: ${e.message}`, e);
         ui.showToast("Failed to process sale: " + e.message, "error");
+        // Only clear counter staff session on auth/permission errors, not transient failures
+        const msg = String(e.message || '').toLowerCase();
+        if (msg.includes('permission') || msg.includes('unauthorized') || msg.includes('auth') || msg.includes('permission-denied')) {
+            clearCounterStaffSession();
+        }
     } finally {
         if (btn) {
             btn.disabled = false;

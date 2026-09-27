@@ -189,54 +189,170 @@ export async function downloadCustomerPDF() {
         if (snap.exists() && snap.val().storeName) storeName = snap.val().storeName;
     } catch (_) {}
 
-    const primaryColor = [232, 73, 8]; // #E84908
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 14;
+    const primary = [232, 73, 8]; // #E84908
+    const ink = [15, 23, 42]; // #0F172A
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const M = 14;
+    const rs = n => 'Rs.' + Math.round(Number(n || 0)).toLocaleString('en-IN');
+    const mix = (a, b, t) => {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return a;
+    return a.map((v, i) => Math.round(v + (b[i] - v) * t));
+};
 
-    const tableData = _filteredData.map(c => [
+    const rows = _filteredData;
+    const totalOrders = rows.reduce((s, c) => s + Number(c.orderCount || 0), 0);
+    const totalRevenue = rows.reduce((s, c) => s + Number(c.ltv || 0), 0);
+    const aov = totalOrders > 0 ? rs(totalRevenue / totalOrders) : '—';
+
+    // Hero band: gradient via interpolated slices + translucent decorative circles
+    const heroH = 54, steps = 54;
+    const A = [176, 47, 6], B = [232, 73, 8], C = [255, 132, 56];
+    for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1);
+        doc.setFillColor(...(t < 0.5 ? mix(A, B, t * 2) : mix(B, C, (t - 0.5) * 2)));
+        doc.rect(0, heroH * i / steps, pw, heroH / steps + 0.6, 'F');
+    }
+    doc.setGState(new doc.GState({ opacity: 0.1 }));
+    doc.setFillColor(255, 255, 255);
+    doc.circle(pw - 26, 14, 28, 'F');
+    doc.circle(pw - 74, 47, 13, 'F');
+    doc.circle(20, 52, 20, 'F');
+    doc.setGState(new doc.GState({ opacity: 1 }));
+
+    // FH badge + brand block: FOODHUBBIE eyebrow, restaurant name as headline
+    doc.setFillColor(255, 255, 255);
+    doc.circle(M + 13, 22, 12.5, 'F');
+    doc.setTextColor(...primary);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('FH', M + 13, 27, { align: 'center' });
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.text('FOODHUBBIE', M + 30, 13.5, { charSpace: 2.2 });
+    let nameSize = 21;
+    doc.setFontSize(nameSize);
+    const nameW = doc.getTextWidth(storeName);
+    const nameMax = pw - (M + 30) - M;
+    if (nameW > nameMax) nameSize = Math.max(12, nameSize * nameMax / nameW);
+    doc.setFontSize(nameSize);
+    doc.text(storeName, M + 30, 27);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(255, 220, 205);
+    doc.text(`Customer Database Report  ·  Generated ${new Date().toLocaleString('en-IN')}  ·  ${rows.length} customers  ·  Meeting Copy`, M + 30, 35);
+
+    // KPI stat cards overlapping the hero edge
+    const cardY = 46, cardH = 26, gap = 6;
+    const cardW = (pw - 2 * M - 3 * gap) / 4;
+    const kpis = [
+        ['TOTAL CUSTOMERS', String(rows.length)],
+        ['TOTAL ORDERS', totalOrders.toLocaleString('en-IN')],
+        ['TOTAL REVENUE', rs(totalRevenue)],
+        ['AVG ORDER VALUE', aov]
+    ];
+    kpis.forEach(([label, value], i) => {
+        const x = M + i * (cardW + gap);
+        doc.setFillColor(234, 228, 224);
+        doc.roundedRect(x + 0.7, cardY + 0.9, cardW, cardH, 3, 3, 'F');
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(150, 145, 140);
+        doc.text(label, x + 5, cardY + 10, { charSpace: 0.3 });
+        doc.setFontSize(12);
+        doc.setTextColor(...ink);
+        doc.text(value, x + 5, cardY + 21);
+    });
+
+    // Section label
+    doc.setFillColor(...primary);
+    doc.rect(M, 85, 3.5, 6, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...ink);
+    doc.text('CUSTOMER DIRECTORY', M + 6, 89.5, { charSpace: 0.5 });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(140, 136, 130);
+    doc.text(`${rows.length} records`, pw - M, 89.5, { align: 'right' });
+
+    const tableData = rows.map(c => [
         c.name || 'Anonymous',
         c.displayPhone || '',
-        c.addressFull || c.address || '',
+        c.addressFull || c.address || '—',
         String(c.orderCount || 0),
-        'Rs.' + Number(c.ltv || 0).toLocaleString('en-IN')
+        rs(c.ltv)
     ]);
 
     doc.autoTable({
         head: [['Customer', 'Phone', 'Address', 'Orders', 'Total Value']],
         body: tableData,
+        foot: [['Grand Total', `${rows.length} customers`, '', String(totalOrders), rs(totalRevenue)]],
+        showFoot: 'lastPage',
+        rowPageBreak: 'avoid',
         theme: 'grid',
-        headStyles: { fillColor: primaryColor, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-        bodyStyles: { fontSize: 8, textColor: [51, 51, 51] },
-        alternateRowStyles: { fillColor: [250, 250, 250] },
-        columnStyles: { 4: { cellWidth: 34, halign: 'right' } },
-        margin: { top: 38, left: margin, right: margin, bottom: 16 },
-        tableLineColor: [230, 230, 230],
-        tableLineWidth: 0.3,
+        headStyles: { fillColor: ink, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: ink, lineWidth: 0.2 },
+        bodyStyles: {
+            fontSize: 8, textColor: [30, 41, 59], lineColor: [236, 231, 227], lineWidth: 0.2, valign: 'middle',
+            cellPadding: { top: 2.2, bottom: 2.2, left: 3, right: 3 }
+        },
+        alternateRowStyles: { fillColor: [255, 247, 243] },
+        footStyles: { fillColor: ink, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: ink, lineWidth: 0.2 },
+        columnStyles: {
+            0: { cellWidth: 40 },
+            1: { cellWidth: 30, halign: 'center' },
+            2: { cellWidth: 60 },
+            3: { cellWidth: 18, halign: 'center' },
+            4: { cellWidth: 34, halign: 'right' }
+        },
+        margin: { top: 26, left: M, right: M, bottom: 18 },
+        startY: 96,
         didDrawPage: () => {
-            doc.setFillColor(...primaryColor);
-            doc.rect(0, 0, pageWidth, 30, 'F');
-            doc.setFillColor(255, 179, 71); // #FFB347
-            doc.circle(pageWidth - 22, 15, 7, 'F');
+            if (doc.internal.getCurrentPageInfo().pageNumber === 1) return;
+            doc.setFillColor(255, 249, 246);
+            doc.rect(0, 0, pw, 22, 'F');
+            doc.setFillColor(...primary);
+            doc.rect(0, 0, pw, 2.6, 'F');
+            doc.circle(M + 7, 13, 7, 'F');
             doc.setTextColor(255, 255, 255);
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(14);
-            doc.text('Customer Database', margin, 13);
-            doc.setFont('helvetica', 'normal');
             doc.setFontSize(9);
-            doc.text(storeName, margin, 21);
-            doc.setFontSize(7.5);
-            doc.text(`Generated ${new Date().toLocaleString()}  |  ${_filteredData.length} customers`, margin, 27);
+            doc.text('FH', M + 7, 16.2, { align: 'center' });
+            doc.setTextColor(...ink);
+            doc.setFontSize(10);
+            doc.text('Customer Database', M + 18, 12);
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(9);
-            doc.text('FH', pageWidth - 22, 17, { align: 'center' });
-
-            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8.5);
+            doc.setTextColor(...primary);
+            doc.text(storeName, M + 18, 17.5);
+            doc.setFont('helvetica', 'normal');
             doc.setFontSize(7.5);
-            doc.setTextColor(150);
-            doc.text('Powered by FoodHubbie ERP', pageWidth / 2, pageHeight - 7, { align: 'center' });
-            doc.text(`Page ${doc.internal.getCurrentPageInfo().pageNumber}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
+            doc.setTextColor(140, 136, 130);
+            doc.text('Continued', pw - M, 14.5, { align: 'right' });
         },
+    });
+
+    // Footer post-pass: Page X of Y on every page
+    const totalPages = doc.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setDrawColor(236, 231, 227);
+        doc.setLineWidth(0.3);
+        doc.line(M, ph - 14, pw - M, ph - 14);
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 143, 138);
+        doc.text(`Powered by FoodHubbie ERP  ·  ${storeName}`, M, ph - 9);
+        doc.text(`Page ${p} of ${totalPages}`, pw - M, ph - 9, { align: 'right' });
+    }
+
+    doc.setProperties({
+        title: `Customer Database - ${storeName}`,
+        subject: 'Customer export',
+        author: storeName,
+        creator: 'FoodHubbie ERP'
     });
 
     doc.save(`Customers_${new Date().toISOString().split('T')[0]}.pdf`);

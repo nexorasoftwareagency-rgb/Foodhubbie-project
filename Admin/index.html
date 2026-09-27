@@ -338,6 +338,17 @@
 
 
 
+                </div>
+
+                
+                <div class="login-forgot-v4">
+                    <button type="button" id="forgotPasswordBtn" class="forgot-password-btn" title="Reset your password via email">
+                        <i data-lucide="key" class="icon-14"></i>
+                        <span>Forgot Password?</span>
+                    </button>
+                </div>
+
+                
                 <div class="login-actions-v4">
 
                     <button id="loginBtn" type="submit" class="btn-login-v4">
@@ -661,8 +672,22 @@
                         <i data-lucide="wallet"></i> <span>Payments</span>
 
                     </button>
+</li>
+
+
+
+
+                <li id="menu-expenses" title="Track and Manage Business Expenses">
+
+                    <button id="nav-expenses" data-action="switchTab" data-tab="expenses" class="nav-btn">
+
+                        <i data-lucide="dollar-sign"></i> <span>Expenses</span>
+
+                    </button>
 
                 </li>
+
+
 
 
 
@@ -1860,6 +1885,8 @@
                         <button class="settings-subtab" data-subtab="receipt-dev">Receipt & Dev</button>
                         <button class="settings-subtab" data-subtab="qr-menu-offer">QR Menu Offer Control</button>
                         <button class="settings-subtab" data-subtab="features">Features</button>
+                        <button class="settings-subtab" data-subtab="staff-management">Staff Management</button>
+                        <button class="settings-subtab" data-subtab="security-audit">Security Audit</button>
                     </div>
 
                     <div class="settings-grid">
@@ -2198,9 +2225,160 @@
 
                                             </div>
 
-                                        </div>
+</div>
 
-                </div>
+                        <!-- Staff Management -->
+
+                        <div class="glass-card p-20 grid-full" data-settings-section="staff-management">
+
+                            <div class="flex-between flex-center mb-20">
+
+                                <div>
+
+                                    <h4 class="mb-4"><i data-lucide="users" class="icon-16"></i> Staff Management</h4>
+
+                                    <p class="text-muted-small">Manage staff accounts, roles, discount ceilings and counter PINs. Only Owners and Super Admins can make changes.</p>
+
+                                </div>
+
+                                <button id="btnAddStaff" class="btn-primary"><i data-lucide="plus" class="icon-14"></i> Add Staff</button>
+
+                            </div>
+
+                            <div class="table-container" style="overflow-x:auto;">
+
+                                <table class="staff-table" style="width:100%;border-collapse:collapse;">
+
+                                    <thead>
+
+                                        <tr style="background:var(--bg-subtle);">
+
+                                            <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);">Name</th>
+
+                                            <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);">Role</th>
+
+                                            <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);">Counter PIN</th>
+
+                                            <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);">Discount Ceiling</th>
+
+                                            <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);">Last Signed In</th>
+
+                                            <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);">Status</th>
+
+                                            <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);">Actions</th>
+
+                                        </tr>
+
+                                    </thead>
+
+                                    <tbody id="staffTableBody">
+
+                                        <tr>
+
+                                            <td colspan="7" class="text-center text-muted p-30">Loading...</td>
+
+                                        </tr>
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                        <!-- Security Audit -->
+
+                        <div class="glass-card p-20 grid-full" data-settings-section="security-audit">
+
+                            <div class="flex-between flex-center mb-20">
+
+                                <div>
+
+                                    <h4 class="mb-4"><i data-lucide="shield-alert" class="icon-16"></i> Security Posture Audit</h4>
+
+                                    <p class="text-muted-small">Automated checks for common security gaps. Runs on load and on demand.</p>
+
+                                </div>
+
+                                <button id="btnReRunAudit" class="btn-secondary btn-small"><i data-lucide="refresh-cw" class="icon-14"></i> Re-check</button>
+
+                            </div>
+
+                            <div class="audit-summary mb-20" style="display:flex;flex-wrap:wrap;gap:8px;">
+
+                                <span class="badge critical">Critical: <span id="auditCritical">0</span></span>
+
+                                <span class="badge high">High: <span id="auditHigh">0</span></span>
+
+                                <span class="badge medium">Medium: <span id="auditMedium">0</span></span>
+
+                                <span class="badge low">Low: <span id="auditLow">0</span></span>
+
+                            </div>
+
+                            <div id="auditFindingsList"></div>
+
+                            <!-- Change Password Section -->
+                            <div class="glass-card p-20 grid-full" style="margin-top:24px;">
+
+                                <div class="flex-between flex-center mb-16">
+
+                                    <h4 class="section-card-heading"><i data-lucide="lock" class="icon-14"></i> Change Password</h4>
+
+                                </div>
+
+                                <div class="flex-col flex-gap-12">
+
+                                    <div class="form-group-mini">
+                                        <label class="form-label-small">Current Password</label>
+                                        <input type="password" id="currentPassword" class="form-input w-100" placeholder="Enter current password">
+                                    </div>
+
+                                    <div class="form-group-mini">
+                                        <label class="form-label-small">New Password</label>
+                                        <input type="password" id="newPassword" class="form-input w-100" placeholder="New password (min 8 chars)" minlength="8">
+                                    </div>
+
+                                    <div class="form-group-mini">
+                                        <label class="form-label-small">Confirm New Password</label>
+                                        <input type="password" id="confirmPassword" class="form-input w-100" placeholder="Confirm new password">
+                                        <small class="text-muted-small" id="passwordMatchHint"></small>
+                                    </div>
+
+                                    <button type="button" id="btnChangePassword" class="btn-primary w-full p-12 br-12 font-weight-700">
+                                        <i data-lucide="lock" class="icon-16"></i> Update Password
+                                    </button>
+
+                                </div>
+
+                            </div>
+
+                            <div class="audit-honesty-block" style="margin-top:24px;padding:16px;background:var(--bg-subtle);border:1px solid var(--border-color);border-radius:12px;">
+
+                                <strong style="display:block;margin-bottom:8px;">What this page could not check:</strong>
+
+                                <ul style="margin:0;padding-left:20px;font-size:13px;color:var(--text-secondary);line-height:1.8;">
+
+                                    <li>Server-side PIN enforcement (client-side only on Spark plan)</li>
+
+                                    <li>Session records / real-time till attribution</li>
+
+                                    <li>Network-level tampering or MITM attacks</li>
+
+                                    <li>Firebase Rules misconfiguration (review rules manually)</li>
+
+                                </ul>
+
+                                <small style="display:block;margin-top:12px;color:var(--text-muted);">Last checked: <span id="auditLastChecked">Never</span> — running in production mode</small>
+
+                            </div>
+
+                        </div>
+
+                    </div>
 
                 <!-- Blocked Contacts Modal -->
                 <div id="blockedContactsModal" class="modal" role="dialog" aria-modal="true" aria-label="Blocked Contacts" aria-hidden="true">
@@ -3017,6 +3195,40 @@
 
                             </div>
 
+                            <div class="settings-section-card mb-14" style="border:1px solid var(--border-color);border-radius:12px;padding:16px;">
+
+                                <div class="flex-between flex-center mb-10" style="flex-wrap:wrap;gap:10px;">
+
+                                    <div>
+
+                                        <strong style="display:block;font-size:13px;color:var(--text-primary);">Expense
+                                        Tracking & Reporting</strong>
+
+                                        <span id="featureExpenseStatus" class="text-muted-small">Currently: Inactive</span>
+
+                                    </div>
+
+                                    <label class="toggle-switch" style="margin:0;">
+
+                                        <input type="checkbox" id="featureExpense">
+
+                                        <span class="toggle-slider"></span>
+
+                                    </label>
+
+                                </div>
+
+                                <p class="text-secondary-small note-small mb-10">Enable full expense management: log daily
+                                expenses by category, track against monthly budgets, generate reports (Excel/PDF), and audit
+                                spending across outlets. <strong>Benefits:</strong> keeps costs visible, alerts on budget
+                                overruns, and costs nothing while off.</p>
+
+                                <a href="manual.html#expenses" target="_blank" rel="noopener"><i data-lucide="book-open" class="icon-14"></i>
+                                Read the expense manual</a>
+
+                            </div>
+
+
                             <p class="text-secondary-small note-small">Turn a feature on, then <strong>Save Settings</strong> —
 
                             a hard refresh prompt appears to activate it.</p>
@@ -3028,8 +3240,6 @@
 
 
                 </div>
-
-            </div>
 
 
 
@@ -4031,9 +4241,13 @@
 
                                 <h3 class="panel-title mb-0">🧾 Order Summary</h3>
 
-                                <button id="btnClearWalkinCart" data-action="clearWalkinCart"
+                                <div class="flex-row flex-gap-6">
 
-                                    class="btn-text-danger small-btn">Clear All</button>
+                                    <button id="btnEndShift" data-action="endShift" class="btn-text-warning small-btn" title="End shift and clear Counter PIN"><i data-lucide="log-out" class="icon-12"></i> End Shift</button>
+
+                                    <button id="btnClearWalkinCart" data-action="clearWalkinCart" class="btn-text-danger small-btn">Clear All</button>
+
+                                </div>
 
                             </div>
 
@@ -4641,14 +4855,275 @@
 
                 </div>
             </div>
-        </main>
 
+    <!-- EXPENSES TAB -->
 
+    <div id="tab-expenses" class="tab-content hidden">
+
+        <div class="mob-card mob-table-card" style="margin:0;">
+
+            <div class="mob-section-head-row">
+
+                <h3 class="mob-card-title">Expenses</h3>
+
+                <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
+
+                    <div class="expense-subtabs" style="display:flex; gap:4px; margin-right:12px;">
+
+                        <button type="button" class="expense-subtab-btn active" data-expense-subtab="today" title="Today's Expenses">
+                            <i data-lucide="calendar" class="icon-14"></i> Today
+                        </button>
+
+                        <button type="button" class="expense-subtab-btn" data-expense-subtab="history" title="Expense History">
+                            <i data-lucide="clock" class="icon-14"></i> History
+                        </button>
+
+                        <button type="button" class="expense-subtab-btn" data-expense-subtab="categories" title="Manage Categories">
+                            <i data-lucide="folder-tree" class="icon-14"></i> Categories
+                        </button>
+
+                        <button type="button" class="expense-subtab-btn" data-expense-subtab="reports" title="Expense Reports">
+                            <i data-lucide="bar-chart-3" class="icon-14"></i> Reports
+                        </button>
+
+                        <button type="button" class="expense-subtab-btn" data-expense-subtab="settings" title="Expense Settings">
+                            <i data-lucide="settings" class="icon-14"></i> Settings
+                        </button>
+
+                    </div>
+
+                    <div style="display:flex; gap:8px; align-items:center;">
+
+                        <button type="button" class="btn-primary btn-small" data-action="openAddExpense" style="margin-right:8px;">
+                            <i data-lucide="plus" class="icon-14"></i> Add Expense
+                        </button>
+
+                        <button type="button" class="btn-secondary btn-small" data-action="openExpenseCategories" style="margin-right:8px;">
+                            <i data-lucide="folder-tree" class="icon-14"></i> Categories
+                        </button>
+
+                        <a href="manual.html#expenses" target="_blank" rel="noopener" class="btn-secondary btn-small" title="Expense Manual" style="margin-right:8px;">
+                            <i data-lucide="book-open" class="icon-14"></i> Manual
+                        </a>
+
+                        <div class="mob-export-row" style="display:flex; gap:8px;">
+
+                            <button type="button" class="mob-export-banner mob-export-excel" data-action="expExportExcel" title="Export to Excel">
+                                <i data-lucide="file-spreadsheet" class="icon-18"></i>
+                                <span>Excel</span>
+                            </button>
+
+                            <button type="button" class="mob-export-banner mob-export-pdf" data-action="expExportPDF" title="Export to PDF">
+                                <i data-lucide="file-text" class="icon-18"></i>
+                                <span>PDF</span>
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- TODAY SUB-TAB -->
+            <div id="expense-subtab-today" class="expense-subtab-content">
+                <div class="expense-today-header">
+                    <div class="expense-today-total">
+                        <span class="label">TOTAL TODAY</span>
+                        <span class="value" id="expenseTodayTotal">Rs. 0</span>
+                    </div>
+                    <div class="expense-category-chips" id="expenseCategoryChips">
+                        <!-- Category chips rendered dynamically -->
+                    </div>
+                </div>
+                <div class="mob-table-scroll">
+                    <table class="mob-data-table" id="expenseTodayTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="date">Time</th>
+                                <th data-sort="categoryName">Category</th>
+                                <th data-sort="description">Description</th>
+                                <th data-sort="amount" class="mob-th-right">Amount</th>
+                                <th class="mob-th-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expenseTodayTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- HISTORY SUB-TAB -->
+            <div id="expense-subtab-history" class="expense-subtab-content hidden">
+                <div class="expense-filter-bar">
+                    <input type="date" id="expenseHistoryFrom" class="form-input" style="width:auto;">
+                    <span style="margin:0 8px;">to</span>
+                    <input type="date" id="expenseHistoryTo" class="form-input" style="width:auto;">
+                    <select id="expenseHistoryCategory" class="form-input" style="width:auto; min-width:140px;">
+                        <option value="">All Categories</option>
+                    </select>
+                    <select id="expenseHistoryStatus" class="form-input" style="width:auto; min-width:130px;">
+                        <option value="">All Status</option>
+                        <option value="approved">Approved</option>
+                        <option value="pending">Pending</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                    <input type="text" id="expenseHistorySearch" placeholder="Search..." class="form-input" style="width:auto; min-width:180px;">
+                </div>
+                <div class="mob-table-scroll">
+                    <table class="mob-data-table" id="expenseHistoryTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="date">Date</th>
+                                <th data-sort="categoryName">Category</th>
+                                <th data-sort="description">Description</th>
+                                <th data-sort="amount" class="mob-th-right">Amount</th>
+                                <th data-sort="outletId">Outlet</th>
+                                <th data-sort="status">Status</th>
+                                <th class="mob-th-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expenseHistoryTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CATEGORIES SUB-TAB -->
+            <div id="expense-subtab-categories" class="expense-subtab-content hidden">
+                <div id="expenseCategoriesContainer">
+                    <!-- Rendered by openExpenseCategoryModal content -->
+                </div>
+            </div>
+
+            <!-- REPORTS SUB-TAB -->
+            <div id="expense-subtab-reports" class="expense-subtab-content hidden">
+                <div class="expense-reports-grid">
+                    <div class="mob-card mob-table-card">
+                        <div class="mob-section-head-row">
+                            <h4 class="mob-card-title">Monthly Summary</h4>
+                        </div>
+                        <canvas id="expenseMonthlyChart" height="200"></canvas>
+                        <div class="mob-table-scroll mt-12">
+                            <table class="mob-data-table" id="expenseMonthlyTable">
+                                <thead>
+                                    <tr>
+                                        <th>Month</th>
+                                        <th class="mob-th-right">Total</th>
+                                        <th class="mob-th-right">Budget</th>
+                                        <th class="mob-th-right">Variance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="expenseMonthlyTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="mob-card mob-table-card">
+                        <div class="mob-section-head-row">
+                            <h4 class="mob-card-title">Category Breakdown</h4>
+                        </div>
+                        <canvas id="expenseCategoryChart" height="200"></canvas>
+                        <div class="mob-table-scroll mt-12">
+                            <table class="mob-data-table" id="expenseCategoryBreakdownTable">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th class="mob-th_right">Amount</th>
+                                        <th class="mob_th_right">% of Total</th>
+                                        <th class="mob_th_right">Budget</th>
+                                        <th class="mob_th_center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="expenseCategoryBreakdownBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="mob-card mob-table-card">
+                        <div class="mob-section-head-row">
+                            <h4 class="mob-card-title">Outlet Comparison</h4>
+                        </div>
+                        <canvas id="expenseOutletChart" height="200"></canvas>
+                        <div class="mob-table-scroll mt-12">
+                            <table class="mob-data-table" id="expenseOutletTable">
+                                <thead>
+                                    <tr>
+                                        <th>Outlet</th>
+                                        <th class="mob-th_right">Total</th>
+                                        <th class="mob_th_right">This Month</th>
+                                        <th class="mob_th_right">Last Month</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="expenseOutletTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="mob-card mob-table-card">
+                        <div class="mob-section-head-row">
+                            <h4 class="mob-card-title">Trend Lines</h4>
+                        </div>
+                        <canvas id="expenseTrendChart" height="200"></canvas>
+                    </div>
+                </div>
+                <div class="mob-export-row" style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
+                    <button type="button" class="mob-export-banner mob-export-excel" data-action="expReportExportExcel" title="Export Report to Excel">
+                        <i data-lucide="file-spreadsheet" class="icon-18"></i> Excel
+                    </button>
+                    <button type="button" class="mob-export-banner mob-export-pdf" data-action="expReportExportPDF" title="Export Report to PDF">
+                        <i data-lucide="file-text" class="icon-18"></i> PDF
+                    </button>
+                </div>
+            </div>
+
+            <!-- SETTINGS SUB-TAB -->
+            <div id="expense-subtab-settings" class="expense-subtab-content hidden">
+                <div class="mob-card mob-table-card">
+                    <div class="mob-section-head-row">
+                        <h4 class="mob-card-title">Expense Settings</h4>
+                    </div>
+                    <div class="form-group-mini">
+                        <label class="form-label-small">Auto-approve Threshold (Rs.)</label>
+                        <input type="number" id="expenseAutoApproveThreshold" class="form-input w-100" placeholder="5000" min="0" step="100">
+                        <small class="text-muted-small">Expenses ≤ this amount auto-approve (default: 5000)</small>
+                    </div>
+                    <div class="form-group-mini">
+                        <label class="form-label-small">Expense Ceiling (% of Projected Revenue)</label>
+                        <input type="number" id="expenseCeilingPct" class="form-input w-100" placeholder="10" min="0" max="100" step="1">
+                        <small class="text-muted-small">Expenses exceeding this % of projected daily revenue require Manager PIN (0 = disabled, default: 10)</small>
+                    </div>
+                    <div class="form-group-mini">
+                        <label class="form-label-small">Default Currency Display</label>
+                        <select id="expenseCurrencyDisplay" class="form-input w-100">
+                            <option value="Rs.">Rs.</option>
+                            <option value="₹">₹</option>
+                        </select>
+                    </div>
+                    <div class="form-group-mini">
+                        <label class="form-label-small">Retention Policy (days)</label>
+                        <input type="number" id="expenseRetentionDays" class="form-input w-100" placeholder="90" min="30" max="365">
+                        <small class="text-muted-small">Days to keep soft-deleted expenses (default: 90)</small>
+                    </div>
+                    <div class="form-group-mini">
+                        <label class="form-label-small">Approval Workflow</label>
+                        <select id="expenseApprovalWorkflow" class="form-input w-100">
+                            <option value="single">Single Manager PIN</option>
+                            <option value="dual">Dual Manager PIN (future)</option>
+                        </select>
+                    </div>
+                    <hr style="margin:16px 0; border-color:var(--glass-border);">
+                    <div class="form-group-mini">
+                        <label class="form-label-small">Initialize Default Categories</label>
+                        <small class="text-muted-small">Creates 7 default system categories (Rent, Utilities, Payroll, Supplies, Marketing, Maintenance, Misc) with budgets and alerts. Run once on first setup.</small>
+                    </div>
+                    <button type="button" class="btn-secondary w-full mt-8 p-12 br-12 font-weight-600" data-action="seedExpenseCategories" style="background:var(--glass-bg); border:1px solid var(--glass-border);">
+                        <i data-lucide="database" class="icon-16"></i> Seed Default Categories
+                    </button>
+                    <button type="button" class="btn-primary w-full mt-16 p-12 br-12 font-weight-700" data-action="saveExpenseSettings">
+                        <i data-lucide="save" class="icon-16"></i> Save Settings
+                    </button>
+                </div>
+            </div> <!-- DISH MODAL -->
+
+        </div>
     </div>
-
-
-
-    <!-- DISH MODAL -->
 
     <div id="dishModal" class="modal" role="dialog" aria-modal="true" aria-label="Edit Dish">
 
@@ -6355,6 +6830,230 @@
 
 
 
+    </div>
+
+        </div>
+
+
+
+
+
+    <!-- ADD EXPENSE MODAL -->
+
+    <div id="expenseModal" class="modal" role="dialog" aria-modal="true" aria-label="Add Expense">
+
+        <div class="modal-content glass-card" style="max-width:520px;">
+
+            <div class="modal-header">
+
+                <h2 class="modal-title" id="expenseModalTitle">Add Expense</h2>
+
+                <button class="close-btn" data-action="closeExpenseModal" aria-label="Close dialog"><i data-lucide="x" class="icon-18"></i></button>
+
+            </div>
+
+            <form id="expenseForm">
+
+                <div class="modal-body p-20">
+
+                    <div class="form-group-mini">
+
+                        <label class="form-label-small">Date <span class="required-star">*</span></label>
+
+                        <input type="date" id="expenseDate" class="form-input w-100" required>
+
+                    </div>
+
+                    <div class="form-group-mini">
+
+                        <label class="form-label-small">Category <span class="required-star">*</span></label>
+
+                        <select id="expenseCategory" class="form-input w-100" required>
+
+                            <option value="">Select Category...</option>
+
+                        </select>
+
+                    </div>
+
+                    <div class="form-group-mini">
+
+                        <label class="form-label-small">Amount (Rs.) <span class="required-star">*</span></label>
+
+                        <input type="number" id="expenseAmount" class="form-input w-100" step="0.01" min="0.01" required>
+
+                    </div>
+
+                    <div class="form-group-mini">
+
+                        <label class="form-label-small">Description</label>
+
+                        <textarea id="expenseDescription" class="form-input w-100" rows="3" placeholder="e.g. Electricity bill, rent, supplies..." maxlength="200"></textarea>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button type="button" class="btn-secondary" data-action="closeExpenseModal">Cancel</button>
+
+                    <button type="submit" class="btn-primary w-full p-12 br-12 font-weight-700">
+
+                        <i data-lucide="save" class="icon-16"></i> Log Expense
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+
+
+
+    <!-- EXPENSE CATEGORY MODAL -->
+
+    <div id="expenseCategoryModal" class="modal" role="dialog" aria-modal="true" aria-label="Manage Expense Categories">
+
+        <div class="modal-content glass-card" style="max-width:520px; max-height:80vh;">
+
+            <div class="modal-header">
+
+                <h2 class="modal-title">Expense Categories</h2>
+
+                <button class="close-btn" data-action="closeExpenseCategoryModal" aria-label="Close dialog"><i data-lucide="x" class="icon-18"></i></button>
+
+            </div>
+
+            <div class="modal-body p-20" style="max-height:60vh; overflow-y:auto;">
+
+                <div class="mb-16">
+
+                    <h4 class="section-card-heading mb-10">Add New Category</h4>
+
+                    <div class="modal-grid-2col mb-12">
+
+                        <div>
+
+                            <div class="form-group-mini">
+
+                                <label class="form-label-small">Category Name <span class="required-star">*</span></label>
+
+                                <input type="text" id="expCatName" placeholder="e.g. Utilities" class="form-input w-100">
+
+                            </div>
+
+                        </div>
+
+                        <div>
+
+                            <div class="form-group-mini">
+
+                                <label class="form-label-small">Color</label>
+
+                                <input type="color" id="expCatColor" class="form-input w-100" style="height:40px;" value="#E84908">
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="flex-row flex-gap-10 mb-12">
+
+                        <div class="flex-1">
+
+                            <div class="form-group-mini">
+
+                                <label class="form-label-small">Icon</label>
+
+                                <select id="expCatIcon" class="form-input w-100">
+
+                                    <option value="zap">⚡ Zap</option>
+
+                                    <option value="home">🏠 Home</option>
+
+                                    <option value="truck">🚚 Truck</option>
+
+                                    <option value="wrench">🔧 Wrench</option>
+
+                                    <option value="credit-card">💳 Credit Card</option>
+
+                                    <option value="utensils">🍴 Utensils</option>
+
+                                    <option value="wifi">📶 WiFi</option>
+
+                                    <option value="dollar-sign">💰 Dollar Sign</option>
+
+                                </select>
+
+                            </div>
+
+                        </div>
+
+                        <div class="flex-1">
+
+                            <div class="form-group-mini">
+
+                                <label class="form-label-small">Monthly Budget (Rs.)</label>
+
+                                <input type="number" id="expCatBudget" class="form-input w-100" placeholder="Optional" min="0" step="100">
+
+                            </div>
+
+                        </div>
+
+                        <div class="flex-1">
+
+                            <div class="form-group-mini">
+
+                                <label class="form-label-small">Alert at %</label>
+
+                                <input type="number" id="expCatAlert" class="form-input w-100" value="80" min="1" max="100">
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <button type="button" id="btnAddExpenseCategory" class="btn-primary w-full p-10 br-10 font-weight-700">Add Category</button>
+
+                </div>
+
+                <div class="mt-20">
+
+                    <h4 class="section-card-heading mb-10">Existing Categories</h4>
+
+                    <div id="expenseCategoryList" class="expense-category-list">
+
+                        <!-- Populated dynamically -->
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+
+                <button type="button" class="btn-secondary" data-action="closeExpenseCategoryModal">Close</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+
+
     <div id="categoryEditorModal" class="modal" role="dialog" aria-modal="true" aria-label="Edit Category">
         <div class="modal-content glass-card" style="max-width:460px;">
             <div class="modal-header">
@@ -6391,6 +7090,94 @@
         </div>
     </div>
 
+    <!-- STAFF MANAGEMENT MODAL -->
+
+    <div id="staffModal" class="modal" role="dialog" aria-modal="true" aria-label="Staff Account">
+
+        <div class="modal-content glass-card" style="max-width:480px;">
+
+            <div class="modal-header">
+
+                <h2 class="modal-title" id="staffModalTitle">Add Staff Member</h2>
+
+                <button class="close-btn" data-action="closeStaffModal" aria-label="Close dialog"><i data-lucide="x" class="icon-18"></i></button>
+
+            </div>
+
+            <form id="staffForm">
+
+                <input type="hidden" id="staffEditUid">
+
+                <div class="modal-body p-20">
+
+                    <div class="form-group-mini">
+
+                        <label class="form-label-small">Email <span class="required-star">*</span></label>
+
+                        <input type="email" id="staffEmail" class="form-input w-100" required autocomplete="email">
+
+                    </div>
+
+                    <div class="form-group-mini">
+
+                        <label class="form-label-small">Full Name <span class="required-star">*</span></label>
+
+                        <input type="text" id="staffName" class="form-input w-100" required maxlength="50">
+
+                    </div>
+
+                    <div class="form-group-mini">
+
+                        <label class="form-label-small">Role <span class="required-star">*</span></label>
+
+                        <select id="staffRole" class="form-input w-100" required>
+
+                            <option value="cashier">Cashier</option>
+
+                            <option value="manager">Manager</option>
+
+                            <option value="waiter">Waiter</option>
+
+                        </select>
+
+                    </div>
+
+                    <div id="staffCeilingGroup" class="form-group-mini" style="display:none;">
+
+                        <label class="form-label-small">Discount Ceiling % (0 = inherit outlet)</label>
+
+                        <input type="number" id="staffCeilingPct" class="form-input w-100" min="0" max="100" step="1" placeholder="0">
+
+                        <small class="text-muted-small">Maximum discount % this staff can apply without manager approval. Waiters inherit outlet ceiling.</small>
+
+                    </div>
+
+                    <div id="staffInitialPasswordGroup" class="form-group-mini">
+
+                        <label class="form-label-small">Initial Password <span class="required-star">*</span></label>
+
+                        <input type="password" id="staffInitialPassword" class="form-input w-100" minlength="6" autocomplete="new-password">
+
+                        <small class="text-muted-small">Staff will receive a password reset email to set their own password. Minimum 6 characters.</small>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button type="button" class="btn-secondary" data-action="closeStaffModal">Cancel</button>
+
+                    <button type="submit" id="staffSubmitBtn" class="btn-primary w-full p-12 br-12 font-weight-700"><i data-lucide="save" class="icon-16"></i> Create Account</button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
     <script src="branding.js?v=5.3.29" defer></script>
 
     <script src="firebase-config.js?v=5.3.29" defer></script>
@@ -6404,6 +7191,50 @@
     <script type="module" src="js/bot-status.js?v=5.3.29"></script>
 
     <script type="module" src="js/main.js?v=5.3.29"></script>
+
+<!-- RECEIPT PREVIEW MODAL -->
+
+    <div id="receiptPreviewModal" class="modal" role="dialog" aria-modal="true" aria-label="Receipt Preview">
+
+        <div class="modal-content glass-card" style="max-width:90vw; max-height:90vh;">
+
+            <div class="modal-header">
+
+                <h2 class="modal-title">Receipt Preview</h2>
+
+                <button class="close-btn" data-action="closeReceiptPreview" aria-label="Close dialog"><i data-lucide="x" class="icon-18"></i></button>
+
+            </div>
+
+            <div class="modal-body p-0" style="max-height:70vh; overflow:auto;">
+
+                <div id="receiptPreviewContainer" style="display:flex; align-items:center; justify-content:center; min-height:300px;">
+
+                    <img id="receiptPreviewImage" alt="Receipt Preview" style="max-width:100%; max-height:70vh; object-fit:contain;">
+
+                </div>
+
+            </div>
+
+            <div class="modal-footer" style="border-top:1px solid var(--glass-border); padding:12px 20px;">
+
+                <button type="button" class="btn-secondary" data-action="closeReceiptPreview">Close</button>
+
+                <button type="button" class="btn-primary" id="receiptDownloadBtn">
+
+                    <i data-lucide="download" class="icon-16"></i> Download
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+        </main>
+
+</div>
 
 </body>
 

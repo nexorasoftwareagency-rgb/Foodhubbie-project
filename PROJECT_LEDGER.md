@@ -80,6 +80,36 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260927-084756-bba1] Fix runtime ReferenceErrors: expenses.js BUSINESS_ID/db undefined, settings.js EmailAuthProvider/reauthenticateWithCredential undefined, ui.js duplicate resize listener
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-09-27 08:47 UTC
+- Files touched: Admin/js/features/expenses.js, Admin/js/features/settings.js, Admin/js/ui.js
+- Verified: node --check clean on expenses.js, settings.js, ui.js; Admin build passes; rider-app build passes; database.rules.json valid JSON; dist assertions confirm BUSINESS_ID, EmailAuthProvider, reauthenticateWithCredential, auth all present
+- NOT verified / open risk: No live E2E test against production RTDB � these ReferenceErrors would only crash at runtime in the browser, not in node --check or esbuild
+- Confidence: HIGH
+- Ended: 2026-09-27 08:50 UTC
+
+### [20260926-000000] Competitor pricing research - first-party verification across all vendors
+- TIER: 1 (research/documentation only — no code, no rules, no money path; internal folder, never published)
+- STATUS: DONE
+- Started: 2026-09-26
+- Scope: user prompt "Research on Pricing of ALL Competitors and their Features". Deliverable = `Competitor/PRICING.md` plus first-party updates to the existing 10-file competitor folder.
+- Trace / constraints found before writing:
+  1. Folder is **internal-only** — `website/Improvements/Rider improvements Section.md.txt:9/:633/:636/:727` bans competitor comparison tables and Swiggy/Zomato promotion on the site. Nothing here ships.
+  2. Provenance rules require every claim tagged `[repo]/[site]/[live]/[web]/[assessment]/[UNKNOWN]`, and **no tag upgrades without a source**.
+  3. Three of five largest vendors publish no price — that became the headline rather than a gap.
+- Findings:
+  1. **Petpooja billing period resolved.** `petpooja.com/pricing` shows Base INR 12,000 ex-tax but never states the period. Six independent signals (vendor's own Annually/Monthly toggle in the index; Techjockey `Outlet: 1, Yearly: 1`; chuk.in; restrofi; zendikt; Softwr 31 Aug 2026 "flat annual licence per outlet"; vendor brochure "Exclusive of GST") converge on **per outlet per year**. The folder's long-standing "third parties disagree 2-4x" flag is therefore **resolved, not averaged**: the 1,500-3,500/mo claims describe the 20k-40k tiers or annual figures divided wrongly. Still an inference — flagged for written confirmation.
+  2. **QR and KDS are not in Petpooja's Base plan** — both start at Operations Manager Growth (INR 20,000) `[site]`. A tiering argument that does not depend on the annual inference.
+  3. **UrbanPiper `/pricing` = 404**; Hub and Meraki FAQ both say "contact us". Own 2022 blog quotes Prime at 10,000 INR (stale, no period) — marked do-not-quote.
+  4. **Restroworks publishes zero figures** on its pricing page; its `/compare/` pages position it against NCR/Oracle Micros/PAR/Toast, i.e. global enterprise, not Indian SMBs.
+  5. **Long tail mapped**: ~15 vendors found; most publish nothing, and most that do publish their own comparison **of themselves** (billfeeds, swaadbyte, dineopen, platera, posible, orgnyz) — flagged as self-published marketing, not independent data.
+  6. Market: ~7.5 lakh active restaurants India 2026, ~18% on digital POS (~1.35 lakh) — an adoption fight, not yet a share fight.
+- Changes: **new** `Competitor/PRICING.md` (258 lines: first-party matrix, resolved billing-period evidence chain, third-party conflict tables, long-tail landscape, market size, what it means for our price). **Updated** `profiles/petpooja.md` (features re-read first-hand, billing-period section, tiering argument, gaps), `profiles/urbanpiper.md` (first-party no-price confirmation, products/customers), `MARKET-CONTEXT.md` §2 (shrunk to summary + pointer; conflict flag resolved; data hygiene rewritten), `COMPARISON.md` (Commercial model tags `[web]`→`[site]`, price curve corrected to /yr), `EVALUATION.md` (O2 corrected, **new O7 price transparency + O8 tiering**, T3 tag upgraded, T4 qualified), `SOURCES.md` (**new §4a first-party pricing pass**, §4 conflicts partially resolved, 7 collection-log rows), `README.md` (PRICING.md added to Files + Quick read, known-gap 4 rewritten).
+- Verification: custom checker `C:\Users\2nile\AppData\Local\Temp\opencode\check_competitor.mjs` walks all 11 files checking U+FFFD/CR encoding, per-block table pipe counts (code spans + fenced blocks stripped), balanced fences, separator rows, and local link resolution → **ALL 11 FILES PASS**. Checker had one false positive on the ASCII positioning diagram in `MARKET-CONTEXT.md` — fixed the checker, not the file.
+- Not done: Petpooja period not confirmed *in writing* by the vendor; UrbanPiper/Restroworks/DotPe figures remain quote-only; `Competitor/` still untracked (not committed — awaiting user).
+
 ### [20260925-224237-1489] User Manual reachable from the Admin sidebar (icon → dist/manual.html)
 - TIER: 2 (build tooling + navigation entry point; no money path, no rules change)
 - STATUS: DONE

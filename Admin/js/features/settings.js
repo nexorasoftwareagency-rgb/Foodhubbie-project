@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { db, Outlet, tenantPath, ref, get, update, set } from '../firebase.js';
+import { db, auth, Outlet, tenantPath, ref, get, update, set, EmailAuthProvider, reauthenticateWithCredential } from '../firebase.js';
 import { logAudit, showToast, showConfirm, getSkeletonRows, hashPin } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { completeSiteRefresh } from '../pwa.js';
@@ -92,8 +92,17 @@ function applyFeatureUI() {
     const st = document.getElementById('featureDiscountStatus');
     if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
 }
+
+// Expense feature UI
+function applyExpenseFeatureUI() {
+    const on = isChecked('featureExpense');
+    const st = document.getElementById('featureExpenseStatus');
+    if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
+    // Note: Expense tab visibility is handled in main.js initTabs()
+}
 document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'featureDiscountApproval') applyFeatureUI();
+    if (e.target && e.target.id === 'featureExpense') applyExpenseFeatureUI();
 });
 const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcons({ root }));
 
@@ -167,6 +176,11 @@ export async function loadStoreSettings() {
         state.features.discountApproval = featSnap.val()?.discountApproval === true;
         setChecked('featureDiscountApproval', state.features.discountApproval);
         applyFeatureUI();
+
+        // 2a-2. Expense feature flag
+        state.features.expense = featSnap.val()?.expense === true;
+        setChecked('featureExpense', state.features.expense);
+        applyExpenseFeatureUI();
 
         // 2b. Dine-In Settings (tax, service charge, QR ordering base URL)
         const dineSnap = await get(Outlet.ref('dineinSettings'));
@@ -359,10 +373,14 @@ export async function saveStoreSettings() {
         updates[tenantPath(Outlet.current, 'settings/Security/discountCeilingPct')] = ceilingPct;
         if (pinHash) updates[tenantPath(Outlet.current, 'settings/Security/pinHash')] = pinHash;
 
-        // Feature flag (Settings > Features). Tracked so we can demand a hard refresh on change.
-        const featureEnabled = isChecked('featureDiscountApproval');
-        const featureChanged = featureEnabled !== state.features.discountApproval;
-        updates[tenantPath(Outlet.current, 'settings/features/discountApproval')] = featureEnabled;
+        // Feature flags (Settings > Features). Tracked so we can demand a hard refresh on change.
+        const featureDiscountEnabled = isChecked('featureDiscountApproval');
+        const featureExpenseEnabled = isChecked('featureExpense');
+        const featureDiscountChanged = featureDiscountEnabled !== state.features.discountApproval;
+        const featureExpenseChanged = featureExpenseEnabled !== state.features.expense;
+        const featureChanged = featureDiscountChanged || featureExpenseChanged;
+        updates[tenantPath(Outlet.current, 'settings/features/discountApproval')] = featureDiscountEnabled;
+        updates[tenantPath(Outlet.current, 'settings/features/expense')] = featureExpenseEnabled;
         const taxRates = _readTaxRates();
         updates[tenantPath(Outlet.current, 'dineinSettings')] = {
             qrBaseUrl: val('settingQrBaseUrl'),
@@ -385,7 +403,8 @@ export async function saveStoreSettings() {
 
         // Feature toggles take effect on load — one popup, then the nuclear refresh.
         if (featureChanged) {
-            state.features.discountApproval = featureEnabled;
+            state.features.discountApproval = featureDiscountEnabled;
+            state.features.expense = featureExpenseEnabled;
             await completeSiteRefresh('Settings saved. A hard refresh is required to activate this feature change. Refresh now?');
         }
 
@@ -597,6 +616,18 @@ document.addEventListener('click', (e) => {
         document.querySelectorAll('[data-settings-section]').forEach(el => {
             el.style.display = el.dataset.settingsSection === tab ? '' : 'none';
         });
+        // Lazy-load Staff Management module when tab is shown
+        if (tab === 'staff-management') {
+            import('../features/staff-management.js').then(m => {
+                m.loadStaffList().then(() => m.renderStaffTable());
+            }).catch(e => console.error('[Settings] Staff Management load failed:', e));
+        }
+        // Lazy-load Security Audit module when tab is shown
+        if (tab === 'security-audit') {
+            import('../features/security-audit.js').then(m => {
+                m.initSecurityAuditTab();
+            }).catch(e => console.error('[Settings] Security Audit load failed:', e));
+        }
     }
 });
 
@@ -835,3 +866,97 @@ if (typeof _origShowTab === 'function') {
 } else {
     document.addEventListener('DOMContentLoaded', () => _loadBlockedNumbers());
 }
+
+// --- Change Password ---
+export async function changePassword() {
+    const currentPassword = document.getElementById('currentPassword')?.value;
+    const newPassword = document.getElementById('newPassword')?.value;
+    const confirmPassword = document.getElementById('confirmPassword')?.value;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        showToast('Please fill all fields', 'warning');
+        return;
+    }
+
+    if (newPassword.length < 8) {
+        showToast('New password must be at least 8 characters', 'error');
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        showToast('Passwords do not match', 'error');
+        return;
+    }
+
+    try {
+        const btn = document.getElementById('btnChangePassword');
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader" class="icon-16 spin-icon"></i> Updating...';
+        await refreshIcons(btn);
+
+        const user = auth.currentUser;
+        if (!user || !user.email) throw new Error('No authenticated user');
+
+        // Re-authenticate before changing password
+        const credential = EmailAuthProvider.credential(user.email, document.getElementById('currentPassword').value);
+        await reauthenticateWithCredential(user, credential);
+
+        // Update password
+        await user.updatePassword(newPassword);
+
+        // Clear inputs
+        document.getElementById('currentPassword').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('confirmPassword').value = '';
+        document.getElementById('passwordMatchHint').textContent = '';
+
+        showToast('Password updated successfully', 'success');
+    } catch (e) {
+        console.error('[Settings] Password change failed:', e);
+        const friendly = {
+            'auth/wrong-password': 'Current password is incorrect',
+            'auth/weak-password': 'New password is too weak (min 8 chars)',
+            'auth/requires-recent-login': 'Please log in again and try again'
+        }[e.code] || 'Failed to change password. Please try again.';
+        showToast(friendly, 'error');
+    } finally {
+        const btn = document.getElementById('btnChangePassword');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="lock" class="icon-16"></i> Update Password';
+            await refreshIcons(btn);
+        }
+    }
+}
+
+// --- Password Match Hint ---
+export function initSettingsPasswordMatch() {
+    const newPassword = document.getElementById('newPassword');
+    const confirmPassword = document.getElementById('confirmPassword');
+    const hint = document.getElementById('passwordMatchHint');
+    
+    if (!newPassword || !confirmPassword || !hint) return;
+    
+    const checkMatch = () => {
+        if (!confirmPassword.value) {
+            hint.textContent = '';
+            hint.style.color = '';
+            return;
+        }
+        if (newPassword.value === confirmPassword.value) {
+            hint.textContent = '✓ Passwords match';
+            hint.style.color = 'var(--success)';
+        } else {
+            hint.textContent = '✗ Passwords do not match';
+            hint.style.color = 'var(--error)';
+        }
+    };
+    
+    newPassword.addEventListener('input', checkMatch);
+    confirmPassword.addEventListener('input', checkMatch);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initSettingsPasswordMatch();
+});

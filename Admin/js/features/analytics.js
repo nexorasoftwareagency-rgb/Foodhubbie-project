@@ -1,6 +1,6 @@
 import { Outlet, tenantRef, db, ref, get, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { ui } from '../ui.js';
-import { showToast, formatDate, getISTDateString, formatOrderId } from '../utils.js';
+import { showToast, formatDate, getISTDateString, formatOrderId, _loadChartJS } from '../utils.js';
 import { loadJSPDF } from './printing.js';
 import { initMobileAnalyticsUI, renderMobileAnalytics, cleanupMobileAnalytics } from './analytics-mobile.js';
 
@@ -8,20 +8,6 @@ let salesData = [];
 let prevPeriodData = [];
 let _isLoading = false;
 let _currentOutletFilter = 'current';
-let _chartJSPromise = null;
-
-async function loadChartJS() {
-    if (_chartJSPromise) return _chartJSPromise;
-    _chartJSPromise = import('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/+esm').then(m => {
-        const C = m.Chart;
-        if (C && C.register && m.CategoryScale) {
-            C.register(m.CategoryScale, m.LinearScale, m.LineElement, m.PointElement, m.LineController, m.ArcElement, m.DoughnutController, m.Tooltip, m.Legend, m.Filler);
-        }
-        window.Chart = C;
-        return m;
-    }).catch(e => { _chartJSPromise = null; throw e; });
-    await _chartJSPromise;
-}
 
 export function setOutletFilter(value) {
     if (!value) value = 'current';
@@ -31,7 +17,7 @@ export function setOutletFilter(value) {
 }
 
 export async function loadReports() {
-    await loadChartJS();
+    await _loadChartJS();
 
     const today = new Date();
     const yesterday = new Date();
@@ -209,15 +195,110 @@ export async function downloadPDF() {
 
     showToast('Generating PDF...', 'info');
 
-    doc.setFontSize(20);
-    doc.text('Sales Report', 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
+    let storeName = 'FoodHubbie';
+    try {
+        const snap = await get(Outlet.ref('settings/Store'));
+        if (snap.exists() && snap.val().storeName) storeName = snap.val().storeName;
+    } catch (_) {}
 
     const from = document.getElementById('reportFrom')?.value || '';
     const to = document.getElementById('reportTo')?.value || '';
-    doc.text(`Period: ${from} to ${to}`, 14, 30);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 42);
+
+    const primary = [232, 73, 8]; // #E84908
+    const ink = [15, 23, 42]; // #0F172A
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const M = 14;
+    const rs = n => 'Rs.' + Math.round(Number(n || 0)).toLocaleString('en-IN');
+    const mix = (a, b, t) => {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return a;
+    return a.map((v, i) => Math.round(v + (b[i] - v) * t));
+};
+
+    const totalRevenue = filtered.reduce((s, o) => s + Number(o.total || 0), 0);
+    const totalOrders = filtered.length;
+    const aov = totalOrders > 0 ? rs(totalRevenue / totalOrders) : '—';
+    const uniqCustomers = new Set(filtered.map(o => {
+        // For walk-in orders without phone/name, use orderId to distinguish
+        if (o.phone) return o.phone;
+        if (o.customerName) return o.customerName;
+        if (o.orderId) return `walkin:${o.orderId}`;
+        if (o.id) return `order:${o.id}`;
+        return 'Guest';
+    })).size;
+
+    // Hero band: gradient via interpolated slices + translucent decorative circles
+    const heroH = 54, steps = 54;
+    const A = [176, 47, 6], B = [232, 73, 8], C = [255, 132, 56];
+    for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1);
+        doc.setFillColor(...(t < 0.5 ? mix(A, B, t * 2) : mix(B, C, (t - 0.5) * 2)));
+        doc.rect(0, heroH * i / steps, pw, heroH / steps + 0.6, 'F');
+    }
+    doc.setGState(new doc.GState({ opacity: 0.1 }));
+    doc.setFillColor(255, 255, 255);
+    doc.circle(pw - 26, 14, 28, 'F');
+    doc.circle(pw - 74, 47, 13, 'F');
+    doc.circle(20, 52, 20, 'F');
+    doc.setGState(new doc.GState({ opacity: 1 }));
+
+    // FH badge + brand block: FOODHUBBIE eyebrow, restaurant name as headline
+    doc.setFillColor(255, 255, 255);
+    doc.circle(M + 13, 22, 12.5, 'F');
+    doc.setTextColor(...primary);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('FH', M + 13, 27, { align: 'center' });
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.text('FOODHUBBIE', M + 30, 13.5, { charSpace: 2.2 });
+    let nameSize = 21;
+    doc.setFontSize(nameSize);
+    const nameW = doc.getTextWidth(storeName);
+    const nameMax = pw - (M + 30) - M;
+    if (nameW > nameMax) nameSize = Math.max(12, nameSize * nameMax / nameW);
+    doc.setFontSize(nameSize);
+    doc.text(storeName, M + 30, 27);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(255, 220, 205);
+    doc.text(`Sales Report  ·  ${from} to ${to}  ·  ${totalOrders.toLocaleString('en-IN')} orders  ·  Generated ${new Date().toLocaleDateString('en-IN')}`, M + 30, 35);
+
+    // KPI stat cards overlapping the hero edge
+    const cardY = 46, cardH = 26, gap = 6;
+    const cardW = (pw - 2 * M - 3 * gap) / 4;
+    const kpis = [
+        ['TOTAL REVENUE', rs(totalRevenue)],
+        ['TOTAL ORDERS', String(totalOrders)],
+        ['AVG ORDER VALUE', aov],
+        ['UNIQUE CUSTOMERS', String(uniqCustomers)]
+    ];
+    kpis.forEach(([label, value], i) => {
+        const x = M + i * (cardW + gap);
+        doc.setFillColor(234, 228, 224);
+        doc.roundedRect(x + 0.7, cardY + 0.9, cardW, cardH, 3, 3, 'F');
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(150, 145, 140);
+        doc.text(label, x + 5, cardY + 10, { charSpace: 0.3 });
+        doc.setFontSize(12);
+        doc.setTextColor(...ink);
+        doc.text(value, x + 5, cardY + 21);
+    });
+
+    // Section label
+    doc.setFillColor(...primary);
+    doc.rect(M, 85, 3.5, 6, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...ink);
+    doc.text('DETAILED SALES DATA', M + 6, 89.5, { charSpace: 0.5 });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(140, 136, 130);
+    doc.text(`${totalOrders} orders`, pw - M, 89.5, { align: 'right' });
 
     const tableData = filtered.map(o => [
         formatDate(o.createdAt),
@@ -225,18 +306,81 @@ export async function downloadPDF() {
         (o.outlet || 'pizza').toUpperCase(),
         o.type || o.orderType || 'Online',
         o.paymentMethod || 'COD',
-        `Rs.${o.total}`,
+        rs(o.total),
         o.itemsStr || ''
     ]);
 
     doc.autoTable({
-        startY: 48,
+        startY: 96,
         head: [['Date', 'Customer', 'Outlet', 'Order Type', 'Payment', 'Total', 'Items']],
         body: tableData,
+        foot: [['Grand Total', `${uniqCustomers} customers`, '', `${totalOrders} orders`, '', rs(totalRevenue), '']],
+        showFoot: 'lastPage',
+        rowPageBreak: 'avoid',
         theme: 'grid',
-        headStyles: { fillColor: [6, 95, 70] },
-        columnStyles: { 5: { cellWidth: 50 } }
+        headStyles: { fillColor: ink, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: ink, lineWidth: 0.2 },
+        bodyStyles: {
+            fontSize: 8, textColor: [30, 41, 59], lineColor: [236, 231, 227], lineWidth: 0.2, valign: 'middle',
+            cellPadding: { top: 2.2, bottom: 2.2, left: 3, right: 3 }
+        },
+        alternateRowStyles: { fillColor: [255, 247, 243] },
+        footStyles: { fillColor: ink, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: ink, lineWidth: 0.2 },
+        columnStyles: {
+            0: { cellWidth: 26 },
+            1: { cellWidth: 28 },
+            2: { cellWidth: 16, halign: 'center' },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 18 },
+            5: { cellWidth: 22, halign: 'right' },
+            6: { cellWidth: 52 }
+        },
+        margin: { top: 26, left: M, right: M, bottom: 18 },
+        didDrawPage: () => {
+            if (doc.internal.getCurrentPageInfo().pageNumber === 1) return;
+            doc.setFillColor(255, 249, 246);
+            doc.rect(0, 0, pw, 22, 'F');
+            doc.setFillColor(...primary);
+            doc.rect(0, 0, pw, 2.6, 'F');
+            doc.circle(M + 7, 13, 7, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.text('FH', M + 7, 16.2, { align: 'center' });
+            doc.setTextColor(...ink);
+            doc.setFontSize(10);
+            doc.text('Sales Report', M + 18, 12);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8.5);
+            doc.setTextColor(...primary);
+            doc.text(storeName, M + 18, 17.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(140, 136, 130);
+            doc.text('Continued', pw - M, 14.5, { align: 'right' });
+        },
     });
+
+    // Footer post-pass: Page X of Y on every page
+    const totalPages = doc.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setDrawColor(236, 231, 227);
+        doc.setLineWidth(0.3);
+        doc.line(M, ph - 14, pw - M, ph - 14);
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 143, 138);
+        doc.text(`Powered by FoodHubbie ERP  ·  ${storeName}`, M, ph - 9);
+        doc.text(`Page ${p} of ${totalPages}`, pw - M, ph - 9, { align: 'right' });
+    }
+
+    doc.setProperties({
+        title: `Sales Report - ${storeName}`,
+        subject: `Sales report ${from} to ${to}`,
+        author: storeName,
+        creator: 'FoodHubbie ERP'
+    });
+
     doc.save(`Sales_Report_${from}_to_${to}.pdf`);
 }
 

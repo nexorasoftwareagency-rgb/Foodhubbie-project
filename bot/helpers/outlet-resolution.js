@@ -16,6 +16,9 @@
 
 // Legacy map for backward compatibility with existing QR codes (no ?b= param)
 // New outlets MUST pass BUSINESS_ID env var or ?b= in URL
+// SYNC WARNING: an identical copy of this map lives in menu/js/firebase.js
+// (browser ESM, can't share a CommonJS require() with this file). If you
+// add an outlet here, add it there too — see docs/FOODHUBBIE-AUDIT-REPORT.md §4.2.
 const DEFAULT_BUSINESS_ID = 'roshani-pizza';
 const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
 

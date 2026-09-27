@@ -100,6 +100,12 @@ export const Outlet = {
         }
         return tenantRef(this.current, cleanPath);
     },
+    // New tenant-scoped refs for staff & audit
+    staff(uid) { return ref(db, `businesses/${BUSINESS_ID()}/outlets/${this.current}/staff/${uid}`); },
+    staffCeilings(uid) { return ref(db, `businesses/${BUSINESS_ID()}/outlets/${this.current}/settings/Security/staffCeilings/${uid}`); },
+    managerPinHash() { return ref(db, `businesses/${BUSINESS_ID()}/outlets/${this.current}/settings/Security/managerPinHash`); },
+    staffChanges() { return ref(db, `businesses/${BUSINESS_ID()}/outlets/${this.current}/audit/staffChanges`); },
+    discountApprovals() { return ref(db, `businesses/${BUSINESS_ID()}/outlets/${this.current}/audit/discountApprovals`); },
     multiUpdate(updates) {
         return update(tenantRef(this.current), updates);
     }

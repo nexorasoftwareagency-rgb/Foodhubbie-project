@@ -1704,7 +1704,9 @@ export async function confirmTableBillPayment() {
 
     // Approval ceiling: a manual discount above settings/Security/discountCeilingPct
     // needs a manager PIN before any payment is taken.
-    if (!await gateManualDiscountPin({ discountValue, subtotal, discountId })) return;
+    // Use per-person ceiling from counterStaffUid (shift sign-in) or current admin.
+    const counterStaffUid = sessionStorage.getItem('counterStaffUid') || state.adminData?.uid;
+    if (!await gateManualDiscountPin({ discountValue, subtotal, discountId, staffUid: counterStaffUid })) return;
 
     // Use Firebase connection state (reliable) instead of navigator.onLine
     if (!isConnected()) {

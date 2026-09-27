@@ -40,6 +40,35 @@ export function initAuth() {
         };
     }
 
+    // Forgot password handler
+    const forgotBtn = document.getElementById("forgotPasswordBtn");
+    if (forgotBtn) {
+        forgotBtn.onclick = async () => {
+            const email = prompt("Enter your registered email to reset password:");
+            if (!email || !email.includes("@")) {
+                showToast("Please enter a valid email address.", "warning");
+                return;
+            }
+            try {
+                forgotBtn.disabled = true;
+                forgotBtn.innerHTML = '<span>Sending...</span> <div class="btn-stitch-v4"></div>';
+                await sendPasswordResetEmail(auth, email.trim());
+                showToast("Password reset email sent! Check your inbox.", "success");
+            } catch (e) {
+                console.error("[Auth] Password reset failed:", e);
+                const friendly = {
+                    'auth/user-not-found': 'No account found with this email',
+                    'auth/invalid-email': 'Invalid email address',
+                    'auth/too-many-requests': 'Too many requests. Please try again later.'
+                }[e.code] || 'Failed to send reset email. Please try again.';
+                showToast(friendly, "error");
+            } finally {
+                forgotBtn.disabled = false;
+                forgotBtn.innerHTML = '<i data-lucide="key" class="icon-14"></i> <span>Forgot Password?</span>';
+            }
+        };
+    }
+
     // Add diagnostic button to login form (Gated for non-production/debug only)
     const isDebuggable = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || localStorage.getItem('DEBUG_MODE') === 'true';
     const loginCard = document.querySelector('.login-card-v4');
@@ -180,21 +209,18 @@ export function initAuth() {
             }
         }
 
-        // --- Realtime disabled listener ---
+// --- Realtime disabled listener ---
         // If the outlet gets disabled while admin is logged in, force sign-out immediately
-let _disabledUnsub = null;
-
-// Force esbuild to keep this by using it in a way that can't be optimized away
-// This creates a getter that esbuild can't optimize away
-const _disabledUnsubHolder = {
-  get value() { return _disabledUnsub; },
-  set value(v) { _disabledUnsub = v; }
-};
-
-// Force reference
-if (typeof window !== 'undefined') {
-  window.__disabledUnsubHolder = _disabledUnsubHolder;
-}
+        let _disabledUnsub = null;
+        
+        // Keep reference to prevent esbuild dead-code elimination
+        // Using a simple function reference that esbuild can't prove is unused
+        const _keepDisabledUnsubRef = () => _disabledUnsub;
+        if (typeof window !== 'undefined') {
+            // Use a unique property name to avoid conflicts
+            window.__disabledUnsubRef = _keepDisabledUnsubRef;
+        }
+        
         if (!adminData.isSuper && !adminData.isSupreme && adminData.outlet) {
             const oid = String(adminData.outlet).toLowerCase();
             const bid = adminData.businessId || BUSINESS_BY_OUTLET[oid];
