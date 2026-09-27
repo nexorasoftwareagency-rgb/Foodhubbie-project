@@ -19,6 +19,21 @@ function fmtMoney(n) {
     return 'Rs.' + (v % 1 === 0 ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: 1 }));
 }
 
+function _sortExpenses(arr) {
+    return [...arr].sort((a, b) => {
+        let av = a[_sortField], bv = b[_sortField];
+        if (_sortField === 'amount' || _sortField === 'date') {
+            av = _sortField === 'date' ? String(av || '') : Number(av || 0);
+            bv = _sortField === 'date' ? String(bv || '') : Number(bv || 0);
+        } else {
+            av = String(av || '').toLowerCase();
+            bv = String(bv || '').toLowerCase();
+        }
+        const cmp = av > bv ? 1 : av < bv ? -1 : 0;
+        return _sortDir === 'asc' ? cmp : -cmp;
+    });
+}
+
 function _renderExpenseTable() {
     const tbody = document.getElementById('expenseDataTableBody');
     const countEl = document.getElementById('expTableCount');
@@ -38,18 +53,7 @@ function _renderExpenseTable() {
 
     if (countEl) countEl.textContent = `${data.length} expense${data.length === 1 ? '' : 's'}`;
 
-    const sorted = [...data].sort((a, b) => {
-        let av = a[_sortField], bv = b[_sortField];
-        if (_sortField === 'amount' || _sortField === 'date') {
-            av = _sortField === 'date' ? (a[_sortField] || '') : Number(av || 0);
-            bv = _sortField === 'date' ? (b[_sortField] || '') : Number(bv || 0);
-        } else {
-            av = String(av || '').toLowerCase();
-            bv = String(bv || '').toLowerCase();
-        }
-        const cmp = av > bv ? 1 : av < bv ? -1 : 0;
-        return _sortDir === 'asc' ? cmp : -cmp;
-    });
+    const sorted = _sortExpenses(data);
 
     if (sorted.length === 0) {
         tbody.innerHTML = `<tr><td colspan="8" class="mob-table-empty">${term ? 'No expenses match your search.' : 'No expenses found.'}</td></tr>`;
@@ -89,23 +93,23 @@ export function filterExpenses(searchTerm) {
 
 
 export function initExpenseTable() {
-    const table = document.getElementById('expenseDataTable');
-    if (!table || table.dataset.wired) return;
-    table.dataset.wired = '1';
-
-    const ths = table.querySelectorAll('th[data-sort]');
-    ths.forEach(th => {
-        th.addEventListener('click', () => {
-            const field = th.dataset.sort;
-            if (_sortField === field) {
-                _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
-            } else {
-                _sortField = field;
-                _sortDir = field === 'amount' || field === 'date' ? 'desc' : 'asc';
-            }
-            ths.forEach(h => h.classList.remove('mob-sort-asc', 'mob-sort-desc'));
-            th.classList.add(_sortDir === 'asc' ? 'mob-sort-asc' : 'mob-sort-desc');
-            _renderExpenseTable();
+    [['expenseTodayTable', _renderTodayView], ['expenseHistoryTable', _renderHistoryView]].forEach(([id, rerender]) => {
+        const table = document.getElementById(id);
+        if (!table || table.dataset.wired) return;
+        table.dataset.wired = '1';
+        table.querySelectorAll('th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const field = th.dataset.sort;
+                if (_sortField === field) {
+                    _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    _sortField = field;
+                    _sortDir = field === 'amount' || field === 'date' ? 'desc' : 'asc';
+                }
+                table.querySelectorAll('th[data-sort]').forEach(h => h.classList.remove('mob-sort-asc', 'mob-sort-desc'));
+                th.classList.add(_sortDir === 'asc' ? 'mob-sort-asc' : 'mob-sort-desc');
+                rerender();
+            });
         });
     });
 }
@@ -162,7 +166,7 @@ export function initExpenseSubTabs() {
 // ===== TODAY VIEW =====
 function _renderTodayView() {
     const today = new Date().toISOString().split('T')[0];
-    const todayExpenses = _expenseData.filter(e => e.date === today);
+    const todayExpenses = _sortExpenses(_expenseData.filter(e => e.date === today));
     const total = todayExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
 
     document.getElementById('expenseTodayTotal').textContent = fmtMoney(total);
@@ -221,7 +225,7 @@ function _renderHistoryView() {
         );
     }
 
-    data.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    data = _sortExpenses(data);
 
     // Update category filter dropdown
     const catSelect = document.getElementById('expenseHistoryCategory');
@@ -503,7 +507,8 @@ export async function loadExpenses() {
         
         _renderExpenseTable();
 
-        // Initialize sub-tabs
+        // Initialize sort headers + sub-tabs
+        initExpenseTable();
         initExpenseSubTabs();
         _switchExpenseSubTab('today');
     } catch (e) {

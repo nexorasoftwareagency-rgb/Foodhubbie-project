@@ -512,6 +512,7 @@ export async function renderOrders(snap) {
         const tr = document.createElement('tr');
         tr.id = `row-${id}`;
         tr.className = "premium-row-v4";
+        tr.tabIndex = 0;
         tr.onclick = (e) => {
             if (!e.target.closest('button, select, a, [data-action]')) {
                 openOrderDrawer(id);
@@ -837,7 +838,7 @@ async function renderPriorityOrders(orders) {
         const itemsSummary = items.length > 0 ? items.map(i => `${i.qty}x ${i.name || i.item}`).join(', ') : "No items";
 
         return `
-            <div class="priority-card-v4 status-${safeStatusClass}" data-order-id="${id}">
+            <div class="priority-card-v4 status-${safeStatusClass}" data-order-id="${id}" role="button" tabindex="0">
                 <div class="header">
                     <span class="order-id">#${formatOrderId(o.orderId || id)}</span>
                     <span class="time">${timeStr}</span>

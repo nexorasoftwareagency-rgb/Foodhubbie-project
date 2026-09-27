@@ -723,8 +723,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             logger.info('KEYBOARD', 'Escape pressed');
             const activeModal = document.querySelector('.modal.active:not(.hidden)');
             if (activeModal) {
-                activeModal.classList.add('hidden');
-                activeModal.classList.remove('active', 'flex');
+                if (activeModal._kbClose) {
+                    activeModal._kbClose();
+                } else {
+                    activeModal.classList.add('hidden');
+                    activeModal.classList.remove('active', 'flex');
+                    activeModal._kbRestore?.();
+                }
                 logger.info('MODAL', `Closed via Escape: ${activeModal.id || 'unknown'}`);
                 return;
             }
@@ -740,6 +745,37 @@ document.addEventListener('DOMContentLoaded', async () => {
             ]);
         }
     });
+
+    // Keyboard activation for non-native controls (divs/rows/ths carrying tabindex).
+    // defaultPrevented guard: an element with its own Enter/Space handler that
+    // called preventDefault() already claimed the key — no double-fire.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.defaultPrevented) return;
+        const el = e.target;
+        if (!el || el.nodeType !== 1) return;
+        if (el.matches('button, a[href], input, select, textarea')) return;
+        if (!el.hasAttribute('tabindex') || el.getAttribute('tabindex') === '-1') return;
+        e.preventDefault();
+        el.click();
+    });
+
+    // Focusability sweep: every delegated control must be tab-reachable.
+    let _kbSweepQueued = false;
+    const _kbSweep = () => {
+        _kbSweepQueued = false;
+        document.querySelectorAll('[data-action], [data-tab], [data-sort]').forEach(el => {
+            if (el.hasAttribute('tabindex')) return;
+            if (el.matches('button, a[href], input, select, textarea, .sidebar-overlay')) return;
+            el.setAttribute('tabindex', '0');
+        });
+    };
+    new MutationObserver(() => {
+        if (_kbSweepQueued) return;
+        _kbSweepQueued = true;
+        requestAnimationFrame(_kbSweep);
+    }).observe(document.body, { childList: true, subtree: true });
+    _kbSweep();
 
     document.addEventListener('submit', (e) => {
         const form = e.target;

@@ -708,6 +708,22 @@ html, body {
     outline-offset: 2px;
 }
 
+/* Keyboard focus for delegated/div controls (tabindex added by main.js sweep) */
+[data-action]:focus-visible,
+[data-tab]:focus-visible,
+[data-sort]:focus-visible,
+.priority-card-v4:focus-visible,
+tr.premium-row-v4:focus-visible {
+    outline: 2px solid var(--primary, #E84908);
+    outline-offset: -2px;
+}
+
+.promo-switch input:focus-visible + .promo-slider {
+    outline: 2px solid var(--primary, #E84908);
+    outline-offset: 2px;
+}
+
+
 .btn-whatsapp {
     background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
     color: white;
