@@ -325,6 +325,17 @@ export function initAuth() {
             set(ref(db, `admins/${user.uid}`), adminNode).catch(e => console.warn('[Auth] Failed to create admin node:', e));
         }
 
+        // Load feature flags at boot — gated nav (Expenses) and discount PIN
+        // gate read state.features, which otherwise only fills on Settings visit.
+        try {
+            const featSnap = await get(Outlet.ref('settings/features'));
+            const f = featSnap.val() || {};
+            state.features.discountApproval = f.discountApproval === true;
+            state.features.expense = f.expense === true;
+        } catch (e) {
+            console.warn('[Auth] Feature flags load failed:', e);
+        }
+
         // Start Features
         updateBranding();
         loadRiders();
