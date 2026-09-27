@@ -502,8 +502,7 @@ export async function loadExpenses() {
         _expenseData.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
         
         _renderExpenseTable();
-        _updateTabCounts();
-        
+
         // Initialize sub-tabs
         initExpenseSubTabs();
         _switchExpenseSubTab('today');

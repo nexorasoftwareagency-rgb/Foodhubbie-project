@@ -177,9 +177,9 @@
     </script>
 
 
-    <link rel="stylesheet" href="style.css?v=5.3.29">
+    <link rel="stylesheet" href="style.css?v=5.4.5">
 
-    <link rel="stylesheet" href="mobile-overrides.css?v=5.3.29">
+    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.5">
 
     <link rel="stylesheet" href="chat.css?v=5.3.32">
 
@@ -201,7 +201,7 @@
 
     <link rel="dns-prefetch" href="https://prashant-pizza-e86e4-default-rtdb.firebaseio.com">
 
-    <link rel="modulepreload" href="js/main.js?v=5.3.29">
+    <link rel="modulepreload" href="js/main.js?v=5.4.5">
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 
@@ -2227,6 +2227,10 @@
 
 </div>
 
+                            </div>
+
+                        </div>
+
                         <!-- Staff Management -->
 
                         <div class="glass-card p-20 grid-full" data-settings-section="staff-management">
@@ -2286,8 +2290,6 @@
                             </div>
 
                         </div>
-
-                    </div>
 
                         <!-- Security Audit -->
 
@@ -2377,8 +2379,6 @@
                             </div>
 
                         </div>
-
-                    </div>
 
                 <!-- Blocked Contacts Modal -->
                 <div id="blockedContactsModal" class="modal" role="dialog" aria-modal="true" aria-label="Blocked Contacts" aria-hidden="true">
@@ -2637,6 +2637,11 @@
 
                                     </div>
 
+                                </div>
+
+                                <div class="flex-1" style="min-width:300px; position:sticky; top:60px; align-self:flex-start;">
+                                    <h5 class="mb-12 text-muted-small text-upper ls-sm"><i data-lucide="printer" class="icon-14"></i> Live Receipt Preview</h5>
+                                    <iframe id="receiptLiveFrame" title="Live Receipt Preview" style="width:100%;max-width:320px;height:640px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;"></iframe>
                                 </div>
 
                             </div>
@@ -3401,7 +3406,7 @@
         <div class="mob-toolbar-label"><i data-lucide="calendar" class="icon-14"></i> Date Range</div>
         <button type="button" class="mob-date-display" id="mobDateDisplay" data-action="mobToggleCustomDates">
             <i data-lucide="calendar" class="icon-16"></i>
-            <span id="mobDateRangeText">Loading\u2026</span>
+            <span id="mobDateRangeText">Loading…</span>
             <i data-lucide="chevron-down" class="icon-14"></i>
         </button>
 
@@ -3436,7 +3441,7 @@
                 <span class="mob-kpi-label">Total Revenue</span>
                 <span class="mob-kpi-icon"><i data-lucide="indian-rupee" class="icon-16"></i></span>
             </div>
-            <div class="mob-kpi-val" id="mobKpiRevenueVal">\u20B90</div>
+            <div class="mob-kpi-val" id="mobKpiRevenueVal">₹0</div>
             <div class="mob-kpi-trend" id="mobKpiRevenueTrend"></div>
             <div class="mob-spark-wrap"><canvas id="sparkRevenue"></canvas></div>
         </div>
@@ -3456,7 +3461,7 @@
                 <span class="mob-kpi-label">Avg. Order Value</span>
                 <span class="mob-kpi-icon"><i data-lucide="wallet" class="icon-16"></i></span>
             </div>
-            <div class="mob-kpi-val" id="mobKpiAvgOrderVal">\u20B90</div>
+            <div class="mob-kpi-val" id="mobKpiAvgOrderVal">₹0</div>
             <div class="mob-kpi-trend" id="mobKpiAvgOrderTrend"></div>
             <div class="mob-spark-wrap"><canvas id="sparkAvgOrder"></canvas></div>
         </div>
@@ -3477,7 +3482,7 @@
         <div class="mob-overview-head">
             <div>
                 <h3>Sales Overview</h3>
-                <div class="mob-overview-total" id="mobOverviewTotal">\u20B90</div>
+                <div class="mob-overview-total" id="mobOverviewTotal">₹0</div>
                 <div class="mob-overview-trend" id="mobOverviewTrend"></div>
             </div>
         </div>
@@ -3525,7 +3530,7 @@
             <div class="mob-donut-wrap">
                 <canvas id="mobPaymentDonut"></canvas>
                 <div class="mob-donut-center">
-                    <div class="mob-donut-total" id="mobDonutCenterTotal">\u20B90</div>
+                    <div class="mob-donut-total" id="mobDonutCenterTotal">₹0</div>
                     <div class="mob-donut-label">Total Sales</div>
                 </div>
             </div>
@@ -4866,7 +4871,7 @@
 
                 <h3 class="mob-card-title">Expenses</h3>
 
-                <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto;">
 
                     <div class="expense-subtabs" style="display:flex; gap:4px; margin-right:12px;">
 
@@ -4892,7 +4897,7 @@
 
                     </div>
 
-                    <div style="display:flex; gap:8px; align-items:center;">
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
 
                         <button type="button" class="btn-primary btn-small" data-action="openAddExpense" style="margin-right:8px;">
                             <i data-lucide="plus" class="icon-14"></i> Add Expense
@@ -7178,19 +7183,19 @@
 
     </div>
 
-    <script src="branding.js?v=5.3.29" defer></script>
+    <script src="branding.js?v=5.4.5" defer></script>
 
-    <script src="firebase-config.js?v=5.3.29" defer></script>
+    <script src="firebase-config.js?v=5.4.5" defer></script>
 
-    <script src="receipt-templates.js?v=5.3.29" defer></script>
+    <script src="receipt-templates.js?v=5.4.5" defer></script>
 
     <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous" defer></script>
 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js" crossorigin="anonymous" defer></script>
 
-    <script type="module" src="js/bot-status.js?v=5.3.29"></script>
+    <script type="module" src="js/bot-status.js?v=5.4.5"></script>
 
-    <script type="module" src="js/main.js?v=5.3.29"></script>
+    <script type="module" src="js/main.js?v=5.4.5"></script>
 
 <!-- RECEIPT PREVIEW MODAL -->
 

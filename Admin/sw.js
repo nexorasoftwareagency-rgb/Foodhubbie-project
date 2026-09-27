@@ -39,19 +39,19 @@ firebase.messaging().onBackgroundMessage((payload) => {
 // Bumped whenever any precached app file changes: the fetch handler is
 // stale-while-revalidate, so mixed old/new module pairs can serve until the
 // name changes force a clean re-cache (getEligibleOffersForDisplay went async).
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.4.3';
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.4.5';
 const ASSETS_TO_CACHE = [
   './index.html',
-  './style.css?v=5.3.29',
-  './mobile-overrides.css?v=5.3.29',
-  './branding.js?v=5.3.29',
-  './firebase-config.js?v=5.3.29',
-  './receipt-templates.js?v=5.3.29',
+  './style.css?v=5.4.5',
+  './mobile-overrides.css?v=5.4.5',
+  './branding.js?v=5.4.5',
+  './firebase-config.js?v=5.4.5',
+  './receipt-templates.js?v=5.4.5',
   './manifest.json',
   './icon-erp-logo.jpeg',
   './sw.js',
   './firebase-messaging-sw.js',
-  './js/main.js?v=5.3.29',
+  './js/main.js?v=5.4.5',
   './js/auth.js',
   './js/firebase.js',
   './js/state.js',
@@ -66,7 +66,6 @@ const ASSETS_TO_CACHE = [
   './js/features/customers.js',
   './js/features/analytics.js',
   './js/features/analytics-mobile.js',
-  './js/features/lost-sales.js',
   './js/features/pos.js',
   './js/features/settings.js',
   './js/features/tracker.js',
@@ -152,8 +151,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Same-origin only from here: cross-origin URLs not in CSP connect-src
+  // (e.g. *.web.app bot images) make fetch() reject → respondWith(undefined) throws.
+  if (new URL(event.request.url).origin !== self.location.origin) return;
+
   // Stale-While-Revalidate for our own app code (HTML, JS, CSS, etc.).
-  // All files are versioned (?v=5.3.29) so new deploy = new cache entry.
+  // All files are versioned (?v=5.4.5) so new deploy = new cache entry.
   // Cache-first: serve instantly, then update cache from network in background.
   // This avoids re-downloading on every page load (~0ms for cached files).
   event.respondWith(

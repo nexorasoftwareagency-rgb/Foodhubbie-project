@@ -365,6 +365,22 @@ export function getSkeletonDivs(count = 5) {
     ).join('');
 }
 
+// Shared Chart.js loader (analytics + expenses). CDN ESM build; CSP allows cdn.jsdelivr.net.
+let _chartJSPromise = null;
+export async function _loadChartJS() {
+    if (_chartJSPromise) return _chartJSPromise;
+    _chartJSPromise = import('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/+esm').then(m => {
+        const C = m.Chart;
+        if (C && C.register && m.CategoryScale) {
+            C.register(m.CategoryScale, m.LinearScale, m.LineElement, m.PointElement, m.LineController,
+                m.ArcElement, m.DoughnutController, m.Tooltip, m.Legend, m.Filler);
+        }
+        window.Chart = C;
+        return m;
+    }).catch(e => { _chartJSPromise = null; throw e; });
+    await _chartJSPromise;
+}
+
 // ─── Counter PIN Shift Sign-In ───
 
 /**
@@ -405,6 +421,17 @@ export async function verifyCounterPin(enteredPin) {
  * Returns staff UID on success, null on cancel.
  */
 export async function promptCounterPinSignIn() {
+    // Fail-open when no Counter PIN exists at all: the prompt would be
+    // impossible to satisfy and hard-lock the POS (network error → prompt anyway).
+    try {
+        if (!(await get(Outlet.ref('counterPinIndex'))).exists()) {
+            console.warn('[Utils] No Counter PIN registered for this outlet — skipping shift sign-in');
+            return true;
+        }
+    } catch (e) {
+        console.warn('[Utils] counterPinIndex check failed, prompting anyway', e);
+    }
+
     const pin = await showPinPrompt('Enter your 4-digit Counter PIN to start your shift', 'Shift Sign-In');
     if (!pin) return null;
     

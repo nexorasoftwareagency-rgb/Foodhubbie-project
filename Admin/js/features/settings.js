@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { db, auth, Outlet, tenantPath, ref, get, update, set, EmailAuthProvider, reauthenticateWithCredential } from '../firebase.js';
-import { logAudit, showToast, showConfirm, getSkeletonRows, hashPin } from '../utils.js';
+import { logAudit, showToast, showConfirm, getSkeletonRows, hashPin, escapeHtml } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { completeSiteRefresh } from '../pwa.js';
 
@@ -628,6 +628,7 @@ document.addEventListener('click', (e) => {
                 m.initSecurityAuditTab();
             }).catch(e => console.error('[Settings] Security Audit load failed:', e));
         }
+        if (tab === 'receipt-dev') renderReceiptLivePreview();
     }
 });
 
@@ -645,6 +646,45 @@ document.addEventListener('input', (e) => {
 // Set initial sub-tab state (General visible, Tax & Services hidden)
 document.querySelectorAll('[data-settings-section]').forEach(el => {
     el.style.display = el.dataset.settingsSection === 'general' ? '' : 'none';
+});
+
+// --- LIVE RECEIPT PREVIEW (Settings > Receipt & Dev) ---
+const _receiptLiveFields = {
+    settingEntityName: 'entityName', settingStoreName: 'storeName', settingStoreAddress: 'address',
+    settingGSTIN: 'gstin', settingFSSAI: 'fssai', settingTagline: 'tagline',
+    settingPoweredBy: 'poweredBy', settingQRUrl: 'paymentQR'
+};
+const _receiptLiveChecks = ['checkShowStoreName', 'checkShowAddress', 'checkShowGSTIN', 'checkShowFSSAI',
+    'checkShowTagline', 'checkShowPoweredBy', 'checkShowQR', 'checkShowFeedbackQR'];
+const _receiptLiveSample = {
+    orderId: '240101-88', time: '12:30', date: new Date().toLocaleDateString('en-GB'),
+    paymentMethod: 'Cash', type: 'Dine-In', tableNo: '07',
+    items: [
+        { name: 'Farmhouse Pizza', size: 'Large', quantity: 1, price: 399 },
+        { name: 'Garlic Bread Sticks', quantity: 2, price: 99 }
+    ],
+    subtotal: 597, taxName: 'GST', tax: 30, total: 627, customerName: 'Preview Guest'
+};
+let _receiptLiveTimer = null;
+function renderReceiptLivePreview() {
+    clearTimeout(_receiptLiveTimer);
+    _receiptLiveTimer = setTimeout(() => {
+        const frame = document.getElementById('receiptLiveFrame');
+        if (!frame || !frame.offsetParent || !window.ReceiptTemplates) return;
+        const store = { config: {} };
+        for (const [id, key] of Object.entries(_receiptLiveFields)) store[key] = val(id);
+        _receiptLiveChecks.forEach(id => { store.config[id.replace('checkShow', 'show')] = isChecked(id); });
+        frame.onload = () => {
+            try { frame.style.height = (frame.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (e) { }
+        };
+        frame.srcdoc = window.ReceiptTemplates.generateThermalReceipt(_receiptLiveSample, store, false);
+    }, 150);
+}
+document.addEventListener('input', (e) => {
+    if (_receiptLiveFields[e.target.id]) renderReceiptLivePreview();
+});
+document.addEventListener('change', (e) => {
+    if (_receiptLiveFields[e.target.id] || _receiptLiveChecks.includes(e.target.id) || e.target.id === 'settingQRFile') renderReceiptLivePreview();
 });
 
 // -------------------------------------------------------------------
