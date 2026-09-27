@@ -52,33 +52,63 @@ export const closeSidebar = () => {
 
 
 // --- ROLE-BASED TAB ACCESS ---
-// Minimum role level per tab (unlisted tab = open to every role).
-// Levels: supreme/super admin 4, owner 3, manager 2, cashier 1, waiter 0.
-const TAB_MIN_ROLE = {
-    settings: 3, // owner+
-    expenses: 2, discounts: 2, reports: 2, promotions: 2, // manager+
-    menu: 2, categories: 2, 'menu-browser': 2, inventory: 2,
-    riders: 2, customers: 2, chat: 2, payments: 2, riderAnalytics: 2, feedback: 2, liveTracker: 2,
-    dashboard: 1, walkin: 1, tables: 1 // cashier+
-    // orders, live (kitchen), notifications stay open to all — waiter lands here
+// Dashboard tabs a role can be granted (id = data-tab on the nav buttons).
+export const TAB_DEFS = [
+    ['dashboard', 'Dashboard'], ['orders', 'Orders'], ['live', 'Kitchen Display'],
+    ['walkin', 'POS (Walk-in)'], ['tables', 'Tables'], ['promotions', 'Promotions'],
+    ['discounts', 'Discounts'], ['menu', 'Menu'], ['categories', 'Categories'],
+    ['menu-browser', 'Menu Browser'], ['inventory', 'Inventory'], ['riders', 'Riders'],
+    ['customers', 'Customers'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
+    ['riderAnalytics', 'Rider Analytics'], ['feedback', 'Feedback'], ['liveTracker', 'Live Tracker'],
+    ['payments', 'Payments'], ['expenses', 'Expenses'], ['notifications', 'Notifications'],
+    ['settings', 'Settings']
+];
+const ALL_TABS = TAB_DEFS.map(t => t[0]);
+const _allExcept = (skip) => ALL_TABS.filter(t => !skip.includes(t));
+
+// Built-in matrix — the default for every outlet until an admin saves a
+// customized copy to settings/roles (Staff Management → Roles).
+// Levels feed staff-edit hierarchy: supreme 4, super 3, owner 2, manager 1, cashier 0, waiter -1.
+export const DEFAULT_ROLES = {
+    owner:   { name: 'Owner',   level: 2, tabs: ALL_TABS },
+    manager: { name: 'Manager', level: 1, tabs: _allExcept(['settings']) },
+    cashier: { name: 'Cashier', level: 0, tabs: ['dashboard', 'walkin', 'tables', 'orders', 'live', 'notifications'] },
+    waiter:  { name: 'Waiter',  level: -1, tabs: ['orders', 'live', 'notifications'] }
 };
-const ROLE_LEVEL = { 'supreme admin': 4, 'super admin': 3, owner: 3, manager: 2, cashier: 1, waiter: 0 };
+
+// Active role set for this outlet (settings/roles) — defaults until customized.
+export const getRoles = () => state.roles || DEFAULT_ROLES;
+
+// Hierarchy level for a role name. Supreme/super are email-derived fixed
+// tiers; everything else comes from its role record. Unknown role = -99.
+export const roleLevel = (role) => {
+    const k = (role || '').toLowerCase().trim();
+    if (k === 'supreme admin') return 4;
+    if (k === 'super admin') return 3;
+    return Number(getRoles()[k]?.level ?? -99);
+};
 
 let _roleWarned = false;
 export const canAccessTab = (tabId) => {
-    const min = TAB_MIN_ROLE[tabId];
-    if (min === undefined) return true;
-    const role = (state.adminData?.role || '').toLowerCase().trim();
-    if (role in ROLE_LEVEL) return ROLE_LEVEL[role] >= min;
+    if (state.adminData?.isSuper) return true; // supreme/super bypass the matrix
+    const key = (state.adminData?.role || '').toLowerCase().trim();
+    const role = getRoles()[key];
+    if (role) return !Array.isArray(role.tabs) || role.tabs.includes(tabId);
     if (!_roleWarned) {
         _roleWarned = true;
-        console.warn(`[RoleAccess] Missing/unknown role "${role}" — tab gates inactive for this session`);
+        console.warn(`[RoleAccess] Missing/unknown role "${key}" — tab gates inactive for this session`);
     }
     return true; // never lock out an unrecognized account
 };
 
 export const switchTab = async (tabId, skipHistory = false) => {
     if (!canAccessTab(tabId)) {
+        // Boot with a blocked landing tab (e.g. hash/#dashboard for a waiter):
+        // fall back to the first tab this role can open instead of a blank shell.
+        if (!state.currentActiveTab) {
+            const fallback = TAB_DEFS.find(([id]) => canAccessTab(id));
+            if (fallback) return switchTab(fallback[0], true);
+        }
         window.__adminLogger?.warn?.('NAV', `Blocked by role: ${tabId}`);
         showToast(`You don't have access to that section`, 'warning');
         return;
@@ -408,7 +438,7 @@ window.addEventListener('resize', applyDataLabels);
 async function refreshNavVisibility() {
     const { state } = await import('./state.js');
     const expenseOn = state.features?.expense === true;
-    Object.keys(TAB_MIN_ROLE).forEach(tab => {
+    TAB_DEFS.forEach(([tab]) => {
         const show = canAccessTab(tab) && (tab !== 'expenses' || expenseOn);
         const li = document.getElementById(`menu-${tab}`);
         if (li) li.style.display = show ? '' : 'none';

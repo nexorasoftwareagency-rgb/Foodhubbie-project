@@ -325,16 +325,24 @@ export function initAuth() {
             set(ref(db, `admins/${user.uid}`), adminNode).catch(e => console.warn('[Auth] Failed to create admin node:', e));
         }
 
-        // Load feature flags at boot — gated nav (Expenses) and discount PIN
-        // gate read state.features, which otherwise only fills on Settings visit.
-        try {
-            const featSnap = await get(Outlet.ref('settings/features'));
-            const f = featSnap.val() || {};
-            state.features.discountApproval = f.discountApproval === true;
-            state.features.expense = f.expense === true;
-        } catch (e) {
-            console.warn('[Auth] Feature flags load failed:', e);
-        }
+        // Load per-outlet gates at boot — feature flags (gated nav, discount
+        // PIN) and the role→tab matrix. Re-run on outlet switch so neither
+        // goes stale when a super admin changes outlet.
+        const loadOutletGates = async () => {
+            try {
+                const [featSnap, rolesSnap] = await Promise.all([
+                    get(Outlet.ref('settings/features')),
+                    get(Outlet.ref('settings/roles'))
+                ]);
+                const f = featSnap.val() || {};
+                state.features.discountApproval = f.discountApproval === true;
+                state.features.expense = f.expense === true;
+                state.roles = rolesSnap.val() || null;
+            } catch (e) {
+                console.warn('[Auth] Feature/role gates load failed:', e);
+            }
+        };
+        await loadOutletGates();
 
         // Start Features
         updateBranding();
@@ -346,6 +354,7 @@ export function initAuth() {
         if (!document._switchOutletListenerBound) {
             document.addEventListener('switchOutlet', () => {
                 initNewOrderNotifications();
+                loadOutletGates(); // feature flags + role matrix follow the new outlet
             });
             document._switchOutletListenerBound = true;
         }

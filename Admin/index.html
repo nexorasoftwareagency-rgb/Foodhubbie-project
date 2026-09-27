@@ -691,6 +691,16 @@
 
 
 
+                <li id="menu-costs" title="Cost of running the software">
+
+                    <button id="nav-costs" data-action="switchTab" data-tab="costs" class="nav-btn">
+
+                        <i data-lucide="calculator"></i> <span>Costs</span>
+
+                    </button>
+
+                </li>
+
                 <li class="nav-group-label">System</li>
 
                 <li id="menu-install" title="Download Portal as App">
@@ -2286,6 +2296,28 @@
                                     </tbody>
 
                                 </table>
+
+                            </div>
+
+                            <!-- Roles & Tab Access -->
+
+                            <div style="border-top:1px solid var(--border-color);margin-top:24px;padding-top:20px;">
+
+                                <div class="flex-between flex-center mb-20">
+
+                                    <div>
+
+                                        <h4 class="mb-4"><i data-lucide="shield-check" class="icon-16"></i> Roles &amp; Tab Access</h4>
+
+                                        <p class="text-muted-small">Define which dashboard tabs each role can open. Custom roles apply to this outlet only.</p>
+
+                                    </div>
+
+                                    <button id="btnAddRole" class="btn-primary"><i data-lucide="plus" class="icon-14"></i> New Role</button>
+
+                                </div>
+
+                                <div id="rolesList"></div>
 
                             </div>
 
@@ -7178,6 +7210,66 @@
                 </div>
 
             </form>
+
+        </div>
+
+    </div>
+
+    <div id="roleModal" class="modal" role="dialog" aria-modal="true" aria-label="Role">
+
+        <div class="modal-content glass-card" style="max-width:560px;">
+
+            <div class="modal-header">
+
+                <h2 class="modal-title" id="roleModalTitle">New Role</h2>
+
+                <button class="close-btn" data-action="closeRoleModal" aria-label="Close dialog"><i data-lucide="x" class="icon-18"></i></button>
+
+            </div>
+
+            <div class="modal-body p-20">
+
+                <div class="form-group-mini">
+
+                    <label class="form-label-small">Role Name <span class="required-star">*</span></label>
+
+                    <input type="text" id="roleName" class="form-input w-100" placeholder="e.g. Supervisor" maxlength="40">
+
+                </div>
+
+                <div class="form-group-mini">
+
+                    <label class="form-label-small">Level (hierarchy rank: higher can edit lower)</label>
+
+                    <input type="number" id="roleLevel" class="form-input w-100" min="-1" max="4" value="0">
+
+                    <small class="text-muted-small">supreme 4 · super 3 · owner 2 · manager 1 · cashier 0 · waiter -1</small>
+
+                </div>
+
+                <div class="form-group-mini">
+
+                    <label class="form-label-small">Allowed Tabs</label>
+
+                    <div id="roleTabsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:6px;"></div>
+
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+
+                <button type="button" id="roleDeleteBtn" class="btn-secondary" style="color:var(--danger,#e53e3e);display:none;">Delete</button>
+
+                <div class="flex-row" style="gap:10px;margin-left:auto;">
+
+                    <button type="button" class="btn-secondary" data-action="closeRoleModal">Cancel</button>
+
+                    <button type="button" id="roleSaveBtn" class="btn-primary w-full p-12 br-12 font-weight-700"><i data-lucide="save" class="icon-16"></i> Save Role</button>
+
+                </div>
+
+            </div>
 
         </div>
 

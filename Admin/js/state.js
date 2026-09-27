@@ -40,7 +40,7 @@ export const state = {
     currentPOSModalQty: 1,
     currentPOSModalSize: null,
     currentPOSModalAddons: {},
-    currentActiveTab: 'dashboard',
+    currentActiveTab: null, // no tab yet — boot switchTab opens (or falls back to) the first allowed one
     editingCartKey: null,
 
     settingsDirty: false,      // Tracks unsaved changes in settings form
@@ -48,6 +48,10 @@ export const state = {
 
     // Settings > Features toggles. Absent node reads as OFF — see docs/PLAN-FEATURES-SUBTAB.md
     features: { discountApproval: false },
+
+    // Outlet role definitions (settings/roles): { key: { name, level, tabs[] } }.
+    // null = not loaded yet / outlet keeps the built-in DEFAULT_ROLES (ui.js).
+    roles: null,
 
     // Continuous notification sound
     unacknowledgedOrders: new Set(),  // Order IDs with sound playing

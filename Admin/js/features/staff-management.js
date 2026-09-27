@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { BUSINESS_ID, db, Outlet, ref, get, set, update, push, remove, onValue, off, query, orderByChild, equalTo, runTransaction } from '../firebase.js';
 import { auth, createUserWithEmailAndPassword, sendPasswordResetEmail } from '../firebase.js';
 import { logAudit, showToast, showConfirm, hashPin, hashEmail, escapeHtml, showPinModal, capitalize, formatRelativeTime, logStaffChange, showPinPrompt } from '../utils.js';
-import { loadLucide } from '../ui.js';
+import { loadLucide, getRoles, roleLevel, TAB_DEFS, DEFAULT_ROLES } from '../ui.js';
 
 // --- STATE ---
 let _staffListCache = [];
@@ -10,24 +10,14 @@ let _staffUnsub = null;
 const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcons({ root }));
 
 // --- ROLE HIERARCHY ---
-const ROLE_HIERARCHY = {
-    'supreme admin': 4,
-    'super admin': 3,
-    'owner': 2,
-    'manager': 1,
-    'cashier': 0,
-    'waiter': -1
-};
-
+// Levels come from the outlet's role records (ui.js: DEFAULT_ROLES or
+// settings/roles); supreme/super are email-derived fixed tiers.
 function canEditRole(actorRole, targetRole) {
-    const a = ROLE_HIERARCHY[actorRole?.toLowerCase()] ?? -99;
-    const t = ROLE_HIERARCHY[targetRole?.toLowerCase()] ?? -99;
-    return a > t;
+    return roleLevel(actorRole) > roleLevel(targetRole);
 }
 
 function canViewStaffManagement() {
-    const role = state.adminData?.role?.toLowerCase();
-    return ['supreme admin', 'super admin', 'owner', 'manager'].includes(role);
+    return roleLevel(state.adminData?.role) >= 1; // manager and above
 }
 
 // --- CORE FUNCTIONS ---
@@ -52,8 +42,8 @@ export async function loadStaffList() {
 export async function createStaffAccount({ email, displayName, role, initialPassword }) {
     console.log('[StaffManagement] Creating staff account:', email, role);
     
-    // Validate role
-    if (!['cashier', 'manager', 'waiter'].includes(role)) {
+    // Validate role against this outlet's role definitions
+    if (!getRoles()[role]) {
         throw new Error('Invalid role');
     }
     
@@ -144,7 +134,7 @@ export async function updateStaff(uid, updates) {
     }
     
     // Role change validation
-    if (updates.role && !['cashier', 'manager', 'waiter'].includes(updates.role)) {
+    if (updates.role && !getRoles()[updates.role]) {
         throw new Error('Invalid role');
     }
     
@@ -381,6 +371,16 @@ function attachRowListeners() {
 // --- MODALS ---
 
 let _staffModalResolve = null;
+let _roleEditKey = null; // role key being edited in the roles modal (null = new)
+
+// Populate the role dropdown from this outlet's role definitions.
+function fillRoleSelect(selected) {
+    const sel = document.getElementById('staffRole');
+    sel.innerHTML = Object.entries(getRoles())
+        .map(([key, r]) => `<option value="${escapeHtml(key)}">${escapeHtml(r.name || capitalize(key))}</option>`)
+        .join('');
+    if (selected && getRoles()[selected]) sel.value = selected;
+}
 
 export function openAddModal() {
     return new Promise((resolve) => {
@@ -391,6 +391,7 @@ export function openAddModal() {
         
         // Reset form
         form.reset();
+        fillRoleSelect();
         document.getElementById('staffEditUid').value = '';
         document.getElementById('staffEmail').disabled = false;
         document.getElementById('staffInitialPasswordGroup').style.display = '';
@@ -425,7 +426,7 @@ export function openEditModal(uid) {
         document.getElementById('staffEmail').value = staff.email;
         document.getElementById('staffEmail').disabled = true; // Email cannot change
         document.getElementById('staffName').value = staff.displayName;
-        document.getElementById('staffRole').value = staff.role;
+        fillRoleSelect(staff.role);
         document.getElementById('staffCeilingPct').value = staff.discountCeilingPct || 0;
         document.getElementById('staffInitialPasswordGroup').style.display = 'none'; // No password change here
         document.getElementById('staffCeilingGroup').style.display = staff.role === 'waiter' ? 'none' : '';
@@ -450,6 +451,109 @@ function closeStaffModal() {
     if (_staffModalResolve) {
         _staffModalResolve(null);
         _staffModalResolve = null;
+    }
+}
+
+// --- ROLES EDITOR (per-outlet role → tab access matrix) ---
+
+export function renderRolesList() {
+    const el = document.getElementById('rolesList');
+    const addBtn = document.getElementById('btnAddRole');
+    if (!el) return;
+    const allowed = canViewStaffManagement();
+    if (addBtn) addBtn.style.display = allowed ? '' : 'none';
+    if (!allowed) {
+        el.innerHTML = '<p class="text-muted-small">Only managers and above can edit roles.</p>';
+        return;
+    }
+    const roles = getRoles();
+    el.innerHTML = Object.entries(roles).map(([key, r]) => {
+        const tabs = Array.isArray(r.tabs) ? r.tabs.length : 0;
+        const isSystem = !!DEFAULT_ROLES[key];
+        return `<div class="flex-between flex-center" style="border:1px solid var(--border-color);border-radius:10px;padding:10px 14px;margin-bottom:8px;gap:10px;">
+            <div>
+                <strong>${escapeHtml(r.name || capitalize(key))}</strong>
+                <span class="text-muted-small"> · level ${Number(r.level) ?? 0} · ${tabs}/${TAB_DEFS.length} tabs${isSystem ? ' · default' : ' · custom'}</span>
+            </div>
+            <div class="flex-row" style="gap:12px;">
+                <button class="btn-text-primary-sm" data-action="editRole" data-role="${escapeHtml(key)}">Edit</button>
+                ${isSystem ? '' : `<button class="btn-text-primary-sm" data-action="deleteRole" data-role="${escapeHtml(key)}">Delete</button>`}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function openRoleModal(key) {
+    _roleEditKey = key || null;
+    const role = key ? getRoles()[key] : null;
+    document.getElementById('roleModalTitle').innerText = key ? `Edit Role: ${role?.name || key}` : 'New Role';
+    document.getElementById('roleName').value = role?.name || '';
+    document.getElementById('roleLevel').value = role?.level ?? 0;
+    const tabs = Array.isArray(role?.tabs) ? role.tabs : [];
+    document.getElementById('roleTabsList').innerHTML = TAB_DEFS.map(([id, label]) =>
+        `<label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" value="${escapeHtml(id)}" ${tabs.includes(id) ? 'checked' : ''}> ${escapeHtml(label)}
+        </label>`).join('');
+    document.getElementById('roleDeleteBtn').style.display = (key && !DEFAULT_ROLES[key]) ? '' : 'none';
+    const modal = document.getElementById('roleModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('active');
+    setTimeout(() => document.getElementById('roleName').focus(), 100);
+}
+
+function closeRoleModal() {
+    const modal = document.getElementById('roleModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('active');
+    _roleEditKey = null;
+}
+
+async function saveRole() {
+    const name = document.getElementById('roleName').value.trim();
+    if (!name) return showToast('Role name is required', 'warning');
+    const level = parseInt(document.getElementById('roleLevel').value, 10);
+    if (Number.isNaN(level)) return showToast('Level must be a number', 'warning');
+    const tabs = Array.from(document.querySelectorAll('#roleTabsList input:checked')).map(i => i.value);
+    const roles = { ...getRoles() };
+    let key = _roleEditKey;
+    if (!key) {
+        key = name.toLowerCase();
+        if (roles[key]) return showToast('A role with that name already exists', 'warning');
+    }
+    roles[key] = { name, level, tabs };
+    try {
+        await set(Outlet.ref('settings/roles'), roles);
+        state.roles = roles;
+        renderRolesList();
+        closeRoleModal();
+        showToast('Role saved', 'success');
+    } catch (e) {
+        showToast(e.message || 'Failed to save role', 'error');
+    }
+}
+
+async function deleteRole() {
+    const key = _roleEditKey;
+    if (!key || DEFAULT_ROLES[key]) return closeRoleModal();
+    const roles = { ...getRoles() };
+    const inUse = _staffListCache.filter(s => s.role === key).length;
+    const ok = await showConfirm(
+        inUse
+            ? `"${roles[key]?.name || key}" is assigned to ${inUse} staff member(s). They will fall back to full access. Delete anyway?`
+            : `Delete role "${roles[key]?.name || key}"?`,
+        'Delete Role'
+    );
+    if (!ok) return;
+    delete roles[key];
+    try {
+        await set(Outlet.ref('settings/roles'), roles);
+        state.roles = roles;
+        renderRolesList();
+        closeRoleModal();
+        showToast('Role deleted', 'success');
+    } catch (e) {
+        showToast(e.message || 'Failed to delete role', 'error');
     }
 }
 
@@ -503,10 +607,23 @@ document.addEventListener('click', (e) => {
         closeStaffModal();
     }
     if (e.target.id === 'staffModal') closeStaffModal(); // Click overlay
+
+    if (e.target.dataset.action === 'closeRoleModal' || e.target.closest('[data-action="closeRoleModal"]')) {
+        closeRoleModal();
+    }
+    if (e.target.id === 'roleModal') closeRoleModal(); // Click overlay
+
+    if (e.target.closest('#btnAddRole')) return openRoleModal(null);
+    const editBtn = e.target.closest('[data-action="editRole"]');
+    if (editBtn) return openRoleModal(editBtn.dataset.role);
+    const delBtn = e.target.closest('[data-action="deleteRole"]');
+    if (delBtn) { _roleEditKey = delBtn.dataset.role; return deleteRole(); }
+    if (e.target.closest('#roleSaveBtn')) return saveRole();
+    if (e.target.closest('#roleDeleteBtn')) return deleteRole();
 });
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeStaffModal();
+    if (e.key === 'Escape') { closeStaffModal(); closeRoleModal(); }
 });
 
 // --- REALTIME LISTENER (optional, for live updates) ---

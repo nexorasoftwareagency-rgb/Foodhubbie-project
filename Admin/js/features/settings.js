@@ -620,6 +620,7 @@ document.addEventListener('click', (e) => {
         if (tab === 'staff-management') {
             import('../features/staff-management.js').then(m => {
                 m.loadStaffList().then(() => m.renderStaffTable());
+                m.renderRolesList();
             }).catch(e => console.error('[Settings] Staff Management load failed:', e));
         }
         // Lazy-load Security Audit module when tab is shown
