@@ -390,7 +390,7 @@ function _applyEditorVisibility() {
     const type = document.getElementById('discType')?.value;
     const mode = document.getElementById('discMode')?.value;
     document.getElementById('discCategoryBox').style.display = type === 'category' ? '' : 'none';
-    document.getElementById('discCouponBox').style.display   = type === 'coupon'   ? '' : 'none';
+    document.getElementById('discCouponBox').style.display   = '';
     const valHint = document.getElementById('discValueHint');
     if (valHint) valHint.textContent = mode === 'percent' ? '% off subtotal' : '₹ off subtotal';
     const noEnd = document.getElementById('discNoEnd')?.checked;
@@ -451,7 +451,7 @@ function _renderReview() {
         ['Name', v('discName')],
         ['Type', typeLabels[type] || type],
         ['Discount', valueLine],
-        type === 'coupon' ? ['Coupon code', (v('discCouponCode') || '').toUpperCase()] : null,
+        (v('discCouponCode') || '').trim() ? ['Coupon code', (v('discCouponCode') || '').toUpperCase()] : null,
         type === 'category' ? ['Categories', cats] : null,
         ['Window', windowLine],
         ['Channel', channelSel?.selectedOptions[0]?.textContent || 'All channels'],
@@ -490,7 +490,7 @@ async function _save() {
         maxCap: Number(document.getElementById('discMaxCap')?.value) || 0,
         minSubtotal: Number(document.getElementById('discMinSubtotal')?.value) || 0,
         categoryIds: type === 'category' ? categoryIds : null,
-        couponCode: type === 'coupon' ? couponCode : null,
+        couponCode: couponCode || null,
         stackable: !!document.getElementById('discStackable')?.checked,
         exclusiveGroup: (document.getElementById('discExclusiveGroup')?.value || '').trim() || null,
         perCustomerLimit: Number(document.getElementById('discPerCustomerLimit')?.value) || 0,

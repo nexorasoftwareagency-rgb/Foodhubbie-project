@@ -230,7 +230,7 @@ export async function evaluateDiscount(ctx = {}) {
         if (d.type === 'global')     return true;
         if (d.type === 'firstOrder') return !customer?.firstOrderDiscountUsed;
         if (d.type === 'category')   return _cartHasCategory(cart, d.categoryIds, categories);
-        if (d.type === 'coupon')     return !!couponCode && String(couponCode).toLowerCase() === String(d.couponCode || '').toLowerCase();
+        if (d.couponCode)     return !!couponCode && String(couponCode).toLowerCase() === String(d.couponCode || '').toLowerCase();
         return false;
     });
 
@@ -259,7 +259,7 @@ export async function evaluateDiscount(ctx = {}) {
         allApplied: chosen,
         amount: total,
         label: primary.name || (primary.type === 'firstOrder' ? 'New Customer Discount' : 'Discount'),
-        source: primary.type === 'coupon'
+        source: primary.couponCode
             ? `coupon:${primary.couponCode}`
             : primary.type === 'firstOrder'
                 ? 'firstOrder'
