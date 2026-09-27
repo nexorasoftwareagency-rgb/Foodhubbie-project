@@ -484,15 +484,12 @@ export async function renderWalkinCart() {
 
     let discountValue = state.walkinDiscount;
     let discountLabel = null;
-    let discountPct = 0;
     if (state.walkinDiscountPct > 0) {
         discountValue = (subtotal * state.walkinDiscountPct) / 100;
         discountLabel = null; // manual % override hides auto label
-        discountPct = state.walkinDiscountPct;
     } else if (state.walkinDiscount === 0 && state.walkinAutoDiscount && state.walkinAutoDiscount.amount > 0) {
         discountValue = state.walkinAutoDiscount.amount;
         discountLabel = state.walkinAutoDiscount.label;
-        discountPct = state.walkinAutoDiscount.discount?.mode === 'percent' ? state.walkinAutoDiscount.discount.value : 0;
     } else if (state.walkinDiscount === 0 && state.walkinAutoDiscount === null) {
         try {
             const items = Object.values(state.walkinCart);
@@ -505,7 +502,6 @@ export async function renderWalkinCart() {
                 state.walkinAutoDiscount = evalResult;
                 discountValue = evalResult.amount;
                 discountLabel = evalResult.label;
-                discountPct = evalResult.discount?.mode === 'percent' ? evalResult.discount.value : 0;
             }
         } catch (e) { console.warn('[POS] auto-discount eval failed:', e?.message || e); }
     }
@@ -525,8 +521,9 @@ export async function renderWalkinCart() {
     const discVal = document.getElementById("walkinDiscountVal");
     if (discountValue > 0) {
         if (discRow) discRow.classList.remove('hidden');
-        if (discVal) discVal.innerText = discountPct > 0
-            ? `-₹${discountValue.toLocaleString()} (${discountPct}%)`
+        const isPct = state.walkinDiscountPct > 0 || state.walkinAutoDiscount?.discount?.mode === 'percent';
+        if (discVal) discVal.innerText = isPct
+            ? `-₹${discountValue.toLocaleString()} (${state.walkinDiscountPct || state.walkinAutoDiscount?.discount?.value}%)`
             : discountLabel
             ? `-₹${discountValue.toLocaleString()} (${discountLabel})`
             : `-₹${discountValue.toLocaleString()}`;
