@@ -153,6 +153,33 @@ export function initAuth() {
             }
 
             if (!adminData) {
+                // Staff without an admins/{uid} node (accounts created before
+                // login provisioning): find their outlet staff record and
+                // bootstrap adminData — the node is created further down.
+                for (const [oid, bid] of Object.entries(BUSINESS_BY_OUTLET)) {
+                    try {
+                        const staffSnap = await get(ref(db, `businesses/${bid}/outlets/${oid}/staff/${user.uid}`));
+                        const rec = staffSnap.val();
+                        if (staffSnap.exists() && rec.role) {
+                            adminData = {
+                                email: user.email,
+                                outlet: oid,
+                                name: rec.displayName || user.email,
+                                role: rec.role,
+                                uid: user.uid,
+                                isSuper: false,
+                                isSupreme: false
+                            };
+                            console.log("[Auth] Bootstrapped staff profile from outlet", oid, "role:", rec.role);
+                            break;
+                        }
+                    } catch (probeErr) {
+                        console.warn("[Auth] Staff probe failed for outlet:", oid, probeErr?.message || probeErr);
+                    }
+                }
+            }
+
+            if (!adminData) {
                 console.error("[Auth] Access Denied: No profile found for UID", user.uid);
                 throw new Error("ACCESS_DENIED");
             }

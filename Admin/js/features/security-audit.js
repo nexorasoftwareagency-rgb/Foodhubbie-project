@@ -425,6 +425,9 @@ async function fixDemoteExtraOwner(uids) {
     
     for (const uid of uidList) {
         await update(Outlet.staff(uid), { role: 'manager' });
+        // Keep the login node's role in sync — dashboard gating and rules read admins/{uid}
+        await update(ref(db, `admins/${uid}`), { role: 'manager' })
+            .catch(e => console.warn('[SecurityAudit] admins role sync failed:', e));
         await logStaffChange('role_change', uid, { role: 'owner' }, { role: 'manager' }, 'Demoted via Security Audit');
     }
     

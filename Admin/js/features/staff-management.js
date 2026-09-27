@@ -46,6 +46,10 @@ export async function createStaffAccount({ email, displayName, role, initialPass
     if (!getRoles()[role]) {
         throw new Error('Invalid role');
     }
+    // Nobody may create a role above their own level (manager → owner = escalation)
+    if (roleLevel(state.adminData?.role) < roleLevel(role)) {
+        throw new Error('You cannot create an account with a role higher than your own');
+    }
     
     // Validate email format
     const normalizedEmail = email.toLowerCase().trim();
@@ -67,6 +71,16 @@ export async function createStaffAccount({ email, displayName, role, initialPass
         throw new Error(friendly);
     }
     const uid = userCred.user.uid;
+
+    // Provision the login node first — dashboard entry, role→tab gating and
+    // outlet rules all read admins/{uid}
+    await set(ref(db, `admins/${uid}`), {
+        email: normalizedEmail,
+        outlet: Outlet.current,
+        name: displayName.trim(),
+        role,
+        fcmToken: ''
+    });
     
     // 2. Send password reset email (staff sets own password)
     try {
@@ -137,6 +151,10 @@ export async function updateStaff(uid, updates) {
     if (updates.role && !getRoles()[updates.role]) {
         throw new Error('Invalid role');
     }
+    // Cannot assign a role above your own level (peer allowed)
+    if (updates.role && roleLevel(actorRole) < roleLevel(updates.role)) {
+        throw new Error('You cannot assign a role higher than your own');
+    }
     
     // Discount ceiling validation (owner-only field, but validate anyway)
     if (updates.discountCeilingPct !== undefined) {
@@ -145,6 +163,11 @@ export async function updateStaff(uid, updates) {
     }
     
     await update(Outlet.staff(uid), updates);
+    // Keep the login node's role in sync — dashboard gating and rules read admins/{uid}
+    if (updates.role && updates.role !== oldVal.role) {
+        await update(ref(db, `admins/${uid}`), { role: updates.role })
+            .catch(e => console.warn('[StaffManagement] admins role sync failed:', e));
+    }
     await logStaffChange('staff_update', uid, oldVal, updates, 'Updated staff profile');
     
     // Refresh cache
