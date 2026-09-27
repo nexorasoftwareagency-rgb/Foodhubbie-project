@@ -61,7 +61,7 @@ export const TAB_DEFS = [
     ['customers', 'Customers'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
     ['riderAnalytics', 'Rider Analytics'], ['feedback', 'Feedback'], ['liveTracker', 'Live Tracker'],
     ['payments', 'Payments'], ['expenses', 'Expenses'], ['notifications', 'Notifications'],
-    ['settings', 'Settings']
+    ['costs', 'Costs'], ['settings', 'Settings']
 ];
 const ALL_TABS = TAB_DEFS.map(t => t[0]);
 const _allExcept = (skip) => ALL_TABS.filter(t => !skip.includes(t));
@@ -249,6 +249,7 @@ export const switchTab = async (tabId, skipHistory = false) => {
         if (tabId !== 'chat') cleanupTasks.push(mod('chat').then(m => m.cleanupChat?.()));
         if (tabId !== 'menu-browser') cleanupTasks.push(mod('menu-browser').then(m => m.cleanupMenuBrowser?.()));
         if (tabId !== 'expenses') cleanupTasks.push(mod('expenses').then(m => m.cleanupExpenses?.()));
+        if (tabId !== 'costs') cleanupTasks.push(mod('costs').then(m => m.cleanupCosts?.()));
         if (tabId !== 'security-audit') cleanupTasks.push(mod('security-audit').then(m => m.cleanupSecurityAudit?.()));
         await Promise.allSettled(cleanupTasks);
         console.log(`[SWITCH] cleanup done for ${tabId}`);
@@ -335,6 +336,11 @@ export const switchTab = async (tabId, skipHistory = false) => {
                     break;
                 }
                 case 'payments': { const { renderOrders } = await mod('orders'); renderOrders(state.lastOrdersSnap); break; }
+                case 'costs': {
+                    const { loadCosts } = await mod('costs');
+                    loadCosts();
+                    break;
+                }
                 case 'expenses': {
                     const { state } = await import('./state.js');
                     if (!state.features?.expense) {

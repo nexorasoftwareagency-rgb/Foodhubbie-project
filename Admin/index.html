@@ -4893,6 +4893,230 @@
                 </div>
             </div>
 
+    <!-- COSTS TAB -->
+
+    <div id="tab-costs" class="tab-content hidden">
+
+        <div class="mob-card mob-table-card" style="margin:0;">
+
+            <div class="mob-section-head-row">
+
+                <h3 class="mob-card-title">Costs</h3>
+
+                <span id="costMonthLabel" style="margin-left:auto;font-size:12px;font-weight:600;color:#94a3b8;"></span>
+
+            </div>
+
+        </div>
+
+        <div class="mob-kpi-grid" style="margin-top:12px;">
+
+            <div class="mob-kpi-card" data-accent="revenue">
+
+                <div class="mob-kpi-head">
+
+                    <div class="mob-kpi-icon"><i data-lucide="calculator" class="icon-18"></i></div>
+
+                    <span class="mob-kpi-label">Cost Index (this month)</span>
+
+                </div>
+
+                <div class="mob-kpi-val" id="costKpiIndex">₹0</div>
+
+                <div class="mob-kpi-trend" id="costKpiIndexTrend">updates on every new order</div>
+
+            </div>
+
+            <div class="mob-kpi-card" data-accent="orders">
+
+                <div class="mob-kpi-head">
+
+                    <div class="mob-kpi-icon"><i data-lucide="package" class="icon-18"></i></div>
+
+                    <span class="mob-kpi-label">Orders Counted</span>
+
+                </div>
+
+                <div class="mob-kpi-val" id="costKpiOrders">0</div>
+
+                <div class="mob-kpi-trend">cancelled orders excluded</div>
+
+            </div>
+
+            <div class="mob-kpi-card" data-accent="newCust">
+
+                <div class="mob-kpi-head">
+
+                    <div class="mob-kpi-icon"><i data-lucide="ticket" class="icon-18"></i></div>
+
+                    <span class="mob-kpi-label">Promo Tokens Left</span>
+
+                </div>
+
+                <div class="mob-kpi-val" id="costKpiTokens">—</div>
+
+                <div class="mob-kpi-trend" id="costKpiTokensTrend">prepaid WhatsApp Official promo credits</div>
+
+            </div>
+
+            <div class="mob-kpi-card" data-accent="avgOrder">
+
+                <div class="mob-kpi-head">
+
+                    <div class="mob-kpi-icon"><i data-lucide="send" class="icon-18"></i></div>
+
+                    <span class="mob-kpi-label">Promo Cost</span>
+
+                </div>
+
+                <div class="mob-kpi-val" id="costKpiPromo">₹0</div>
+
+                <div class="mob-kpi-trend" id="costKpiPromoTrend">0 tokens used × ₹0.86</div>
+
+            </div>
+
+        </div>
+
+        <div class="mob-card mob-table-card" style="margin-top:12px;">
+
+            <h4 class="section-card-heading"><i data-lucide="layers" class="icon-14"></i> Cost by order source</h4>
+
+            <table style="width:100%;font-size:13px;">
+
+                <thead>
+
+                    <tr style="text-align:left;color:#94a3b8;">
+
+                        <th style="padding:6px 8px;">Source</th>
+
+                        <th>Rate</th>
+
+                        <th>Orders</th>
+
+                        <th style="text-align:right;padding-right:8px;">Cost</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody id="costBreakdownBody"><tr><td colspan="4" style="color:#94a3b8;padding:8px;">Loading…</td></tr></tbody>
+
+            </table>
+
+        </div>
+
+        <div class="mob-card mob-table-card" style="margin-top:12px;">
+
+            <h4 class="section-card-heading"><i data-lucide="ticket" class="icon-14"></i> WhatsApp Official Promo Tokens &amp; Billing</h4>
+
+            <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;">
+
+                <div>
+
+                    <div style="font-size:12px;color:#94a3b8;">Current active plan</div>
+
+                    <div style="font-size:18px;font-weight:900;" id="costPlanName">—</div>
+
+                </div>
+
+                <div>
+
+                    <div style="font-size:12px;color:#94a3b8;">Pricing structure (active)</div>
+
+                    <div style="font-size:15px;font-weight:700;" id="costPricingStructure">—</div>
+
+                </div>
+
+            </div>
+
+            <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;">
+
+                <div>
+
+                    <div style="font-size:12px;color:#94a3b8;">Token balance</div>
+
+                    <div style="font-size:30px;font-weight:900;" id="costPromoBal">—</div>
+
+                    <div style="font-size:12px;color:#94a3b8;" id="costPromoNote"></div>
+
+                </div>
+
+                <div>
+
+                    <div style="font-size:12px;color:#94a3b8;">Tokens used</div>
+
+                    <div style="font-size:18px;font-weight:700;" id="costPromoUsed">0</div>
+
+                </div>
+
+                <div>
+
+                    <div style="font-size:12px;color:#94a3b8;">Billing mode</div>
+
+                    <div style="font-size:15px;font-weight:700;" id="costBillingMode">—</div>
+
+                </div>
+
+                <div>
+
+                    <div style="font-size:12px;color:#94a3b8;">Setup fee (₹500)</div>
+
+                    <div style="font-size:15px;font-weight:700;" id="costSetupStatus">—</div>
+
+                </div>
+
+            </div>
+
+            <table style="width:100%;font-size:13px;margin-top:12px;">
+
+                <thead>
+
+                    <tr style="text-align:left;color:#94a3b8;">
+
+                        <th style="padding:6px 8px;">Source</th>
+
+                        <th>Rate per order</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody id="costRatesBody"></tbody>
+
+            </table>
+
+        </div>
+
+        <div class="mob-card mob-table-card" style="margin-top:12px;">
+
+            <h4 class="section-card-heading"><i data-lucide="list" class="icon-14"></i> Recent orders — live cost feed</h4>
+
+            <table style="width:100%;font-size:13px;">
+
+                <thead>
+
+                    <tr style="text-align:left;color:#94a3b8;">
+
+                        <th style="padding:6px 8px;">Order</th>
+
+                        <th>Source</th>
+
+                        <th>Order total</th>
+
+                        <th style="text-align:right;padding-right:8px;">Cost</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody id="costFeedBody"><tr><td colspan="4" style="color:#94a3b8;padding:8px;">Loading…</td></tr></tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
     <!-- EXPENSES TAB -->
 
     <div id="tab-expenses" class="tab-content hidden">

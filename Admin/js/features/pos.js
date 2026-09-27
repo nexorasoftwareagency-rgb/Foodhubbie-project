@@ -1001,6 +1001,7 @@ export async function submitWalkinSale() {
             tableNo: tableNo,
             status: "Delivered",
             type: "Dine-in",
+            source: "POS",
             stockDeducted: true,
             timestamp: serverTimestamp(),
             createdAt: new Date().toISOString(),
