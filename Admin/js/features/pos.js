@@ -483,12 +483,31 @@ export async function renderWalkinCart() {
     window.lucide.createIcons({ root: list });
 
     let discountValue = state.walkinDiscount;
-    let discountLabel = state.walkinAutoDiscount?.label || null;
+    let discountLabel = null;
+    let discountPct = 0;
     if (state.walkinDiscountPct > 0) {
         discountValue = (subtotal * state.walkinDiscountPct) / 100;
         discountLabel = null; // manual % override hides auto label
+        discountPct = state.walkinDiscountPct;
     } else if (state.walkinDiscount === 0 && state.walkinAutoDiscount && state.walkinAutoDiscount.amount > 0) {
         discountValue = state.walkinAutoDiscount.amount;
+        discountLabel = state.walkinAutoDiscount.label;
+        discountPct = state.walkinAutoDiscount.discount?.mode === 'percent' ? state.walkinAutoDiscount.discount.value : 0;
+    } else if (state.walkinDiscount === 0 && state.walkinAutoDiscount === null) {
+        try {
+            const items = Object.values(state.walkinCart);
+            const evalResult = await evaluateDiscount({
+                customer: null, subtotal, couponCode: null,
+                cart: items.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
+                channel: 'pos'
+            });
+            if (evalResult && evalResult.amount > 0) {
+                state.walkinAutoDiscount = evalResult;
+                discountValue = evalResult.amount;
+                discountLabel = evalResult.label;
+                discountPct = evalResult.discount?.mode === 'percent' ? evalResult.discount.value : 0;
+            }
+        } catch (e) { console.warn('[POS] auto-discount eval failed:', e?.message || e); }
     }
 
     // Tax & Service Charge from cached dineinSettings
@@ -506,7 +525,9 @@ export async function renderWalkinCart() {
     const discVal = document.getElementById("walkinDiscountVal");
     if (discountValue > 0) {
         if (discRow) discRow.classList.remove('hidden');
-        if (discVal) discVal.innerText = discountLabel
+        if (discVal) discVal.innerText = discountPct > 0
+            ? `-₹${discountValue.toLocaleString()} (${discountPct}%)`
+            : discountLabel
             ? `-₹${discountValue.toLocaleString()} (${discountLabel})`
             : `-₹${discountValue.toLocaleString()}`;
     } else {
@@ -908,7 +929,7 @@ export async function submitWalkinSale() {
             discountValue = (subtotal * state.walkinDiscountPct) / 100;
             discountSource = 'manual:percent';
             discountId = 'manual:percent';
-            discountLabel = 'Manual Discount';
+            discountLabel = `${state.walkinDiscountPct}%`;
         } else {
             // Auto-evaluate (best of: firstOrder / coupon / global / category)
             try {
@@ -928,7 +949,9 @@ export async function submitWalkinSale() {
                 if (evalResult && evalResult.amount > 0) {
                     discountValue = evalResult.amount;
                     discountId = evalResult.discount.id;
-                    discountLabel = evalResult.label;
+                    discountLabel = evalResult.discount.mode === 'percent'
+                        ? `${evalResult.discount.value}%`
+                        : evalResult.label;
                     discountSource = evalResult.source;
                     discountGlobalLimit = evalResult.discount.globalLimit;
                 }
