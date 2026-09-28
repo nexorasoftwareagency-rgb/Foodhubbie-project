@@ -1,22 +1,23 @@
-import { Outlet, tenantRef, get, query, orderByChild, startAt, endAt, push, set, update, remove, runTransaction, serverTimestamp, ref as dbRef, BUSINESS_ID } from '../firebase.js';
+import { Outlet, get, query, orderByChild, push, set, update, remove } from '../firebase.js';
 import { escapeHtml, showToast, formatDate, getISTDateString } from '../utils.js';
 import { loadJSPDF } from './printing.js';
 import { logger } from '../utils/logger.js';
 
 let _expenseData = [];
-let _filteredData = [];
 let _sortField = 'date', _sortDir = 'desc';
-let _searchTerm = '';
 let _categoryCache = [];
 let _categoryCacheAt = 0; // timestamp for TTL
 const CATEGORY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let _currentSubTab = 'today';
 let _historyFilters = { from: '', to: '', category: '', status: '', search: '' };
 let _chartInstances = {};
+let _currency = 'Rs.';
+let _modalsWired = false;   // static elements — wire listeners exactly once
+let _subTabsWired = false;
 
 function fmtMoney(n) {
     const v = Number(n || 0);
-    return 'Rs.' + (v % 1 === 0 ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: 1 }));
+    return _currency + (v % 1 === 0 ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: 2 }));
 }
 
 function _sortExpenses(arr) {
@@ -33,64 +34,6 @@ function _sortExpenses(arr) {
         return _sortDir === 'asc' ? cmp : -cmp;
     });
 }
-
-function _renderExpenseTable() {
-    const tbody = document.getElementById('expenseDataTableBody');
-    const countEl = document.getElementById('expTableCount');
-    if (!tbody) return;
-
-    let data = _filteredData;
-    const term = _searchTerm.trim().toLowerCase();
-    if (term) {
-        data = data.filter(e =>
-            (e.categoryName || '').toLowerCase().includes(term) ||
-            (e.description || '').toLowerCase().includes(term) ||
-            (e.outletId || '').toLowerCase().includes(term) ||
-            fmtMoney(e.amount || 0).includes(term)
-        );
-    }
-    _filteredData = data;
-
-    if (countEl) countEl.textContent = `${data.length} expense${data.length === 1 ? '' : 's'}`;
-
-    const sorted = _sortExpenses(data);
-
-    if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="mob-table-empty">${term ? 'No expenses match your search.' : 'No expenses found.'}</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = sorted.map(e => {
-        const statusBadge = e.status === 'approved'
-            ? `<span class="mob-badge mob-badge-approved">Approved</span>`
-            : e.status === 'pending'
-                ? `<span class="mob-badge mob-badge-pending">Pending</span>`
-                : `<span class="mob-badge mob-badge-rejected">Rejected</span>`;
-
-        return `<tr>
-            <td>${escapeHtml(formatDate(e.date || e.createdAt) || '—')}</td>
-            <td>${escapeHtml(e.categoryName || '—')}</td>
-            <td><span class="mob-addr-text" title="${escapeHtml(e.description || '—')}">${escapeHtml(e.description || '—')}</span></td>
-            <td class="mob-th-right"><span class="mob-td-total">${fmtMoney(e.amount || 0)}</span></td>
-            <td>${escapeHtml(e.outletId || '—')}</td>
-            <td class="mob-th-center">${statusBadge}</td>
-            <td class="mob-th-center">
-                <div style="display:flex; gap:4px; justify-content:center;">
-                    <button type="button" class="btn-icon-only" data-action="editExpense" data-id="${e.id}" title="Edit" aria-label="Edit expense"><i data-lucide="edit-2" style="width:14px;height:14px;"></i></button>
-                    <button type="button" class="btn-icon-only btn-danger" data-action="deleteExpense" data-id="${e.id}" title="Delete" aria-label="Delete expense"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
-                </div>
-            </td>
-        </tr>`;
-    }).join('');
-
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-}
-
-export function filterExpenses(searchTerm) {
-    _searchTerm = (searchTerm || '').trim();
-    _renderExpenseTable();
-}
-
 
 export function initExpenseTable() {
     [['expenseTodayTable', _renderTodayView], ['expenseHistoryTable', _renderHistoryView]].forEach(([id, rerender]) => {
@@ -116,7 +59,7 @@ export function initExpenseTable() {
 
 
 // Sub-tab state and switching
-function _switchExpenseSubTab(subTab) {
+async function _switchExpenseSubTab(subTab) {
     _currentSubTab = subTab;
     document.querySelectorAll('.expense-subtab-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.expenseSubtab === subTab);
@@ -124,19 +67,29 @@ function _switchExpenseSubTab(subTab) {
     document.querySelectorAll('.expense-subtab-content').forEach(div => {
         div.classList.toggle('hidden', div.id !== `expense-subtab-${subTab}`);
     });
+    // Data exports only make sense on data views (Reports has its own exports)
+    document.querySelector('[data-action="expExportExcel"]')?.closest('.mob-export-row')
+        ?.classList.toggle('hidden', !['today', 'history'].includes(subTab));
 
     // Load sub-tab specific content
-    switch (subTab) {
-        case 'today': _renderTodayView(); break;
-        case 'history': _renderHistoryView(); break;
-        case 'categories': _renderCategoriesView(); break;
-        case 'reports': _renderReportsView(); break;
-        case 'settings': _loadSettingsView(); break;
+    try {
+        switch (subTab) {
+            case 'today': _renderTodayView(); break;
+            case 'history': _renderHistoryView(); break;
+            case 'categories': await _renderCategoriesView(); break;
+            case 'reports': await _renderReportsView(); break;
+            case 'settings': await _loadSettingsView(); break;
+        }
+    } catch (e) {
+        console.error(`[Expenses] Render sub-tab "${subTab}" failed:`, e);
+        showToast(`Failed to load ${subTab} view`, 'error');
     }
 }
 
-// Initialize sub-tab listeners
+// Initialize sub-tab listeners (static elements — guarded, wire once)
 export function initExpenseSubTabs() {
+    if (_subTabsWired) return;
+    _subTabsWired = true;
     document.querySelectorAll('.expense-subtab-btn').forEach(btn => {
         btn.addEventListener('click', () => _switchExpenseSubTab(btn.dataset.expenseSubtab));
     });
@@ -154,18 +107,17 @@ export function initExpenseSubTabs() {
     if (statusEl) statusEl.addEventListener('change', () => { _historyFilters.status = statusEl.value; _renderHistoryView(); });
     if (searchEl) searchEl.addEventListener('input', () => { _historyFilters.search = searchEl.value; _renderHistoryView(); });
 
-    // Set default date range to current month
-    const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    if (fromEl && !fromEl.value) fromEl.value = firstDay.toISOString().split('T')[0];
-    if (toEl && !toEl.value) toEl.value = new Date().toISOString().split('T')[0];
+    // Default range: current month in IST (getISTDateString = YYYY-MM-DD)
+    const todayIST = getISTDateString();
+    if (fromEl && !fromEl.value) fromEl.value = todayIST.slice(0, 7) + '01';
+    if (toEl && !toEl.value) toEl.value = todayIST;
     _historyFilters.from = fromEl?.value || '';
     _historyFilters.to = toEl?.value || '';
 }
 
 // ===== TODAY VIEW =====
 function _renderTodayView() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getISTDateString();
     const todayExpenses = _sortExpenses(_expenseData.filter(e => e.date === today));
     const total = todayExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
 
@@ -180,7 +132,7 @@ function _renderTodayView() {
             const color = catData?.color || '#E84908';
             const icon = catData?.icon || 'dollar-sign';
             const catTotal = todayExpenses.filter(e => (e.categoryName || 'Other') === cat).reduce((s, e) => s + Number(e.amount || 0), 0);
-            return `<span class="expense-category-chip" style="border-color:${color}; color:${color};" title="${cat}: ${fmtMoney(catTotal)}"><i data-lucide="${icon}" class="icon-12"></i> ${cat} <span class="chip-amount">${fmtMoney(catTotal)}</span></span>`;
+            return `<span class="expense-category-chip" style="border-color:${escapeHtml(color)}; color:${escapeHtml(color)};" title="${escapeHtml(cat)}: ${fmtMoney(catTotal)}"><i data-lucide="${escapeHtml(icon)}" class="icon-12"></i> ${escapeHtml(cat)} <span class="chip-amount">${fmtMoney(catTotal)}</span></span>`;
         }).join('');
         if (typeof lucide !== 'undefined') lucide.createIcons({ root: chipsContainer });
     }
@@ -190,17 +142,25 @@ function _renderTodayView() {
     if (!tbody) return;
 
     if (todayExpenses.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="mob-table-empty">No expenses logged today</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="mob-table-empty">No expenses logged today <button type="button" class="btn-primary btn-small" data-action="openAddExpense" style="margin-left:8px;"><i data-lucide="plus" class="icon-14"></i> Add Expense</button></td></tr>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
         return;
     }
 
     tbody.innerHTML = todayExpenses.map(e => {
+        const time = e.createdAt
+            ? new Date(e.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+            : (formatDate(e.date) || '—');
         return `<tr>
-            <td>${escapeHtml(formatDate(e.date || e.createdAt) || '—')}</td>
+            <td>${escapeHtml(time)}</td>
             <td>${escapeHtml(e.categoryName || '—')}</td>
             <td><span class="mob-addr-text" title="${escapeHtml(e.description || '—')}">${escapeHtml(e.description || '—')}</span></td>
             <td class="mob-th-right"><span class="mob-td-total">${fmtMoney(e.amount || 0)}</span></td>
-            <td class="mob-th-center"><button type="button" class="btn-icon-only" data-action="editExpense" data-id="${e.id}" title="Edit"><i data-lucide="edit-2" style="width:14px;height:14px;"></i></button></td>
+            <td class="mob-th-center" style="white-space:nowrap;">
+                ${_approvalActions(e)}
+                <button type="button" class="btn-icon-only" data-action="editExpense" data-id="${e.id}" title="Edit" aria-label="Edit expense"><i data-lucide="edit-2" style="width:14px;height:14px;"></i></button>
+                <button type="button" class="btn-icon-only btn-danger" data-action="deleteExpense" data-id="${e.id}" title="Delete" aria-label="Delete expense"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
+            </td>
         </tr>`;
     }).join('');
 
@@ -227,22 +187,24 @@ function _renderHistoryView() {
 
     data = _sortExpenses(data);
 
-    // Update category filter dropdown
+    // Category filter options come from the category cache (all categories, incl. unused)
+    if (!_categoryCache.length || Date.now() - _categoryCacheAt >= CATEGORY_CACHE_TTL) {
+        loadExpenseCategories().then(() => { if (_currentSubTab === 'history') _renderHistoryView(); });
+    }
     const catSelect = document.getElementById('expenseHistoryCategory');
-    if (catSelect && catSelect.options.length <= 1) {
-        const cats = [...new Set(_expenseData.map(e => e.categoryName).filter(Boolean))];
-        cats.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c; opt.textContent = c;
-            catSelect.appendChild(opt);
-        });
+    if (catSelect) {
+        const cur = catSelect.value;
+        if (cur && !['', ..._categoryCache.map(c => c.name)].includes(cur)) _historyFilters.category = '';
+        const names = ['All Categories', ..._categoryCache.map(c => c.name).filter(Boolean)];
+        catSelect.innerHTML = names.map((n, i) => `<option value="${i ? escapeHtml(n) : ''}">${escapeHtml(n)}</option>`).join('');
+        if ([...catSelect.options].some(o => o.value === _historyFilters.category)) catSelect.value = _historyFilters.category;
     }
 
     const tbody = document.getElementById('expenseHistoryTableBody');
     if (!tbody) return;
 
     if (data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="mob-table-empty">No expenses match your filters</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="mob-table-empty">No expenses match your filters <button type="button" class="btn-secondary btn-small" data-action="clearExpenseFilters" style="margin-left:8px;">Clear filters</button></td></tr>`;
         return;
     }
 
@@ -259,19 +221,30 @@ function _renderHistoryView() {
             <td class="mob-th-right"><span class="mob-td-total">${fmtMoney(e.amount || 0)}</span></td>
             <td>${escapeHtml(e.outletId || '—')}</td>
             <td class="mob-th-center">${statusBadge}</td>
-            <td class="mob-th-center"><button type="button" class="btn-icon-only" data-action="editExpense" data-id="${e.id}" title="Edit"><i data-lucide="edit-2" style="width:14px;height:14px;"></i></button></td>
+            <td class="mob-th-center" style="white-space:nowrap;">
+                ${_approvalActions(e)}
+                <button type="button" class="btn-icon-only" data-action="editExpense" data-id="${e.id}" title="Edit" aria-label="Edit expense"><i data-lucide="edit-2" style="width:14px;height:14px;"></i></button>
+                <button type="button" class="btn-icon-only btn-danger" data-action="deleteExpense" data-id="${e.id}" title="Delete" aria-label="Delete expense"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
+            </td>
         </tr>`;
     }).join('');
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
 }
-// ===== CATEGORIES VIEW =====
+// ===== CATEGORIES VIEW (inline in sub-tab) =====
 async function _renderCategoriesView() {
     const container = document.getElementById('expenseCategoriesContainer');
     if (!container) return;
-    // Reuse the category modal content
-    await openExpenseCategoryModal();
+    container.innerHTML = `
+        <div style="display:flex; justify-content:flex-end; padding:12px 0;">
+            <button type="button" class="btn-primary btn-small" data-action="openExpenseCategories">
+                <i data-lucide="plus" class="icon-14"></i> Add Category
+            </button>
+        </div>
+        <div id="expenseCategoryListInline" class="expense-category-list"></div>`;
+    if (typeof lucide !== 'undefined') lucide.createIcons({ root: container });
+    await renderExpenseCategoryList();
 }
 
 // ===== REPORTS VIEW =====
@@ -279,31 +252,13 @@ async function _renderReportsView() {
     const { _loadChartJS } = await import('../utils.js');
     await _loadChartJS();
 
-    // Compute report data
-    const currentOutlet = window.currentOutlet || 'pizza';
-    const expenses = _expenseData.filter(e => e.outletId === currentOutlet || currentOutlet === 'all');
+    // Budgets/colors need the category cache — warm it, then re-render once
+    if (!_categoryCache.length || Date.now() - _categoryCacheAt >= CATEGORY_CACHE_TTL) {
+        loadExpenseCategories().then(() => { if (_currentSubTab === 'reports') _renderReportsView(); });
+    }
 
-    // Monthly summary
-    const monthly = {};
-    expenses.forEach(e => {
-        const month = e.date?.substring(0, 7) || 'Unknown';
-        if (!monthly[month]) monthly[month] = { total: 0, count: 0, byCat: {} };
-        monthly[month].total += Number(e.amount || 0);
-        monthly[month].count++;
-        const cat = e.categoryName || 'Other';
-        monthly[month].byCat[cat] = (monthly[month].byCat[cat] || 0) + Number(e.amount || 0);
-    });
-
-    const months = Object.keys(monthly).sort();
-    const monthlyLabels = months.map(monthStr => {
-        const [y, m] = monthStr.split('-');
-        return new Date(y, m - 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
-    });
-    const monthlyTotals = months.map(m => monthly[m].total);
-    const monthlyBudgets = months.map(m => {
-        // Sum of category budgets for this month
-        return _categoryCache.reduce((s, c) => s + (c.monthlyBudget || 0), 0);
-    });
+    // Report data (shared with Excel/PDF exports)
+    const R = _buildReportData();
 
     // Monthly chart
     const monthlyCtx = document.getElementById('expenseMonthlyChart');
@@ -311,9 +266,9 @@ async function _renderReportsView() {
         _destroyChart('monthly');
         _chartInstances.monthly = new Chart(monthlyCtx, {
             type: 'bar',
-            data: { labels: monthlyLabels, datasets: [
-                { label: 'Actual', data: monthlyTotals, backgroundColor: '#E84908' },
-                { label: 'Budget', data: monthlyBudgets, backgroundColor: '#3B82F6' }
+            data: { labels: R.monthlyRows.map(r => r.label), datasets: [
+                { label: 'Actual', data: R.monthlyRows.map(r => r.total), backgroundColor: '#E84908' },
+                { label: 'Budget', data: R.monthlyRows.map(r => r.budget), backgroundColor: '#3B82F6' }
             ]},
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
         });
@@ -322,80 +277,135 @@ async function _renderReportsView() {
     // Monthly table
     const monthlyBody = document.getElementById('expenseMonthlyTableBody');
     if (monthlyBody) {
-        monthlyBody.innerHTML = months.map(m => {
-            const total = monthly[m].total;
-            const budget = _categoryCache.reduce((s, c) => s + (c.monthlyBudget || 0), 0);
-            const variance = total - budget;
-            const varianceClass = variance > 0 ? 'text-error' : 'text-success';
-            return `<tr><td>${months.indexOf(m) + 1}/${m.split('-')[0].slice(2)}</td><td class="mob-th-right">${fmtMoney(total)}</td><td class="mob-th-right">${fmtMoney(budget)}</td><td class="mob-th-right ${varianceClass}">${variance >= 0 ? '+' : ''}${fmtMoney(variance)}</td></tr>`;
+        monthlyBody.innerHTML = R.monthlyRows.map(r => {
+            const varianceClass = r.variance > 0 ? 'text-error' : 'text-success';
+            return `<tr><td>${r.label}</td><td class="mob-th-right">${fmtMoney(r.total)}</td><td class="mob-th-right">${fmtMoney(r.budget)}</td><td class="mob-th-right ${varianceClass}">${r.variance >= 0 ? '+' : ''}${fmtMoney(r.variance)}</td></tr>`;
         }).join('');
     }
 
-    // Category breakdown
-    const catTotals = {};
-    expenses.forEach(e => {
-        const cat = e.categoryName || 'Other';
-        catTotals[cat] = (catTotals[cat] || 0) + Number(e.amount || 0);
-    });
-    const totalAll = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
-    const catLabels = Object.keys(catTotals).sort((a, b) => catTotals[b] - catTotals[a]);
-    const catData = catLabels.map(c => catTotals[c]);
-    const catColors = catLabels.map(c => {
-        const cat = _categoryCache.find(x => x.name === c);
-        return cat?.color || '#E84908';
-    });
-
+    // Category breakdown chart — current month scope so Amount vs Budget is apples-to-apples
     const catCtx = document.getElementById('expenseCategoryChart');
     if (catCtx) {
         _destroyChart('category');
         _chartInstances.category = new Chart(catCtx, {
             type: 'doughnut',
-            data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: catColors }] },
+            data: { labels: R.breakdownRows.map(r => r.cat), datasets: [{ data: R.breakdownRows.map(r => r.amount), backgroundColor: R.breakdownRows.map(r => _categoryCache.find(x => x.name === r.cat)?.color || '#E84908') }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
         });
     }
 
     const catBody = document.getElementById('expenseCategoryBreakdownBody');
     if (catBody) {
-        catBody.innerHTML = catLabels.map(c => {
-            const amt = catTotals[c];
-            const pct = totalAll ? ((amt / totalAll) * 100).toFixed(1) : 0;
-            const cat = _categoryCache.find(x => x.name === c);
-            const budget = cat?.monthlyBudget || 0;
-            const status = budget && amt > budget ? '<span class="mob-badge mob-badge-rejected">Over Budget</span>' : '<span class="mob-badge mob-badge-approved">On Track</span>';
-            return `<tr><td>${c}</td><td class="mob-th-right">${fmtMoney(amt)}</td><td class="mob-th-right">${pct}%</td><td class="mob-th-right">${fmtMoney(budget)}</td><td class="mob-th-center">${status}</td></tr>`;
+        catBody.innerHTML = R.breakdownRows.map(r => {
+            const status = r.status === 'No budget'
+                ? '<span class="text-muted-small">No budget</span>'
+                : r.status === 'Over Budget'
+                    ? '<span class="mob-badge mob-badge-rejected">Over Budget</span>'
+                    : '<span class="mob-badge mob-badge-approved">On Track</span>';
+            return `<tr><td>${escapeHtml(r.cat)}</td><td class="mob-th-right">${fmtMoney(r.amount)}</td><td class="mob-th-right">${r.pct}%</td><td class="mob-th-right">${fmtMoney(r.budget)}</td><td class="mob-th-center">${status}</td></tr>`;
         }).join('');
     }
 
-    // Outlet comparison (if multi-outlet)
+    // Outlet comparison chart (if multi-outlet)
     const outletCtx = document.getElementById('expenseOutletChart');
     if (outletCtx) {
-        const outlets = [...new Set(expenses.map(e => e.outletId))];
-        const outletData = outlets.map(o => {
-            const outExpenses = expenses.filter(e => e.outletId === o);
-            return outExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
-        });
         _destroyChart('outlet');
         _chartInstances.outlet = new Chart(outletCtx, {
             type: 'bar',
-            data: { labels: outlets, datasets: [{ label: 'Total Spend', data: outletData, backgroundColor: '#E84908' }] },
+            data: { labels: R.outletRows.map(r => r.outlet), datasets: [{ label: 'Total Spend', data: R.outletRows.map(r => r.total), backgroundColor: '#E84908' }] },
             options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y' }
         });
+    }
+
+    // Outlet comparison table (Total / This Month / Last Month)
+    const outletBody = document.getElementById('expenseOutletTableBody');
+    if (outletBody) {
+        outletBody.innerHTML = R.outletRows.length === 0
+            ? `<tr><td colspan="4" class="mob-table-empty">No expense data</td></tr>`
+            : R.outletRows.map(r => `<tr><td>${escapeHtml(r.outlet)}</td><td class="mob-th-right">${fmtMoney(r.total)}</td><td class="mob-th-right">${fmtMoney(r.thisMonth)}</td><td class="mob-th-right">${fmtMoney(r.lastMonth)}</td></tr>`).join('');
     }
 
     // Trend chart
     const trendCtx = document.getElementById('expenseTrendChart');
     if (trendCtx) {
-        const days = [...new Set(expenses.map(e => e.date))].sort();
-        const trendData = days.map(d => expenses.filter(e => e.date === d).reduce((s, e) => s + Number(e.amount || 0), 0));
-        const trendLabels = days.map(d => d.split('-').slice(1).join('-'));
         _destroyChart('trend');
         _chartInstances.trend = new Chart(trendCtx, {
             type: 'line',
-            data: { labels: trendLabels, datasets: [{ label: 'Daily Spend', data: trendData, borderColor: '#E84908', fill: false, tension: 0.3 }] },
+            data: { labels: R.trendRows.map(r => r.date.split('-').slice(1).join('-')), datasets: [{ label: 'Daily Spend', data: R.trendRows.map(r => r.total), borderColor: '#E84908', fill: false, tension: 0.3 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
     }
+}
+
+// Pure computation shared by the Reports view and report exports — no DOM access
+function _buildReportData() {
+    const currentOutlet = window.currentOutlet || 'pizza';
+    const expenses = _expenseData.filter(e => e.outletId === currentOutlet || currentOutlet === 'all');
+    const budgetTotal = _categoryCache.reduce((s, c) => s + (c.monthlyBudget || 0), 0);
+
+    const monthly = {};
+    expenses.forEach(e => {
+        const month = e.date?.substring(0, 7) || 'Unknown';
+        if (!monthly[month]) monthly[month] = { total: 0, count: 0 };
+        monthly[month].total += Number(e.amount || 0);
+        monthly[month].count++;
+    });
+    const monthlyRows = Object.keys(monthly).sort().map(m => {
+        const [y, mo] = m.split('-');
+        const total = monthly[m].total;
+        return {
+            month: m,
+            label: new Date(y, mo - 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+            total,
+            budget: budgetTotal,
+            variance: total - budgetTotal
+        };
+    });
+
+    // Category breakdown — current month scope so Amount vs Budget is apples-to-apples
+    const monthKey = getISTDateString().slice(0, 7);
+    const catTotals = {};
+    let totalAll = 0;
+    expenses.forEach(e => {
+        if (!(e.date || '').startsWith(monthKey)) return;
+        const cat = e.categoryName || 'Other';
+        catTotals[cat] = (catTotals[cat] || 0) + Number(e.amount || 0);
+        totalAll += Number(e.amount || 0);
+    });
+    const breakdownRows = Object.keys(catTotals).sort((a, b) => catTotals[b] - catTotals[a]).map(c => {
+        const catDef = _categoryCache.find(x => x.name === c);
+        const budget = catDef?.monthlyBudget || 0;
+        const amount = catTotals[c];
+        return {
+            cat: c,
+            amount,
+            pct: totalAll ? ((amount / totalAll) * 100).toFixed(1) : '0.0',
+            budget,
+            status: !budget ? 'No budget' : amount > budget ? 'Over Budget' : 'On Track'
+        };
+    });
+
+    const thisYm = getISTDateString().slice(0, 7);
+    const lastMonthDate = new Date();
+    lastMonthDate.setDate(1);
+    lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+    const lastYm = getISTDateString(lastMonthDate).slice(0, 7);
+    const outletRows = [...new Set(expenses.map(e => e.outletId))].filter(Boolean).map(o => {
+        const mine = expenses.filter(e => e.outletId === o);
+        return {
+            outlet: o,
+            total: mine.reduce((s, e) => s + Number(e.amount || 0), 0),
+            thisMonth: mine.filter(e => (e.date || '').startsWith(thisYm)).reduce((s, e) => s + Number(e.amount || 0), 0),
+            lastMonth: mine.filter(e => (e.date || '').startsWith(lastYm)).reduce((s, e) => s + Number(e.amount || 0), 0)
+        };
+    });
+
+    const trendRows = [...new Set(expenses.map(e => e.date))].sort().map(d => ({
+        date: d,
+        total: expenses.filter(e => e.date === d).reduce((s, e) => s + Number(e.amount || 0), 0)
+    }));
+
+    return { monthlyRows, breakdownRows, outletRows, trendRows, monthKey };
 }
 
 function _destroyChart(name) {
@@ -410,14 +420,12 @@ async function _loadSettingsView() {
     try {
         const { Outlet, get } = await import('../firebase.js');
         const snap = await get(Outlet.ref('settings/Expenses'));
-        if (snap.exists()) {
-            const s = snap.val();
-            document.getElementById('expenseAutoApproveThreshold').value = s.autoApproveThreshold || 5000;
-            document.getElementById('expenseCeilingPct').value = s.expenseCeilingPct || 10;
-            document.getElementById('expenseCurrencyDisplay').value = s.currencyDisplay || 'Rs.';
-            document.getElementById('expenseRetentionDays').value = s.retentionDays || 90;
-            document.getElementById('expenseApprovalWorkflow').value = s.approvalWorkflow || 'single';
-        }
+        const s = snap.exists() ? snap.val() : {};
+        document.getElementById('expenseAutoApproveThreshold').value = s.autoApproveThreshold ?? 5000;
+        document.getElementById('expenseCeilingPct').value = s.expenseCeilingPct ?? 10;
+        const cur = document.getElementById('expenseCurrencyDisplay');
+        if (cur) cur.value = s.currencyDisplay || 'Rs.';
+        _currency = s.currencyDisplay || 'Rs.';
     } catch (e) {
         console.error('[Expenses] Load settings error:', e);
     }
@@ -426,16 +434,18 @@ async function _loadSettingsView() {
 export async function saveExpenseSettings() {
     try {
         const { Outlet, set } = await import('../firebase.js');
+        const thresholdRaw = document.getElementById('expenseAutoApproveThreshold').value;
+        const ceilingRaw = document.getElementById('expenseCeilingPct').value;
+        const currencyEl = document.getElementById('expenseCurrencyDisplay');
         const settings = {
-            autoApproveThreshold: Number(document.getElementById('expenseAutoApproveThreshold').value) || 5000,
-            expenseCeilingPct: Number(document.getElementById('expenseCeilingPct').value) || 10,
-            currencyDisplay: document.getElementById('expenseCurrencyDisplay').value,
-            retentionDays: Number(document.getElementById('expenseRetentionDays').value) || 90,
-            approvalWorkflow: document.getElementById('expenseApprovalWorkflow').value,
+            autoApproveThreshold: thresholdRaw === '' ? 5000 : Number(thresholdRaw),
+            expenseCeilingPct: ceilingRaw === '' ? 10 : Number(ceilingRaw),
             updatedAt: Date.now(),
             updatedBy: (await import('../firebase.js')).auth.currentUser?.uid
         };
+        if (currencyEl) settings.currencyDisplay = currencyEl.value;
         await set(Outlet.ref('settings/Expenses'), settings);
+        if (currencyEl) _currency = currencyEl.value;
         showToast('Settings saved', 'success');
     } catch (e) {
         console.error('[Expenses] Save settings error:', e);
@@ -484,6 +494,11 @@ export async function seedExpenseCategories() {
 // Update loadExpenses to initialize sub-tabs
 export async function loadExpenses() {
     try {
+        // Loading row only when the table is empty (don't flash over existing data on reload)
+        const lt = document.getElementById('expenseTodayTableBody');
+        if (lt && !lt.children.length) lt.innerHTML = '<tr><td colspan="5" class="mob-table-empty">Loading\u2026</td></tr>';
+        const lh = document.getElementById('expenseHistoryTableBody');
+        if (lh && !lh.children.length) lh.innerHTML = '<tr><td colspan="7" class="mob-table-empty">Loading\u2026</td></tr>';
         const { Outlet, get, query, orderByChild, equalTo } = await import('../firebase.js');
         const currentOutlet = window.currentOutlet || 'pizza';
         const expenseRef = Outlet.ref('expenses');
@@ -504,13 +519,14 @@ export async function loadExpenses() {
         
         // Sort by date descending (newest first) - client-side since we ordered by outletId
         _expenseData.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-        
-        _renderExpenseTable();
 
-        // Initialize sort headers + sub-tabs
+        // Wire sort headers + sub-tabs (both guarded — once per session)
         initExpenseTable();
         initExpenseSubTabs();
-        _switchExpenseSubTab('today');
+        // Currency for fmtMoney — otherwise Today/History/Reports show default until Settings visited
+        try { _currency = ((await get(Outlet.ref('settings/Expenses'))).val() || {}).currencyDisplay || 'Rs.'; } catch (_) {}
+        // Re-render the sub-tab the user is actually on (don't bounce to Today after save)
+        _switchExpenseSubTab(_currentSubTab);
     } catch (e) {
         console.error('[Expenses] Load error:', e);
         showToast('Failed to load expenses', 'error');
@@ -518,10 +534,10 @@ export async function loadExpenses() {
 }
 
 export function downloadExpenseExcel() {
-    if (_filteredData.length === 0) { showToast('No expense data to export.', 'info'); return; }
+    if (_expenseData.length === 0) { showToast('No expense data to export.', 'info'); return; }
     showToast('Generating Excel...', 'info');
 
-    const data = _filteredData.map(e => ({
+    const data = _expenseData.map(e => ({
         Date: formatDate(e.date || e.createdAt),
         Category: e.categoryName || '',
         Description: e.description || '',
@@ -535,7 +551,7 @@ export function downloadExpenseExcel() {
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
-            XLSX.writeFile(wb, `Expenses_${new Date().toISOString().split('T')[0]}.xlsx`);
+            XLSX.writeFile(wb, `Expenses_${getISTDateString()}.xlsx`);
         }, 50);
     } else {
         showToast('Excel library not loaded.', 'error');
@@ -544,7 +560,7 @@ export function downloadExpenseExcel() {
 
 export async function downloadExpensePDF() {
     await loadJSPDF();
-    if (_filteredData.length === 0) { showToast('No expense data to export.', 'warning'); return; }
+    if (_expenseData.length === 0) { showToast('No expense data to export.', 'warning'); return; }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     if (typeof doc.autoTable !== 'function') { showToast('PDF table plugin not ready.', 'error'); return; }
@@ -562,13 +578,13 @@ export async function downloadExpensePDF() {
     const pw = doc.internal.pageSize.getWidth();
     const ph = doc.internal.pageSize.getHeight();
     const M = 14;
-    const rs = n => 'Rs.' + Math.round(Number(n || 0)).toLocaleString('en-IN');
+    const rs = n => _currency + Math.round(Number(n || 0)).toLocaleString('en-IN');
     const mix = (a, b, t) => {
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return a;
     return a.map((v, i) => Math.round(v + (b[i] - v) * t));
 };
 
-    const rows = _filteredData;
+    const rows = _expenseData;
     const totalAmount = rows.reduce((s, e) => s + Number(e.amount || 0), 0);
     const totalCount = rows.length;
 
@@ -724,35 +740,116 @@ export async function downloadExpensePDF() {
         creator: 'FoodHubbie ERP'
     });
 
-    doc.save(`Expenses_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`Expenses_${getISTDateString()}.pdf`);
 }
 
-export async function createExpenseModal() {
-    // Placeholder for future modal implementation
-    showToast('Add Expense modal - coming soon', 'info');
+export function downloadReportExcel() {
+    const d = _buildReportData();
+    if (!d.monthlyRows.length && !d.breakdownRows.length) { showToast('No expense data to export.', 'info'); return; }
+    if (typeof XLSX === 'undefined') { showToast('Excel library not loaded.', 'error'); return; }
+    showToast('Generating report...', 'info');
+    setTimeout(() => {
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.monthlyRows.map(r => ({ Month: r.label, Total: r.total, Budget: r.budget, Variance: r.variance }))), 'Monthly Summary');
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.breakdownRows.map(r => ({ Category: r.cat, Amount: r.amount, 'Percent': r.pct, Budget: r.budget, Status: r.status }))), 'Category Breakdown');
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.outletRows.map(r => ({ Outlet: r.outlet, Total: r.total, 'This Month': r.thisMonth, 'Last Month': r.lastMonth }))), 'Outlet Comparison');
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.trendRows.map(r => ({ Date: r.date, Total: r.total }))), 'Daily Trend');
+        XLSX.writeFile(wb, `ExpenseReport_${getISTDateString()}.xlsx`);
+    }, 50);
 }
 
-export async function initExpenses() {
-    // Check if Expense feature is enabled
-    const { state } = await import('../state.js');
-    if (!state.features?.expense) {
-        showToast('Expense feature is disabled. Enable it in Settings > Features.', 'info');
-        return;
+export async function downloadReportPDF() {
+    await loadJSPDF();
+    const d = _buildReportData();
+    if (!d.monthlyRows.length && !d.breakdownRows.length) { showToast('No expense data to export.', 'info'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    if (typeof doc.autoTable !== 'function') { showToast('PDF table plugin not ready.', 'error'); return; }
+
+    showToast('Generating report...', 'info');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('Expense Report', 14, 16);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Outlet: ${window.currentOutlet || 'pizza'}   |   Generated: ${getISTDateString()}`, 14, 22);
+
+    let y = 30;
+    const section = (title, head, rows) => {
+        if (!rows.length) return;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(title, 14, y);
+        doc.autoTable({
+            startY: y + 3,
+            head: [head],
+            body: rows,
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [232, 73, 8] }
+        });
+        y = doc.lastAutoTable.finalY + 10;
+    };
+    section('Monthly Summary', ['Month', 'Total', 'Budget', 'Variance'],
+        d.monthlyRows.map(r => [r.label, fmtMoney(r.total), fmtMoney(r.budget), (r.variance >= 0 ? '+' : '') + fmtMoney(r.variance)]));
+    section(`Category Breakdown (${d.monthKey})`, ['Category', 'Amount', '% of Total', 'Budget', 'Status'],
+        d.breakdownRows.map(r => [r.cat, fmtMoney(r.amount), r.pct + '%', fmtMoney(r.budget), r.status]));
+    section('Outlet Comparison', ['Outlet', 'Total', 'This Month', 'Last Month'],
+        d.outletRows.map(r => [r.outlet, fmtMoney(r.total), fmtMoney(r.thisMonth), fmtMoney(r.lastMonth)]));
+    section('Daily Trend', ['Date', 'Total'],
+        d.trendRows.map(r => [r.date, fmtMoney(r.total)]));
+    doc.save(`ExpenseReport_${getISTDateString()}.pdf`);
+}
+
+// Pending-only Approve/Reject (manager PIN via shared gate; feature off = direct action)
+function _approvalActions(e) {
+    if (e.status !== 'pending') return '';
+    return `<button type="button" class="btn-icon-only" style="color:#10B981" data-action="approveExpense" data-id="${e.id}" title="Approve" aria-label="Approve expense"><i data-lucide="check" style="width:14px;height:14px;"></i></button>
+                <button type="button" class="btn-icon-only btn-danger" data-action="rejectExpense" data-id="${e.id}" title="Reject" aria-label="Reject expense"><i data-lucide="x" style="width:14px;height:14px;"></i></button>`;
+}
+
+async function _setExpenseStatus(id, status, toastMsg, auditAction) {
+    const { gateManagerPin } = await import('../utils.js');
+    const verb = status === 'approved' ? 'approve' : 'reject';
+    const ok = await gateManagerPin({ message: `Manager approval required to ${verb} this expense.`, auditAction, auditDetails: { expenseId: id, status } });
+    if (!ok) return;
+    try {
+        const { Outlet, update, auth } = await import('../firebase.js');
+        await update(Outlet.ref(`expenses/${id}`), { status, statusAt: Date.now(), statusBy: auth.currentUser?.uid });
+        showToast(toastMsg, 'success');
+        loadExpenses();
+    } catch (e) {
+        console.error(`[Expenses] Status change error:`, e);
+        showToast(`Failed to ${verb} expense`, 'error');
     }
-    await loadExpenses();
 }
 
-export function openAddExpenseModal() {
+export async function approveExpense(id) {
+    await _setExpenseStatus(id, 'approved', 'Expense approved', 'expense.approved');
+}
+
+export async function rejectExpense(id) {
+    await _setExpenseStatus(id, 'rejected', 'Expense rejected', 'expense.rejected');
+}
+
+export function clearExpenseHistoryFilters() {
+    _historyFilters = { from: '', to: '', category: '', status: '', search: '' };
+    ['expenseHistoryFrom', 'expenseHistoryTo', 'expenseHistoryCategory', 'expenseHistoryStatus', 'expenseHistorySearch'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    _renderHistoryView();
+}
+
+export async function openAddExpenseModal() {
     const modal = document.getElementById('expenseModal');
     if (!modal) return;
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('expenseDate').value = today;
+    document.getElementById('expenseDate').value = getISTDateString();
     document.getElementById('expenseAmount').value = '';
     document.getElementById('expenseDescription').value = '';
     document.getElementById('expenseCategory').value = '';
     document.getElementById('expenseModalTitle').textContent = 'Add Expense';
     document.getElementById('expenseForm').dataset.editId = '';
-    loadExpenseCategories();
+    await loadExpenseCategories(); // awaited so callers can set field values after this
     modal.classList.add('active', 'flex');
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
@@ -807,7 +904,6 @@ function populateCategorySelect(select, categories) {
 export async function openExpenseCategoryModal() {
     const modal = document.getElementById('expenseCategoryModal');
     if (!modal) return;
-    await renderExpenseCategoryList();
     modal.classList.add('active', 'flex');
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
@@ -819,32 +915,39 @@ export function closeExpenseCategoryModal() {
     modal.classList.remove('active', 'flex');
     modal.classList.add('hidden');
     document.body.style.overflow = '';
+    // Reset edit state so a cancelled edit can't leak into the next "Add" (overwrites an existing category instead of creating)
+    const btn = document.getElementById('btnAddExpenseCategory');
+    if (btn) { btn.textContent = 'Add Category'; delete btn.dataset.editId; }
+    const nm = document.getElementById('expCatName');
+    if (nm) nm.value = '';
+    const heading = document.getElementById('expCatFormHeading');
+    if (heading) heading.textContent = 'Add New Category';
 }
 
+// Renders the inline Categories sub-tab list (the modal is form-only)
 async function renderExpenseCategoryList() {
-    const list = document.getElementById('expenseCategoryList');
-    if (!list) return;
+    const targets = [document.getElementById('expenseCategoryListInline')].filter(Boolean);
+    if (!targets.length) return;
     try {
         const { Outlet, get } = await import('../firebase.js');
         const snap = await get(Outlet.ref('expenseCategories'));
-        list.innerHTML = '';
+        let html = '';
         snap.forEach(c => {
-            const cat = c.val();
-            const div = document.createElement('div');
-            div.className = 'expense-category-item';
-            div.innerHTML = `
-                <div class="flex-row flex-center flex-gap-10">
-                    <span style="color:${cat.color || '#E84908'}; font-size:1.2rem;">${cat.icon || '💰'}</span>
-                    <span class="flex-1">${escapeHtml(cat.name || c.key)}</span>
-                    ${cat.monthlyBudget ? `<span class="text-muted-small">Budget: ${fmtMoney(cat.monthlyBudget)}</span>` : ''}
-                </div>
-                <div class="flex-row flex-gap-6 mt-6">
-                    <button type="button" class="btn-secondary btn-small" data-action="editExpenseCategory" data-id="${c.key}">Edit</button>
-                    <button type="button" class="btn-danger btn-small" data-action="deleteExpenseCategory" data-id="${c.key}">Delete</button>
-                </div>
-            `;
-            list.appendChild(div);
+            const cat = c.val() || {};
+            html += `
+                <div class="expense-category-item">
+                    <div class="flex-row flex-center flex-gap-10">
+                        <span style="color:${escapeHtml(cat.color || '#E84908')}; font-size:1.2rem;">${escapeHtml(cat.icon || '💰')}</span>
+                        <span class="flex-1">${escapeHtml(cat.name || c.key)}</span>
+                        ${cat.monthlyBudget ? `<span class="text-muted-small">Budget: ${fmtMoney(cat.monthlyBudget)}</span>` : ''}
+                    </div>
+                    <div class="flex-row flex-gap-6 mt-6">
+                        <button type="button" class="btn-secondary btn-small" data-action="editExpenseCategory" data-id="${c.key}">Edit</button>
+                        <button type="button" class="btn-danger btn-small" data-action="deleteExpenseCategory" data-id="${c.key}">Delete</button>
+                    </div>
+                </div>`;
         });
+        targets.forEach(t => { t.innerHTML = html; });
     } catch (e) {
         console.error('[Expenses] Failed to render category list:', e);
     }
@@ -857,11 +960,20 @@ export async function addExpenseCategory() {
     const icon = document.getElementById('expCatIcon')?.value || 'dollar-sign';
     const budget = Number(document.getElementById('expCatBudget')?.value || 0);
     const alertPct = Number(document.getElementById('expCatAlert')?.value || 80);
+    const btn = document.getElementById('btnAddExpenseCategory');
+    const editId = btn?.dataset.editId;
     try {
-        const { Outlet, push, set } = await import('../firebase.js');
-        const ref = push(Outlet.ref('expenseCategories'));
-        await set(ref, { name, color, icon, monthlyBudget: budget, alertThreshold: alertPct, isSystem: false, displayOrder: Date.now() });
-        showToast('Category added', 'success');
+        const { Outlet, push, set, update } = await import('../firebase.js');
+        if (editId) {
+            await update(Outlet.ref(`expenseCategories/${editId}`), { name, color, icon, monthlyBudget: budget, alertThreshold: alertPct });
+            showToast('Category updated', 'success');
+            btn.textContent = 'Add Category';
+            delete btn.dataset.editId;
+        } else {
+            const ref = push(Outlet.ref('expenseCategories'));
+            await set(ref, { name, color, icon, monthlyBudget: budget, alertThreshold: alertPct, isSystem: false, displayOrder: Date.now() });
+            showToast('Category added', 'success');
+        }
         document.getElementById('expCatName').value = '';
         document.getElementById('expCatBudget').value = '';
         _categoryCache = []; _categoryCacheAt = 0; // Invalidate cache
@@ -873,7 +985,11 @@ export async function addExpenseCategory() {
     }
 }
 
-export async function initExpenseModals() {
+export function initExpenseModals() {
+    // Static DOM — wire listeners exactly once (re-binding on every tab visit stacked duplicate submits)
+    if (_modalsWired) return;
+    _modalsWired = true;
+
     // Add Expense Form
     const form = document.getElementById('expenseForm');
     if (form) {
@@ -886,20 +1002,24 @@ export async function initExpenseModals() {
             const editId = form.dataset.editId;
             if (!date || !categoryId || !amount) { showToast('Fill required fields', 'error'); return; }
 
-            // Expense ceiling check: if enabled, check if new expense + today's expenses exceed ceiling % of projected daily revenue
+            // Settings for ceiling + auto-approve (fail-open on read errors)
+            let expenseSettings = {};
             try {
                 const { Outlet, get } = await import('../firebase.js');
-                const currentOutlet = window.currentOutlet || 'pizza';
                 const settingsSnap = await get(Outlet.ref('settings/Expenses'));
-                const expenseSettings = settingsSnap.exists() ? settingsSnap.val() : {};
+                expenseSettings = settingsSnap.exists() ? settingsSnap.val() : {};
+            } catch (e) {
+                console.warn('[Expenses] Settings unreadable, failing open:', e);
+            }
+
+            // Expense ceiling check: % of projected daily revenue
+            try {
                 const ceilingPct = Number(expenseSettings?.expenseCeilingPct) || 0;
-                
                 if (ceilingPct > 0) {
-                    // Calculate today's total expenses for this outlet - fetch fresh from server
-                    const todayStr = new Date().toISOString().split('T')[0];
+                    const currentOutlet = window.currentOutlet || 'pizza';
                     const { Outlet, get, query, orderByChild, equalTo } = await import('../firebase.js');
-                    const expenseRef = Outlet.ref('expenses');
-                    const todaySnap = await get(query(expenseRef, orderByChild('date'), equalTo(todayStr)));
+                    const todayStr = getISTDateString();
+                    const todaySnap = await get(query(Outlet.ref('expenses'), orderByChild('date'), equalTo(todayStr)));
                     let todayTotal = 0;
                     if (todaySnap.exists()) {
                         todaySnap.forEach(child => {
@@ -909,35 +1029,32 @@ export async function initExpenseModals() {
                             }
                         });
                     }
-                    
-                    // Get projected daily revenue from dineinSettings
+
                     const dineinSnap = await get(Outlet.ref('dineinSettings'));
-                    const dineinSettings = dineinSnap.val() || {};
-                    let projectedDailyRevenue = Number(dineinSettings.projectedDailyRevenue);
+                    const projectedDailyRevenue = Number((dineinSnap.val() || {}).projectedDailyRevenue);
                     if (!projectedDailyRevenue || projectedDailyRevenue <= 0) {
+                        // Config missing: warn and fall through — never silently discard the entry
                         showToast('Projected daily revenue not configured in Dine In settings. Ceiling check skipped.', 'warning');
-                        return;
-                    }
-                    
-                    const ceilingAmount = (projectedDailyRevenue * ceilingPct) / 100;
-                    const projectedTotal = todayTotal + amount;
-                    
-                    if (projectedTotal > ceilingAmount) {
-                        // Exceeds ceiling - require manager PIN
-                        const { gateManagerPin } = await import('../utils.js');
-                        const ok = await gateManagerPin({
-                            message: `This expense (₹${amount.toLocaleString('en-IN')}) would bring today's total to ₹${projectedTotal.toLocaleString('en-IN')}, exceeding the ${ceilingPct}% ceiling (₹${ceilingAmount.toLocaleString('en-IN')}) of projected daily revenue (₹${projectedDailyRevenue.toLocaleString('en-IN')}). Manager approval required.`,
-                            auditAction: 'expense.ceiling.approved',
-                            auditDetails: {
-                                expenseAmount: amount,
-                                todayTotal: todayTotal,
-                                projectedTotal: projectedTotal,
-                                ceilingPct: ceilingPct,
-                                ceilingAmount: ceilingAmount,
-                                projectedRevenue: projectedDailyRevenue
-                            }
-                        });
-                        if (!ok) return; // User cancelled or PIN failed
+                    } else {
+                        const ceilingAmount = (projectedDailyRevenue * ceilingPct) / 100;
+                        const projectedTotal = todayTotal + amount;
+                        if (projectedTotal > ceilingAmount) {
+                            // Exceeds ceiling - require manager PIN
+                            const { gateManagerPin } = await import('../utils.js');
+                            const ok = await gateManagerPin({
+                                message: `This expense (₹${amount.toLocaleString('en-IN')}) would bring today's total to ₹${projectedTotal.toLocaleString('en-IN')}, exceeding the ${ceilingPct}% ceiling (₹${ceilingAmount.toLocaleString('en-IN')}) of projected daily revenue (₹${projectedDailyRevenue.toLocaleString('en-IN')}). Manager approval required.`,
+                                auditAction: 'expense.ceiling.approved',
+                                auditDetails: {
+                                    expenseAmount: amount,
+                                    todayTotal: todayTotal,
+                                    projectedTotal: projectedTotal,
+                                    ceilingPct: ceilingPct,
+                                    ceilingAmount: ceilingAmount,
+                                    projectedRevenue: projectedDailyRevenue
+                                }
+                            });
+                            if (!ok) return; // User cancelled or PIN failed
+                        }
                     }
                 }
             } catch (e) {
@@ -953,9 +1070,12 @@ export async function initExpenseModals() {
                     await update(Outlet.ref(`expenses/${editId}`), { date, categoryId, categoryName: catName, amount, description, editedAt: Date.now(), editedBy: (await import('../firebase.js')).auth.currentUser?.uid });
                     showToast('Expense updated', 'success');
                 } else {
+                    // Auto-approve at/below threshold (settings help text), else pending
+                    const threshold = Number(expenseSettings?.autoApproveThreshold);
+                    const status = amount <= (Number.isFinite(threshold) ? threshold : 5000) ? 'approved' : 'pending';
                     const ref = push(Outlet.ref('expenses'));
-                    await set(ref, { date, categoryId, categoryName: catName, amount, description, outletId: currentOutlet, status: 'pending', createdAt: Date.now(), createdBy: (await import('../firebase.js')).auth.currentUser?.uid });
-                    showToast('Expense logged', 'success');
+                    await set(ref, { date, categoryId, categoryName: catName, amount, description, outletId: currentOutlet, status, createdAt: Date.now(), createdBy: (await import('../firebase.js')).auth.currentUser?.uid });
+                    showToast(status === 'approved' ? 'Expense logged & auto-approved' : 'Expense logged', 'success');
                 }
                 closeExpenseModal();
                 loadExpenses();
@@ -966,63 +1086,14 @@ export async function initExpenseModals() {
         });
     }
 
-    // Add Expense Category
-    const addCatBtn = document.getElementById('btnAddExpenseCategory');
-    if (addCatBtn) {
-        addCatBtn.addEventListener('click', addExpenseCategory);
-    }
-
-    // Open Add Expense
-    document.querySelectorAll('[data-action="openAddExpense"]').forEach(btn => {
-        btn.addEventListener('click', openAddExpenseModal);
-    });
-
-    // Close Expense Modal
-    document.querySelectorAll('[data-action="closeExpenseModal"]').forEach(btn => {
-        btn.addEventListener('click', closeExpenseModal);
-    });
-
-    // Open Category Modal
-    document.querySelectorAll('[data-action="openExpenseCategories"]').forEach(btn => {
-        btn.addEventListener('click', openExpenseCategoryModal);
-    });
-
-    // Close Category Modal
-    document.querySelectorAll('[data-action="closeExpenseCategoryModal"]').forEach(btn => {
-        btn.addEventListener('click', closeExpenseCategoryModal);
-    });
-
-    // Edit/Delete Expense Category (event delegation)
-    document.getElementById('expenseCategoryList')?.addEventListener('click', async (e) => {
-        const editBtn = e.target.closest('[data-action="editExpenseCategory"]');
-        const delBtn = e.target.closest('[data-action="deleteExpenseCategory"]');
-        if (editBtn) {
-            const catId = editBtn.dataset.id;
-            await editExpenseCategory(catId);
-        } else if (delBtn) {
-            const catId = delBtn.dataset.id;
-            if (confirm('Delete this category? Expenses using it will be reassigned to "Misc".')) {
-                await deleteExpenseCategory(catId);
-            }
-        }
-    });
-
-    // Edit/Delete Expense (event delegation on table)
-    document.getElementById('expenseDataTableBody')?.addEventListener('click', async (e) => {
-        const editBtn = e.target.closest('[data-action="editExpense"]');
-        const delBtn = e.target.closest('[data-action="deleteExpense"]');
-        if (editBtn) {
-            await editExpense(editBtn.dataset.id);
-        } else if (delBtn) {
-            if (confirm('Delete this expense?')) {
-                await deleteExpense(delBtn.dataset.id);
-            }
-        }
-    });
+    // Add Expense Category (no data-action on this button — bind directly)
+    document.getElementById('btnAddExpenseCategory')?.addEventListener('click', addExpenseCategory);
+    // Everything else (open/close modals, edit/delete rows & categories) routes through
+    // main.js's global [data-action] dispatcher — single wiring, keyboard Enter included.
 }
 
 // Edit Expense Category
-async function editExpenseCategory(catId) {
+export async function editExpenseCategory(catId) {
     try {
         const { Outlet, get, update } = await import('../firebase.js');
         const snap = await get(Outlet.ref(`expenseCategories/${catId}`));
@@ -1034,12 +1105,13 @@ async function editExpenseCategory(catId) {
         document.getElementById('expCatIcon').value = cat.icon || 'dollar-sign';
         document.getElementById('expCatBudget').value = cat.monthlyBudget || '';
         document.getElementById('expCatAlert').value = cat.alertThreshold || 80;
-        document.getElementById('expCatBudget').dataset.editId = catId;
 
         // Change button text
         const btn = document.getElementById('btnAddExpenseCategory');
         btn.textContent = 'Update Category';
         btn.dataset.editId = catId;
+        const heading = document.getElementById('expCatFormHeading');
+        if (heading) heading.textContent = 'Edit Category';
 
         // Open modal
         await openExpenseCategoryModal();
@@ -1049,45 +1121,34 @@ async function editExpenseCategory(catId) {
     }
 }
 
-async function deleteExpenseCategory(catId) {
+export async function deleteExpenseCategory(catId) {
+    if (!confirm('Delete this category? Expenses using it will be reassigned to "Misc".')) return;
     try {
-        const { Outlet, get, update, runTransaction, query, orderByChild, startAt, endAt } = await import('../firebase.js');
-        
-        // Use transaction on the outlet root to atomically handle everything
-        await runTransaction(dbRef(`businesses/${BUSINESS_ID()}/outlets/${Outlet.current}`), (currentData) => {
-            const data = currentData.val() || {};
-            const categories = data.expenseCategories || {};
-            
-            // Find or create Misc category
-            let miscId = null;
-            for (const [key, cat] of Object.entries(categories)) {
-                if (cat.name === 'Misc') {
-                    miscId = key;
-                    break;
-                }
+        const { Outlet, get, push, set } = await import('../firebase.js');
+
+        // Targeted multi-path update: only the category + expenses referencing it
+        // (a transaction on the outlet root would rewrite orders/menu/sessions too)
+        const [catSnap, expSnap] = await Promise.all([
+            get(Outlet.ref('expenseCategories')),
+            get(Outlet.ref('expenses'))
+        ]);
+        const cats = catSnap.val() || {};
+        let miscId = Object.keys(cats).find(k => cats[k]?.name === 'Misc');
+        const updates = {};
+        if (!miscId) {
+            miscId = push(Outlet.ref('expenseCategories')).key;
+            updates[`expenseCategories/${miscId}`] = { name: 'Misc', color: '#6B7280', icon: 'dollar-sign', isSystem: true, displayOrder: 999 };
+        }
+        updates[`expenseCategories/${catId}`] = null;
+        const exps = expSnap.val() || {};
+        for (const [key, exp] of Object.entries(exps)) {
+            if (exp && exp.categoryId === catId) {
+                updates[`expenses/${key}/categoryId`] = miscId;
+                updates[`expenses/${key}/categoryName`] = 'Misc';
             }
-            if (!miscId) {
-                const newKey = `misc_${Date.now()}`;
-                categories[newKey] = { name: 'Misc', color: '#6B7280', icon: 'dollar-sign', isSystem: true, displayOrder: 999 };
-                miscId = newKey;
-            }
-            
-            // Reassign expenses to Misc category
-            const expenses = data.expenses || {};
-            for (const [key, exp] of Object.entries(expenses)) {
-                if (exp.categoryId === catId) {
-                    expenses[key] = { ...exp, categoryId: miscId, categoryName: 'Misc' };
-                }
-            }
-            
-            // Delete the category
-            delete categories[catId];
-            
-            data.expenseCategories = categories;
-            data.expenses = expenses;
-            return data;
-        });
-        
+        }
+        await Outlet.multiUpdate(updates);
+
         showToast('Category deleted, expenses reassigned to Misc', 'success');
         _categoryCache = []; _categoryCacheAt = 0; // Invalidate cache
         await renderExpenseCategoryList();
@@ -1099,29 +1160,29 @@ async function deleteExpenseCategory(catId) {
 }
 
 // Edit Expense
-async function editExpense(expenseId) {
+export async function editExpense(expenseId) {
     try {
         const { Outlet, get } = await import('../firebase.js');
         const snap = await get(Outlet.ref(`expenses/${expenseId}`));
         const exp = snap.val();
         if (!exp) { showToast('Expense not found', 'error'); return; }
 
+        // Open first (it resets the form and loads category options), then populate
+        await openAddExpenseModal();
         document.getElementById('expenseDate').value = exp.date || '';
         document.getElementById('expenseCategory').value = exp.categoryId || '';
         document.getElementById('expenseAmount').value = exp.amount || '';
         document.getElementById('expenseDescription').value = exp.description || '';
         document.getElementById('expenseModalTitle').textContent = 'Edit Expense';
         document.getElementById('expenseForm').dataset.editId = expenseId;
-
-        await loadExpenseCategories();
-        openAddExpenseModal();
     } catch (e) {
         console.error('[Expenses] Edit expense error:', e);
         showToast('Failed to load expense', 'error');
     }
 }
 
-async function deleteExpense(expenseId) {
+export async function deleteExpense(expenseId) {
+    if (!confirm('Delete this expense?')) return;
     try {
         const { Outlet, remove } = await import('../firebase.js');
         await remove(Outlet.ref(`expenses/${expenseId}`));
@@ -1135,18 +1196,12 @@ async function deleteExpense(expenseId) {
 
 export function cleanupExpenses() {
     _expenseData = [];
-    _filteredData = [];
-    _searchTerm = '';
     _sortField = 'date';
     _sortDir = 'desc';
     _categoryCache = [];
     _categoryCacheAt = 0;
-    const table = document.getElementById('expenseDataTable');
-    if (table) table.dataset.wired = '';
-    const todayTable = document.getElementById('expenseTodayTable');
-    if (todayTable) todayTable.dataset.wired = '';
-    const historyTable = document.getElementById('expenseHistoryTable');
-    if (historyTable) historyTable.dataset.wired = '';
+    // NOTE: wired flags intentionally NOT reset — sort-header/sub-tab/modal listeners are
+    // bound once to static elements; clearing them stacked duplicate listeners per revisit.
     Object.values(_chartInstances).forEach(chart => chart.destroy?.());
     _chartInstances = {};
 }

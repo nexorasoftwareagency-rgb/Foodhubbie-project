@@ -39,11 +39,11 @@ firebase.messaging().onBackgroundMessage((payload) => {
 // Bumped whenever any precached app file changes: the fetch handler is
 // stale-while-revalidate, so mixed old/new module pairs can serve until the
 // name changes force a clean re-cache (getEligibleOffersForDisplay went async).
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.4.6';
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.4.7';
 const ASSETS_TO_CACHE = [
   './index.html',
   './style.css?v=5.4.6',
-  './mobile-overrides.css?v=5.4.5',
+  './mobile-overrides.css?v=5.4.6',
   './branding.js?v=5.4.5',
   './firebase-config.js?v=5.4.5',
   './receipt-templates.js?v=5.4.5',

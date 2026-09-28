@@ -372,8 +372,8 @@ export async function _loadChartJS() {
     _chartJSPromise = import('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/+esm').then(m => {
         const C = m.Chart;
         if (C && C.register && m.CategoryScale) {
-            C.register(m.CategoryScale, m.LinearScale, m.LineElement, m.PointElement, m.LineController,
-                m.ArcElement, m.DoughnutController, m.Tooltip, m.Legend, m.Filler);
+            C.register(m.CategoryScale, m.LinearScale, m.LineElement, m.PointElement, m.BarElement, m.LineController,
+                m.BarController, m.ArcElement, m.DoughnutController, m.Tooltip, m.Legend, m.Filler);
         }
         window.Chart = C;
         return m;

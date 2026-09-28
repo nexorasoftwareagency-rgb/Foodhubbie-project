@@ -179,7 +179,7 @@
 
     <link rel="stylesheet" href="style.css?v=5.4.6">
 
-    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.5">
+    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.6">
 
     <link rel="stylesheet" href="chat.css?v=5.3.32">
 
@@ -5061,51 +5061,51 @@
 
                 <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto;">
 
-                    <div class="expense-subtabs" style="display:flex; gap:4px; margin-right:12px;">
+                    <button type="button" class="btn-primary btn-small" data-action="openAddExpense">
+                        <i data-lucide="plus" class="icon-14"></i> Add Expense
+                    </button>
 
-                        <button type="button" class="expense-subtab-btn active" data-expense-subtab="today" title="Today's Expenses">
-                            <i data-lucide="calendar" class="icon-14"></i> Today
+                    <div class="mob-export-row" style="display:flex; gap:8px;">
+
+                        <button type="button" class="mob-export-banner mob-export-excel" data-action="expExportExcel" title="Export to Excel">
+                            <i data-lucide="file-spreadsheet" class="icon-18"></i>
+                            <span>Excel</span>
                         </button>
 
-                        <button type="button" class="expense-subtab-btn" data-expense-subtab="history" title="Expense History">
-                            <i data-lucide="clock" class="icon-14"></i> History
-                        </button>
-
-                        <button type="button" class="expense-subtab-btn" data-expense-subtab="categories" title="Manage Categories">
-                            <i data-lucide="folder-tree" class="icon-14"></i> Categories
-                        </button>
-
-                        <button type="button" class="expense-subtab-btn" data-expense-subtab="reports" title="Expense Reports">
-                            <i data-lucide="bar-chart-3" class="icon-14"></i> Reports
-                        </button>
-
-                        <button type="button" class="expense-subtab-btn" data-expense-subtab="settings" title="Expense Settings">
-                            <i data-lucide="settings" class="icon-14"></i> Settings
+                        <button type="button" class="mob-export-banner mob-export-pdf" data-action="expExportPDF" title="Export to PDF">
+                            <i data-lucide="file-text" class="icon-18"></i>
+                            <span>PDF</span>
                         </button>
 
                     </div>
 
-                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                </div>
 
-                        <button type="button" class="btn-primary btn-small" data-action="openAddExpense" style="margin-right:8px;">
-                            <i data-lucide="plus" class="icon-14"></i> Add Expense
-                        </button>
+            </div>
 
-                        <div class="mob-export-row" style="display:flex; gap:8px;">
+            <div class="expense-toolbar">
 
-                            <button type="button" class="mob-export-banner mob-export-excel" data-action="expExportExcel" title="Export to Excel">
-                                <i data-lucide="file-spreadsheet" class="icon-18"></i>
-                                <span>Excel</span>
-                            </button>
+                <div class="expense-subtabs">
 
-                            <button type="button" class="mob-export-banner mob-export-pdf" data-action="expExportPDF" title="Export to PDF">
-                                <i data-lucide="file-text" class="icon-18"></i>
-                                <span>PDF</span>
-                            </button>
+                    <button type="button" class="expense-subtab-btn active" data-expense-subtab="today" title="Today's Expenses">
+                        <i data-lucide="calendar" class="icon-14"></i> Today
+                    </button>
 
-                        </div>
+                    <button type="button" class="expense-subtab-btn" data-expense-subtab="history" title="Expense History">
+                        <i data-lucide="clock" class="icon-14"></i> History
+                    </button>
 
-                    </div>
+                    <button type="button" class="expense-subtab-btn" data-expense-subtab="categories" title="Manage Categories">
+                        <i data-lucide="folder-tree" class="icon-14"></i> Categories
+                    </button>
+
+                    <button type="button" class="expense-subtab-btn" data-expense-subtab="reports" title="Expense Reports">
+                        <i data-lucide="bar-chart-3" class="icon-14"></i> Reports
+                    </button>
+
+                    <button type="button" class="expense-subtab-btn" data-expense-subtab="settings" title="Expense Settings">
+                        <i data-lucide="settings" class="icon-14"></i> Settings
+                    </button>
 
                 </div>
 
@@ -7110,7 +7110,7 @@
 
                 <div class="mb-16">
 
-                    <h4 class="section-card-heading mb-10">Add New Category</h4>
+                    <h4 class="section-card-heading mb-10" id="expCatFormHeading">Add New Category</h4>
 
                     <div class="modal-grid-2col mb-12">
 
@@ -7199,18 +7199,6 @@
                     </div>
 
                     <button type="button" id="btnAddExpenseCategory" class="btn-primary w-full p-10 br-10 font-weight-700">Add Category</button>
-
-                </div>
-
-                <div class="mt-20">
-
-                    <h4 class="section-card-heading mb-10">Existing Categories</h4>
-
-                    <div id="expenseCategoryList" class="expense-category-list">
-
-                        <!-- Populated dynamically -->
-
-                    </div>
 
                 </div>
 

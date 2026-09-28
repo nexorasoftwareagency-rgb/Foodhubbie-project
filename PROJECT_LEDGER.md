@@ -80,6 +80,34 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260927-170537-a2e7] outletNo: platform-wide outlet numbers for order IDs (03-161126-12)
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-27 17:05 UTC
+- Confidence: HIGH
+- Ended: 2026-09-27 17:12 UTC
+
+### [20260927-155631-1800] Order ID format: Outlet-ID + DDMMYY-N (03-161126-12)
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-27 15:56 UTC
+- Confidence: HIGH
+- Ended: 2026-09-27 16:48 UTC
+
+### [20260927-152513-1c44] Fix rider review findings 1-8
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-27 15:25 UTC
+- Confidence: HIGH
+- Ended: 2026-09-27 15:52 UTC
+
+### [20260927-141302-b923] Self-review of rider-app (full static code review, findings report)
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-27 14:13 UTC
+- Confidence: HIGH
+- Ended: 2026-09-27 14:47 UTC
+
 ### [20260927-084756-bba1] Fix runtime ReferenceErrors: expenses.js BUSINESS_ID/db undefined, settings.js EmailAuthProvider/reauthenticateWithCredential undefined, ui.js duplicate resize listener
 - TIER: 3 (high-risk)
 - STATUS: DONE

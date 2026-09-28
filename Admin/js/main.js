@@ -460,15 +460,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'custExportPDF': logger.info('CUSTOMERS', 'Export PDF'); (await useMod('customers')).downloadCustomerPDF(); break;
                 case 'expExportExcel': logger.info('EXPENSES', 'Export Excel'); (await useMod('expenses')).downloadExpenseExcel(); break;
                 case 'expExportPDF': logger.info('EXPENSES', 'Export PDF'); (await useMod('expenses')).downloadExpensePDF(); break;
-                case 'expReportExportExcel': logger.info('EXPENSES', 'Export Report Excel'); (await useMod('expenses')).downloadExpenseExcel(); break;
-                case 'expReportExportPDF': logger.info('EXPENSES', 'Export Report PDF'); (await useMod('expenses')).downloadExpensePDF(); break;
+                case 'expReportExportExcel': logger.info('EXPENSES', 'Export Report Excel'); (await useMod('expenses')).downloadReportExcel(); break;
+                case 'expReportExportPDF': logger.info('EXPENSES', 'Export Report PDF'); (await useMod('expenses')).downloadReportPDF(); break;
                 case 'openAddExpense': logger.info('EXPENSES', 'Open Add Expense'); (await useMod('expenses')).openAddExpenseModal(); break;
                 case 'closeExpenseModal': logger.info('EXPENSES', 'Close Expense Modal'); (await useMod('expenses')).closeExpenseModal(); break;
                 case 'openExpenseCategories': logger.info('EXPENSES', 'Open Categories'); (await useMod('expenses')).openExpenseCategoryModal(); break;
                 case 'closeExpenseCategoryModal': logger.info('EXPENSES', 'Close Categories'); (await useMod('expenses')).closeExpenseCategoryModal(); break;
                 case 'saveExpenseSettings': logger.info('EXPENSES', 'Save Settings'); (await useMod('expenses')).saveExpenseSettings(); break;
-                case 'closeExpenseReceiptPreview': logger.info('EXPENSES', 'Close Receipt Preview'); (await useMod('expenses')).closeReceiptPreview(); break;
                 case 'seedExpenseCategories': logger.info('EXPENSES', 'Seed Categories'); (await useMod('expenses')).seedExpenseCategories(); break;
+                case 'editExpense': logger.info('EXPENSES', 'Edit Expense'); (await useMod('expenses')).editExpense(id); break;
+                case 'deleteExpense': logger.info('EXPENSES', 'Delete Expense'); (await useMod('expenses')).deleteExpense(id); break;
+                case 'editExpenseCategory': logger.info('EXPENSES', 'Edit Category'); (await useMod('expenses')).editExpenseCategory(id); break;
+                case 'deleteExpenseCategory': logger.info('EXPENSES', 'Delete Category'); (await useMod('expenses')).deleteExpenseCategory(id); break;
+                case 'clearExpenseFilters': logger.info('EXPENSES', 'Clear Filters'); (await useMod('expenses')).clearExpenseHistoryFilters(); break;
+                case 'approveExpense': logger.info('EXPENSES', 'Approve Expense'); (await useMod('expenses')).approveExpense(id); break;
+                case 'rejectExpense': logger.info('EXPENSES', 'Reject Expense'); (await useMod('expenses')).rejectExpense(id); break;
                 default:
                     logger.warn('CLICK', `Unhandled action: ${action}`, { el: el.outerHTML.slice(0, 200) });
             }

@@ -3349,6 +3349,16 @@
 .expense-subtab-content { animation: fadeIn 0.2s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
+.expense-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 2px 0 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.expense-toolbar .expense-subtabs { flex: 0 0 auto; }
+
 .expense-today-header {
     display: flex;
     align-items: center;
