@@ -373,6 +373,14 @@
 | **Verdict** | Spark fails at ~3 busy restaurants (100-connection cap first, 10 GB/mo download second); 100s of restaurants viable on Blaze ~$60–100/mo; enable Blaze + fix base64 images in RTDB (730 KB menu → 75 KB) before scaling |
 | **Evidence** | Live DB measured via `bot/p38-measure.js` + `bot/p38-payload.js`: 4.81 MB, 37,734 nodes, 121 orders, 667 B/order, 657 KB base64 images, logs = 67% of nodes |
 
+### P3-9: Root logs/audit unbounded growth (P3-8 #2) — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Problem** | Root /logs/audit grew unbounded — 4,038 entries ≈ 25K nodes = 67% of all RTDB nodes (P3-8); node count bloats storage + slows console/queries |
+| **Root Cause** | logAudit() appends forever; no reader UI exists, no retention anywhere |
+| **Fix Applied** | Admin/js/log-prune.js (push-key cutoff encoder) + pruneOldLogs() in utils.js, fired once/browser/day from main.js init — deletes entries older than 30d (AUDIT_RETENTION_MS); pure check 	ests/test-log-prune.mjs |
+| **Verified** | Live: removed 2,726 entries (4,038 → 1,314, oldest Aug-28 → Sep-10); dry-run matched exactly; canary create+delete passes rules; commit d541aa, deployed hosting:admin. Skipped: outlet walkouts (1 entry), riderErrors (rider-write-only rule) — revisit if they grow |
+
 ---
 
 ## 📊 SUMMARY MATRIX
