@@ -1384,6 +1384,10 @@ export async function openOrderDrawer(id) {
         .join('');
 
     const age = getOrderAge(order.createdAt);
+    let sellerName = '';
+    if (order.counterStaffUid) {
+        try { sellerName = (await get(Outlet.staff(order.counterStaffUid))).val()?.displayName || ''; } catch (_) { /* staff read failed → chip omitted */ }
+    }
     const isTerminalForRider = ['Delivered', 'Cancelled'].includes(order.status);
     const orderTypeIcon = orderType === 'Online' ? 'globe' : orderType === 'WhatsApp' ? 'message-circle' : 'utensils';
 
@@ -1394,6 +1398,7 @@ export async function openOrderDrawer(id) {
             </button>
             <div class="dw-toprow">
                 <span class="dw-type-badge"><i data-lucide="${orderTypeIcon}" style="width:9px;height:9px;"></i> ${escapeHtml(orderType)}</span>
+                ${sellerName ? `<span class="dw-type-badge"><i data-lucide="user-check" style="width:9px;height:9px;"></i> ${escapeHtml(sellerName)}</span>` : ''}
             </div>
             <div class="dw-id">#${escapeHtml(formatOrderId(order.orderId || id))}</div>
             <div class="dw-meta-row">
