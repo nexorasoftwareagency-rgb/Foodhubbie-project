@@ -179,7 +179,7 @@
 
     <link rel="stylesheet" href="style.css?v=5.4.6">
 
-    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.6">
+    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.7">
 
     <link rel="stylesheet" href="chat.css?v=5.3.32">
 
@@ -5141,9 +5141,11 @@
             <!-- HISTORY SUB-TAB -->
             <div id="expense-subtab-history" class="expense-subtab-content hidden">
                 <div class="expense-filter-bar">
-                    <input type="date" id="expenseHistoryFrom" class="form-input" style="width:auto;">
-                    <span style="margin:0 8px;">to</span>
-                    <input type="date" id="expenseHistoryTo" class="form-input" style="width:auto;">
+                    <span class="expense-filter-dates">
+                        <input type="date" id="expenseHistoryFrom" class="form-input">
+                        <span>to</span>
+                        <input type="date" id="expenseHistoryTo" class="form-input">
+                    </span>
                     <select id="expenseHistoryCategory" class="form-input" style="width:auto; min-width:140px;">
                         <option value="">All Categories</option>
                     </select>
@@ -5286,13 +5288,13 @@
                         <label class="form-label-small">Initialize Default Categories</label>
                         <small class="text-muted-small">Creates 7 default system categories (Rent, Utilities, Payroll, Supplies, Marketing, Maintenance, Misc) with budgets and alerts. Run once on first setup.</small>
                     </div>
-                    <button type="button" class="btn-secondary w-full mt-8 p-12 br-12 font-weight-600" data-action="seedExpenseCategories" style="background:var(--glass-bg); border:1px solid var(--glass-border);">
+                    <button type="button" class="btn-secondary w-full mt-8 p-12 br-12 font-weight-600" data-action="seedExpenseCategories">
                         <i data-lucide="database" class="icon-16"></i> Seed Default Categories
                     </button>
                     <button type="button" class="btn-primary w-full mt-16 p-12 br-12 font-weight-700" data-action="saveExpenseSettings">
                         <i data-lucide="save" class="icon-16"></i> Save Settings
                     </button>
-                    <a href="manual.html#expenses" target="_blank" rel="noopener" class="btn-secondary w-full mt-8 p-12 br-12 font-weight-600" style="background:var(--glass-bg); border:1px solid var(--glass-border); text-align:center;">
+                    <a href="manual.html#expenses" target="_blank" rel="noopener" class="btn-secondary w-full mt-8 p-12 br-12 font-weight-600 text-center" style="display:block;">
                         <i data-lucide="book-open" class="icon-16"></i> Expense Manual
                     </a>
                 </div>

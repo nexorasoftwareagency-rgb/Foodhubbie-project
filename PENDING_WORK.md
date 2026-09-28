@@ -164,14 +164,15 @@
 
 ## 🟡 P2 — MEDIUM (Code Quality / Technical Debt)
 
-### P2-2: Modal Event Wiring Should Be at Init, Not Modal Open
+### P2-2: Modal Event Wiring Should Be at Init, Not Modal Open — **✅ FIXED (subsumed by P1-10)**
 | Field | Detail |
 |-------|--------|
 | **Problem** | Event wiring logic lives in `openTableBillReview` instead of module initialization |
-| **Place** | `Admin/js/features/tables.js:1017-1077` |
+| **Place** | `Admin/js/features/tables.js:1017-1077` (function now at 1125-1208) |
 | **Issue** | 60 lines of `addEventListener` setup inside async function that runs on every bill review |
 | **Reason** | Modal HTML exists in DOM at page load; wiring deferred to avoid race with DOMContentLoaded. But proper fix is `loadTableManagement` → wire once |
 | **Impact** | Harder to test, violates separation of concerns, runs unnecessary logic |
+| **Fix Applied** | The P1-10 fix removed the per-open wiring block entirely. Verified 2026-09-28: full scan of `openTableBillReview` body for `addEventListener`/`.once(` finds only the idempotent `retryBtn._handler` re-attach (tables.js:1205) — no setup block remains. |
 
 ### P2-3: `_renderAll` rAF Debounce + Individual Render Calls Race — **✅ FIXED**
 | Field | Detail |
@@ -383,17 +384,8 @@
 | **P2** | 9 | ⚠️ Recommended (9/9 done) |
 | **P3** | 8 | 📋 Backlog (8/8 done) |
 
-**Total Active Issues: 15** (0 P0 + 0 P1 + 0 P2 open + 0 P3 remaining)
+**Total Active Issues: 15** (0 P0 + 0 P1 + 0 P2 open + 0 P3 remaining — stale "fix order" blocks pruned 2026-09-28; only P3-2's real-WhatsApp re-verify remains optional)
 
----
-
-## 🎯 RECOMMENDED FIX ORDER (Next Session)
-
-```bash
-# 1. P3-2: Verify Sharp conversion with real WhatsApp message
-# (P2-8 M5 + P2-9 M7 done this session — all P0/P1/P2 closed)
-```
-```
 ---
 
 ## ✅ COMPLETED THIS SESSION — P0 CRITICAL RIDER/DELIVERY FIXES
@@ -418,20 +410,6 @@
 | **Status** | ✅ DONE |
 | **Files Changed** | `bot/rider.js` |
 | **Fix Applied** | Added `notifyCustomerArrived(sock, order)` function that sends ARRIVED WhatsApp template to customer when order status changes to "Reached Drop Location". Bot's main order status listener should call this on status change. |
-
----
-
-## 🎯 RECOMMENDED FIX ORDER (Next Session)
-
-```bash
-# 1. P3-2: Verify Sharp conversion with real WhatsApp message
-# 2. P1-R4: Fix cache leak in subscribeAvailableOrders (filter at emit, don't delete)
-# 3. P1-R5: Remove unused proximity params from acceptOrder
-# 4. P1-R6: Dynamic outlets in settlement (riders.js)
-# 5. P1-R7: Admin check for backup OTP in verifyOtp
-# 6. P1-R8: Token replay race on double-click delivery
-# 7. P1-R9: Add assignedRider: null to delivery order payload
-```
 
 ---
 
@@ -565,25 +543,3 @@
 - **Auth**: `roshanipizza@gmail.com` / `REDACTED-PASSWORD-ROTATE-ME` for admin login
 - **QR Menu**: `https://foodhubbie-qrmenu.web.app/?o=pizza&b=roshani-pizza&t=2135N2D5F5E3H6J4` (Table 02)
 - **M5 = P2-8** (void billDiscount analytics — FIXED); **M7 = P2-9** (coupon base — FIXED, food-subtotal policy locked). Bot deploy path is `/var/www/foodhubbie/bot/` (PM2 script path) — not `/home/ubuntu/`.
-
----
-
-## 🎯 RECOMMENDED FIX ORDER (Next Session)
-
-```bash
-# IMMEDIATE - P0 Critical (blockers):
-# 1. P0-R1: Remove sync tenantPath() — constants.ts
-# 2. P0-R2: Batch loadOutlets settings reads — orderService.ts
-# 3. P0-R3: Add bot handler for "Reached Drop Location" — bot/rider.js
-
-# THIS SPRINT - P1 High:
-# 4. P1-R4: Fix cache leak on accept — orderService.ts
-# 5. P1-R5: Remove unused proximity params — orderService.ts + components
-# 6. P1-R6: Dynamic outlets in settlement — riders.js
-# 7. P1-R7: Admin check for backup OTP — orderService.ts
-# 8. P1-R8: Set tokenValid=false immediately on click — delivery.js
-# 9. P1-R9: Add assignedRider: null to payload — delivery-order.js
-
-# NEXT SPRINT - P2 Medium:
-# 10-14: Refactoring items
-```

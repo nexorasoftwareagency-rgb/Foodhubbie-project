@@ -2801,6 +2801,9 @@
 .mob-badge-rating-high { background: var(--mob-green); }
 .mob-badge-rating-mid { background: var(--mob-amber); }
 .mob-badge-rating-low { background: var(--mob-red); }
+.mob-badge-approved { background: var(--mob-green); }
+.mob-badge-pending { background: var(--mob-amber); }
+.mob-badge-rejected { background: var(--mob-red); }
 
 .mob-export-row {
     display: flex;
@@ -3430,12 +3433,24 @@
     padding: 8px 12px;
     font-size: 13px;
 }
+.expense-filter-dates {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+}
+/* native date inputs are ~160px — fixed width keeps from/to on one line on mobile */
+.expense-filter-dates input[type="date"] { width: 138px; }
 
 .expense-reports-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
     gap: 16px;
 }
+/* cards are too narrow for the app-wide 860px table min-width — compact instead of scrolling */
+.expense-reports-grid .mob-data-table { min-width: 0; font-size: 12px; }
+.expense-reports-grid .mob-data-table th,
+.expense-reports-grid .mob-data-table td { padding: 8px 6px; }
 .expense-reports-grid canvas {
     width: 100% !important;
     height: auto !important;
@@ -3443,18 +3458,27 @@
 }
 
 .expense-category-item {
-    padding: 12px;
+    padding: 12px 0;
     border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.1));
 }
 .expense-category-item:last-child { border-bottom: none; }
-.expense-category-item .flex-row { align-items: center; }
+.expense-category-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.expense-category-name { flex: 1 1 auto; font-weight: 600; min-width: 120px; }
+.expense-category-actions { display: flex; gap: 6px; }
+.expense-category-addrow { display: flex; justify-content: flex-end; padding: 12px 0; }
 
 @media (max-width: 768px) {
     .expense-subtabs {
-        overflow-x: auto;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
+        overflow-x: visible;
         -webkit-overflow-scrolling: touch;
     }
+    .expense-toolbar .expense-subtabs { flex: 1 1 auto; min-width: 0; }
     .expense-subtab-btn {
         padding: 6px 10px;
         font-size: 12px;
@@ -3469,5 +3493,6 @@
     }
     .expense-reports-grid { grid-template-columns: 1fr; }
     .expense-reports-grid canvas { max-height: 250px; }
+    .expense-category-addrow { padding: 12px 16px; }
 }
 

@@ -209,9 +209,10 @@ function _renderHistoryView() {
     }
 
     tbody.innerHTML = data.map(e => {
-        const statusBadge = e.status === 'approved'
+        const st = e.status || 'pending';
+        const statusBadge = st === 'approved'
             ? `<span class="mob-badge mob-badge-approved">Approved</span>`
-            : e.status === 'pending'
+            : st === 'pending'
                 ? `<span class="mob-badge mob-badge-pending">Pending</span>`
                 : `<span class="mob-badge mob-badge-rejected">Rejected</span>`;
         return `<tr>
@@ -237,7 +238,7 @@ async function _renderCategoriesView() {
     const container = document.getElementById('expenseCategoriesContainer');
     if (!container) return;
     container.innerHTML = `
-        <div style="display:flex; justify-content:flex-end; padding:12px 0;">
+        <div class="expense-category-addrow">
             <button type="button" class="btn-primary btn-small" data-action="openExpenseCategories">
                 <i data-lucide="plus" class="icon-14"></i> Add Category
             </button>
@@ -934,20 +935,29 @@ async function renderExpenseCategoryList() {
         let html = '';
         snap.forEach(c => {
             const cat = c.val() || {};
+            const icon = cat.icon || 'dollar-sign';
+            const color = escapeHtml(cat.color || '#E84908');
+            // lucide names are ASCII; anything else (emoji) renders as text
+            const iconHtml = /^[\w-]+$/.test(icon)
+                ? `<i data-lucide="${escapeHtml(icon)}" style="color:${color}; width:16px; height:16px;"></i>`
+                : `<span style="color:${color}; font-size:1.2rem;">${escapeHtml(icon)}</span>`;
             html += `
                 <div class="expense-category-item">
-                    <div class="flex-row flex-center flex-gap-10">
-                        <span style="color:${escapeHtml(cat.color || '#E84908')}; font-size:1.2rem;">${escapeHtml(cat.icon || '💰')}</span>
-                        <span class="flex-1">${escapeHtml(cat.name || c.key)}</span>
-                        ${cat.monthlyBudget ? `<span class="text-muted-small">Budget: ${fmtMoney(cat.monthlyBudget)}</span>` : ''}
-                    </div>
-                    <div class="flex-row flex-gap-6 mt-6">
-                        <button type="button" class="btn-secondary btn-small" data-action="editExpenseCategory" data-id="${c.key}">Edit</button>
-                        <button type="button" class="btn-danger btn-small" data-action="deleteExpenseCategory" data-id="${c.key}">Delete</button>
+                    <div class="expense-category-row">
+                        ${iconHtml}
+                        <span class="expense-category-name">${escapeHtml(cat.name || c.key)}</span>
+                        <span class="text-muted-small">${cat.monthlyBudget ? 'Budget: ' + fmtMoney(cat.monthlyBudget) : 'No budget'}</span>
+                        <span class="expense-category-actions">
+                            <button type="button" class="btn-secondary btn-small" data-action="editExpenseCategory" data-id="${c.key}">Edit</button>
+                            <button type="button" class="btn-danger btn-small" data-action="deleteExpenseCategory" data-id="${c.key}">Delete</button>
+                        </span>
                     </div>
                 </div>`;
         });
-        targets.forEach(t => { t.innerHTML = html; });
+        targets.forEach(t => {
+            t.innerHTML = html;
+            if (typeof lucide !== 'undefined') lucide.createIcons({ root: t });
+        });
     } catch (e) {
         console.error('[Expenses] Failed to render category list:', e);
     }

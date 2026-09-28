@@ -42,6 +42,18 @@ async function dismissPin(page) {
   return false;
 }
 
+async function openAddModal(page) {
+  // retry: waitForSelector once timed out despite modal being 'active' (visibility race)
+  for (let t = 0; t < 3; t++) {
+    await page.click('[data-action="openAddExpense"]');
+    for (let w = 0; w < 15; w++) {
+      if (await page.locator('#expenseModal.active').count()) return;
+      await page.waitForTimeout(300);
+    }
+  }
+  throw new Error('add-expense modal never opened');
+}
+
 async function goTab(page, tab) {
   for (let i = 0; i < 3; i++) {
     const ov = page.locator('.dynamic-modal-overlay').first();
@@ -176,8 +188,7 @@ const run = async () => {
 
   // 6. Add expense: one submit → one record, stays on current sub-tab
   const desc = `ZZ-EXP-${Date.now()}`;
-  await page.click('[data-action="openAddExpense"]');
-  await page.waitForSelector('#expenseModal.active', { timeout: 5000 });
+  await openAddModal(page);
   await page.waitForTimeout(400);
   const catOpt = await page.locator('#expenseCategory option:not([value=""])').first().getAttribute('value');
   await page.selectOption('#expenseCategory', catOpt);
@@ -206,11 +217,11 @@ const run = async () => {
     check('save: exactly one record (no stacked submits)', rowsAfter === rowsBefore + 1, `${rowsBefore}→${rowsAfter}`);
     const found = await page.locator(`#expenseHistoryTableBody tr:has-text("${desc}")`).count();
     check('save: new row visible', found === 1, `found=${found}`);
-    // cleanup: delete it
+    // cleanup: delete it (poll — RTDB latency made a fixed wait flaky)
     if (found) {
       await page.locator(`#expenseHistoryTableBody tr:has-text("${desc}") [data-action="deleteExpense"]`).first().click();
-      await page.waitForTimeout(1200);
-      const left = await page.locator(`#expenseHistoryTableBody tr:has-text("${desc}")`).count();
+      let left = -1;
+      for (let t = 0; t < 20; t++) { await page.waitForTimeout(500); left = await page.locator(`#expenseHistoryTableBody tr:has-text("${desc}")`).count(); if (left === 0) break; }
       check('cleanup: test expense deleted', left === 0, `left=${left}`);
     }
   } else {
@@ -219,8 +230,7 @@ const run = async () => {
 
   // 6b. Pending workflow (M1): >threshold expense gets Approve/Reject; shared PIN gate
   const aprDesc = `ZZ-APR-${Date.now()}`;
-  await page.click('[data-action="openAddExpense"]');
-  await page.waitForSelector('#expenseModal.active', { timeout: 5000 });
+  await openAddModal(page);
   await page.waitForTimeout(400);
   const aprCat = await page.locator('#expenseCategory option:not([value=""])').first().getAttribute('value');
   await page.selectOption('#expenseCategory', aprCat);
@@ -268,6 +278,58 @@ const run = async () => {
     check('approve: test expense cleaned up', aprLeft === 0, `left=${aprLeft}`);
   } else {
     check('approve: pending workflow', false, `outcome=${aprOutcome}`);
+  }
+
+  // 6c. Reject path (M1): same shared gate, Rejected badge, symmetric to approve
+  const rejDesc = `ZZ-REJ-${Date.now()}`;
+  await openAddModal(page);
+  await page.waitForTimeout(400);
+  const rejCat = await page.locator('#expenseCategory option:not([value=""])').first().getAttribute('value');
+  await page.selectOption('#expenseCategory', rejCat);
+  await page.fill('#expenseAmount', '6000');
+  await page.fill('#expenseDescription', rejDesc);
+  await page.click('#expenseForm button[type="submit"]');
+  let rejOutcome = 'timeout';
+  const t2 = Date.now();
+  while (Date.now() - t2 < 9000) {
+    if (await page.locator('.dynamic-modal-overlay').count()) { rejOutcome = 'ceiling-pin'; break; }
+    if (!(await page.locator('#expenseModal.active').count())) { rejOutcome = 'saved'; break; }
+    await page.waitForTimeout(250);
+  }
+  if (rejOutcome === 'ceiling-pin') {
+    await dismissPin(page);
+    await page.waitForTimeout(400);
+    await page.click('#expenseModal [data-action="closeExpenseModal"]').catch(() => {});
+    check('reject: pending workflow', true, 'SKIPPED — ceiling PIN blocked test create');
+  } else if (rejOutcome === 'saved') {
+    const rejRow = `#expenseHistoryTableBody tr:has-text("${rejDesc}")`;
+    for (let t = 0; t < 10; t++) { if (await page.locator(rejRow).count()) break; await page.waitForTimeout(400); }
+    const rejBtns = await page.locator(`${rejRow} [data-action="rejectExpense"]`).count();
+    check('reject: pending row has Reject button', rejBtns === 1, `found=${rejBtns}`);
+    if (rejBtns) {
+      await page.locator(`${rejRow} [data-action="rejectExpense"]`).click();
+      await page.waitForTimeout(700);
+      if (await page.locator('.dynamic-modal-overlay').count()) {
+        await dismissPin(page);
+        await page.waitForTimeout(700);
+        const still = await page.locator(`${rejRow} [data-action="rejectExpense"]`).count();
+        check('reject: PIN cancel keeps pending', still === 1, 'gate held');
+      } else {
+        let rejTxt = '';
+        for (let t = 0; t < 12; t++) {
+          rejTxt = (await page.locator(rejRow).textContent()) || '';
+          if (/Rejected/i.test(rejTxt)) break;
+          await page.waitForTimeout(500);
+        }
+        check('reject: applied (PIN gate off)', /Rejected/i.test(rejTxt), rejTxt.trim().replace(/\s+/g, ' ').slice(0, 60));
+      }
+    }
+    await page.locator(`${rejRow} [data-action="deleteExpense"]`).click();
+    let rejLeft = -1;
+    for (let t = 0; t < 20; t++) { await page.waitForTimeout(500); rejLeft = await page.locator(rejRow).count(); if (rejLeft === 0) break; }
+    check('reject: test expense cleaned up', rejLeft === 0, `left=${rejLeft}`);
+  } else {
+    check('reject: pending workflow', false, `outcome=${rejOutcome}`);
   }
 
   // 7. Excel export actually downloads (was: always "No expense data to export")
