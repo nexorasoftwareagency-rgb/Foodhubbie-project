@@ -378,8 +378,16 @@
 |-------|--------|
 | **Problem** | Root /logs/audit grew unbounded — 4,038 entries ≈ 25K nodes = 67% of all RTDB nodes (P3-8); node count bloats storage + slows console/queries |
 | **Root Cause** | logAudit() appends forever; no reader UI exists, no retention anywhere |
-| **Fix Applied** | Admin/js/log-prune.js (push-key cutoff encoder) + pruneOldLogs() in utils.js, fired once/browser/day from main.js init — deletes entries older than 30d (AUDIT_RETENTION_MS); pure check 	ests/test-log-prune.mjs |
-| **Verified** | Live: removed 2,726 entries (4,038 → 1,314, oldest Aug-28 → Sep-10); dry-run matched exactly; canary create+delete passes rules; commit d541aa, deployed hosting:admin. Skipped: outlet walkouts (1 entry), riderErrors (rider-write-only rule) — revisit if they grow |
+| **Fix Applied** | Admin/js/log-prune.js (push-key cutoff encoder) + pruneOldLogs() in utils.js, fired once/browser/day from main.js init — deletes entries older than 30d (AUDIT_RETENTION_MS); pure check `tests/test-log-prune.mjs` |
+| **Verified** | Live: removed 2,726 entries (4,038 → 1,314, oldest Aug-28 → Sep-10); dry-run matched exactly; canary create+delete passes rules; commit `ad541aa`, deployed hosting:admin. Skipped: outlet walkouts (1 entry), riderErrors (rider-write-only rule) — revisit if they grow |
+
+### P3-10: Paginate/date-gate orders queries (P3-8 #4) — **✅ DONE**
+| Field | Detail |
+|-------|--------|
+| **Problem** | Orders reads grew linearly with history: tables.js held an UNBOUNDED onValue on all orders (full history re-downloaded on every order write); orders.js was already date-gated (default yesterday→today, server-side rebuild on input change) + Orders tab paginated 50/page — council said partially done |
+| **Fix Applied** | tables.js orders listener bounded: onValue(query(ordersRef, orderByChild(createdAt), limitToLast(500))) — covers open sessions (hours) + live KDS even at 300+ orders/day |
+| **Verified** | Live: Tables tab renders, 0 console errors, KDS/live counts match REST ground truth; at 124 orders limit returns identical data (provably no behavior change). Commit 55c0cde, deployed hosting:admin. Ceiling: customers.js:95 + analytics-mobile.js:91 still one-shot full-history gets (on-demand, out of scope). Data note: stale billing session on table 01 (since 2026-07-04) is pre-existing test junk |
+
 
 ---
 

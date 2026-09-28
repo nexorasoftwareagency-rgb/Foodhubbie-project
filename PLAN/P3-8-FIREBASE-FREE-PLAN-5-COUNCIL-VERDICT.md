@@ -131,7 +131,7 @@ Blaze keeps the free allowances and removes every wall. At 100 restaurants that'
 | Can Spark run **5–10 restaurants**? | **NO** — dies at ~3 (connections) |
 | Can Spark run **100s of restaurants**? | **ABSOLUTELY NOT** — 10–30× over on every axis |
 | Should we enable **Blaze now**? | **YES** — free allowances stay, hard caps vanish; enable *before* onboarding restaurant #4, with budget alerts at $10/$50/$100 |
-| Must-fix code items (plan-independent) | ① externalize dish images out of RTDB — ❌ won't do (user: free plan, 2026-09-28) ② monthly `logs/` pruning — ✅ DONE (30d auto-prune, `ad541aa`, P3-9) ③ App Check on menu app — ❌ won't do (user: 2026-09-28 — DB-wide enforcement re-adds reCAPTCHA weight to admin + console setup) ④ paginate orders query |
+| Must-fix code items (plan-independent) | ① externalize dish images out of RTDB — ❌ won't do (user: free plan, 2026-09-28) ② monthly `logs/` pruning — ✅ DONE (30d auto-prune, `ad541aa`, P3-9) ③ App Check on menu app — ❌ won't do (user: 2026-09-28 — DB-wide enforcement re-adds reCAPTCHA weight to admin + console setup) ④ paginate orders query — ✅ DONE (tables listener bounded, orders already date-gated+paged, P3-10) |
 
 **One-sentence verdict:** Free plan is a demo-grade sandbox that fails at ~3 busy restaurants; the product is fully viable for 100s of restaurants on Blaze at ~$60–100/month — upgrade before scaling, and ship the image-externalization fix regardless.
 
