@@ -68,10 +68,10 @@ function _render() {
         const rows = Object.entries(idx.bySource);
         bb.innerHTML = rows.length ? rows.map(([src, v]) => `<tr>
             <td style="padding:6px 8px;font-weight:700;">${_label(src)}</td>
-            <td>${mode === 'commission_1pct' && src === 'webview_delivery' ? '1% of order' : _inr(rates[src] ?? rates.other)}</td>
-            <td>${v.orders}</td>
+            <td style="text-align:right;">${mode === 'commission_1pct' && src === 'webview_delivery' ? '1% of order' : _inr(rates[src] ?? rates.other)}</td>
+            <td style="text-align:right;">${v.orders}</td>
             <td style="text-align:right;padding-right:8px;font-weight:700;">${_inr(v.cost)}</td>
-        </tr>`).join('') : '<tr><td colspan="4" style="color:#94a3b8;padding:8px;">No orders yet this month</td></tr>';
+        </tr>`).join('') : '<tr><td colspan="4" style="color:#64748b;padding:8px;">No orders yet this month</td></tr>';
     }
 
     // --- promo token balance KPI ---
@@ -100,10 +100,10 @@ function _render() {
             return `<tr style="opacity:${excluded ? 0.55 : 1}">
                 <td style="padding:6px 8px;">#${o.orderId || id}${excluded ? ' <span style="color:#ef4444;">(excluded)</span>' : ''}</td>
                 <td><span style="background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;">${_label(src)}</span></td>
-                <td>${_inr(o.total)}</td>
+                <td style="text-align:right;">${_inr(o.total)}</td>
                 <td style="text-align:right;padding-right:8px;font-weight:700;">${fee === null ? '—' : _inr(fee)}</td>
             </tr>`;
-        }).join('') : '<tr><td colspan="4" style="color:#94a3b8;padding:8px;">No orders yet this month</td></tr>';
+        }).join('') : '<tr><td colspan="4" style="color:#64748b;padding:8px;">No orders yet this month</td></tr>';
     }
 }
 

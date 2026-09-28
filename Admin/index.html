@@ -338,9 +338,6 @@
 
 
 
-                </div>
-
-                
                 <div class="login-forgot-v4">
                     <button type="button" id="forgotPasswordBtn" class="forgot-password-btn" title="Reset your password via email">
                         <i data-lucide="key" class="icon-14"></i>
@@ -4903,7 +4900,7 @@
 
                 <h3 class="mob-card-title">Costs</h3>
 
-                <span id="costMonthLabel" style="margin-left:auto;font-size:12px;font-weight:600;color:#94a3b8;"></span>
+                <span id="costMonthLabel" style="margin-left:auto;font-size:12px;font-weight:600;color:#64748b;"></span>
 
             </div>
 
@@ -4985,13 +4982,13 @@
 
                 <thead>
 
-                    <tr style="text-align:left;color:#94a3b8;">
+                    <tr style="text-align:left;color:#64748b;">
 
                         <th style="padding:6px 8px;">Source</th>
 
-                        <th>Rate</th>
+                        <th style="text-align:right;">Rate</th>
 
-                        <th>Orders</th>
+                        <th style="text-align:right;">Orders</th>
 
                         <th style="text-align:right;padding-right:8px;">Cost</th>
 
@@ -4999,7 +4996,7 @@
 
                 </thead>
 
-                <tbody id="costBreakdownBody"><tr><td colspan="4" style="color:#94a3b8;padding:8px;">Loading…</td></tr></tbody>
+                <tbody id="costBreakdownBody"><tr><td colspan="4" style="color:#64748b;padding:8px;">Loading…</td></tr></tbody>
 
             </table>
 
@@ -5014,13 +5011,13 @@
 
                 <thead>
 
-                    <tr style="text-align:left;color:#94a3b8;">
+                    <tr style="text-align:left;color:#64748b;">
 
                         <th style="padding:6px 8px;">Order</th>
 
                         <th>Source</th>
 
-                        <th>Order total</th>
+                        <th style="text-align:right;">Order total</th>
 
                         <th style="text-align:right;padding-right:8px;">Cost</th>
 
@@ -5028,9 +5025,25 @@
 
                 </thead>
 
-                <tbody id="costFeedBody"><tr><td colspan="4" style="color:#94a3b8;padding:8px;">Loading…</td></tr></tbody>
+                <tbody id="costFeedBody"><tr><td colspan="4" style="color:#64748b;padding:8px;">Loading…</td></tr></tbody>
 
             </table>
+
+        </div>
+
+        <div class="mob-card mob-table-card" style="margin-top:12px;">
+
+            <h4 class="section-card-heading"><i data-lucide="headphones" class="icon-14"></i> Connect Supreme Admin</h4>
+
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+
+                <a href="tel:9724649971" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;background:rgba(59,130,246,.1);color:#1d4ed8;font-weight:700;font-size:14px;text-decoration:none;"><i data-lucide="phone" class="icon-14"></i> 9724649971</a>
+
+                <a href="https://wa.me/919724649971" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;background:rgba(34,197,94,.12);color:#15803d;font-weight:700;font-size:14px;text-decoration:none;"><i data-lucide="message-circle" class="icon-14"></i> WhatsApp</a>
+
+                <span style="font-size:12.5px;color:#64748b;">Billing, promo tokens, plan &amp; account support</span>
+
+            </div>
 
         </div>
 
@@ -5077,14 +5090,6 @@
                         <button type="button" class="btn-primary btn-small" data-action="openAddExpense" style="margin-right:8px;">
                             <i data-lucide="plus" class="icon-14"></i> Add Expense
                         </button>
-
-                        <button type="button" class="btn-secondary btn-small" data-action="openExpenseCategories" style="margin-right:8px;">
-                            <i data-lucide="folder-tree" class="icon-14"></i> Categories
-                        </button>
-
-                        <a href="manual.html#expenses" target="_blank" rel="noopener" class="btn-secondary btn-small" title="Expense Manual" style="margin-right:8px;">
-                            <i data-lucide="book-open" class="icon-14"></i> Manual
-                        </a>
 
                         <div class="mob-export-row" style="display:flex; gap:8px;">
 
@@ -5207,10 +5212,10 @@
                                 <thead>
                                     <tr>
                                         <th>Category</th>
-                                        <th class="mob-th_right">Amount</th>
-                                        <th class="mob_th_right">% of Total</th>
-                                        <th class="mob_th_right">Budget</th>
-                                        <th class="mob_th_center">Status</th>
+                                        <th class="mob-th-right">Amount</th>
+                                        <th class="mob-th-right">% of Total</th>
+                                        <th class="mob-th-right">Budget</th>
+                                        <th class="mob-th-center">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody id="expenseCategoryBreakdownBody"></tbody>
@@ -5227,9 +5232,9 @@
                                 <thead>
                                     <tr>
                                         <th>Outlet</th>
-                                        <th class="mob-th_right">Total</th>
-                                        <th class="mob_th_right">This Month</th>
-                                        <th class="mob_th_right">Last Month</th>
+                                        <th class="mob-th-right">Total</th>
+                                        <th class="mob-th-right">This Month</th>
+                                        <th class="mob-th-right">Last Month</th>
                                     </tr>
                                 </thead>
                                 <tbody id="expenseOutletTableBody"></tbody>
@@ -5276,18 +5281,6 @@
                             <option value="₹">₹</option>
                         </select>
                     </div>
-                    <div class="form-group-mini">
-                        <label class="form-label-small">Retention Policy (days)</label>
-                        <input type="number" id="expenseRetentionDays" class="form-input w-100" placeholder="90" min="30" max="365">
-                        <small class="text-muted-small">Days to keep soft-deleted expenses (default: 90)</small>
-                    </div>
-                    <div class="form-group-mini">
-                        <label class="form-label-small">Approval Workflow</label>
-                        <select id="expenseApprovalWorkflow" class="form-input w-100">
-                            <option value="single">Single Manager PIN</option>
-                            <option value="dual">Dual Manager PIN (future)</option>
-                        </select>
-                    </div>
                     <hr style="margin:16px 0; border-color:var(--glass-border);">
                     <div class="form-group-mini">
                         <label class="form-label-small">Initialize Default Categories</label>
@@ -5299,6 +5292,9 @@
                     <button type="button" class="btn-primary w-full mt-16 p-12 br-12 font-weight-700" data-action="saveExpenseSettings">
                         <i data-lucide="save" class="icon-16"></i> Save Settings
                     </button>
+                    <a href="manual.html#expenses" target="_blank" rel="noopener" class="btn-secondary w-full mt-8 p-12 br-12 font-weight-600" style="background:var(--glass-bg); border:1px solid var(--glass-border); text-align:center;">
+                        <i data-lucide="book-open" class="icon-16"></i> Expense Manual
+                    </a>
                 </div>
             </div> <!-- DISH MODAL -->
 
