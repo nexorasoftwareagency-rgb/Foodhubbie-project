@@ -320,6 +320,28 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 return;
             }
 
+            if (!isTest) {
+                // Prepaid promo tokens: stop when the balance is empty. Fail
+                // closed on the unreadable case too — a read error must not
+                // turn into free marketing sends. Recharge + re-issue to go on.
+                let tokenBalance;
+                try {
+                    const balSnap = await db.ref(resolvePath('billing/tokens/balance', OUTLET)).once('value');
+                    tokenBalance = Number(balSnap.val() || 0);
+                } catch (e) {
+                    console.warn(`[Promo] Balance read failed — pausing ${campaignId}:`, e.message);
+                    await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'balance-unreadable', currentIndex: i, totalSent: sent, totalFailed: failed });
+                    return;
+                }
+                // Positive-form check: a corrupt (NaN) balance must fail closed
+                // too — `NaN <= 0` is false and would let sends through.
+                if (!(tokenBalance > 0)) {
+                    console.warn(`[Promo] Promo token balance empty. Pausing ${campaignId}.`);
+                    await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'no-tokens', currentIndex: i, totalSent: sent, totalFailed: failed });
+                    return;
+                }
+            }
+
             const phone = list[i];
             const jid = formatJid(phone);
             if (!jid) { await logPromoSkip(campaignId, phone, 'invalid-jid', OUTLET, db); failed++; continue; }
@@ -372,6 +394,15 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 if (!isTest) {
                     dailySentToday++;
                     try { await db.ref(resolvePath(`bot/promotions/dailyCount/${todayStr}`, OUTLET)).set(dailySentToday); } catch (_) {}
+                    // Charge one prepaid promo token for this delivered message
+                    // (same event the Costs tab bills on: totalSent). Transaction
+                    // so a concurrent write can't lose the decrement; clamped so
+                    // a race can't drive the balance negative.
+                    try {
+                        await db.ref(resolvePath('billing/tokens/balance', OUTLET)).transaction(v => Math.max(Number(v || 0) - 1, 0));
+                    } catch (e) {
+                        console.warn('[Promo] Token decrement failed (message already sent):', e.message);
+                    }
                 }
                 if (extraImage) {
                     try {

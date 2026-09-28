@@ -21,6 +21,10 @@ let collapsedSections = new Set(); // collapsible section ids the user has close
 let pairModalOpen = false; // live QR modal state
 let pairUnsubscribe = null; // stop the QR listener when the modal closes
 let currentTab = 'overview'; // 'overview' | 'analytics' — in-page tab rail state
+// Draft for the Billing card inputs (token qty/price, setup status) — same
+// idea as detailEdit: survives the live re-render ticks so a half-typed
+// grant form isn't wiped by an incoming botStatus/usage update.
+let billingDraft = null; // { qty, priceRs, setup }
 
 function reRenderProfile() {
   const biz = lastRaw?.[currentBid];
@@ -116,6 +120,7 @@ export function render(bid, oid, tab) {
   currentTab = tab === 'analytics' ? 'analytics' : 'overview';
   adminEdit = null;
   detailEdit = null;
+  billingDraft = null; // scoped to this navigation — must not leak onto another outlet's card
   quotaFetchedFor = null;
   quotaHtml = null;
   collapsedSections.clear();
@@ -235,6 +240,8 @@ function renderProfile(bid, oid, biz, outlet) {
         <div>Created: ${formatDate(biz.createdAt || outlet.createdAt)}</div>
       </div>
     </div>
+
+    ${renderBillingCard(outlet, readOnly)}
 
     <div class="glass-card" style="font-size:13px;margin-bottom:16px;border:1px solid ${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--glass-border,#2a2f3a)'}">
       <strong style="display:block;margin-bottom:6px;color:${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--status-offline,#f87171)'}">
@@ -379,6 +386,14 @@ function renderProfile(bid, oid, biz, outlet) {
   `;
   refreshIcons(document.getElementById('profile-content'));
 
+  // Keep the Billing card inputs' values in module state across live
+  // re-renders (render restores them via value= below).
+  document.querySelectorAll('[data-billing-draft]').forEach((el) => {
+    el.addEventListener('input', () => {
+      billingDraft = { ...(billingDraft || {}), [el.dataset.billingDraft]: el.value };
+    });
+  });
+
   // Mount the WhatsApp number wizard (plan G4) after the DOM for the section
   // exists. State lives in the module so the 30s re-render keeps any active
   // wizard step; we just hand it the latest connected state.
@@ -394,6 +409,69 @@ function renderProfile(bid, oid, biz, outlet) {
   }).catch((err) => console.error('whatsapp-manage mount failed', err));
 
   if (connected) loadWaTemplates(bid, oid);
+}
+
+// ---- Billing & promo tokens (Supreme-side management) ---------------------
+// Reads/writes businesses/{bid}/outlets/{oid}/billing — the same node the
+// Admin Costs tab displays and tools/seed-billing-defaults.cjs seeds.
+// Grants go through a transaction on tokens/balance so concurrent grants
+// can't lose an increment, then record the pack for the history list.
+function renderBillingCard(outlet, readOnly) {
+  const b = outlet.billing || null;
+  const collapsed = collapsedSections.has('billing-body');
+  const ro = readOnly ? 'disabled' : '';
+  const roTitle = readOnly ? 'View-only account' : '';
+  const header = `
+    <div class="collapsible-header${collapsed ? ' collapsed' : ''}" data-action="toggle-section" data-target="billing-body" role="button" tabindex="0" aria-expanded="${!collapsed}" aria-controls="billing-body" style="margin-bottom:10px">
+      <strong style="display:block"><svg data-lucide="wallet" style="width:14px;height:14px;vertical-align:-2px"></svg> Billing &amp; promo tokens</strong>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:12px;color:var(--text-secondary)">${b ? `${b.tokens?.balance ?? 0} tokens` : 'Not seeded'}</span>
+        <svg data-lucide="chevron-down" class="chevron-icon" style="width:14px;height:14px;color:var(--text-tertiary)"></svg>
+      </div>
+    </div>`;
+
+  if (!b) {
+    return `<div class="glass-card" style="font-size:13px;margin-bottom:16px">${header}
+      <div class="collapsible-body${collapsed ? ' collapsed' : ''}" id="billing-body" style="color:var(--text-secondary)">Billing not set up yet — run <span class="mono">tools/seed-billing-defaults.cjs</span>.</div>
+    </div>`;
+  }
+
+  const mode = b.mode === 'commission_1pct' ? 'commission_1pct' : 'per_order';
+  const rates = b.rates || {};
+  const bal = b.tokens?.balance ?? 0;
+  const setupStatus = billingDraft?.setup ?? b.setup?.status ?? 'refundable';
+  const w = b.tokenPacks?.welcome;
+
+  return `<div class="glass-card" style="font-size:13px;margin-bottom:16px">
+    ${header}
+    <div class="collapsible-body${collapsed ? ' collapsed' : ''}" id="billing-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">
+        <div class="detail-cell"><div class="detail-label">Pricing mode</div><div class="detail-value">${mode === 'commission_1pct' ? '1% of sales' : 'Per order'}</div></div>
+        <div class="detail-cell"><div class="detail-label">Setup fee</div><div class="detail-value">₹${b.setup?.amount ?? 500} · ${escapeHtml(String(b.setup?.status || '—'))}</div></div>
+        <div class="detail-cell"><div class="detail-label">Promo token balance</div><div class="detail-value mono">${bal}</div></div>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+        Rates: QR ₹${rates.QR ?? 2} · POS ₹${rates.POS ?? 2} · Delivery ₹${rates.webview_delivery ?? 3} · WhatsApp ₹${rates.WA ?? 3} · other ₹${rates.other ?? 2} · promo ₹${rates.promo ?? 0.86}/token${w ? ` · welcome pack: ${w.qty} free` : ''}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-ghost btn-sm" data-action="billing-toggle-mode" ${ro} title="${mode === 'per_order' ? 'Charge WhatsApp delivery orders at 1% of order value instead of the flat rate' : 'Go back to flat per-order rates'}">
+          ${mode === 'per_order' ? 'Switch to 1% of sales' : 'Switch to per-order'}
+        </button>
+        <select id="billingSetupStatus" class="text-input" style="width:auto" data-billing-draft="setup" ${ro}>
+          ${['refundable', 'paid', 'adjusted', 'refunded'].map((s) => `<option value="${s}" ${setupStatus === s ? 'selected' : ''}>Setup: ${s}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" data-action="billing-save-setup" ${ro} title="${roTitle}">Save setup</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <input id="billingGrantQty" type="number" min="1" max="10000" class="text-input" style="width:110px" placeholder="Tokens" value="${escapeHtml(billingDraft?.qty ?? '')}" data-billing-draft="qty" ${ro}>
+        <input id="billingGrantPrice" type="number" min="0" step="0.01" class="text-input" style="width:130px" placeholder="₹ received (0 = free)" value="${escapeHtml(billingDraft?.priceRs ?? '')}" data-billing-draft="priceRs" ${ro}>
+        <button class="btn btn-primary btn-sm" data-action="billing-grant-tokens" ${ro} title="${roTitle}">
+          <svg data-lucide="gift" style="width:13px;height:13px"></svg> Grant tokens
+        </button>
+        <span style="font-size:11.5px;color:var(--text-tertiary)">List value ₹${rates.promo ?? 0.86} each — charged to campaigns on send.</span>
+      </div>
+    </div>
+  </div>`;
 }
 
 // ---- Business & store details (read + inline edit) ----------------------
@@ -1297,4 +1375,85 @@ registerAction('scan-baileys', async () => {
 registerAction('reconnect-whatsapp', async () => {
   const { launchWhatsAppSignup } = await import('/js/features/whatsapp-linking.js');
   launchWhatsAppSignup(currentBid, currentOid, {});
+});
+
+// ---- Billing & promo tokens ----------------------------------------------
+registerAction('billing-toggle-mode', async () => {
+  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
+  const b = lastRaw?.[currentBid]?.outlets?.[currentOid]?.billing;
+  if (!b) return showToast('Billing not seeded — run tools/seed-billing-defaults.cjs.', 'error');
+  const next = b.mode === 'commission_1pct' ? 'per_order' : 'commission_1pct';
+  const ok = await showConfirm({
+    title: next === 'commission_1pct' ? 'Switch to 1% of sales?' : 'Switch to per-order billing?',
+    body: next === 'commission_1pct'
+      ? `WhatsApp delivery orders are billed at 1% of order value instead of the flat ₹${b.rates?.WA ?? 3}. QR, POS and other sources stay per-order.`
+      : `Every source goes back to flat per-order rates (QR ₹${b.rates?.QR ?? 2} · POS ₹${b.rates?.POS ?? 2}, WhatsApp delivery ₹${b.rates?.WA ?? 3}).`,
+    confirmLabel: 'Switch mode',
+  });
+  if (!ok) return;
+  try {
+    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}/billing`).update({ mode: next });
+    showToast(`Billing mode → ${next === 'commission_1pct' ? '1% of sales' : 'per order'}.`, 'success');
+  } catch (err) {
+    console.error('billing mode switch failed', err);
+    showToast('Mode switch failed — check the console.', 'error');
+  }
+});
+
+registerAction('billing-save-setup', async () => {
+  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
+  const status = document.getElementById('billingSetupStatus')?.value;
+  if (!status) return;
+  try {
+    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}/billing/setup`).update({ status });
+    if (billingDraft) billingDraft.setup = status;
+    showToast('Setup status saved.', 'success');
+  } catch (err) {
+    console.error('billing setup save failed', err);
+    showToast('Setup save failed — check the console.', 'error');
+  }
+});
+
+registerAction('billing-grant-tokens', async () => {
+  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
+  const qty = parseInt(document.getElementById('billingGrantQty')?.value, 10);
+  const priceRs = parseFloat(document.getElementById('billingGrantPrice')?.value || '0');
+  if (!Number.isFinite(qty) || qty < 1 || qty > 10000) return showToast('Enter a token quantity between 1 and 10000.', 'error');
+  if (priceRs < 0) return showToast('Price cannot be negative.', 'error');
+  const b = lastRaw?.[currentBid]?.outlets?.[currentOid]?.billing;
+  const listValue = (qty * (b?.rates?.promo ?? 0.86)).toFixed(2);
+  const ok = await showConfirm({
+    title: `Grant ${qty} promo token${qty === 1 ? '' : 's'}?`,
+    body: `Adds ${qty} tokens to this outlet's prepaid balance (list value ₹${listValue}).${priceRs > 0 ? ` Sold for ₹${priceRs.toFixed(2)}.` : ' Recorded as a free grant.'}`,
+    confirmLabel: 'Grant tokens',
+  });
+  if (!ok) return;
+  try {
+    const user = firebase.auth().currentUser;
+    const base = `businesses/${currentBid}/outlets/${currentOid}/billing`;
+    // History push first, balance transaction last. If anything fails in
+    // between, only an orphan history row remains (cosmetic) — never a
+    // credited balance with no record, which the "Grant failed" toast could
+    // then invite a retry that double-credits. The transaction still keeps
+    // simultaneous grants from overwriting each other's increment.
+    await firebase.database().ref(`${base}/tokenPacks`).push({
+      qty,
+      priceRs: Number.isFinite(priceRs) ? priceRs : 0,
+      grantedAt: firebase.database.ServerValue.TIMESTAMP,
+      grantedBy: user?.uid || 'unknown',
+    });
+    await firebase.database().ref(`${base}/tokens/balance`).transaction((cur) => (cur || 0) + qty);
+    billingDraft = null;
+    // Clear the inputs as well — a live tick during the awaits above
+    // re-rendered them from the draft, so waiting for the next tick could
+    // leave the old qty visible and invite a double-grant.
+    const qtyEl = document.getElementById('billingGrantQty');
+    const priceEl = document.getElementById('billingGrantPrice');
+    if (qtyEl) qtyEl.value = '';
+    if (priceEl) priceEl.value = '';
+    showToast(`${qty} promo tokens granted.`, 'success');
+  } catch (err) {
+    console.error('grant tokens failed', err);
+    showToast('Grant failed — check the console.', 'error');
+  }
 });

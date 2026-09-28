@@ -344,6 +344,7 @@ async function _renderActivePane() {
                 <div>
                     <strong>${escapeHtml(c.id)}</strong>
                     <span class="promo-badge-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span>
+                    ${c.status === 'paused' && c.pauseReason ? `<span class="text-muted-small" title="${escapeHtml(c.pauseReason)}">${escapeHtml(c.pauseReason)}</span>` : ''}
                     ${c.runAt ? `<span class="text-muted-small">scheduled ${escapeHtml(formatDate(c.runAt))}</span>` : ''}
                     ${c.menuText ? `<span class="text-muted-small" title="Has menu footer">• 🍴 menu</span>` : ''}
                 </div>
