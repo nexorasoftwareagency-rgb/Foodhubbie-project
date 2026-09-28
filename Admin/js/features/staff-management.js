@@ -7,6 +7,16 @@ import { loadLucide, getRoles, roleLevel, TAB_DEFS, DEFAULT_ROLES } from '../ui.
 // --- STATE ---
 let _staffListCache = [];
 let _staffUnsub = null;
+let _staffTableState = 'idle'; // 'idle' | 'loading' | 'error' | 'ready'
+
+export function setStaffTableState(state) {
+    _staffTableState = state;
+    renderStaffTable();
+}
+
+// Global retry handler for error state
+window.staffManagementRetry = () => loadStaffList();
+
 const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcons({ root }));
 
 // --- ROLE HIERARCHY ---
@@ -24,6 +34,7 @@ function canViewStaffManagement() {
 
 export async function loadStaffList() {
     console.log('[StaffManagement] Loading staff list...');
+    setStaffTableState('loading');
     try {
         const snap = await get(Outlet.ref('staff'));
         const staff = [];
@@ -31,10 +42,12 @@ export async function loadStaffList() {
             snap.forEach(child => staff.push({ uid: child.key, ...child.val() }));
         }
         _staffListCache = staff.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+        setStaffTableState('ready');
         return _staffListCache;
     } catch (e) {
         console.error('[StaffManagement] Load failed:', e);
         showToast('Failed to load staff list', 'error');
+        setStaffTableState('error');
         return [];
     }
 }
@@ -161,6 +174,10 @@ export async function updateStaff(uid, updates) {
         const ceiling = Math.max(0, Math.min(100, parseInt(updates.discountCeilingPct) || 0));
         updates.discountCeilingPct = ceiling;
     }
+    // Auto-zero ceiling when role changed to waiter (waiters cannot apply manual discounts)
+    if (updates.role === 'waiter') {
+        updates.discountCeilingPct = 0;
+    }
     
     await update(Outlet.staff(uid), updates);
     // Keep the login node's role in sync — dashboard gating and rules read admins/{uid}
@@ -184,8 +201,10 @@ export async function resetCounterPin(uid) {
     if (!oldSnap.exists()) throw new Error('Staff not found');
     const oldHash = oldSnap.val().counterPinHash;
     
-    // Generate 4-digit temp PIN
-    const tempPin = String(Math.floor(1000 + Math.random() * 9000));
+    // Generate 4-digit temp PIN (crypto-secure)
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    const tempPin = String(1000 + (arr[0] % 9000));
     const hash = await hashPin(tempPin);
     if (!hash) return showToast('PIN hashing unavailable — app must run over HTTPS.', 'error');
     
@@ -266,6 +285,41 @@ export function renderStaffTable() {
     if (!tbody) return;
     
     const canManage = canViewStaffManagement();
+    
+    // Loading state
+    if (_staffTableState === 'loading') {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center p-30">
+                    <div class="flex-center flex-gap-12">
+                        <i data-lucide="loader" class="icon-20 spin-icon text-primary"></i>
+                        <span class="text-muted">Loading staff...</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+        refreshIcons(tbody);
+        return;
+    }
+    
+    // Error state
+    if (_staffTableState === 'error') {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center p-30">
+                    <div class="flex-col flex-center flex-gap-8">
+                        <i data-lucide="alert-circle" class="icon-24 text-error"></i>
+                        <span class="text-error">Failed to load staff list</span>
+                        <button class="btn-secondary btn-small" onclick="window.staffManagementRetry?.()">
+                            <i data-lucide="refresh-cw" class="icon-14"></i> Retry
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        refreshIcons(tbody);
+        return;
+    }
     
     if (_staffListCache.length === 0) {
         tbody.innerHTML = `
@@ -560,21 +614,35 @@ async function deleteRole() {
     const key = _roleEditKey;
     if (!key || DEFAULT_ROLES[key]) return closeRoleModal();
     const roles = { ...getRoles() };
-    const inUse = _staffListCache.filter(s => s.role === key).length;
+    const affectedStaff = _staffListCache.filter(s => s.role === key);
+    const inUse = affectedStaff.length;
     const ok = await showConfirm(
         inUse
-            ? `"${roles[key]?.name || key}" is assigned to ${inUse} staff member(s). They will fall back to full access. Delete anyway?`
+            ? `"${roles[key]?.name || key}" is assigned to ${inUse} staff member(s). They will be reassigned to "Cashier". Delete anyway?`
             : `Delete role "${roles[key]?.name || key}"?`,
         'Delete Role'
     );
     if (!ok) return;
+    
+    // Reassign affected staff to 'cashier' before deleting role
+    if (inUse > 0) {
+        for (const staff of affectedStaff) {
+            await update(Outlet.staff(staff.uid), { role: 'cashier' });
+            // Update cache
+            const idx = _staffListCache.findIndex(s => s.uid === staff.uid);
+            if (idx !== -1) _staffListCache[idx].role = 'cashier';
+            await logStaffChange('staff_update', staff.uid, { role: key }, { role: 'cashier' }, `Reassigned due to role deletion: ${key}`);
+        }
+    }
+    
     delete roles[key];
     try {
         await set(Outlet.ref('settings/roles'), roles);
         state.roles = roles;
         renderRolesList();
+        renderStaffTable();
         closeRoleModal();
-        showToast('Role deleted', 'success');
+        showToast('Role deleted, affected staff reassigned to Cashier', 'success');
     } catch (e) {
         showToast(e.message || 'Failed to delete role', 'error');
     }
