@@ -12,11 +12,11 @@ admin.initializeApp({
 const db = admin.database();
 const now = Date.now();
 
-// Mirror of Admin/js/features/cost-math.js DEFAULT_RATES + website pricing
+// Mirror of shared/cost-math.js DEFAULT_RATES + website pricing
 const FREE_TOKENS = 15;
 const DEFAULT_BILLING = {
   mode: 'per_order',
-  rates: { QR: 2, POS: 2, webview_delivery: 3, WA: 3, other: 2, promo: 0.86, commission1pct: 0.01 },
+  rates: { QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2, promo: 0.86, commission1pct: 0.01 },
   setup: { amount: 500, status: 'refundable', date: new Date(now).toISOString() },
   tokens: { balance: FREE_TOKENS, updatedAt: now },
   tokenPacks: { welcome: { qty: FREE_TOKENS, priceRs: 0, note: 'Free welcome pack', grantedAt: now, grantedBy: 'system' } },
@@ -29,7 +29,15 @@ async function main() {
   for (const [bid, biz] of Object.entries(bizSnap.val())) {
     for (const oid of Object.keys(biz.outlets || {})) {
       const cur = await db.ref(`businesses/${bid}/outlets/${oid}/billing`).get();
-      if (cur.exists()) { console.log(`skip  ${bid}/${oid} (billing exists)`); skipped++; continue; }
+      if (cur.exists()) {
+        // Rate migration: POS counter is ₹1/order (was ₹2) — patch existing billing only
+        const pos = cur.val()?.rates?.POS;
+        if (pos != null && pos !== 1) {
+          await db.ref(`businesses/${bid}/outlets/${oid}/billing/rates/POS`).set(1);
+          console.log(`PATCH ${bid}/${oid} rates/POS ${pos} → 1`);
+        }
+        console.log(`skip  ${bid}/${oid} (billing exists)`); skipped++; continue;
+      }
       await db.ref(`businesses/${bid}/outlets/${oid}/billing`).set(DEFAULT_BILLING);
       console.log(`SEEDED ${bid}/${oid} — billing defaults + ${FREE_TOKENS} free promo tokens`);
       seeded++;
