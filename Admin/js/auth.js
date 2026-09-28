@@ -77,9 +77,9 @@ export function initAuth() {
         diagBtn.id = 'diagnosticBtn';
         diagBtn.type = 'button';
         diagBtn.innerText = '🔍 Run Diagnostics';
-        diagBtn.style.cssText = 'margin-top: 20px; background: rgba(255,255,255,0.05); color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 12px; cursor: pointer; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.3s;';
-        diagBtn.onmouseover = () => diagBtn.style.background = 'rgba(255,255,255,0.1)';
-        diagBtn.onmouseout = () => diagBtn.style.background = 'rgba(255,255,255,0.05)';
+        diagBtn.style.cssText = 'margin-top: 20px; background: rgba(15,23,42,0.04); color: #64748b; border: 1px solid rgba(15,23,42,0.12); padding: 10px 20px; border-radius: 12px; cursor: pointer; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.3s;';
+        diagBtn.onmouseover = () => diagBtn.style.background = 'rgba(15,23,42,0.08)';
+        diagBtn.onmouseout = () => diagBtn.style.background = 'rgba(15,23,42,0.04)';
         diagBtn.onclick = () => {
             if (window.diagnoseDatabase) {
                 window.diagnoseDatabase();
@@ -96,7 +96,7 @@ export function initAuth() {
             state.adminData = null;
             const overlay = document.getElementById("authOverlay");
             const layout = document.querySelector(".layout");
-            const loginBtn = document.querySelector("#loginForm button");
+            const loginBtn = document.getElementById("loginBtn");
             
             if (overlay) overlay.classList.remove('hidden');
             if (layout) layout.classList.add('hidden');
