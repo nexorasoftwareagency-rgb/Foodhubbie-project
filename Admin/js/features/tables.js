@@ -27,7 +27,7 @@
  * ============================================================================
  */
 
-import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange } from '../firebase.js';
+import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange, query, orderByChild, limitToLast } from '../firebase.js';
 import { state } from '../state.js';
 import { showToast, showConfirm, showDeleteConfirm } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
@@ -2704,7 +2704,11 @@ function _attachListeners() {
     }
     if (!_ordersListenerAttached) {
         _ordersListenerAttached = true;
-        _ordersListener = onValue(_ordersRef(), (snap) => {
+        // ponytail: was an unbounded onValue — re-downloaded the ENTIRE orders
+        // history on every order write (P3-8 #4). 500 recent orders covers open
+        // sessions (hours) + live KDS even at 300+ orders/day; raise if a
+        // session can outlive the window.
+        _ordersListener = onValue(query(_ordersRef(), orderByChild('createdAt'), limitToLast(500)), (snap) => {
             _orders = snap.val() || {};
             _syncCustomersFromOrders(_orders);
             _renderAll();
