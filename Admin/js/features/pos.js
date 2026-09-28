@@ -1019,7 +1019,9 @@ export async function submitWalkinSale() {
             createdAt: new Date().toISOString(),
             outlet: Outlet.current,
             assignedRider: "",
-            createdBy: auth.currentUser ? auth.currentUser.email : 'admin'
+            createdBy: auth.currentUser ? auth.currentUser.email : 'admin',
+            // ponytail: uid-only attribution; join staff/{uid} for name when a UI needs it
+            counterStaffUid: getCounterStaffUid()
         };
 
         // 1. Save Order
