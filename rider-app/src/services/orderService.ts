@@ -21,6 +21,7 @@ import {
   waitForServerTimeOffset,
 } from "@/lib/firebase";
 import { dbPaths, PROXIMITY, OTP_LIMITS, type OutletId } from "@/lib/constants";
+import { applyDeliveryStat } from "@/lib/deliveryStats";
 import { logRiderError } from "@/services/auditService";
 import { getDistanceKm, isGhostOrder, formatOrderId } from "@/lib/utils";
 import { whatsappService } from "@/services/whatsappService";
@@ -574,19 +575,12 @@ export async function completeDelivery(params: {
 
   // Per-order idempotency flag inside the stats node: a retry after a partial
   // failure (stats committed, order update didn't) can never double-count.
+  // Flags carry timestamps and are pruned after FLAG_TTL_MS so the node stays bounded.
   const flagKey = orderId.replace(/[.#$/[\]]/g, "");
   const riderStatsPath = dbPaths.riderStats(riderId);
-  const result = await runTransaction(ref(db, riderStatsPath), (current) => {
-    if (current?.deliveredOrders?.[flagKey]) return current; // already counted
-    const deliveredOrders = { ...(current?.deliveredOrders || {}), [flagKey]: true };
-    if (!current) return { totalOrders: 1, totalEarnings: deliveryFee, deliveredOrders };
-    return {
-      ...current,
-      totalOrders: (current.totalOrders || 0) + 1,
-      totalEarnings: (current.totalEarnings || 0) + deliveryFee,
-      deliveredOrders,
-    };
-  });
+  const result = await runTransaction(ref(db, riderStatsPath), (current) =>
+    applyDeliveryStat(current, flagKey, deliveryFee, Date.now())
+  );
   if (!result.committed) throw new Error("Failed to update rider earnings");
 
   const singleOrderPath = dbPaths.singleOrder(outlet, orderId);
