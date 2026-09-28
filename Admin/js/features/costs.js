@@ -23,6 +23,25 @@ let _billing = null;      // null = not seeded yet, false = read denied
 let _campaigns = null;
 let _lastIndex = 0;
 let _renderTimer = null;
+let _subtabsWired = false;
+
+function _wireSubtabs() {
+    if (_subtabsWired) return;
+    _subtabsWired = true;
+    document.getElementById('tab-costs')?.addEventListener('click', e => {
+        const b = e.target.closest('[data-cost-tab]');
+        if (!b) return;
+        document.querySelectorAll('#tab-costs .cost-subtab').forEach(x => x.classList.toggle('active', x === b));
+        document.querySelectorAll('#tab-costs [data-cost-section]').forEach(el => {
+            el.style.display = el.dataset.costSection === b.dataset.costTab ? '' : 'none';
+        });
+    });
+    // initial paint: only the active sub-tab's section shows
+    const active = document.querySelector('#tab-costs .cost-subtab.active');
+    document.querySelectorAll('#tab-costs [data-cost-section]').forEach(el => {
+        el.style.display = active && el.dataset.costSection === active.dataset.costTab ? '' : 'none';
+    });
+}
 
 const _inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const _monthPrefix = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-`; };
@@ -109,6 +128,7 @@ function _render() {
 
 export function loadCosts() {
     cleanupCosts();
+    _wireSubtabs();
     _orders = {}; _billing = null; _campaigns = null; _lastIndex = 0;
 
     const q = query(Outlet.ref('orders'), orderByChild('createdAt'), startAt(_monthPrefix()));

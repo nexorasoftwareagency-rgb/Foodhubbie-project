@@ -4894,6 +4894,13 @@
 
     <div id="tab-costs" class="tab-content hidden">
 
+        <div class="cost-subtabs">
+            <button class="cost-subtab active" data-cost-tab="overview">Overview</button>
+            <button class="cost-subtab" data-cost-tab="breakdown">Breakdown</button>
+            <button class="cost-subtab" data-cost-tab="feed">Feed</button>
+            <button class="cost-subtab" data-cost-tab="connect">Connect</button>
+        </div>
+
         <div class="mob-card mob-table-card" style="margin:0;">
 
             <div class="mob-section-head-row">
@@ -4906,7 +4913,7 @@
 
         </div>
 
-        <div class="mob-kpi-grid" style="margin-top:12px;">
+        <div class="mob-kpi-grid" style="margin-top:12px;" data-cost-section="overview">
 
             <div class="mob-kpi-card" data-accent="revenue">
 
@@ -4974,7 +4981,7 @@
 
         </div>
 
-        <div class="mob-card mob-table-card" style="margin-top:12px;">
+        <div class="mob-card mob-table-card" style="margin-top:12px;" data-cost-section="breakdown">
 
             <h4 class="section-card-heading"><i data-lucide="layers" class="icon-14"></i> Cost by order source</h4>
 
@@ -5003,7 +5010,7 @@
         </div>
 
 
-        <div class="mob-card mob-table-card" style="margin-top:12px;">
+        <div class="mob-card mob-table-card" style="margin-top:12px;" data-cost-section="feed">
 
             <h4 class="section-card-heading"><i data-lucide="list" class="icon-14"></i> Recent orders — live cost feed</h4>
 
@@ -5031,7 +5038,7 @@
 
         </div>
 
-        <div class="mob-card mob-table-card" style="margin-top:12px;">
+        <div class="mob-card mob-table-card" style="margin-top:12px;" data-cost-section="connect">
 
             <h4 class="section-card-heading"><i data-lucide="headphones" class="icon-14"></i> Connect Supreme Admin</h4>
 
