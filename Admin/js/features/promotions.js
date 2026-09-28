@@ -478,6 +478,27 @@ async function _launchCampaign() {
     if (!template) { showToast('Please write a message first', 'warning'); return; }
     const recipients = await _buildRecipients();
     if (recipients.length === 0) { showToast('No eligible recipients found', 'warning'); return; }
+
+    // Pre-flight promo token check — hard block if insufficient
+    try {
+        const balSnap = await get(_ref('billing/tokens/balance'));
+        const tokenBalance = balSnap.exists() ? Number(balSnap.val() || 0) : 0;
+        const needed = recipients.length;
+        const estimatedCost = (needed * 0.86).toFixed(2);
+        if (tokenBalance < needed) {
+            const shortfall = needed - tokenBalance;
+            const msg = `Insufficient promo tokens.\n\nRequired: ${needed} tokens (est. ₹${estimatedCost})\nAvailable: ${tokenBalance} tokens\nShortfall: ${shortfall} tokens\n\nPromo tokens are managed by Supreme Admin. Please contact Supreme Admin to grant more tokens before launching this campaign.`;
+            await showConfirm(msg, 'Cannot launch — token balance too low');
+            showToast('Campaign blocked: insufficient promo tokens', 'error', 6000);
+            return;
+        }
+        // Show estimated cost in confirm
+        const costInfo = `Estimated promo cost: ${needed} tokens × ₹0.86 = ₹${estimatedCost} (balance: ${tokenBalance} tokens)`;
+    } catch (e) {
+        console.warn('[Promo] Token balance check failed:', e?.message || e);
+        // Fail open on read error — bot will enforce per-send
+    }
+
     if (!_promoEnabledLocal) {
         const ok = await showConfirm('Promotional sending is currently OFF (dashboard toggle). Enable it and continue?', 'Sending disabled');
         if (!ok) return;
@@ -518,8 +539,10 @@ async function _launchCampaign() {
     };
     if (mode !== 'schedule') campaignDoc.startedAt = Date.now();
 
+    const needed = recipients.length;
+    const costInfo = `Estimated promo cost: ${needed} tokens × ₹0.86 = ₹${(needed * 0.86).toFixed(2)}`;
     const confirm = await showConfirm(
-        `Send to ${recipients.length} recipients${mode === 'schedule' ? ` at ${formatDate(runAt)}` : ' now'}${attachMenu && menuText ? ' (+ menu footer)' : ''}?`,
+        `Send to ${recipients.length} recipients${mode === 'schedule' ? ` at ${formatDate(runAt)}` : ' now'}${attachMenu && menuText ? ' (+ menu footer)' : ''}?\n\n${costInfo}`,
         'Confirm campaign'
     );
     if (!confirm) return;

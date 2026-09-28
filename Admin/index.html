@@ -5007,6 +5007,9 @@
 
             </table>
 
+            <!-- Billing configuration breakdown (read-only, mirrors Supreme Admin) -->
+            <div id="costBillingBreakdown" style="margin-top:16px;"></div>
+
         </div>
 
 
@@ -5182,10 +5185,74 @@
                 </div>
             </div>
 
-            <!-- CATEGORIES SUB-TAB -->
+            <!-- CATEGORIES SUB-TAB (list ⇄ in-page form flow) -->
             <div id="expense-subtab-categories" class="expense-subtab-content hidden">
                 <div id="expenseCategoriesContainer">
-                    <!-- Rendered by openExpenseCategoryModal content -->
+                    <div id="ecatListView">
+                        <div class="ecat-toolbar">
+                            <input type="search" id="ecatSearch" placeholder="Search categories..." class="form-input" aria-label="Search categories">
+                            <span class="ecat-count" id="ecatCount" aria-live="polite"></span>
+                            <button type="button" class="btn-primary btn-small" data-action="openExpenseCategories">
+                                <i data-lucide="plus" class="icon-14"></i> Add Category
+                            </button>
+                        </div>
+                        <div id="expenseCategoryListInline" class="ecat-grid"></div>
+                        <div id="ecatEmpty" class="ecat-empty hidden">
+                            <i data-lucide="folder-tree" class="icon-18"></i>
+                            <p id="ecatEmptyText">No categories yet</p>
+                            <button type="button" class="btn-primary btn-small" data-action="openExpenseCategories">
+                                <i data-lucide="plus" class="icon-14"></i> Add your first category
+                            </button>
+                        </div>
+                    </div>
+                    <div id="ecatFormView" class="hidden">
+                        <div class="ecat-form-head">
+                            <button type="button" class="btn-secondary btn-small" data-action="closeExpenseCategoryForm">
+                                <i data-lucide="arrow-left" class="icon-14"></i> Back
+                            </button>
+                            <h4 class="section-card-heading mb-0" id="expCatFormHeading">Add Category</h4>
+                        </div>
+                        <div class="mob-card ecat-form-card">
+                            <div class="ecat-form-grid">
+                                <div class="form-group-mini">
+                                    <label class="form-label-small" for="expCatName">Category Name <span class="required-star">*</span></label>
+                                    <input type="text" id="expCatName" placeholder="e.g. Utilities" class="form-input w-100">
+                                </div>
+                                <div class="form-group-mini">
+                                    <label class="form-label-small" for="expCatColor">Color</label>
+                                    <input type="color" id="expCatColor" class="form-input ecat-color-input" value="#E84908">
+                                </div>
+                                <div class="form-group-mini">
+                                    <label class="form-label-small" for="expCatIcon">Icon</label>
+                                    <select id="expCatIcon" class="form-input w-100">
+                                        <option value="zap">⚡ Zap</option>
+                                        <option value="home">🏠 Home</option>
+                                        <option value="truck">🚚 Truck</option>
+                                        <option value="wrench">🔧 Wrench</option>
+                                        <option value="credit-card">💳 Credit Card</option>
+                                        <option value="utensils">🍴 Utensils</option>
+                                        <option value="wifi">📶 WiFi</option>
+                                        <option value="megaphone">📣 Megaphone</option>
+                                        <option value="dollar-sign">💰 Dollar Sign</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-mini">
+                                    <label class="form-label-small" for="expCatBudget">Monthly Budget (Rs.)</label>
+                                    <input type="number" id="expCatBudget" class="form-input w-100" placeholder="Optional" min="0" step="100">
+                                    <span class="ecat-hint">Leave empty for no budget tracking</span>
+                                </div>
+                                <div class="form-group-mini">
+                                    <label class="form-label-small" for="expCatAlert">Alert at %</label>
+                                    <input type="number" id="expCatAlert" class="form-input w-100" value="80" min="1" max="100">
+                                    <span class="ecat-hint">Warn when spending crosses this % of the budget</span>
+                                </div>
+                            </div>
+                            <div class="ecat-form-actions">
+                                <button type="button" class="btn-secondary" data-action="closeExpenseCategoryForm">Cancel</button>
+                                <button type="button" id="btnAddExpenseCategory" class="btn-primary">Add Category</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -7102,130 +7169,6 @@
 
 
     <!-- EXPENSE CATEGORY MODAL -->
-
-    <div id="expenseCategoryModal" class="modal" role="dialog" aria-modal="true" aria-label="Manage Expense Categories">
-
-        <div class="modal-content glass-card" style="max-width:520px; max-height:80vh;">
-
-            <div class="modal-header">
-
-                <h2 class="modal-title">Expense Categories</h2>
-
-                <button class="close-btn" data-action="closeExpenseCategoryModal" aria-label="Close dialog"><i data-lucide="x" class="icon-18"></i></button>
-
-            </div>
-
-            <div class="modal-body p-20" style="max-height:60vh; overflow-y:auto;">
-
-                <div class="mb-16">
-
-                    <h4 class="section-card-heading mb-10" id="expCatFormHeading">Add New Category</h4>
-
-                    <div class="modal-grid-2col mb-12">
-
-                        <div>
-
-                            <div class="form-group-mini">
-
-                                <label class="form-label-small">Category Name <span class="required-star">*</span></label>
-
-                                <input type="text" id="expCatName" placeholder="e.g. Utilities" class="form-input w-100">
-
-                            </div>
-
-                        </div>
-
-                        <div>
-
-                            <div class="form-group-mini">
-
-                                <label class="form-label-small">Color</label>
-
-                                <input type="color" id="expCatColor" class="form-input w-100" style="height:40px;" value="#E84908">
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                    <div class="flex-row flex-gap-10 mb-12">
-
-                        <div class="flex-1">
-
-                            <div class="form-group-mini">
-
-                                <label class="form-label-small">Icon</label>
-
-                                <select id="expCatIcon" class="form-input w-100">
-
-                                    <option value="zap">⚡ Zap</option>
-
-                                    <option value="home">🏠 Home</option>
-
-                                    <option value="truck">🚚 Truck</option>
-
-                                    <option value="wrench">🔧 Wrench</option>
-
-                                    <option value="credit-card">💳 Credit Card</option>
-
-                                    <option value="utensils">🍴 Utensils</option>
-
-                                    <option value="wifi">📶 WiFi</option>
-
-                                    <option value="dollar-sign">💰 Dollar Sign</option>
-
-                                </select>
-
-                            </div>
-
-                        </div>
-
-                        <div class="flex-1">
-
-                            <div class="form-group-mini">
-
-                                <label class="form-label-small">Monthly Budget (Rs.)</label>
-
-                                <input type="number" id="expCatBudget" class="form-input w-100" placeholder="Optional" min="0" step="100">
-
-                            </div>
-
-                        </div>
-
-                        <div class="flex-1">
-
-                            <div class="form-group-mini">
-
-                                <label class="form-label-small">Alert at %</label>
-
-                                <input type="number" id="expCatAlert" class="form-input w-100" value="80" min="1" max="100">
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                    <button type="button" id="btnAddExpenseCategory" class="btn-primary w-full p-10 br-10 font-weight-700">Add Category</button>
-
-                </div>
-
-            </div>
-
-            <div class="modal-footer">
-
-                <button type="button" class="btn-secondary" data-action="closeExpenseCategoryModal">Close</button>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-
-
 
     <div id="categoryEditorModal" class="modal" role="dialog" aria-modal="true" aria-label="Edit Category">
         <div class="modal-content glass-card" style="max-width:460px;">

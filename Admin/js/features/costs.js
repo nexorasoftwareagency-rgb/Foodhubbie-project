@@ -11,11 +11,11 @@
  * Data: businesses/{bid}/outlets/{oid}/orders/{id}   (existing)
  *       businesses/{bid}/outlets/{oid}/billing/*     (seeded, rules-gated)
  *       businesses/{bid}/outlets/{oid}/bot/promotions/campaigns (existing)
- * Pure math lives in ./cost-math.js (node-runnable self-check).
+ * Pure math lives in ../../shared/cost-math.js (node-runnable self-check).
  * ============================================================================
  */
 import { Outlet, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt } from '../firebase.js';
-import { DEFAULT_RATES, PROMO_RATE, sourceOf, feeOf, computeCostIndex } from './cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, sourceOf, feeOf, computeCostIndex } from '../../shared/cost-math.js';
 
 let _unsubs = [];
 let _orders = {};
@@ -105,6 +105,67 @@ function _render() {
     _setText('costPromoUsed', String(used));
     _setText('costKpiPromo', _inr(used * PROMO_RATE));
     _setText('costKpiPromoTrend', `${used} token${used === 1 ? '' : 's'} used × ₹${PROMO_RATE}`);
+
+    // --- billing configuration breakdown (read-only) ---
+    const billingDiv = document.getElementById('costBillingBreakdown');
+    if (billingDiv) {
+        if (!_billing || typeof _billing !== 'object') {
+            billingDiv.innerHTML = `
+                <div class="mob-card mob-table-card" style="margin-top:12px;">
+                    <h4 class="section-card-heading"><i data-lucide="wallet" class="icon-14"></i> Billing configuration</h4>
+                    <div style="color:#64748b;padding:8px;">Not seeded — run <code class="mono" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">tools/seed-billing-defaults.cjs</code> to initialize.</div>
+                </div>`;
+        } else {
+            const b = _billing;
+            const rates = _rates();
+            const mode = _mode();
+            const modeLabel = mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
+            const setup = b.setup || {};
+            const setupStatus = setup.status || 'refundable';
+            const tp = b.tokenPacks || {};
+            const welcome = tp.welcome || {};
+            const bal = b.tokens?.balance ?? 0;
+            const totalGranted = (b.tokens?.granted || 0);
+            const totalUsed = (b.tokens?.used || 0);
+
+            billingDiv.innerHTML = `
+                <div class="mob-card mob-table-card" style="margin-top:12px;">
+                    <h4 class="section-card-heading"><i data-lucide="wallet" class="icon-14"></i> Billing configuration</h4>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:8px;">
+                        <div class="detail-cell">
+                            <div class="detail-label">Mode</div>
+                            <div class="detail-value mono">${modeLabel}</div>
+                        </div>
+                        <div class="detail-cell">
+                            <div class="detail-label">Setup status</div>
+                            <div class="detail-value">${setupStatus === 'non_refundable' ? 'Non-refundable (Official pack)' : 'Refundable (Baileys)'}</div>
+                        </div>
+                        <div class="detail-cell">
+                            <div class="detail-label">Token balance</div>
+                            <div class="detail-value mono" style="font-size:18px;font-weight:700;color:var(--accent,#25D366)">${bal}</div>
+                        </div>
+                        <div class="detail-cell">
+                            <div class="detail-label">Total granted / used</div>
+                            <div class="detail-value mono">${totalGranted} / ${totalUsed}</div>
+                        </div>
+                        <div class="detail-cell">
+                            <div class="detail-label">Welcome pack</div>
+                            <div class="detail-value">${welcome.qty ? `${welcome.qty} free tokens${bal === welcome.qty ? ' (unused)' : ''}` : 'Not granted'}</div>
+                        </div>
+                        <div class="detail-cell">
+                            <div class="detail-label">Promo list value</div>
+                            <div class="detail-value mono">₹${PROMO_RATE}/token</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--glass-border);font-size:12px;color:#64748b;">
+                        <strong>Per-source rates:</strong>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+                            ${Object.entries(rates).map(([k, v]) => `<span style="background:#f1f5f9;padding:4px 10px;border-radius:6px;font-family:monospace;font-size:11px;">${k}: ${v === '1%' || (mode === 'commission_1pct' && k === 'webview_delivery') ? '1% of order' : '₹' + v}</span>`).join('')}
+                        </div>
+                    </div>
+                </div>`;
+        }
+    }
 
     // --- live feed (latest 20) ---
     const fb = document.getElementById('costFeedBody');
