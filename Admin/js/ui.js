@@ -96,9 +96,9 @@ export const canAccessTab = (tabId) => {
     if (role) return !Array.isArray(role.tabs) || role.tabs.includes(tabId);
     if (!_roleWarned) {
         _roleWarned = true;
-        console.warn(`[RoleAccess] Missing/unknown role "${key}" — tab gates inactive for this session`);
+        console.warn(`[RoleAccess] Missing/unknown role "${key}" — access denied`);
     }
-    return true; // never lock out an unrecognized account
+    return false; // deny by default for unknown roles
 };
 
 export const switchTab = async (tabId, skipHistory = false) => {

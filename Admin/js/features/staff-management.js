@@ -39,7 +39,7 @@ export async function loadStaffList() {
         const snap = await get(Outlet.ref('staff'));
         const staff = [];
         if (snap.exists()) {
-            snap.forEach(child => staff.push({ uid: child.key, ...child.val() }));
+            snap.forEach(child => { staff.push({ uid: child.key, ...child.val() }); });
         }
         _staffListCache = staff.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
         setStaffTableState('ready');
@@ -591,13 +591,46 @@ async function saveRole() {
     if (!name) return showToast('Role name is required', 'warning');
     const level = parseInt(document.getElementById('roleLevel').value, 10);
     if (Number.isNaN(level)) return showToast('Level must be a number', 'warning');
-    const tabs = Array.from(document.querySelectorAll('#roleTabsList input:checked')).map(i => i.value);
+    if (level < -1 || level > 100) return showToast('Level must be between -1 and 100', 'warning');
+    
+    const tabs = Array.from(document.querySelectorAll('#roleTabsList input:checked'))
+        .map(i => i.value)
+        .filter(t => TAB_DEFS.some(d => d[0] === t)); // Only allow known tabs
+    
+    if (tabs.length === 0) return showToast('Select at least one allowed tab', 'warning');
+    
     const roles = { ...getRoles() };
     let key = _roleEditKey;
+    
+    // Sanitize key: lowercase, spaces to underscores, alphanumeric + underscore only
+    const sanitizeKey = (n) => n.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    
     if (!key) {
-        key = name.toLowerCase();
+        // New role: generate key from sanitized name
+        key = sanitizeKey(name);
+        if (!key) return showToast('Role name must contain valid characters', 'warning');
         if (roles[key]) return showToast('A role with that name already exists', 'warning');
+    } else if (key !== sanitizeKey(name)) {
+        // Edit mode: name changed -> create new key, delete old
+        const newKey = sanitizeKey(name);
+        if (!newKey) return showToast('Role name must contain valid characters', 'warning');
+        if (roles[newKey]) return showToast('A role with that name already exists', 'warning');
+        // Reassign staff from old key to new key
+        const affectedStaff = _staffListCache.filter(s => s.role === key);
+        for (const staff of affectedStaff) {
+            await update(Outlet.staff(staff.uid), { role: newKey });
+            const idx = _staffListCache.findIndex(s => s.uid === staff.uid);
+            if (idx !== -1) _staffListCache[idx].role = newKey;
+            await logStaffChange('staff_update', staff.uid, { role: key }, { role: newKey }, `Role renamed: ${key} → ${newKey}`);
+        }
+        delete roles[key];
+        key = newKey;
     }
+    
+    // Check unique level (except for the role being edited)
+    const levelTaken = Object.entries(roles).some(([k, r]) => k !== key && r.level === level);
+    if (levelTaken) return showToast('Another role already uses this level', 'warning');
+    
     roles[key] = { name, level, tabs };
     try {
         await set(Outlet.ref('settings/roles'), roles);
@@ -723,7 +756,7 @@ export function startStaffListener() {
     const staffRef = query(Outlet.ref('staff'), orderByChild('displayName'));
     _staffUnsub = onValue(staffRef, (snap) => {
         const staff = [];
-        if (snap.exists()) snap.forEach(child => staff.push({ uid: child.key, ...child.val() }));
+        if (snap.exists()) snap.forEach(child => { staff.push({ uid: child.key, ...child.val() }); });
         _staffListCache = staff;
         renderStaffTable();
     });
