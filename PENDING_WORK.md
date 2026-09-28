@@ -286,18 +286,13 @@
 | **Files Changed** | `Admin/js/fcm-init.js` (added `getAuthReady()`, updated `controllerchange` handler) |
 | **Verified** | Build passes, deploy successful |
 
-### P3-2: Sharp JPEG→PNG Conversion — Code Exists, **NEEDS EC2 VERIFICATION**
+### P3-2: Sharp JPEG→PNG Conversion — **✅ VERIFIED ON EC2**
 | Field | Detail |
 |-------|--------|
 | **Problem** | Image conversion fix in bot codepath untested with real notification |
 | **Place** | `bot/index.js:587-623` |
-| **Issue** | Code converts JPEG to PNG for WhatsApp media messages; no end-to-end test |
-| **Reason** | Requires real WhatsApp message send from running bot on EC2 |
-| **Impact** | Potential broken images in customer notifications |
-| **Fix Applied** | Code already in place (lines 587-623): converts JPEG→PNG for Baileys thumbnail |
-| **Verification Needed** | Run on EC2, trigger image send via WhatsApp, check logs for conversion messages |
-| **Files** | `bot/index.js` (lines 587-623) |
-| **Next Step** | SSH to EC2, trigger image send via WhatsApp, verify logs |
+| **Verification (2026-09-28)** | 1) `sharp` installed at `bot/node_modules/sharp` (bot's require path); functional JPEG→PNG test on EC2 passes (`sharp OK, jpeg->png bytes: 96`). 2) pm2 logs show end-to-end: `[SEND IMAGE] Converted URL JPEG to PNG successfully` → `[SEND OK] ... type=image trackType=menu_display`. 3) No `sharp not installed` boot warnings. Earlier commit `0935b1f` also recorded P3-2 verified. |
+| **Status** | **✅ VERIFIED — no further action** |
 
 ### P3-3: Session Expiry Walkout Auto-Detection — **✅ FIXED**
 | Field | Detail |
@@ -386,9 +381,9 @@
 | **P0** | 6 | ✅ YES (all 6 — P0-4/5/6 fixed this session) |
 | **P1** | 6 | ✅ YES (all 6) |
 | **P2** | 9 | ⚠️ Recommended (9/9 done) |
-| **P3** | 8 | 📋 Backlog (7/8 done) |
+| **P3** | 8 | 📋 Backlog (8/8 done) |
 
-**Total Active Issues: 15** (0 P0 + 0 P1 + 0 P2 open + 1 P3 remaining)
+**Total Active Issues: 15** (0 P0 + 0 P1 + 0 P2 open + 0 P3 remaining)
 
 ---
 
