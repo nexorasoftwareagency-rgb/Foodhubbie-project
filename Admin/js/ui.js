@@ -139,6 +139,8 @@ export const switchTab = async (tabId, skipHistory = false) => {
 
     const previousTab = state.currentActiveTab;
     state.currentActiveTab = tabId;
+    const titleEl = document.getElementById('currentTabTitle');
+    if (titleEl) titleEl.textContent = TAB_DEFS.find(([id]) => id === tabId)?.[1] || tabId;
     window.__adminLogger?.nav('TAB', `Switching: ${previousTab || '(none)'} → ${tabId}`);
 
     // Reset orders pagination when leaving the orders tab

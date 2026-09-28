@@ -10593,3 +10593,19 @@ body.pos-selection-mode .walkin-picker {
 }
 #tab-costs tbody tr:not(:last-child) td { border-bottom: 1px solid #eef2f7; }
 #tab-costs tbody tr:hover td { background: #f8fafc; }
+
+/* ---- Costs tab: compact header row (sub-tabs + month badge) ---- */
+#tab-costs .costs-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
+#tab-costs .costs-head .cost-subtabs { margin-bottom: 0; }
+#tab-costs .costs-month { font-size: 12px; font-weight: 600; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 5px 12px; border-radius: 999px; white-space: nowrap; }
+
+/* ---- Costs tab: table headers ---- */
+#tab-costs thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
+
+/* ---- Costs tab: billing configuration (read-only) ---- */
+#tab-costs .cost-billing { margin-top: 4px; padding-top: 16px; border-top: 1px dashed #e2e8f0; }
+#tab-costs .cost-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+#tab-costs .cost-detail-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; color: #64748b; margin-bottom: 3px; }
+#tab-costs .cost-detail-value { font-size: 15px; font-weight: 700; color: #0f172a; }
+#tab-costs .cost-rate-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+#tab-costs .cost-rate-chip { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 3px 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #334155; }

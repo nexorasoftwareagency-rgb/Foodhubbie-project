@@ -492,8 +492,6 @@ async function _launchCampaign() {
             showToast('Campaign blocked: insufficient promo tokens', 'error', 6000);
             return;
         }
-        // Show estimated cost in confirm
-        const costInfo = `Estimated promo cost: ${needed} tokens × ₹0.86 = ₹${estimatedCost} (balance: ${tokenBalance} tokens)`;
     } catch (e) {
         console.warn('[Promo] Token balance check failed:', e?.message || e);
         // Fail open on read error — bot will enforce per-send

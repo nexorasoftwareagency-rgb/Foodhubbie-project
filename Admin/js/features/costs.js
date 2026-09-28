@@ -129,39 +129,38 @@ function _render() {
             const totalUsed = (b.tokens?.used || 0);
 
             billingDiv.innerHTML = `
-                <div class="mob-card mob-table-card" style="margin-top:12px;">
+                <div class="cost-billing">
                     <h4 class="section-card-heading"><i data-lucide="wallet" class="icon-14"></i> Billing configuration</h4>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:8px;">
-                        <div class="detail-cell">
-                            <div class="detail-label">Mode</div>
-                            <div class="detail-value mono">${modeLabel}</div>
+                    <div class="cost-detail-grid">
+                        <div>
+                            <div class="cost-detail-label">Mode</div>
+                            <div class="cost-detail-value">${modeLabel}</div>
                         </div>
-                        <div class="detail-cell">
-                            <div class="detail-label">Setup status</div>
-                            <div class="detail-value">${setupStatus === 'non_refundable' ? 'Non-refundable (Official pack)' : 'Refundable (Baileys)'}</div>
+                        <div>
+                            <div class="cost-detail-label">Setup status</div>
+                            <div class="cost-detail-value">${setupStatus === 'non_refundable' ? 'Non-refundable (Official)' : 'Refundable (Baileys)'}</div>
                         </div>
-                        <div class="detail-cell">
-                            <div class="detail-label">Token balance</div>
-                            <div class="detail-value mono" style="font-size:18px;font-weight:700;color:var(--accent,#25D366)">${bal}</div>
+                        <div>
+                            <div class="cost-detail-label">Token balance</div>
+                            <div class="cost-detail-value" style="color:var(--accent,#25D366);">${bal}</div>
                         </div>
-                        <div class="detail-cell">
-                            <div class="detail-label">Total granted / used</div>
-                            <div class="detail-value mono">${totalGranted} / ${totalUsed}</div>
+                        <div>
+                            <div class="cost-detail-label">Granted / used</div>
+                            <div class="cost-detail-value">${totalGranted} / ${totalUsed}</div>
                         </div>
-                        <div class="detail-cell">
-                            <div class="detail-label">Welcome pack</div>
-                            <div class="detail-value">${welcome.qty ? `${welcome.qty} free tokens${bal === welcome.qty ? ' (unused)' : ''}` : 'Not granted'}</div>
+                        <div>
+                            <div class="cost-detail-label">Welcome pack</div>
+                            <div class="cost-detail-value">${welcome.qty ? `${welcome.qty} free${bal === welcome.qty ? ' (unused)' : ''}` : 'Not granted'}</div>
                         </div>
-                        <div class="detail-cell">
-                            <div class="detail-label">Promo list value</div>
-                            <div class="detail-value mono">₹${PROMO_RATE}/token</div>
+                        <div>
+                            <div class="cost-detail-label">Promo rate</div>
+                            <div class="cost-detail-value">₹${PROMO_RATE} / token</div>
                         </div>
                     </div>
-                    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--glass-border);font-size:12px;color:#64748b;">
-                        <strong>Per-source rates:</strong>
-                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
-                            ${Object.entries(rates).map(([k, v]) => `<span style="background:#f1f5f9;padding:4px 10px;border-radius:6px;font-family:monospace;font-size:11px;">${k}: ${v === '1%' || (mode === 'commission_1pct' && k === 'webview_delivery') ? '1% of order' : '₹' + v}</span>`).join('')}
-                        </div>
+                    <div style="margin-top:14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#64748b;">Per-source rates</div>
+                    <div class="cost-rate-chips">
+                        ${Object.keys(LABELS).filter(k => k in rates).map(k =>
+                            `<span class="cost-rate-chip">${_label(k)}: ${mode === 'commission_1pct' && k === 'webview_delivery' ? '1% of order' : '₹' + rates[k]}</span>`).join('')}
                     </div>
                 </div>`;
         }
