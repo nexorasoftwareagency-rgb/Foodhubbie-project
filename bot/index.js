@@ -1596,7 +1596,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                         const claimedCouponCode = (order.discountSource || '').startsWith('coupon:')
                             ? order.discountSource.slice('coupon:'.length)
                             : null;
-                        // channel: 'website' — matches the "Website/App only" option
+                        // channel: 'website' — matches the "QR / WhatsApp Webview only" option
                         // in the discount editor; a discount scoped to 'whatsapp' or
                         // 'pos' only will correctly NOT apply here even if the
                         // client-side check let it through before this fix.

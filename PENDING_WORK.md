@@ -362,17 +362,13 @@
 | **Finding** | **No PII in walkout logs** — `recordWalkout` maps orders to `{ id, total, status }` only, no `customerPhone`. Rules already correctly restrict to outlet admin + super/supreme. |
 | **Status** | **✅ VERIFIED — No Fix Needed** |
 
-### P3-7: Stale comment at `bot/index.js:1599` names a relabeled discount option — **⏳ PENDING**
+### P3-7: Stale comment at `bot/index.js:1599` names a relabeled discount option — **✅ DONE**
 | Field | Detail |
 |-------|--------|
 | **Priority** | P3 — Low (comment only; zero behavior) |
 | **Problem** | Comment still quotes the discount channel option by its OLD label |
 | **Place** | `bot/index.js:1599` |
-| **Issue** | `// channel: 'website' — matches the "Website/App only" option` — task `20260925-151619-0a72` relabeled that option to **"QR / WhatsApp Webview only"** in `Admin/index.html` `#discChannel`. The value `website` is unchanged, so the comment's substance still holds (use `website`; `whatsapp`/`pos` correctly do not apply) — only the quoted label is now wrong. |
-| **Why deferred** | `bot/index.js` carries ~800 lines of another workstream's in-flight WIP (83 insertions, 717 deletions). Line 1599 sits in a clean block (their hunks jump 1139 → 1646), but touching the file risked sweeping their work into the commit. |
-| **Fix Required** | Update the quoted label. Stage with a filtered `git apply --cached` patch keeping only that hunk — same technique used for `Admin/index.html` in `20260925-151619-0a72`. **Re-check hunk offsets first** — their edits are still moving. |
-| **Files** | `bot/index.js` (one line) |
-| **Verified** | n/a — comment-only change, `node --check` + `grep` suffice |
+| **Fix Applied** | Comment updated to `"QR / WhatsApp Webview only"` (label verified at `Admin/index.html:6457`); `node --check` OK. WIP deferral no longer applicable — `bot/index.js` clean in working tree (other workstream's changes committed). |
 
 ### P3-8: Firebase Free-Plan Capability Analysis + 5-Council Verdict — **✅ DONE**
 | Field | Detail |
@@ -390,9 +386,9 @@
 | **P0** | 6 | ✅ YES (all 6 — P0-4/5/6 fixed this session) |
 | **P1** | 6 | ✅ YES (all 6) |
 | **P2** | 9 | ⚠️ Recommended (9/9 done) |
-| **P3** | 8 | 📋 Backlog (6/8 done) |
+| **P3** | 8 | 📋 Backlog (7/8 done) |
 
-**Total Active Issues: 15** (0 P0 + 0 P1 + 0 P2 open + 2 P3 remaining)
+**Total Active Issues: 15** (0 P0 + 0 P1 + 0 P2 open + 1 P3 remaining)
 
 ---
 
