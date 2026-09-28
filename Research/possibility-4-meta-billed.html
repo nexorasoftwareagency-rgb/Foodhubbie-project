@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Possibility 4 — Official Meta API (billed, from Oct 1) | Foodhubbie Cost Analysis</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Possibility 4 — Official Meta Cloud API · billed regime <span class="pill bad">from Oct 1, 2026 — the production default</span></h1>
+  <div class="sub"><b>The same official-API bot after Meta starts billing service replies.</b> <b>₹0.115/msg</b> on every service/utility message — <b>no free tier in this model</b> (the 1,000-free/number allowance is not counted; worst case, calculate all). Promos <b>₹0.86/msg</b>. This is the number to plan production on — after Oct 1 it is the <b>only</b> official-API reality.</div>
+</header>
+
+<nav>
+  <a href="index.html">Hub</a>
+  <a href="possibility-1-no-bot.html">1 · No bot</a>
+  <a href="possibility-2-baileys.html">2 · Baileys</a>
+  <a href="possibility-3-meta-free.html">3 · Meta free</a>
+  <a href="possibility-4-meta-billed.html">4 · Meta billed</a>
+  <a href="index.html#sources">Sources</a>
+</nav>
+
+<h2><span class="n">·</span>The rate card this model applies (India, from Oct 1 2026)</h2>
+<table>
+  <thead><tr><th>Message type</th><th class="num">Rate</th><th>Billing rule</th></tr></thead>
+  <tbody>
+    <tr><td><b>Service</b> — reply to customer inside their 24-hr window</td><td class="num">₹0.115</td><td>billed per message — model assumes <b>no free tier</b> (Meta's 1,000-free/number/mo allowance not counted, worst case)</td></tr>
+    <tr><td><b>Utility</b> — order confirmations/status (in or out of window)</td><td class="num">₹0.115</td><td>billed per message (in-window free ended Oct 1)</td></tr>
+    <tr><td><b>Authentication</b> — OTP</td><td class="num">₹0.115</td><td>always billed</td></tr>
+    <tr><td><b>Marketing</b> — promos/campaigns</td><td class="num">₹0.86</td><td>always billed · CTWA/ad entry points keep a free 72-hr window</td></tr>
+    <tr><td>Inbound customer message</td><td class="num">₹0</td><td>always free</td></tr>
+  </tbody>
+</table>
+
+<div class="box">
+  <div class="t">What the model bills (labeled assumptions)</div>
+  <ul style="margin:4px 0">
+    <li><b>8 msgs/order — real delivery order flow</b> (from <code>bot/index.js</code>): greeting + menu CTA + placed + confirmed + ready + out-for-delivery/OTP + rider-reached + delivered. <b>The bot handles delivery only</b> — dine-in is QR table → webview → POS, never WhatsApp.</li>
+    <li><b>No free allowance</b> — every service/utility message billed at ₹0.115 (1,000-free/number/mo removed from the model; calculate all).</li>
+    <li><b>Promo marketing rate = ₹0.86/msg</b> (≈ your ₹0.85 — Meta India marketing, never free). Volume = <b>0.1 promo msgs per order/day</b> (i.e. 1 promo per 10 orders) — the "0.1" is frequency, not rupees. Change with <code>--mktg=N</code> (each +100 promo msgs/day/outlet = +₹2,580/mo).</li>
+    <li>₹88/$ · server tiers by outlet count · bot listeners +0.5 GB/mo/outlet.</li>
+  </ul>
+</div>
+
+<h2><span class="n">·</span>Real order flow — messages &amp; conversation per WhatsApp order</h2>
+<p class="small"><b>Delivery orders only</b> — dine-in never touches WhatsApp: <b>QR table → webview menu → POS</b>.</p>
+<table>
+  <thead><tr><th>#</th><th>Message (bot sends)</th><th>Trigger</th><th class="num">Delivery</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td>Welcome greeting (image)</td><td>session start</td><td class="num">✓</td></tr>
+    <tr><td class="num">2</td><td>Menu CTA (image + order link)</td><td>order intent</td><td class="num">✓</td></tr>
+    <tr><td class="num">3</td><td>ORDER PLACED (invoice)</td><td>status: placed</td><td class="num">✓</td></tr>
+    <tr><td class="num">4</td><td>ORDER CONFIRMED</td><td>status: confirmed</td><td class="num">✓</td></tr>
+    <tr><td class="num">5</td><td>PACKED &amp; READY</td><td>status: ready</td><td class="num">✓</td></tr>
+    <tr><td class="num">6</td><td>OUT FOR DELIVERY + OTP</td><td>status: out for delivery</td><td class="num">✓</td></tr>
+    <tr><td class="num">7</td><td>RIDER HAS REACHED (OTP)</td><td>status: reached drop</td><td class="num">✓</td></tr>
+    <tr><td class="num">8</td><td>DELIVERED (payment)</td><td>status: delivered</td><td class="num">✓</td></tr>
+    <tr><td><b>Total</b></td><td colspan="2"><b>messages per WhatsApp (delivery) order</b></td><td class="num hl"><b>8</b></td></tr>
+  </tbody>
+</table>
+<p class="small"><b>8 messages · 1 conversation per WhatsApp order</b> (one 24-hr session covers greeting → order → status; repeat orders same day share it). Real cost per order = 8 × ₹0.115 = <b>₹0.92</b> service+utility (billed on every message — no free allowance) + 1 promo per 10 orders × ₹0.86 = ₹0.09 → <b>≈ ₹1.01 per WhatsApp order</b>. All delivery orders flow through the bot — no share assumption.</p>
+
+<h2><span class="n">·</span>What you pay and what you don't</h2>
+<table>
+  <thead><tr><th>Component</th><th>Cost</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><b>Firebase RTDB</b> (+ bot listeners)</td><td>base + 0.5 GB/mo/outlet</td><td>bot order/session listeners</td></tr>
+    <tr><td><b>Firebase Hosting</b></td><td>₹0–2,298/mo</td><td>same as no-bot</td></tr>
+    <tr><td><b>EC2 server</b></td><td>₹1,338 / ₹5,342 / ₹10,692</td><td>bot stack, sized by outlet count</td></tr>
+    <tr><td><b>Meta — service + utility</b></td><td>₹27,600–2,76,000/mo</td><td>8×orders×30 × ₹0.115 — every message, no free tier</td></tr>
+    <tr><td><b>Meta — promos</b></td><td>₹258–25,800/mo</td><td>rate <b>₹0.86/msg</b> × (0.1 promo msgs per order/day × 30) (<code>--mktg=0</code> removes)</td></tr>
+    <tr><td>Auth · Functions · Storage · Analytics</td><td>₹0</td><td>same as no-bot</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">·</span>Full detail — 10 / 25 / 50 / 100 orders per day per restaurant</h2>
+<p class="small"><b>₹/order</b> = total ÷ (orders/day × 30 × restaurants). With no free tier the Meta line is <b>exactly linear</b>: 10 orders/day × 8 flow msgs = 2,400 msgs/outlet (₹276 service + ₹26 promos) → 24,000 msgs (₹2,760 + ₹258) at 100 orders/day.</p>
+
+<h3>Images in Firebase Storage (default)</h3>
+<table>
+  <thead><tr><th class="num">orders/day/rest</th><th class="num">restaurants</th><th class="num">TOTAL ₹/mo</th><th class="num">₹ / order</th><th class="num">₹/restaurant</th></tr></thead>
+  <tbody>
+    <tr><td class="num">10</td><td class="num">10</td><td class="num">₹5,969</td><td class="num">₹1.99</td><td class="num">₹597</td></tr>
+    <tr><td class="num">10</td><td class="num">50</td><td class="num">₹32,295</td><td class="num">₹2.15</td><td class="num">₹646</td></tr>
+    <tr><td class="num">10</td><td class="num">100</td><td class="num">₹65,653</td><td class="num">₹2.19</td><td class="num">₹657</td></tr>
+    <tr><td class="num">25</td><td class="num">10</td><td class="num">₹10,541</td><td class="num">₹1.41</td><td class="num">₹1,054</td></tr>
+    <tr><td class="num">25</td><td class="num">50</td><td class="num">₹55,404</td><td class="num">₹1.48</td><td class="num">₹1,108</td></tr>
+    <tr><td class="num">25</td><td class="num">100</td><td class="num">₹1,12,157</td><td class="num">₹1.50</td><td class="num">₹1,122</td></tr>
+    <tr><td class="num">50</td><td class="num">10</td><td class="num">₹18,171</td><td class="num">₹1.21</td><td class="num">₹1,817</td></tr>
+    <tr><td class="num">50</td><td class="num">50</td><td class="num">₹94,156</td><td class="num">₹1.26</td><td class="num">₹1,883</td></tr>
+    <tr><td class="num">50</td><td class="num">100</td><td class="num">₹1,89,662</td><td class="num">₹1.26</td><td class="num">₹1,897</td></tr>
+    <tr><td class="num">100</td><td class="num">10</td><td class="num">₹33,529</td><td class="num">₹1.12</td><td class="num">₹3,353</td></tr>
+    <tr><td class="num">100</td><td class="num">50</td><td class="num">₹1,71,661</td><td class="num">₹1.14</td><td class="num">₹3,433</td></tr>
+    <tr><td class="num">100</td><td class="num">100</td><td class="num hl">₹3,44,672</td><td class="num hl">₹1.15</td><td class="num">₹3,447</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">·</span>Where the money goes — worst cell (100 orders × 100 rest)</h2>
+<pre><code>Meta API    ₹3,01,800/mo  (88%)  ← 8 flow msgs × ₹0.115 + promos × ₹0.86, no free tier
+Firebase      ₹32,180/mo  ( 9%)  (images in Storage)
+EC2 server    ₹10,692/mo  ( 3%)
+                          ₹3,44,672 total   vs   ₹27,780 without bot   vs   ₹42,872 with Baileys</code></pre>
+
+<h2><span class="n">·</span>Reading this outcome</h2>
+<ul>
+  <li><b>Meta is the bill.</b> It is 88% of the worst cell and it grows linearly with orders — Firebase and server barely move with volume.</li>
+  <li><b>No free tier → exactly linear:</b> every delivery order costs 8 × ₹0.115 = ₹0.92 service+utility + ₹0.09 promos ≈ <b>₹1.01</b> in Meta fees. 10 orders/day = ₹302/mo per outlet → ₹3,018 at 100 orders/day.</li>
+  <li><b>₹/order falls with volume but never reaches Possibility 1:</b> at 100 rest it's ₹2.19 (10 orders) → ₹1.15 (100 orders), while no-bot is ₹0.68→₹0.09 — Meta's share grows from ~3× to ~13× the no-bot cost per order.</li>
+  <li>Levers ranked: <code>--mktg=0</code> (drop promos, −₹0.09/order) → Baileys/no-bot if the Meta bill can't be justified.</li>
+</ul>
+
+<div class="box bad"><div class="t">Who this is for / when to pick it</div>Production on the official API after Oct 1 2026 — compliance, reliability, and number safety. Pick it when WhatsApp ordering revenue covers the Meta line; if not, the fallback ladder is: <b>3 (4 days left) → 2 Baileys → 1 no-bot</b>.</div>
+
+<h2><span class="n">·</span>Compare all possibilities (same cell)</h2>
+<table>
+  <thead><tr><th>Possibility</th><th class="num">10 orders · 10 rest</th><th class="num">100 orders · 100 rest</th></tr></thead>
+  <tbody>
+    <tr><td><a href="possibility-1-no-bot.html">1 · No bot</a></td><td class="num">₹1,174</td><td class="num">₹27,780</td></tr>
+    <tr><td><a href="possibility-2-baileys.html">2 · Bot + Baileys</a></td><td class="num">₹2,951</td><td class="num">₹42,872</td></tr>
+    <tr><td><a href="possibility-3-meta-free.html">3 · Meta API free (till Sep 30)</a></td><td class="num">₹3,209</td><td class="num">₹68,672</td></tr>
+    <tr><td><b>4 · Meta API billed (from Oct 1)</b> (this page)</td><td class="num hl">₹5,969</td><td class="num hl">₹3,44,672</td></tr>
+  </tbody>
+</table>
+
+<a class="back" href="index.html">← All possibilities</a>
+<footer>Research only — no codebase changes · Numbers from <code>node Research\scripts\cost-calc.js --fixed --inr</code> (possibility sections) · 2026-09-27 · ₹88/$ · Sources: <code>WHATSAPP-BOT-COST.md</code> §2/§2a</footer>
+</div>
+</body>
+</html>

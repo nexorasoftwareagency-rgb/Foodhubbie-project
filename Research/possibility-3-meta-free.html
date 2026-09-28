@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Possibility 3 — Official Meta API (free, till Sep 30) | Foodhubbie Cost Analysis</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Possibility 3 — Official Meta Cloud API · customer-first FREE <span class="pill ok">valid till Sep 30, 2026</span></h1>
+  <div class="sub"><b>Official WhatsApp Business Cloud API.</b> The bot sends on the official API with the <b>customer-messaged-first</b> pattern: customer writes first → bot replies inside the 24-hour service window → <b>₹0 per reply</b> (verified: unlimited till Sep 30, 2026). Only marketing/promo messages are billed. <b>This regime expires in 4 days → becomes Possibility 4.</b></div>
+</header>
+
+<nav>
+  <a href="index.html">Hub</a>
+  <a href="possibility-1-no-bot.html">1 · No bot</a>
+  <a href="possibility-2-baileys.html">2 · Baileys</a>
+  <a href="possibility-3-meta-free.html">3 · Meta free</a>
+  <a href="possibility-4-meta-billed.html">4 · Meta billed</a>
+  <a href="index.html#sources">Sources</a>
+</nav>
+
+<h2><span class="n">·</span>How the free window works (verified Sep 27, 2026)</h2>
+<table>
+  <thead><tr><th>Event</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><b>Customer messages first</b> → opens a 24-hour service window</td><td>bot replies inside it = <b>₹0</b> (service free since Nov 1 2024; in-window utility templates free since Jul 1 2025)</td></tr>
+    <tr><td>Bot writes <b>first</b> (proactive template outside any window)</td><td>billed ₹0.115 — <b>always</b>, even in this regime</td></tr>
+    <tr><td>Marketing/promo template (any time)</td><td>billed <b>₹0.86/msg</b> — never free</td></tr>
+    <tr><td>Inbound customer message</td><td>₹0 always</td></tr>
+  </tbody>
+</table>
+<div class="box warn"><div class="t">Time limit</div><b>Sep 30, 2026 is the last day of this regime.</b> From Oct 1, service replies are billed at ₹0.115/msg (model counts <b>no free allowance</b> — calculate all) → same bot becomes <a href="possibility-4-meta-billed.html">Possibility 4</a>. Plan with Possibility 4 numbers; enjoy Possibility 3 for 4 days.</div>
+
+<h2><span class="n">·</span>What you pay and what you don't</h2>
+<table>
+  <thead><tr><th>Component</th><th>Cost</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><b>Firebase RTDB</b> (+ bot listeners)</td><td>base + 0.5 GB/mo/outlet</td><td>bot order/session listeners</td></tr>
+    <tr><td><b>Firebase Hosting</b></td><td>₹0–2,298/mo</td><td>same as no-bot</td></tr>
+    <tr><td><b>EC2 server</b></td><td>₹1,338 / ₹5,342 / ₹10,692</td><td>bot stack (same as Baileys — transport is the only difference)</td></tr>
+    <tr><td><b>Meta — service/in-window replies</b></td><td class="hl">₹0</td><td>customer-first, inside 24-hr window</td></tr>
+    <tr><td><b>Meta — promos</b></td><td>₹258–25,800/mo</td><td>₹0.86 × 0.1×orders/day × 30 (model default; <code>--mktg=0</code> removes)</td></tr>
+    <tr><td>Auth · Functions · Storage · Analytics</td><td>₹0</td><td>same as no-bot</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">·</span>Full detail — 10 / 25 / 50 / 100 orders per day per restaurant</h2>
+<p class="small"><b>₹/order</b> = total ÷ (orders/day × 30 × restaurants). Meta contributes only the promo line here, so curves track Possibility 2 (Baileys) plus a small marketing delta.</p>
+
+<h3>Images in Firebase Storage (default)</h3>
+<table>
+  <thead><tr><th class="num">orders/day/rest</th><th class="num">restaurants</th><th class="num">TOTAL ₹/mo</th><th class="num">₹ / order</th><th class="num">₹/restaurant</th></tr></thead>
+  <tbody>
+    <tr><td class="num">10</td><td class="num">10</td><td class="num">₹3,209</td><td class="num">₹1.07</td><td class="num">₹321</td></tr>
+    <tr><td class="num">10</td><td class="num">50</td><td class="num">₹18,495</td><td class="num">₹1.23</td><td class="num">₹370</td></tr>
+    <tr><td class="num">10</td><td class="num">100</td><td class="num">₹38,053</td><td class="num">₹1.27</td><td class="num">₹381</td></tr>
+    <tr><td class="num">25</td><td class="num">10</td><td class="num">₹3,641</td><td class="num">₹0.49</td><td class="num">₹364</td></tr>
+    <tr><td class="num">25</td><td class="num">50</td><td class="num">₹20,904</td><td class="num">₹0.56</td><td class="num">₹418</td></tr>
+    <tr><td class="num">25</td><td class="num">100</td><td class="num">₹43,157</td><td class="num">₹0.58</td><td class="num">₹432</td></tr>
+    <tr><td class="num">50</td><td class="num">10</td><td class="num">₹4,371</td><td class="num">₹0.29</td><td class="num">₹437</td></tr>
+    <tr><td class="num">50</td><td class="num">50</td><td class="num">₹25,156</td><td class="num">₹0.34</td><td class="num">₹503</td></tr>
+    <tr><td class="num">50</td><td class="num">100</td><td class="num">₹51,662</td><td class="num">₹0.34</td><td class="num">₹517</td></tr>
+    <tr><td class="num">100</td><td class="num">10</td><td class="num">₹5,929</td><td class="num">₹0.20</td><td class="num">₹593</td></tr>
+    <tr><td class="num">100</td><td class="num">50</td><td class="num">₹33,661</td><td class="num">₹0.22</td><td class="num">₹673</td></tr>
+    <tr><td class="num">100</td><td class="num">100</td><td class="num hl">₹68,672</td><td class="num hl">₹0.23</td><td class="num">₹687</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">·</span>Reading this outcome</h2>
+<ul>
+  <li><b>Official compliance + near-Baileys pricing</b> — but only while the free regime lasts.</li>
+  <li>Meta delta over Baileys = promos only: <b>₹258–25,800/mo</b> (0.1×orders/day × ₹0.86; <code>--mktg=0</code> → Meta exactly ₹0).</li>
+  <li>Same EC2 sizing as Possibility 2/4 (transport doesn't change memory footprint).</li>
+  <li><b>Customer-first must be enforced in the bot</b>: never send a template before the customer writes, or you drift into billed territory even here.</li>
+</ul>
+
+<div class="box"><div class="t">Who this is for</div>Anyone starting on the official API <b>right now</b> — 4 days of cheap official traffic — but every contract/planning number should come from <a href="possibility-4-meta-billed.html">Possibility 4</a>.</div>
+
+<h2><span class="n">·</span>Compare all possibilities (same cell)</h2>
+<table>
+  <thead><tr><th>Possibility</th><th class="num">10 orders · 10 rest</th><th class="num">100 orders · 100 rest</th></tr></thead>
+  <tbody>
+    <tr><td><a href="possibility-1-no-bot.html">1 · No bot</a></td><td class="num">₹1,174</td><td class="num">₹27,780</td></tr>
+    <tr><td><a href="possibility-2-baileys.html">2 · Bot + Baileys</a></td><td class="num">₹2,951</td><td class="num">₹42,872</td></tr>
+    <tr><td><b>3 · Meta API free (till Sep 30)</b> (this page)</td><td class="num hl">₹3,209</td><td class="num hl">₹68,672</td></tr>
+    <tr><td><a href="possibility-4-meta-billed.html">4 · Meta API billed (from Oct 1)</a></td><td class="num">₹5,969</td><td class="num">₹3,44,672</td></tr>
+  </tbody>
+</table>
+
+<a class="back" href="index.html">← All possibilities</a>
+<footer>Research only — no codebase changes · Numbers from <code>node Research\scripts\cost-calc.js --fixed --inr</code> (possibility sections) · 2026-09-27 · ₹88/$ · Sources: <code>WHATSAPP-BOT-COST.md</code> §2a</footer>
+</div>
+</body>
+</html>
