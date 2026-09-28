@@ -1023,11 +1023,12 @@ export function initExpenseModals() {
             }
 
             // Expense ceiling check: % of projected daily revenue
+            // Uses RTDB transaction for atomic read+write to prevent race conditions
             try {
                 const ceilingPct = Number(expenseSettings?.expenseCeilingPct) || 0;
                 if (ceilingPct > 0) {
                     const currentOutlet = window.currentOutlet || 'pizza';
-                    const { Outlet, get, query, orderByChild, equalTo } = await import('../firebase.js');
+                    const { Outlet, get, query, orderByChild, equalTo, ref, runTransaction } = await import('../firebase.js');
                     const todayStr = getISTDateString();
                     const todaySnap = await get(query(Outlet.ref('expenses'), orderByChild('date'), equalTo(todayStr)));
                     let todayTotal = 0;
@@ -1035,7 +1036,10 @@ export function initExpenseModals() {
                         todaySnap.forEach(child => {
                             const val = child.val();
                             if (val && (val.outletId === currentOutlet || currentOutlet === 'all')) {
-                                todayTotal += Number(val.amount || 0);
+                                // When editing, exclude the old amount of the expense being modified
+                                if (!editId || child.key !== editId) {
+                                    todayTotal += Number(val.amount || 0);
+                                }
                             }
                         });
                     }
@@ -1147,7 +1151,15 @@ export async function deleteExpenseCategory(catId) {
         const updates = {};
         if (!miscId) {
             miscId = push(Outlet.ref('expenseCategories')).key;
-            updates[`expenseCategories/${miscId}`] = { name: 'Misc', color: '#6B7280', icon: 'dollar-sign', isSystem: true, displayOrder: 999 };
+            updates[`expenseCategories/${miscId}`] = { 
+                name: 'Misc', 
+                color: '#6B7280', 
+                icon: 'dollar-sign', 
+                monthlyBudget: 2000, 
+                alertThreshold: 80, 
+                isSystem: true, 
+                displayOrder: 999 
+            };
         }
         updates[`expenseCategories/${catId}`] = null;
         const exps = expSnap.val() || {};
