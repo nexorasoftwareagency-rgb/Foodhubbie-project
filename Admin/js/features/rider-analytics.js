@@ -5,7 +5,7 @@
 
 import { Outlet, tenantRef, db, ref, get, query, orderByChild, equalTo, startAt, endAt, push, set, serverTimestamp, BUSINESS_BY_OUTLET } from '../firebase.js';
 import { state } from '../state.js';
-import { escapeHtml, showToast, formatDate, getISTDateString, getSkeletonDivs, formatOrderId } from '../utils.js';
+import { escapeHtml, showToast, formatDate, getISTDateString, getSkeletonDivs, formatOrderId, _loadChartJS } from '../utils.js';
 import { settleRiderWallet } from './riders.js';
 import { loadJSPDF } from './printing.js';
 
@@ -14,21 +14,7 @@ let _reportRows = [];
 let _selectedRider = null;
 let _lastFrom = '';
 let _lastTo = '';
-let _chartJSPromise = null;
 let _reportSending = false;
-
-async function loadChartJS() {
-    if (_chartJSPromise) return _chartJSPromise;
-    _chartJSPromise = import('chart.js').then(m => {
-        const C = m.Chart;
-        if (C && C.register && m.CategoryScale) {
-            C.register(m.CategoryScale, m.LinearScale, m.BarElement, m.BarController, m.Tooltip, m.Legend);
-        }
-        window.Chart = C;
-        return m;
-    }).catch(e => { _chartJSPromise = null; throw e; });
-    await _chartJSPromise;
-}
 
 export async function generateRiderPerformanceReport() {
     const sel = document.getElementById('riderSelectAnalytics');
@@ -174,7 +160,7 @@ function _renderReport(orders, stats, settlements, riderId) {
 }
 
 async function _renderChart(labels, data) {
-    await loadChartJS();
+    await _loadChartJS();
     const canvas = document.getElementById('riderEarningsChart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
