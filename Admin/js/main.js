@@ -518,6 +518,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (modal) {
                     modal.classList.remove('active', 'flex');
                     modal.classList.add('hidden');
+                    document.body.style.overflow = '';
                 }
             }
         });
@@ -736,6 +737,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     activeModal.classList.remove('active', 'flex');
                     activeModal._kbRestore?.();
                 }
+                document.body.style.overflow = '';
                 logger.info('MODAL', `Closed via Escape: ${activeModal.id || 'unknown'}`);
                 return;
             }

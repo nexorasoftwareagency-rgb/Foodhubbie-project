@@ -11,6 +11,7 @@ export function initGestures() {
         const overlay = document.getElementById('orderDrawerOverlay');
         if (drawer) drawer.classList.remove('active');
         if (overlay) overlay.classList.remove('active');
+        document.body.style.overflow = '';
     });
 
     initSwipeToClose('notificationSheet', () => {

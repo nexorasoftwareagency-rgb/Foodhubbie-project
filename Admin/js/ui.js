@@ -158,8 +158,10 @@ export const switchTab = async (tabId, skipHistory = false) => {
     // Close other mobile drawers
     const orderDrawer = document.getElementById('orderDrawer');
     const orderOverlay = document.getElementById('orderDrawerOverlay');
+    const drawerWasOpen = orderDrawer?.classList.contains('active');
     if (orderDrawer) orderDrawer.classList.remove('active');
     if (orderOverlay) orderOverlay.classList.remove('active');
+    if (drawerWasOpen) document.body.style.overflow = '';
     
     window.__tables?.closeDrawer?.();
     

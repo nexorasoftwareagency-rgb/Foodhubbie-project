@@ -332,6 +332,18 @@ const run = async () => {
     check('reject: pending workflow', false, `outcome=${rejOutcome}`);
   }
 
+  // 6d. Escape must close the modal AND release the body scroll lock
+  //     (leaked inline overflow:hidden on <body> froze scrolling on ALL tabs at <=1024px)
+  await openAddModal(page);
+  await page.waitForTimeout(400);
+  const lockedOvf = await page.evaluate(() => document.body.style.overflow);
+  check('escape: body scroll locked while modal open', lockedOvf === 'hidden', `overflow=${lockedOvf || '(none)'}`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  const unlockedOvf = await page.evaluate(() => document.body.style.overflow);
+  const escModalGone = (await page.locator('#expenseModal.active').count()) === 0;
+  check('escape: modal closed + scroll lock released', escModalGone && unlockedOvf === '', `modalActive=${!escModalGone} overflow=${unlockedOvf || '(none)'}`);
+
   // 7. Excel export actually downloads (was: always "No expense data to export")
   if ((await realRows.count()) > 0) {
     try {
