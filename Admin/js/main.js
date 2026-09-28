@@ -1,4 +1,4 @@
-import { previewImage, showToast, showConfirm, logAudit, getISTDateString } from './utils.js';
+import { previewImage, showToast, showConfirm, logAudit, pruneOldLogs, getISTDateString } from './utils.js';
 import { escapeHtml } from '../../shared/dom/escape.js';
 import { state } from './state.js';
 import { auth, db, serverTimestamp, ref, push, set } from './firebase.js';
@@ -840,6 +840,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         version: '5.2.0',
         timestamp: new Date().toISOString()
     });
+    pruneOldLogs();
 
     // Bot status on the dashboard widget
     window.addEventListener('botStatusChange', (e) => {

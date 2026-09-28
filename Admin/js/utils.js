@@ -1,4 +1,5 @@
-import { Outlet, auth, serverTimestamp, ref, db, get, set, push, update, runTransaction } from './firebase.js';
+import { Outlet, auth, serverTimestamp, ref, db, get, set, push, update, runTransaction, query, orderByKey, endAt } from './firebase.js';
+import { pushKeyFor, AUDIT_RETENTION_MS } from './log-prune.js';
 import { state } from './state.js';
 import { needsPinApproval } from './features/discount-evaluator.js';
 
@@ -196,6 +197,28 @@ export const logAudit = async (action, details = {}) => {
         } else {
             console.warn("[Audit] Log failed:", action, e?.message || e);
         }
+    }
+};
+
+// P3-8 #2: root logs/audit grows unbounded (4k entries ≈ 67% of all RTDB nodes).
+// Age-based prune, at most once per browser per day, fire-and-forget from init.
+// ponytail: root audit only — outlet walkouts (single entry) and riderErrors
+// (rider-write-only rule) don't meaningfully grow; revisit if that changes.
+export async function pruneOldLogs() {
+    try {
+        if (Date.now() - Number(localStorage.getItem('auditPrunedAt') || 0) < 864e5) return;
+        localStorage.setItem('auditPrunedAt', String(Date.now()));
+        const auditRef = Outlet.ref('logs/audit');
+        const snap = await get(query(auditRef, orderByKey(), endAt(pushKeyFor(Date.now() - AUDIT_RETENTION_MS))));
+        if (!snap.exists()) return;
+        const upd = {};
+        snap.forEach((child) => { upd[child.key] = null; });
+        const n = Object.keys(upd).length;
+        if (!n) return;
+        await update(auditRef, upd);
+        console.log(`[Prune] audit: removed ${n} entries older than ${AUDIT_RETENTION_MS / 864e5}d`);
+    } catch (e) {
+        console.warn('[Prune] audit prune failed:', e?.message || e);
     }
 };
 
