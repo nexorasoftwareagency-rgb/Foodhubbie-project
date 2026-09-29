@@ -6,9 +6,12 @@
  * Usage: node tests/check-sw.mjs
  */
 import { chromium } from 'playwright';
+import fs from 'fs';
 
 const ADMIN_URL = process.env.ADMIN_URL || 'https://foodhubbie-admins.web.app';
 const PASSWORD = process.env.ADMIN_PASSWORD || '';
+// source of truth — bumping sw.js CACHE_NAME must not require editing this test
+const CACHE_NAME = /CACHE_NAME\s*=\s*'([^']+)'/.exec(fs.readFileSync(new URL('../Admin/sw.js', import.meta.url), 'utf8'))[1];
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
@@ -37,7 +40,6 @@ await page.waitForSelector('.layout:not(.hidden)', { timeout: 30000 });
 
 // Keep the SW alive (unlike review-tabs.mjs); wait until the NEW sw (current
 // cache name) is activated and controlling, not just any registration.
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.5.0';
 const gotController = await page.waitForFunction(async (cacheName) => {
   const r = await navigator.serviceWorker.getRegistration();
   if (!r || !navigator.serviceWorker.controller || r.active?.state !== 'activated') return false;
@@ -67,7 +69,7 @@ const imgOk = await page.evaluate(() => new Promise(resolve => {
 
 await browser.close();
 
-console.log('SW controlling page (new v5.5.0):', gotController);
+console.log(`SW controlling page (new ${CACHE_NAME}):`, gotController);
 console.log('cross-origin image loads via SW:', imgOk);
 console.log('CSP/SW errors:', bad.length);
 bad.forEach(b => console.log('  -', b));
