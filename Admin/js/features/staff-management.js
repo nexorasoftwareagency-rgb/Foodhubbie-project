@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { BUSINESS_ID, db, Outlet, ref, get, set, update, push, remove, onValue, off, query, orderByChild, equalTo, runTransaction } from '../firebase.js';
-import { auth, createUserWithEmailAndPassword, sendPasswordResetEmail } from '../firebase.js';
+import { auth, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail, getSecondaryAuth } from '../firebase.js';
 import { logAudit, showToast, showConfirm, hashPin, hashEmail, escapeHtml, showPinModal, capitalize, formatRelativeTime, logStaffChange, showPinPrompt } from '../utils.js';
 import { loadLucide, getRoles, roleLevel, TAB_DEFS, DEFAULT_ROLES } from '../ui.js';
 
@@ -70,10 +70,15 @@ export async function createStaffAccount({ email, displayName, role, initialPass
         throw new Error('Invalid email address');
     }
     
-    // 1. Create Firebase Auth user
+    // 1. Create Firebase Auth user on the SECONDARY auth instance — creating on
+    // the primary would sign the new staff in, hijacking the owner's session so
+    // every write below runs as the unprovisioned new user and gets denied.
     let userCred;
+    const _sa = getSecondaryAuth();
+    if (!_sa) throw new Error('Account creation service unavailable. Refresh and retry.');
     try {
-        userCred = await createUserWithEmailAndPassword(auth, normalizedEmail, initialPassword);
+        userCred = await createUserWithEmailAndPassword(_sa, normalizedEmail, initialPassword);
+        await signOut(_sa);
     } catch (e) {
         const friendly = {
             'auth/email-already-in-use': 'This email is already registered',
@@ -740,13 +745,22 @@ function openRoleModal(key) {
         </div>
     `;
     
-    // Select All / None handlers
-    document.getElementById('roleSelectAllTabs')?.addEventListener('click', () => {
-        document.querySelectorAll('#roleTabsList input[type="checkbox"]').forEach(cb => cb.checked = true);
+    // Select All / None handlers — assigned (not addEventListener) so reopening
+    // never stacks listeners; labels re-sync whenever checkbox state changes.
+    const tabsList = document.getElementById('roleTabsList');
+    const syncTabLabels = () => tabsList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        const span = cb.closest('label')?.querySelector('span');
+        if (span) span.textContent = cb.checked ? '✓ Enabled' : '✗ Disabled';
     });
-    document.getElementById('roleSelectNoneTabs')?.addEventListener('click', () => {
-        document.querySelectorAll('#roleTabsList input[type="checkbox"]').forEach(cb => cb.checked = false);
-    });
+    tabsList.onchange = syncTabLabels;
+    const setAllTabs = (checked) => {
+        tabsList.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = checked; });
+        syncTabLabels();
+    };
+    const allBtn = document.getElementById('roleSelectAllTabs');
+    const noneBtn = document.getElementById('roleSelectNoneTabs');
+    if (allBtn) allBtn.onclick = () => setAllTabs(true);
+    if (noneBtn) noneBtn.onclick = () => setAllTabs(false);
     
     document.getElementById('roleDeleteBtn').style.display = (key && !DEFAULT_ROLES[key]) ? '' : 'none';
     const modal = document.getElementById('roleModal');

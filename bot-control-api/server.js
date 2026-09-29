@@ -262,7 +262,7 @@ app.post('/api/admin/update-password', requireSuperOnly, async (req, res) => {
     const outlet = outletSnap.val() || {};
     const outletName = outlet.name || oid;
     await admin.database().ref(`admins/${uid}`).set({
-      email, outlet: oid, name: outletName, role: 'Admin', businessId: bid,
+      email, outlet: oid, name: outletName, role: 'owner', businessId: bid,
     });
     await admin.database().ref(`businesses/${bid}/outlets/${oid}/adminLogin`).set({ email, password: newPassword });
     res.json({ ok: true, uid });
@@ -354,7 +354,7 @@ app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => 
 
     // Write admins/{uid} mirror
     await admin.database().ref(`admins/${uid}`).set({
-      email: adminEmail, outlet: oid, name: outletName, role: 'Admin', businessId: bid,
+      email: adminEmail, outlet: oid, name: outletName, role: 'owner', businessId: bid,
     });
 
     // Write outlet with locked: true

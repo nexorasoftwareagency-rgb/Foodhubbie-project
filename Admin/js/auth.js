@@ -165,7 +165,7 @@ export function initAuth() {
                                 console.log("[Auth] Bootstrapped missing role from staff:", adminData.role, "outlet:", oid);
                                 
                                 // Write role back to admin node so fcmToken and future writes work
-                                await update(ref(db, `admins/${user.uid}`), { role: rec.role, outlet: oid })
+                                await update(ref(db, `admins/${user.uid}`), { email: user.email, role: rec.role, outlet: oid })
                                     .catch(e => console.warn("[Auth] Failed to write bootstrapped role:", e));
                                 break;
                             }
@@ -335,6 +335,9 @@ export function initAuth() {
     document.documentElement.classList.remove('seamless-mode');
 
         // Initialize Session
+        // uid must survive onto state.adminData — staff creation (createdBy),
+        // logStaffChange (actorUid) and self-guards all read it.
+        adminData.uid = adminData.uid || user.uid;
         state.adminData = adminData;
         if (adminData.businessId) window.currentBusinessId = adminData.businessId;
         sessionStorage.setItem('adminIsLoggedIn', 'true');
