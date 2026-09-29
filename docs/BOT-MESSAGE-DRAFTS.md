@@ -16,7 +16,7 @@ Every message the bot (`bot/`) sends, rendered **exactly as a customer / admin /
 
 ## PART 1 — CUSTOMER MESSAGES (WhatsApp chat with the bot)
 
-*(In chat-order sequence. Messages marked `[image]` arrive as an image with this caption.)*
+*(Current customer messages — ordering happens in the webview. Messages marked `[image]` arrive as an image with this caption.)*
 
 ### C1. Welcome back — greeting `[image]`
 ```
@@ -546,125 +546,11 @@ _Reply STOP to unsubscribe._
 
 ---
 
-## PART 6 — INVALID INPUT HELP MESSAGES (customer)
-
-### H1. Invalid input at Category step
-```
-⚠️ *Invalid Selection.* Please reply with a *Category Number* from the list above.
-
-🛒 *9* View Cart
-🏠 *0* Main Menu
-```
-
-### H2. Invalid input at Dish step
-```
-⚠️ *Invalid Selection.* Please reply with an *Item Number* from the list above.
-
-🛒 *9* View Cart
-🔙 *0* Back to Categories
-```
-
-### H3. Invalid input at Size step
-```
-⚠️ *Invalid Selection.* Please select a *Size Number* (1, 2, etc.) from the options above.
-```
-
-### H4. Invalid input at Addons step
-```
-⚠️ *Invalid Selection.* Reply with an *Add-on Number* to add it, or *0* (Zero) if you are *DONE*.
-```
-
-### H5. Invalid input at Quantity step
-```
-⚠️ *Invalid Selection.* Please enter a quantity between *1* and *50*.
-```
-
-### H6. Invalid input at Location step
-```
-⚠️ *Invalid Selection.* To continue, please share your *Live/Current Location* using the 📎 (Paperclip) or + button in WhatsApp and selecting 'Location'.
-```
-
-### H7. Invalid input at Confirm-payment step
-```
-⚠️ *Invalid Selection.* Please reply with *1* to Confirm Order or *2* to Cancel.
-```
-
-### H8. Invalid input at Payment-method step
-```
-⚠️ *Invalid Selection.* Please reply with *1* for Cash or *2* for UPI.
-```
-
-### H9. Invalid input at Cart step
-```
-⚠️ *Invalid Selection.* Please reply with *1* to Proceed to Checkout or *2* to Clear Cart.
-```
-
-### H10. Invalid input at Coupon step
-```
-⚠️ *Invalid Selection.* If you have a coupon code, reply with it. Otherwise reply *0* to skip and continue.
-```
-
-### H11. Invalid input at Reuse-profile step
-```
-⚠️ *Invalid Selection.* Please reply with *1* to use your saved details or *2* to enter new ones.
-```
-
-### H12. Invalid input at any other step
-```
-⚠️ *Invalid Selection.* Please follow the instructions in the message above or reply *RESET* to start over.
-```
-
-### H13. Invalid reply in "Added to cart" step
-```
-⚠️ Reply *1* to add more, *2* to view cart or *0* to go back.
-```
-
-### H14. Invalid reply in "Empty cart" step
-```
-⚠️ Reply *1* to browse menu or *0* to go back.
-```
-
-### H15. Main menu (reply 0 at category)
-```
-🏠 *Main Menu* — Send any message to restart.
-```
-
----
-
-## PART 7 — ERROR / EDGE-CASE MESSAGES
-
-### E1. No categories available
-```
-❌ No categories available right now.
-```
-
-### E2. No items in category
-```
-❌ No items in this category.
-```
-
-### E3. Generic processing error
-```
-❌ Something went wrong. Please try again.
-```
-
-### E4. Order placement error
-```
-❌ Error placing your order. Please try again.
-```
-
-### E5. Delivery fee calculation error
-```
-❌ Error calculating delivery fee. Please try again.
-```
-
----
-
 ## Source reference (file → message)
 
 | File | Messages |
 |------|----------|
-| `bot/index.js` | C1–C33, S1–S9, A1–A15, H1–H15, E1–E5 (chat flows, status pipeline, admin notifies) |
+| `bot/index.js` | C1–C6, C28–C30, C32–C33, S1–S9, A1–A15 (chat flows, status pipeline, admin notifies) |
 | `bot/utils.js` | `formatOrderInvoice` (used in S1/S2 invoice block), `getFunnyFoodJoke` (S8), `getFoodFunnyProgress` (S2/S4/S5) |
 | `bot/reports.js` | A7–A9 (daily/weekly/monthly sales reports) |
 | `bot/promotions.js` | P1–P3 (promo campaigns), C32/C33 opt-out/opt-in handled in index.js |
