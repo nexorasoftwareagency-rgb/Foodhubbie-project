@@ -9,7 +9,7 @@ export type OutletId = string;
 export const FALLBACK_COORDS = { lat: 25.887944, lng: 85.026194 };
 
 /** In-memory cache for outlet -> businessId mapping */
-const outletBusinessIdCache = new Map<OutletId, string>();
+export const outletBusinessIdCache = new Map<OutletId, string>();
 
 /** Resolve businessId for an outlet at runtime. */
 export async function resolveBusinessIdForOutlet(outletId: OutletId): Promise<string> {

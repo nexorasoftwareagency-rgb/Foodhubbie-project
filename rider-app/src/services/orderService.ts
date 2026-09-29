@@ -20,7 +20,7 @@ import {
   serverNow,
   waitForServerTimeOffset,
 } from "@/lib/firebase";
-import { dbPaths, PROXIMITY, OTP_LIMITS, type OutletId } from "@/lib/constants";
+import { dbPaths, PROXIMITY, OTP_LIMITS, type OutletId, outletBusinessIdCache } from "@/lib/constants";
 import { applyDeliveryStat } from "@/lib/deliveryStats";
 import { logRiderError } from "@/services/auditService";
 import { getDistanceKm, isGhostOrder, formatOrderId } from "@/lib/utils";
@@ -120,6 +120,9 @@ export async function loadOutlets(): Promise<OutletInfo[]> {
     
     // Get display name from outlet settings or use outlet ID
     const displayName = outletMetaData.name || outletMetaData.id || oid;
+    
+    // Pre-populate businessId cache so sync dbPaths works
+    outletBusinessIdCache.set(oid, bid);
     
     results.push({
       id: oid,
