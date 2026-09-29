@@ -13,6 +13,7 @@
 
 .chat-app {
     height: 100%;
+    position: relative; /* anchors #wa-onboarding (absolute inset:0) to the chat panel — without it the overlay escapes to the viewport and blocks all nav */
 }
 
 .chat-app-inner {

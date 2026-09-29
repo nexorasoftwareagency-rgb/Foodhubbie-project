@@ -112,6 +112,12 @@ const run = async () => {
 
   // 3. Order rows — keyboard activation (use whichever tab has visible rows)
   let rowTab = null;
+  // default window is yesterday→today; widen it or the check is data-dependent (0 rows some days)
+  await page.evaluate(() => {
+    const el = document.getElementById('orderFrom');
+    if (el) { el.value = '2026-01-01'; el.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+  await page.waitForTimeout(1500);
   for (const t of ['orders', 'dashboard']) {
     await goTab(page, t);
     if (await page.locator(`#tab-${t} tr.premium-row-v4[tabindex]:visible`).count()) { rowTab = t; break; }

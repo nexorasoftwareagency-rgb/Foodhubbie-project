@@ -264,8 +264,13 @@ export async function openPOSSelectionModal(dishId) {
             (el || (modal._kbLastFocus?.isConnected ? modal._kbLastFocus : null))?.focus();
         };
         modal._kbClose = hidePOSSelectionModal;
+        // ponytail: .modal transitions visibility .25s — the first rAF fires before that
+        // transition starts, so focus() runs while computed visibility is still hidden (no-op).
+        // Retry once after the transition window instead of stacking rAFs.
         requestAnimationFrame(() => {
-            modal.querySelector('button, input, select, [tabindex]')?.focus();
+            const focusFirst = () => modal.querySelector('button, input, select, [tabindex]')?.focus();
+            focusFirst();
+            if (!modal.contains(document.activeElement)) setTimeout(focusFirst, 300);
         });
         // Ensure all icons (including ones in headers and the button) are rendered
         await loadLucide();

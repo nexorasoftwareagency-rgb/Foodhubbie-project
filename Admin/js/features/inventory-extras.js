@@ -107,7 +107,7 @@ export async function viewStockHistory(itemId, itemName) {
         );
         const snap = await get(logRef);
         const entries = [];
-        snap.forEach(child => entries.push({ id: child.key, ...child.val() }));
+        snap.forEach(child => { entries.push({ id: child.key, ...child.val() }); });
         entries.reverse();
 
         const body = overlay.querySelector('#stockHistoryBody');

@@ -70,6 +70,8 @@ const _allExcept = (skip) => ALL_TABS.filter(t => !skip.includes(t));
 // customized copy to settings/roles (Staff Management → Roles).
 // Levels feed staff-edit hierarchy: supreme 4, super 3, owner 2, manager 1, cashier 0, waiter -1.
 export const DEFAULT_ROLES = {
+    // 'Admin' is auth.js's default role (role: adminData.role || 'Admin') — must exist here or canAccessTab fail-closed denies every default login (03df0f7 fallout)
+    admin:   { name: 'Admin',   level: 2, tabs: ALL_TABS },
     owner:   { name: 'Owner',   level: 2, tabs: ALL_TABS },
     manager: { name: 'Manager', level: 1, tabs: _allExcept(['settings']) },
     cashier: { name: 'Cashier', level: 0, tabs: ['dashboard', 'walkin', 'tables', 'orders', 'live', 'notifications'] },

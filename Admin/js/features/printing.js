@@ -284,7 +284,7 @@ export async function printReceiptById(orderId) {
         let order;
 
         if (snap.exists()) {
-            snap.forEach(s => order = s.val());
+            snap.forEach(s => { order = s.val(); });
         } else {
             const snap2 = await get(Outlet.ref(`orders/${orderId}`));
             order = snap2.val();

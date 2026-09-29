@@ -10,6 +10,7 @@ let _categoryCacheAt = 0; // timestamp for TTL
 const CATEGORY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let _currentSubTab = 'today';
 let _historyFilters = { from: '', to: '', category: '', status: '', search: '' };
+let _catSearch = ''; // Categories sub-tab search — survives list re-renders
 let _chartInstances = {};
 let _currency = 'Rs.';
 let _modalsWired = false;   // static elements — wire listeners exactly once
@@ -106,6 +107,10 @@ export function initExpenseSubTabs() {
     if (catEl) catEl.addEventListener('change', () => { _historyFilters.category = catEl.value; _renderHistoryView(); });
     if (statusEl) statusEl.addEventListener('change', () => { _historyFilters.status = statusEl.value; _renderHistoryView(); });
     if (searchEl) searchEl.addEventListener('input', () => { _historyFilters.search = searchEl.value; _renderHistoryView(); });
+
+    // Categories sub-tab search (static input — wire once)
+    const catSearchEl = document.getElementById('ecatSearch');
+    if (catSearchEl) catSearchEl.addEventListener('input', () => { _catSearch = catSearchEl.value; renderExpenseCategoryList(); });
 
     // Default range: current month in IST (getISTDateString = YYYY-MM-DD)
     const todayIST = getISTDateString();
@@ -233,18 +238,19 @@ function _renderHistoryView() {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
 }
-// ===== CATEGORIES VIEW (inline in sub-tab) =====
+// ===== CATEGORIES VIEW (list ⇄ in-page form — no modal) =====
 async function _renderCategoriesView() {
-    const container = document.getElementById('expenseCategoriesContainer');
-    if (!container) return;
-    container.innerHTML = `
-        <div class="expense-category-addrow">
-            <button type="button" class="btn-primary btn-small" data-action="openExpenseCategories">
-                <i data-lucide="plus" class="icon-14"></i> Add Category
-            </button>
-        </div>
-        <div id="expenseCategoryListInline" class="expense-category-list"></div>`;
-    if (typeof lucide !== 'undefined') lucide.createIcons({ root: container });
+    const list = document.getElementById('expenseCategoryListInline');
+    if (!list) return;
+    // Entering the tab always lands on the list view (the form is a transient page state)
+    document.getElementById('ecatFormView')?.classList.add('hidden');
+    document.getElementById('ecatListView')?.classList.remove('hidden');
+    const search = document.getElementById('ecatSearch');
+    if (search && search.value !== _catSearch) search.value = _catSearch;
+    // Warm the category cache (budgets on the cards) — same TTL pattern as Reports
+    if (!_categoryCache.length || Date.now() - _categoryCacheAt >= CATEGORY_CACHE_TTL) {
+        await loadExpenseCategories().catch(() => {});
+    }
     await renderExpenseCategoryList();
 }
 
@@ -902,62 +908,105 @@ function populateCategorySelect(select, categories) {
     });
 }
 
-export async function openExpenseCategoryModal() {
-    const modal = document.getElementById('expenseCategoryModal');
-    if (!modal) return;
-    modal.classList.add('active', 'flex');
-    modal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-}
-
-export function closeExpenseCategoryModal() {
-    const modal = document.getElementById('expenseCategoryModal');
-    if (!modal) return;
-    modal.classList.remove('active', 'flex');
-    modal.classList.add('hidden');
-    document.body.style.overflow = '';
-    // Reset edit state so a cancelled edit can't leak into the next "Add" (overwrites an existing category instead of creating)
+// In-page Add/Edit form: swap list ⇄ form view (replaces the old modal flow)
+function _resetCategoryForm() {
     const btn = document.getElementById('btnAddExpenseCategory');
     if (btn) { btn.textContent = 'Add Category'; delete btn.dataset.editId; }
-    const nm = document.getElementById('expCatName');
-    if (nm) nm.value = '';
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('expCatName', '');
+    set('expCatBudget', '');
+    set('expCatColor', '#E84908');
+    set('expCatIcon', 'zap');
+    set('expCatAlert', '80');
     const heading = document.getElementById('expCatFormHeading');
-    if (heading) heading.textContent = 'Add New Category';
+    if (heading) heading.textContent = 'Add Category';
 }
 
-// Renders the inline Categories sub-tab list (the modal is form-only)
+export function openExpenseCategoryForm() {
+    // Always start clean — a cancelled/abandoned edit must never leak into a new Add
+    _resetCategoryForm();
+    document.getElementById('ecatListView')?.classList.add('hidden');
+    document.getElementById('ecatFormView')?.classList.remove('hidden');
+    document.getElementById('expCatName')?.focus();
+}
+
+export function closeExpenseCategoryForm() {
+    _resetCategoryForm();
+    document.getElementById('ecatFormView')?.classList.add('hidden');
+    document.getElementById('ecatListView')?.classList.remove('hidden');
+}
+
+// Renders the Categories sub-tab card grid (budget usage from _expenseData + _categoryCache)
 async function renderExpenseCategoryList() {
-    const targets = [document.getElementById('expenseCategoryListInline')].filter(Boolean);
-    if (!targets.length) return;
+    const grid = document.getElementById('expenseCategoryListInline');
+    if (!grid) return;
     try {
         const { Outlet, get } = await import('../firebase.js');
         const snap = await get(Outlet.ref('expenseCategories'));
-        let html = '';
-        snap.forEach(c => {
-            const cat = c.val() || {};
-            const icon = cat.icon || 'dollar-sign';
-            const color = escapeHtml(cat.color || '#E84908');
+        const cats = [];
+        // ponytail: CDN firebase forEach aborts on truthy callback return (push returns length) — block body, no return
+        snap.forEach(c => { cats.push({ id: c.key, ...(c.val() || {}) }); });
+        cats.sort((a, b) => (a.displayOrder || 999) - (b.displayOrder || 999) || String(a.name || '').localeCompare(String(b.name || '')));
+
+        // Month-to-date spend per category name (_expenseData is already outlet-scoped by loadExpenses)
+        const monthKey = getISTDateString().slice(0, 7);
+        const spend = {};
+        _expenseData.forEach(e => {
+            if ((e.date || '').startsWith(monthKey)) {
+                const k = e.categoryName || 'Other';
+                spend[k] = (spend[k] || 0) + Number(e.amount || 0);
+            }
+        });
+
+        const q = _catSearch.trim().toLowerCase();
+        const shown = q ? cats.filter(c => String(c.name || '').toLowerCase().includes(q)) : cats;
+
+        grid.innerHTML = shown.map(c => {
+            const color = /^#[0-9A-Fa-f]{6}$/.test(c.color || '') ? c.color : '#E84908';
+            const icon = c.icon || 'dollar-sign';
             // lucide names are ASCII; anything else (emoji) renders as text
             const iconHtml = /^[\w-]+$/.test(icon)
-                ? `<i data-lucide="${escapeHtml(icon)}" style="color:${color}; width:16px; height:16px;"></i>`
-                : `<span style="color:${color}; font-size:1.2rem;">${escapeHtml(icon)}</span>`;
-            html += `
-                <div class="expense-category-item">
-                    <div class="expense-category-row">
-                        ${iconHtml}
-                        <span class="expense-category-name">${escapeHtml(cat.name || c.key)}</span>
-                        <span class="text-muted-small">${cat.monthlyBudget ? 'Budget: ' + fmtMoney(cat.monthlyBudget) : 'No budget'}</span>
-                        <span class="expense-category-actions">
-                            <button type="button" class="btn-secondary btn-small" data-action="editExpenseCategory" data-id="${c.key}">Edit</button>
-                            <button type="button" class="btn-danger btn-small" data-action="deleteExpenseCategory" data-id="${c.key}">Delete</button>
-                        </span>
+                ? `<i data-lucide="${escapeHtml(icon)}"></i>`
+                : `<span>${escapeHtml(icon)}</span>`;
+            const budget = Number(c.monthlyBudget || 0);
+            const used = spend[c.name] || 0;
+            const pct = budget ? Math.min(100, Math.round((used / budget) * 100)) : 0;
+            const over = budget > 0 && used > budget;
+            const warn = budget > 0 && !over && pct >= Number(c.alertThreshold || 80);
+            const barColor = over ? '#EF4444' : warn ? '#F59E0B' : color;
+            const usage = budget
+                ? `<div class="ecat-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+                       <span class="ecat-bar-fill" style="width:${pct}%;background:${barColor}"></span>
+                   </div>
+                   <div class="ecat-spend-row"><span${over ? ' class="ecat-over"' : ''}>${over ? 'Over by ' + fmtMoney(used - budget) : fmtMoney(used) + ' spent'}</span><span>of ${fmtMoney(budget)}/mo</span></div>`
+                : `<div class="ecat-spend-row"><span class="ecat-muted">No budget set</span><span class="ecat-muted">${fmtMoney(used)} this month</span></div>`;
+            return `
+                <div class="ecat-card" data-cat-id="${c.id}">
+                    <div class="ecat-card-top">
+                        <span class="ecat-icon" style="background:${color}1F;color:${color}">${iconHtml}</span>
+                        <span class="ecat-name">${escapeHtml(c.name || c.id)}</span>
+                        ${c.isSystem ? '<span class="ecat-sys" title="System category">System</span>' : ''}
+                    </div>
+                    ${usage}
+                    <div class="ecat-actions">
+                        <button type="button" class="btn-secondary btn-small" data-action="editExpenseCategory" data-id="${c.id}">Edit</button>
+                        <button type="button" class="btn-danger btn-small" data-action="deleteExpenseCategory" data-id="${c.id}">Delete</button>
                     </div>
                 </div>`;
-        });
-        targets.forEach(t => {
-            t.innerHTML = html;
-            if (typeof lucide !== 'undefined') lucide.createIcons({ root: t });
-        });
+        }).join('');
+
+        // Count + empty states (no categories at all vs no search match)
+        const countEl = document.getElementById('ecatCount');
+        if (countEl) countEl.textContent = shown.length === cats.length ? `${cats.length} categories` : `${shown.length} of ${cats.length}`;
+        const emptyEl = document.getElementById('ecatEmpty');
+        const emptyText = document.getElementById('ecatEmptyText');
+        if (emptyEl) {
+            const noneAtAll = cats.length === 0;
+            emptyEl.classList.toggle('hidden', shown.length > 0);
+            if (emptyText) emptyText.textContent = noneAtAll ? 'No categories yet — create your first one.' : `No categories match "${_catSearch.trim()}"`;
+            if (!emptyEl.classList.contains('hidden') && typeof lucide !== 'undefined') lucide.createIcons({ root: emptyEl });
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons({ root: grid });
     } catch (e) {
         console.error('[Expenses] Failed to render category list:', e);
     }
@@ -977,16 +1026,13 @@ export async function addExpenseCategory() {
         if (editId) {
             await update(Outlet.ref(`expenseCategories/${editId}`), { name, color, icon, monthlyBudget: budget, alertThreshold: alertPct });
             showToast('Category updated', 'success');
-            btn.textContent = 'Add Category';
-            delete btn.dataset.editId;
         } else {
             const ref = push(Outlet.ref('expenseCategories'));
             await set(ref, { name, color, icon, monthlyBudget: budget, alertThreshold: alertPct, isSystem: false, displayOrder: Date.now() });
             showToast('Category added', 'success');
         }
-        document.getElementById('expCatName').value = '';
-        document.getElementById('expCatBudget').value = '';
-        _categoryCache = []; _categoryCacheAt = 0; // Invalidate cache
+        _categoryCacheAt = 0; // Force refill on next loadExpenseCategories call
+        closeExpenseCategoryForm(); // back to list view (also resets edit state + fields)
         await renderExpenseCategoryList();
         await loadExpenseCategories();
     } catch (e) {
@@ -1114,21 +1160,21 @@ export async function editExpenseCategory(catId) {
         const cat = snap.val();
         if (!cat) { showToast('Category not found', 'error'); return; }
 
+        // Open FIRST (it resets the form), then populate — order matters since open() clears fields
+        openExpenseCategoryForm();
+
         document.getElementById('expCatName').value = cat.name || '';
         document.getElementById('expCatColor').value = cat.color || '#E84908';
         document.getElementById('expCatIcon').value = cat.icon || 'dollar-sign';
         document.getElementById('expCatBudget').value = cat.monthlyBudget || '';
         document.getElementById('expCatAlert').value = cat.alertThreshold || 80;
 
-        // Change button text
+        // Relabel heading + submit for edit mode
         const btn = document.getElementById('btnAddExpenseCategory');
         btn.textContent = 'Update Category';
         btn.dataset.editId = catId;
         const heading = document.getElementById('expCatFormHeading');
         if (heading) heading.textContent = 'Edit Category';
-
-        // Open modal
-        await openExpenseCategoryModal();
     } catch (e) {
         console.error('[Expenses] Edit category error:', e);
         showToast('Failed to load category', 'error');
@@ -1172,7 +1218,7 @@ export async function deleteExpenseCategory(catId) {
         await Outlet.multiUpdate(updates);
 
         showToast('Category deleted, expenses reassigned to Misc', 'success');
-        _categoryCache = []; _categoryCacheAt = 0; // Invalidate cache
+        _categoryCacheAt = 0; // Force refill on next loadExpenseCategories call
         await renderExpenseCategoryList();
         await loadExpenseCategories();
     } catch (e) {
@@ -1220,8 +1266,7 @@ export function cleanupExpenses() {
     _expenseData = [];
     _sortField = 'date';
     _sortDir = 'desc';
-    _categoryCache = [];
-    _categoryCacheAt = 0;
+    _categoryCacheAt = 0; // Force refill on next loadExpenseCategories call
     // NOTE: wired flags intentionally NOT reset — sort-header/sub-tab/modal listeners are
     // bound once to static elements; clearing them stacked duplicate listeners per revisit.
     Object.values(_chartInstances).forEach(chart => chart.destroy?.());

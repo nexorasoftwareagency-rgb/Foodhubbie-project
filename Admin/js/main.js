@@ -464,8 +464,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'expReportExportPDF': logger.info('EXPENSES', 'Export Report PDF'); (await useMod('expenses')).downloadReportPDF(); break;
                 case 'openAddExpense': logger.info('EXPENSES', 'Open Add Expense'); (await useMod('expenses')).openAddExpenseModal(); break;
                 case 'closeExpenseModal': logger.info('EXPENSES', 'Close Expense Modal'); (await useMod('expenses')).closeExpenseModal(); break;
-                case 'openExpenseCategories': logger.info('EXPENSES', 'Open Categories'); (await useMod('expenses')).openExpenseCategoryModal(); break;
-                case 'closeExpenseCategoryModal': logger.info('EXPENSES', 'Close Categories'); (await useMod('expenses')).closeExpenseCategoryModal(); break;
+                case 'openExpenseCategories': logger.info('EXPENSES', 'Open Category Form'); (await useMod('expenses')).openExpenseCategoryForm(); break;
+                case 'closeExpenseCategoryForm': logger.info('EXPENSES', 'Close Category Form'); (await useMod('expenses')).closeExpenseCategoryForm(); break;
                 case 'saveExpenseSettings': logger.info('EXPENSES', 'Save Settings'); (await useMod('expenses')).saveExpenseSettings(); break;
                 case 'seedExpenseCategories': logger.info('EXPENSES', 'Seed Categories'); (await useMod('expenses')).seedExpenseCategories(); break;
                 case 'editExpense': logger.info('EXPENSES', 'Edit Expense'); (await useMod('expenses')).editExpense(id); break;

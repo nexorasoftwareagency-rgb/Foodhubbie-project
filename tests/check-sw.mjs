@@ -8,6 +8,7 @@
 import { chromium } from 'playwright';
 
 const ADMIN_URL = process.env.ADMIN_URL || 'https://foodhubbie-admins.web.app';
+const PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
@@ -30,17 +31,18 @@ try {
   process.exit(1);
 }
 await page.fill('#loginEmail', 'roshanipizza@gmail.com');
-await page.fill('#loginPassword', 'REDACTED-PASSWORD-ROTATE-ME');
+await page.fill('#loginPassword', PASSWORD);
 await page.click('#loginBtn');
 await page.waitForSelector('.layout:not(.hidden)', { timeout: 30000 });
 
-// Keep the SW alive (unlike review-tabs.mjs); wait until the NEW sw (v5.4.5
+// Keep the SW alive (unlike review-tabs.mjs); wait until the NEW sw (current
 // cache name) is activated and controlling, not just any registration.
-const gotController = await page.waitForFunction(async () => {
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.5.0';
+const gotController = await page.waitForFunction(async (cacheName) => {
   const r = await navigator.serviceWorker.getRegistration();
   if (!r || !navigator.serviceWorker.controller || r.active?.state !== 'activated') return false;
-  return (await caches.keys()).includes('foodhubbie-erp-shell-v5.4.5');
-}, { timeout: 60000, polling: 1000 }).then(() => true).catch(() => false);
+  return (await caches.keys()).includes(cacheName);
+}, CACHE_NAME, { timeout: 60000, polling: 1000 }).then(() => true).catch(() => false);
 console.log('SW regs:', JSON.stringify(await page.evaluate(async () => {
   const rs = await navigator.serviceWorker.getRegistrations();
   return rs.map(r => ({ scope: r.scope, active: r.active?.state || null, installing: !!r.installing, waiting: !!r.waiting }));
@@ -65,7 +67,7 @@ const imgOk = await page.evaluate(() => new Promise(resolve => {
 
 await browser.close();
 
-console.log('SW controlling page (new v5.4.5):', gotController);
+console.log('SW controlling page (new v5.5.0):', gotController);
 console.log('cross-origin image loads via SW:', imgOk);
 console.log('CSP/SW errors:', bad.length);
 bad.forEach(b => console.log('  -', b));

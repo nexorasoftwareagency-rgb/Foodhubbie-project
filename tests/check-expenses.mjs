@@ -1,7 +1,7 @@
 /**
  * Expenses tab regression check — review fixes:
  *  1. Edit/Delete wired to live tables (edit opens populated modal, delete confirms)
- *  2. Categories sub-tab renders inline (not a modal over an empty div)
+ *  2. Categories sub-tab: list ⇄ in-page form flow (modal removed), search, budget bars
  *  3. Category edit updates in place (no duplicates), delete removes
  *  4. Listener guards: after repeated tab revisits, one submit = one record
  *  5. Save stays on current sub-tab; Excel export downloads
@@ -100,8 +100,9 @@ const run = async () => {
 
   await goTab(page, 'expenses');
 
-  // 1. Categories sub-tab renders inline (was: modal over empty div)
+  // 1. Categories sub-tab: list view (toolbar + card grid), form starts closed
   await subTab(page, 'categories');
+  await page.waitForSelector('#expenseCategoryListInline .ecat-card', { timeout: 10000 }); // cards/bars render after async data arrives
   const catState = await page.evaluate(() => {
     const c = document.getElementById('expenseCategoriesContainer');
     return {
@@ -109,43 +110,61 @@ const run = async () => {
       list: !!document.getElementById('expenseCategoryListInline'),
       addBtn: !!c?.querySelector('[data-action="openExpenseCategories"]'),
       headerDupes: document.querySelectorAll('#tab-expenses .mob-section-head-row [data-action="openExpenseCategories"]').length,
+      formHidden: !!document.getElementById('ecatFormView')?.classList.contains('hidden'),
+      searchBox: !!document.getElementById('ecatSearch'),
+      bars: document.querySelectorAll('.ecat-bar-fill').length,
     };
   });
   check('categories: inline view rendered', catState.html > 50 && catState.list && catState.addBtn, `html=${catState.html} list=${catState.list}`);
   check('categories: no duplicate header button', catState.headerDupes === 0, `found=${catState.headerDupes}`);
+  check('categories: list view default (form closed)', catState.formHidden === true, `formHidden=${catState.formHidden}`);
+  check('categories: search box present', catState.searchBox === true, '');
+  check('categories: budget bars render', catState.bars > 0, `bars=${catState.bars}`);
 
-  // 2. Category create → update (no duplicate) → delete
+  // 2. Category create — in-page form flow (modal removed): open → save → auto-returns to list
   const catName = `ZZTest-${Date.now()}`;
   await page.click('#expenseCategoriesContainer [data-action="openExpenseCategories"]');
-  await page.waitForSelector('#expenseCategoryModal.active', { timeout: 5000 });
+  await page.waitForSelector('#ecatFormView:not(.hidden)', { timeout: 5000 });
+  const modalEls = await page.locator('#expenseCategoryModal').count();
+  check('categories: add opens in-page form (no modal)', modalEls === 0, `modalEls=${modalEls}`);
   await page.fill('#expCatName', catName);
+  await page.fill('#expCatBudget', '1000');
   await page.click('#btnAddExpenseCategory');
-  await page.waitForTimeout(1200);
-  await page.click('#expenseCategoryModal [data-action="closeExpenseCategoryModal"]');
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(1500);
+  const backOnList = await page.locator('#ecatFormView.hidden').count();
+  check('categories: save auto-returns to list', backOnList === 1, `formHidden=${backOnList}`);
   let hits = await page.locator('#expenseCategoryListInline').evaluate((el, n) => (el.textContent.match(new RegExp(n, 'g')) || []).length, catName);
   check('categories: created appears once inline', hits === 1, `hits=${hits}`);
 
-  // Edit → Update Category must UPDATE, not push a duplicate (target OUR row by name, never .first())
-  await page.locator('#expenseCategoryListInline .expense-category-item').filter({ hasText: catName }).locator('[data-action="editExpenseCategory"]').click();
-  await page.waitForSelector('#expenseCategoryModal.active', { timeout: 5000 });
+  // 3. Search filters the grid (count shows "x of y")
+  await page.fill('#ecatSearch', catName);
+  await page.waitForTimeout(600);
+  const searchState = await page.evaluate(() => ({
+    cards: document.querySelectorAll('.ecat-card').length,
+    count: document.getElementById('ecatCount')?.textContent || '',
+  }));
+  check('categories: search filters to match', searchState.cards === 1 && /of/.test(searchState.count), `cards=${searchState.cards} count="${searchState.count}"`);
+  await page.fill('#ecatSearch', '');
+  await page.waitForTimeout(600);
+
+  // 4. Edit → Update Category must UPDATE, not push a duplicate (target OUR row by name, never .first())
+  await page.locator('#expenseCategoryListInline .ecat-card').filter({ hasText: catName }).locator('[data-action="editExpenseCategory"]').click();
+  await page.waitForSelector('#ecatFormView:not(.hidden)', { timeout: 5000 });
   const btnText = (await page.locator('#btnAddExpenseCategory').textContent())?.trim();
   const prefill = await page.inputValue('#expCatName');
   check('categories: edit prefills + relabels', btnText === 'Update Category' && prefill === catName, `btn="${btnText}" name="${prefill}"`);
   await page.fill('#expCatName', catName + '-UPD');
   await page.click('#btnAddExpenseCategory');
-  await page.waitForTimeout(1200);
-  await page.click('#expenseCategoryModal [data-action="closeExpenseCategoryModal"]');
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(1500);
   hits = await page.locator('#expenseCategoryListInline').evaluate((el, n) => (el.textContent.match(new RegExp(n, 'g')) || []).length, catName + '-UPD');
   const oldHits = await page.locator('#expenseCategoryListInline').evaluate((el, n) => (el.textContent.match(new RegExp(n, 'g')) || []).length, catName + '(?!-UPD)');
   check('categories: update does not duplicate', hits === 1 && oldHits === 0, `new=${hits} old=${oldHits}`);
 
-  // 3. Listener guard: revisit tab twice, then create — must produce exactly one row
+  // 5. Listener guard: revisit tab twice — resumes same sub-tab with grid intact
   for (let i = 0; i < 2; i++) { await goTab(page, 'orders'); await goTab(page, 'expenses'); }
   const resumed = await page.evaluate(() => document.querySelector('.expense-subtab-btn.active')?.dataset.expenseSubtab);
   check('revisit: resumes same sub-tab', resumed === 'categories', `active=${resumed}`);
-  await page.locator('#expenseCategoryListInline .expense-category-item').filter({ hasText: catName + '-UPD' }).locator('[data-action="deleteExpenseCategory"]').click(); // dialog accepted by handler
+  await page.locator('#expenseCategoryListInline .ecat-card').filter({ hasText: catName + '-UPD' }).locator('[data-action="deleteExpenseCategory"]').click(); // dialog accepted by handler
   let gone = -1;
   for (let t = 0; t < 20; t++) { // poll: delete does 2 reads + multiUpdate + re-render
     await page.waitForTimeout(500);
