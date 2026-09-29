@@ -6,7 +6,7 @@
  *       QR ₹2 · POS counter ₹1 · webview_delivery (WhatsApp flow) ₹3 · other ₹2
  *       (commission_1pct mode → 1% of order total instead, Official pack)
  *   - cancelled/refunded orders are excluded from billing
- *   - promo token balance KPI + promo usage cost = sent tokens × ₹0.86 (campaigns totalSent)
+ *   - promo token balance KPI + promo usage cost = sent tokens × ₹1 (campaigns totalSent)
  *
  * Data: businesses/{bid}/outlets/{oid}/orders/{id}   (existing)
  *       businesses/{bid}/outlets/{oid}/billing/*     (seeded, rules-gated)

@@ -7,7 +7,7 @@ Build order: steps 1→10, one by one, each verified before the next.
 
 ## #Verify (done)
 
-- Usage math exists & live: `Admin/js/features/cost-math.js` (QR ₹2 · POS ₹1 · webview/WA ₹3 · other ₹2 · promo ₹0.86 · 1% mode · Cancelled/Refunded excluded) → Admin Costs tab KPI.
+- Usage math exists & live: `Admin/js/features/cost-math.js` (QR ₹2 · POS ₹1 · webview/WA ₹3 · other ₹2 · promo ₹1 · 1% mode · Cancelled/Refunded excluded) → Admin Costs tab KPI.
 - Supreme profile `renderBillingCard` = config only (rates/mode/setup/tokens) — no usage ₹, no payments.
 - `billing` node seeded in prod; rules: read = super/supreme or own-outlet admin, write = super/supreme only → both pay places are Supreme (tab + profile).
 - No payments/receipts anywhere yet. All inputs (orders, billing, campaigns) live in the single data-store snapshot → zero new listeners.

@@ -16,7 +16,7 @@ const now = Date.now();
 const FREE_TOKENS = 15;
 const DEFAULT_BILLING = {
   mode: 'per_order',
-  rates: { QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2, promo: 0.86, commission1pct: 0.01 },
+  rates: { QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2, promo: 1, commission1pct: 0.01 },
   setup: { amount: 500, status: 'refundable', date: new Date(now).toISOString() },
   tokens: { balance: FREE_TOKENS, updatedAt: now },
   tokenPacks: { welcome: { qty: FREE_TOKENS, priceRs: 0, note: 'Free welcome pack', grantedAt: now, grantedBy: 'system' } },
@@ -30,11 +30,13 @@ async function main() {
     for (const oid of Object.keys(biz.outlets || {})) {
       const cur = await db.ref(`businesses/${bid}/outlets/${oid}/billing`).get();
       if (cur.exists()) {
-        // Rate migration: POS counter is ₹1/order (was ₹2) — patch existing billing only
-        const pos = cur.val()?.rates?.POS;
-        if (pos != null && pos !== 1) {
-          await db.ref(`businesses/${bid}/outlets/${oid}/billing/rates/POS`).set(1);
-          console.log(`PATCH ${bid}/${oid} rates/POS ${pos} → 1`);
+        // Rate migrations on existing billing: POS ₹1/order (was ₹2), promo ₹1/token (was ₹0.86)
+        for (const [key, want] of [['POS', 1], ['promo', 1]]) {
+          const have = cur.val()?.rates?.[key];
+          if (have != null && have !== want) {
+            await db.ref(`businesses/${bid}/outlets/${oid}/billing/rates/${key}`).set(want);
+            console.log(`PATCH ${bid}/${oid} rates/${key} ${have} → ${want}`);
+          }
         }
         console.log(`skip  ${bid}/${oid} (billing exists)`); skipped++; continue;
       }

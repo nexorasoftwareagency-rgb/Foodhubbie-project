@@ -462,7 +462,7 @@ function renderBillingCard(outlet, readOnly, bid, oid, biz) {
         <div class="detail-cell"><div class="detail-label">Promo token balance</div><div class="detail-value mono">${bal}</div></div>
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
-        Rates: QR ₹${rates.QR ?? 2} · POS ₹${rates.POS ?? 1} · Delivery ₹${rates.webview_delivery ?? 3} · WhatsApp ₹${rates.WA ?? 3} · other ₹${rates.other ?? 2} · promo ₹${rates.promo ?? 0.86}/token${w ? ` · welcome pack: ${w.qty} free` : ''}
+        Rates: QR ₹${rates.QR ?? 2} · POS ₹${rates.POS ?? 1} · Delivery ₹${rates.webview_delivery ?? 3} · WhatsApp ₹${rates.WA ?? 3} · other ₹${rates.other ?? 2} · promo ₹${rates.promo ?? 1}/token${w ? ` · welcome pack: ${w.qty} free` : ''}
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;padding:10px 12px;background:var(--bg-elevated-2,#eef2f7);border:1px solid var(--glass-border,rgba(15,23,42,.10));border-radius:10px">
         <div class="detail-cell"><div class="detail-label">Usage · ${monthLabel(ym)}</div><div class="detail-value">${inr(month.usage)} <span style="font-size:11px;color:var(--text-tertiary)">${month.orders} orders</span></div></div>
@@ -490,7 +490,7 @@ function renderBillingCard(outlet, readOnly, bid, oid, biz) {
         <button class="btn btn-primary btn-sm" data-action="billing-grant-tokens" ${ro} title="${roTitle}">
           <svg data-lucide="gift" style="width:13px;height:13px"></svg> Grant tokens
         </button>
-        <span style="font-size:11.5px;color:var(--text-tertiary)">List value ₹${rates.promo ?? 0.86} each — charged to campaigns on send.</span>
+        <span style="font-size:11.5px;color:var(--text-tertiary)">List value ₹${rates.promo ?? 1} each — charged to campaigns on send.</span>
       </div>
     </div>
   </div>`;
@@ -1464,7 +1464,7 @@ registerAction('billing-grant-tokens', async () => {
   if (!Number.isFinite(qty) || qty < 1 || qty > 10000) return showToast('Enter a token quantity between 1 and 10000.', 'error');
   if (priceRs < 0) return showToast('Price cannot be negative.', 'error');
   const b = lastRaw?.[currentBid]?.outlets?.[currentOid]?.billing;
-  const listValue = (qty * (b?.rates?.promo ?? 0.86)).toFixed(2);
+  const listValue = (qty * (b?.rates?.promo ?? 1)).toFixed(2);
   const ok = await showConfirm({
     title: `Grant ${qty} promo token${qty === 1 ? '' : 's'}?`,
     body: `Adds ${qty} tokens to this outlet's prepaid balance (list value ₹${listValue}).${priceRs > 0 ? ` Sold for ₹${priceRs.toFixed(2)}.` : ' Recorded as a free grant.'}`,

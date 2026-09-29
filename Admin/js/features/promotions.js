@@ -10,6 +10,7 @@ import {
     query, orderByChild, equalTo, limitToLast, serverTimestamp,
     isConnected, onConnectionChange
 } from '../firebase.js';
+import { PROMO_RATE } from '../../shared/cost-math.js';
 import { state } from '../state.js';
 import { showToast, showConfirm } from '../ui-utils.js';
 import { haptic, escapeHtml, formatDate } from '../utils.js';
@@ -484,7 +485,7 @@ async function _launchCampaign() {
         const balSnap = await get(_ref('billing/tokens/balance'));
         const tokenBalance = balSnap.exists() ? Number(balSnap.val() || 0) : 0;
         const needed = recipients.length;
-        const estimatedCost = (needed * 0.86).toFixed(2);
+        const estimatedCost = (needed * PROMO_RATE).toFixed(2);
         if (tokenBalance < needed) {
             const shortfall = needed - tokenBalance;
             const msg = `Insufficient promo tokens.\n\nRequired: ${needed} tokens (est. ₹${estimatedCost})\nAvailable: ${tokenBalance} tokens\nShortfall: ${shortfall} tokens\n\nPromo tokens are managed by Supreme Admin. Please contact Supreme Admin to grant more tokens before launching this campaign.`;
@@ -538,7 +539,7 @@ async function _launchCampaign() {
     if (mode !== 'schedule') campaignDoc.startedAt = Date.now();
 
     const needed = recipients.length;
-    const costInfo = `Estimated promo cost: ${needed} tokens × ₹0.86 = ₹${(needed * 0.86).toFixed(2)}`;
+    const costInfo = `Estimated promo cost: ${needed} tokens × ₹${PROMO_RATE} = ₹${(needed * PROMO_RATE).toFixed(2)}`;
     const confirm = await showConfirm(
         `Send to ${recipients.length} recipients${mode === 'schedule' ? ` at ${formatDate(runAt)}` : ' now'}${attachMenu && menuText ? ' (+ menu footer)' : ''}?\n\n${costInfo}`,
         'Confirm campaign'

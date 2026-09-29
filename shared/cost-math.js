@@ -3,11 +3,11 @@
  * Rates mirror the public pricing page (website/index.html):
  *   QR Table ₹2/order · POS counter ₹1/order · WhatsApp Baileys ₹3/order · Official ₹5/order
  *   commission_1pct mode = the 1% option on total revenue (WhatsApp Official pack only)
- *   Promo (marketing) message = ₹0.86 · cancelled/refunded orders never bill
+ *   Promo (marketing) message = ₹1 · cancelled/refunded orders never bill
  */
 
 export const DEFAULT_RATES = { QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2 };
-export const PROMO_RATE = 0.86;
+export const PROMO_RATE = 1;
 export const FREE_PROMO_TOKENS = 15;
 export const COMMISSION_PCT = 0.01;
 
@@ -53,5 +53,6 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     assert.equal(p.total, 5, '1% of 500');
     const legacy = computeCostIndex({ a: { total: 100, type: 'Dine-in', status: 'Delivered' } });
     assert.equal(legacy.total, 1, 'untagged dine-in → POS rate');
+    assert.equal(PROMO_RATE, 1, 'promo ₹1/token');
     console.log('cost-math OK');
 }
