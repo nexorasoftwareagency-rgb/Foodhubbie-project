@@ -19,13 +19,83 @@ An agent should treat **VERIFY** as a hard gate — do not proceed to the next s
 
 ---
 
+## Windows 10 Host Machine — Required Setup (read this FIRST if your local machine runs Windows)
+
+**Correction to an assumption in this guide**: every "local machine" command throughout this guide (Section P's project bootstrap, Section 11's dashboard deployment, `git`/`ssh`/`firebase` CLI usage) is written in **bash syntax** — heredocs (`<< 'EOF'`), `chmod`, `ssh-keygen` in Linux style. None of this runs natively in Windows 10's PowerShell or Command Prompt. This does NOT affect the EC2 server itself (Sections 1-10) — that's Ubuntu Linux regardless of what OS you're connecting from. It only affects commands run on YOUR machine.
+
+**The fix — install WSL2 (Windows Subsystem for Linux) with Ubuntu.** This gives you a real Linux environment inside Windows 10, so every bash command in this guide works completely unchanged — no translation, no PowerShell equivalents to maintain separately.
+
+### W.1 Check Windows 10 build supports WSL2
+```powershell
+winver
+```
+**EXPECTED OUTPUT**: A dialog showing your Windows version. WSL2 requires **Windows 10 version 2004 (Build 19041) or higher**.
+
+**IF FAILS (older build)**: Run Windows Update until fully current, then retry.
+
+### W.2 Install WSL2 with Ubuntu (run in PowerShell **as Administrator**)
+```powershell
+wsl --install -d Ubuntu
+```
+**EXPECTED OUTPUT**: Downloads and installs WSL2 plus Ubuntu, then prompts for a restart.
+
+**VERIFY** (after restart, open PowerShell again):
+```powershell
+wsl --list --verbose
+```
+**EXPECTED OUTPUT**: A table showing `Ubuntu` with `VERSION 2` (not `VERSION 1` — WSL1 doesn't support everything this guide needs, e.g. `systemctl`).
+
+**IF FAILS**: `VERSION 1` shown instead of `2` → run `wsl --set-version Ubuntu 2` and wait for conversion to complete. If `wsl --install` itself fails with "WSL is not supported" → your Windows edition or virtualization settings block it; enable **Virtualization** in your PC's BIOS/UEFI settings first (varies by manufacturer), then retry.
+
+### W.3 Complete Ubuntu first-run setup
+After restart, Ubuntu opens automatically (or launch it from the Start menu). It will prompt for:
+```
+Enter new UNIX username: <choose any username, e.g. nilesh>
+New password: <choose a password - this is separate from your Windows password>
+```
+**VERIFY**:
+```bash
+whoami && lsb_release -a
+```
+**EXPECTED OUTPUT**: Your chosen username, then `Ubuntu 24.04 LTS` or similar (matches the EC2 server's OS — same commands work identically on both).
+
+### W.4 Critical — where to put the project (performance + permissions)
+**Do NOT** put the project folder under `/mnt/c/Users/...` (Windows' filesystem, mounted into WSL2). File permission commands (`chmod`) and performance are both meaningfully worse across that mount boundary. Instead, keep everything inside WSL2's own native Linux filesystem:
+```bash
+cd ~   # this is WSL2's own home directory, e.g. /home/nilesh - NOT /mnt/c/...
+pwd
+```
+**EXPECTED OUTPUT**: A path starting with `/home/`, not `/mnt/c/`. **All of Section P's commands (`mkdir ~/food-hubbie-platform`, etc.) should run from here.**
+
+### W.5 Install the tools this guide needs, inside WSL2's Ubuntu shell
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git curl unzip
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+npm install -g firebase-tools
+```
+**VERIFY**:
+```bash
+git --version && node --version && npm --version && firebase --version
+```
+**EXPECTED OUTPUT**: All four print version numbers with no `command not found` errors.
+
+### W.6 From here forward in this guide
+- Every command labeled "local machine" (Section P entirely; Section 11's `firebase deploy`; the `scp`/`ssh -i` commands in Sections 3.1, 7.2) → run inside this **WSL2 Ubuntu terminal**, never PowerShell/cmd.
+- Every command connecting to or running ON the EC2 server (Sections 2-10, after `ssh ubuntu@<IP>`) → unaffected by any of this, already Linux-to-Linux.
+- VS Code users: install the **"WSL" extension** (Microsoft) to edit files directly inside this Ubuntu environment with full IntelliSense — `code .` from inside the WSL2 terminal opens VS Code connected to WSL2 automatically.
+- If using an agent (OpenCode or similar) locally on Windows: point it at the WSL2 environment specifically (most agentic coding tools have a "use WSL" or "remote shell" setting) — this is what makes every bash command in Section P and Section 11 executable without modification.
+
+---
+
 ## Agent Operating Protocol (read before starting ANY step)
 
 ### A. Required tool stack
 
 | Tool | Role in this guide |
 |---|---|
-| **Bash/shell execution** | SSH into server, run every install/config command, npm, systemctl, cron |
+| **Bash/shell execution** | SSH into server, run every install/config command, npm, systemctl, cron. **If the local machine is Windows 10, this means WSL2's Ubuntu shell — see the "Windows 10 Host Machine" section above, not native PowerShell/cmd** |
 | **Playwright MCP (browser automation)** | Post-login navigation on Meta/Cloudflare dashboards — form filling, DOM scraping of IDs/tokens, clicking through wizards. Requires a human to complete the FIRST login on each site (see table B) — reuse that authenticated browser session/profile afterward |
 | **Git tool / bash git** | Clone, status, commit, `.gitignore` management |
 | **Filesystem read/write tool** | Writing config files, `.env`, heredocs, editing `firebase.json` |
@@ -182,6 +252,7 @@ Section P.0 (below) contains a strict, non-negotiable list of what may and may n
 
 ## Index
 
+- [Windows 10 Host Machine — Required Setup](#windows-10-host-machine--required-setup-read-this-first-if-your-local-machine-runs-windows) *(skip if your local machine is already Linux/Mac)*
 - [Section P — Project Bootstrap: Merging Roshani + Food-Hubbie into One New Project](#section-p)
   - P.1 Priorities & decisions · P.2 Create blank project · P.3 Fetch Roshani (code source)
   - P.4 Fetch Food-Hubbie (reference only) · P.5 Assemble the merged project
