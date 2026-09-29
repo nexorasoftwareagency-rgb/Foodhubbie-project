@@ -330,52 +330,113 @@ export function renderStaffTable() {
         return;
     }
     
-    tbody.innerHTML = _staffListCache.map(staff => {
-        const pinStatus = staff.counterPinHash ? 
-            '<span class="badge success">SET</span>' : 
-            '<span class="badge warning">NOT SET</span>';
-        const ceilingDisplay = staff.discountCeilingPct > 0 ? 
-            `${staff.discountCeilingPct}%` : 
-            '<span class="text-muted">Inherit (outlet)</span>';
-        const lastSignedIn = staff.lastSignedIn ? 
-            formatRelativeTime(staff.lastSignedIn) : 
-            '<span class="text-muted">Never</span>';
-        const statusBadge = staff.isActive ? 
-            '<span class="badge success">Active</span>' : 
-            '<span class="badge danger">Disabled</span>';
-        
-        const actions = canManage ? `
-            <div class="flex-row flex-gap-4">
-                <button class="btn-icon-secondary btn-edit-staff" data-uid="${staff.uid}" title="Edit">
-                    <i data-lucide="edit-2" class="icon-14"></i>
-                </button>
-                <button class="btn-icon-secondary btn-reset-pin" data-uid="${staff.uid}" title="Reset Counter PIN">
-                    <i data-lucide="key" class="icon-14"></i>
-                </button>
-                ${staff.isActive ? 
-                    `<button class="btn-icon-danger btn-disable-staff" data-uid="${staff.uid}" title="Disable Account">
-                        <i data-lucide="user-x" class="icon-14"></i>
-                    </button>` :
-                    `<button class="btn-icon-success btn-enable-staff" data-uid="${staff.uid}" title="Enable Account">
-                        <i data-lucide="user-check" class="icon-14"></i>
-                    </button>`
-                }
-            </div>
-        ` : '<span class="text-muted-small">View only</span>';
-        
-        return `
-            <tr data-uid="${staff.uid}">
-                <td>${escapeHtml(staff.displayName)}</td>
-                <td><span class="badge ${roleBadgeClass(staff.role)}">${capitalize(staff.role)}</span></td>
-                <td>${pinStatus}</td>
-                <td>${ceilingDisplay}</td>
-                <td>${lastSignedIn}</td>
-                <td>${statusBadge}</td>
-                <td>${actions}</td>
-            </tr>
-        `;
-    }).join('');
+    // Group staff by role
+    const rolesOrder = ['owner', 'manager', 'cashier', 'waiter'];
+    const roles = getRoles();
+    const staffByRole = {};
+    for (const staff of _staffListCache) {
+        const roleKey = staff.role || 'cashier';
+        if (!staffByRole[roleKey]) staffByRole[roleKey] = [];
+        staffByRole[roleKey].push(staff);
+    }
     
+    // Build rows grouped by role with role header
+    const rows = [];
+    for (const roleKey of rolesOrder) {
+        const roleDef = roles[roleKey];
+        if (!roleDef) continue;
+        const staffList = staffByRole[roleKey] || [];
+        
+        // Role header row
+        const hasSettingsAccess = roleDef.tabs?.includes('settings');
+        rows.push(`
+            <tr class="role-header-row" style="background:var(--bg-subtle);">
+                <td colspan="7" style="padding:12px 16px;">
+                    <div class="flex-row flex-center flex-gap-12" style="flex-wrap:wrap;align-items:center;">
+                        <span class="badge ${roleBadgeClass(roleKey)}" style="font-size:12px;">${capitalize(roleKey)}</span>
+                        <span class="text-muted-small">${staffList.length} staff</span>
+                        ${hasSettingsAccess ? '<span class="badge warning" style="font-size:11px;"><i data-lucide="shield" class="icon-10"></i> Settings Access</span>' : ''}
+                        <span class="text-muted-small" style="margin-left:auto;">Level: ${roleDef.level}</span>
+                    </div>
+                    <div class="role-tabs-preview" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
+                        ${roleDef.tabs?.map(t => `<span class="tab-chip" style="background:var(--bg-elevated);border:1px solid var(--border-color);padding:2px 8px;border-radius:4px;font-size:11px;">${escapeHtml(t)}</span>`).join('') || ''}
+                    </div>
+                </td>
+            </tr>
+        `);
+        
+        if (staffList.length === 0) {
+            rows.push(`
+                <tr class="role-empty-row" style="background:var(--bg-subtle);">
+                    <td colspan="7" class="text-center text-muted p-20" style="font-size:12px;">No ${capitalize(roleKey)}s yet</td>
+                </tr>
+            `);
+        } else {
+            for (const staff of staffList) {
+                const pinStatus = staff.counterPinHash ? 
+                    '<span class="badge success">SET</span>' : 
+                    '<span class="badge warning">NOT SET</span>';
+                const ceilingDisplay = staff.discountCeilingPct > 0 ? 
+                    `${staff.discountCeilingPct}%` : 
+                    '<span class="text-muted">Inherit</span>';
+                const lastSignedIn = staff.lastSignedIn ? 
+                    formatRelativeTime(staff.lastSignedIn) : 
+                    '<span class="text-muted">Never</span>';
+                const statusBadge = staff.isActive ? 
+                    '<span class="badge success">Active</span>' : 
+                    '<span class="badge danger">Disabled</span>';
+                
+                // Credentials display (email only, password shown once on creation)
+                const credentialsHtml = `
+                    <div class="staff-credentials" style="font-size:12px;line-height:1.6;">
+                        <div><strong>Email:</strong> ${escapeHtml(staff.email)}</div>
+                        <div><strong>UID:</strong> <code style="background:var(--bg-elevated);padding:1px 4px;border-radius:3px;">${staff.uid}</code></div>
+                    </div>
+                `;
+                
+                const actions = canManage ? `
+                    <div class="flex-row flex-gap-4">
+                        <button class="btn-icon-secondary btn-edit-staff" data-uid="${staff.uid}" title="Edit">
+                            <i data-lucide="edit-2" class="icon-14"></i>
+                        </button>
+                        <button class="btn-icon-secondary btn-reset-pin" data-uid="${staff.uid}" title="Reset Counter PIN">
+                            <i data-lucide="key" class="icon-14"></i>
+                        </button>
+                        <button class="btn-icon-secondary btn-send-password-reset" data-uid="${staff.uid}" data-email="${escapeHtml(staff.email)}" data-name="${escapeHtml(staff.displayName)}" title="Send Password Reset Email">
+                            <i data-lucide="mail" class="icon-14"></i>
+                        </button>
+                        ${staff.isActive ? 
+                            `<button class="btn-icon-danger btn-disable-staff" data-uid="${staff.uid}" title="Disable Account">
+                                <i data-lucide="user-x" class="icon-14"></i>
+                            </button>` :
+                            `<button class="btn-icon-success btn-enable-staff" data-uid="${staff.uid}" title="Enable Account">
+                                <i data-lucide="user-check" class="icon-14"></i>
+                            </button>`
+                        }
+                    </div>
+                ` : '<span class="text-muted-small">View only</span>';
+                
+                rows.push(`
+                    <tr data-uid="${staff.uid}" class="staff-row" style="border-top:1px solid var(--border-color);">
+                        <td style="padding:12px 16px;min-width:180px;">
+                            <div style="font-weight:500;">${escapeHtml(staff.displayName)}</div>
+                            ${credentialsHtml}
+                        </td>
+                        <td style="padding:12px 16px;text-align:center;">
+                            <span class="badge ${roleBadgeClass(staff.role)}">${capitalize(staff.role)}</span>
+                        </td>
+                        <td style="padding:12px 16px;text-align:center;">${pinStatus}</td>
+                        <td style="padding:12px 16px;text-align:center;">${ceilingDisplay}</td>
+                        <td style="padding:12px 16px;">${lastSignedIn}</td>
+                        <td style="padding:12px 16px;text-align:center;">${statusBadge}</td>
+                        <td style="padding:12px 16px;text-align:center;">${actions}</td>
+                    </tr>
+                `);
+            }
+        }
+    }
+    
+    tbody.innerHTML = rows.join('');
     refreshIcons(tbody);
     attachRowListeners();
 }
@@ -440,6 +501,29 @@ function attachRowListeners() {
                 showToast('Account enabled', 'success');
             } catch (e) {
                 showToast(e.message || 'Failed to enable', 'error');
+            }
+        };
+    });
+    
+    // Send Password Reset Email
+    tbody.querySelectorAll('.btn-send-password-reset').forEach(btn => {
+        btn.onclick = async () => {
+            const uid = btn.dataset.uid;
+            const email = btn.dataset.email;
+            const name = btn.dataset.name;
+            if (!await showConfirm('Send Password Reset Email?', `A password reset link will be sent to ${name} (${email}).`)) return;
+            try {
+                await sendPasswordResetEmail(auth, email);
+                showToast(`Password reset email sent to ${email}`, 'success');
+                await logStaffChange('password_reset_email', uid, null, { email }, 'Owner sent password reset email');
+            } catch (e) {
+                console.error('[StaffManagement] Password reset email failed:', e);
+                const friendly = {
+                    'auth/user-not-found': 'User not found in Auth',
+                    'auth/invalid-email': 'Invalid email address',
+                    'auth/too-many-requests': 'Too many requests. Try again later.'
+                }[e.code] || e.message;
+                showToast(friendly, 'error');
             }
         };
     });
@@ -544,20 +628,76 @@ export function renderRolesList() {
         return;
     }
     const roles = getRoles();
-    el.innerHTML = Object.entries(roles).map(([key, r]) => {
-        const tabs = Array.isArray(r.tabs) ? r.tabs.length : 0;
-        const isSystem = !!DEFAULT_ROLES[key];
-        return `<div class="flex-between flex-center" style="border:1px solid var(--border-color);border-radius:10px;padding:10px 14px;margin-bottom:8px;gap:10px;">
-            <div>
-                <strong>${escapeHtml(r.name || capitalize(key))}</strong>
-                <span class="text-muted-small"> · level ${Number(r.level) ?? 0} · ${tabs}/${TAB_DEFS.length} tabs${isSystem ? ' · default' : ' · custom'}</span>
-            </div>
-            <div class="flex-row" style="gap:12px;">
-                <button class="btn-text-primary-sm" data-action="editRole" data-role="${escapeHtml(key)}">Edit</button>
-                ${isSystem ? '' : `<button class="btn-text-primary-sm" data-action="deleteRole" data-role="${escapeHtml(key)}">Delete</button>`}
-            </div>
-        </div>`;
-    }).join('');
+    
+    // Build visual matrix
+    const tabIds = TAB_DEFS.map(t => t[0]);
+    const tabLabels = Object.fromEntries(TAB_DEFS);
+    
+    el.innerHTML = `
+        <div class="roles-matrix" style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                    <tr style="background:var(--bg-subtle);position:sticky;top:0;z-index:1;">
+                        <th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border-color);min-width:180px;">Role</th>
+                        <th style="padding:8px 12px;text-align:center;border-bottom:2px solid var(--border-color);min-width:60px;">Level</th>
+                        ${tabIds.map(id => `
+                            <th style="padding:8px 6px;text-align:center;border-bottom:2px solid var(--border-color);border-left:1px solid var(--border-color);min-width:36px;white-space:nowrap;" title="${escapeHtml(tabLabels[id])}">
+                                <span style="display:inline-block;transform:rotate(-45deg);transform-origin:left top;width:80px;text-align:left;font-size:11px;">${escapeHtml(tabLabels[id])}</span>
+                            </th>
+                        `).join('')}
+                        <th style="padding:8px 12px;text-align:center;border-bottom:2px solid var(--border-color);border-left:1px solid var(--border-color);min-width:100px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Object.entries(roles).map(([key, r]) => {
+                        const tabs = Array.isArray(r.tabs) ? r.tabs : [];
+                        const isSystem = !!DEFAULT_ROLES[key];
+                        const hasSettings = tabs.includes('settings');
+                        return `
+                            <tr style="border-bottom:1px solid var(--border-color);">
+                                <td style="padding:10px 12px;border-right:1px solid var(--border-color);">
+                                    <div style="font-weight:500;">${escapeHtml(r.name || capitalize(key))}</div>
+                                    <div class="text-muted-small">${isSystem ? 'Default' : 'Custom'} · Level ${Number(r.level) ?? 0}</div>
+                                    ${hasSettings ? '<span class="badge warning" style="font-size:10px;margin-top:4px;display:inline-block;"><i data-lucide="shield" class="icon-8"></i> Settings</span>' : ''}
+                                </td>
+                                <td style="padding:10px 12px;text-align:center;border-right:1px solid var(--border-color);">${Number(r.level) ?? 0}</td>
+                                ${tabIds.map(id => `
+                                    <td style="padding:6px;text-align:center;border-left:1px solid var(--border-color);">
+                                        ${tabs.includes(id) ? 
+                                            '<i data-lucide="check" class="icon-14 text-success" style="width:14px;height:14px;"></i>' : 
+                                            '<i data-lucide="x" class="icon-14 text-muted" style="width:14px;height:14px;"></i>'
+                                        }
+                                    </td>
+                                `).join('')}
+                                <td style="padding:10px 12px;text-align:center;border-left:1px solid var(--border-color);">
+                                    <div class="flex-row flex-center flex-gap-4" style="justify-content:center;">
+                                        <button class="btn-icon-secondary btn-edit-role" data-role="${escapeHtml(key)}" title="Edit Role">
+                                            <i data-lucide="edit-2" class="icon-14"></i>
+                                        </button>
+                                        ${isSystem ? '' : `
+                                            <button class="btn-icon-danger btn-delete-role" data-role="${escapeHtml(key)}" title="Delete Role">
+                                                <i data-lucide="trash-2" class="icon-14"></i>
+                                            </button>
+                                        `}
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    refreshIcons(el);
+    
+    // Attach listeners
+    el.querySelectorAll('.btn-edit-role').forEach(btn => {
+        btn.onclick = () => openRoleModal(btn.dataset.role);
+    });
+    el.querySelectorAll('.btn-delete-role').forEach(btn => {
+        btn.onclick = () => { _roleEditKey = btn.dataset.role; deleteRole(); };
+    });
 }
 
 function openRoleModal(key) {
@@ -566,11 +706,48 @@ function openRoleModal(key) {
     document.getElementById('roleModalTitle').innerText = key ? `Edit Role: ${role?.name || key}` : 'New Role';
     document.getElementById('roleName').value = role?.name || '';
     document.getElementById('roleLevel').value = role?.level ?? 0;
+    
     const tabs = Array.isArray(role?.tabs) ? role.tabs : [];
-    document.getElementById('roleTabsList').innerHTML = TAB_DEFS.map(([id, label]) =>
-        `<label style="display:flex;align-items:center;gap:6px;">
-            <input type="checkbox" value="${escapeHtml(id)}" ${tabs.includes(id) ? 'checked' : ''}> ${escapeHtml(label)}
-        </label>`).join('');
+    const tabIds = TAB_DEFS.map(t => t[0]);
+    const tabLabels = Object.fromEntries(TAB_DEFS);
+    
+    // Build visual matrix in modal
+    document.getElementById('roleTabsList').innerHTML = `
+        <div style="overflow-x:auto;max-height:300px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                    <tr style="background:var(--bg-subtle);">
+                        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-color);min-width:160px;">Tab</th>
+                        <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border-color);min-width:60px;border-left:1px solid var(--border-color);">Access</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tabIds.map(id => `
+                        <tr style="border-bottom:1px solid var(--border-color);">
+                            <td style="padding:8px 10px;border-right:1px solid var(--border-color);">
+                                ${escapeHtml(tabLabels[id])}
+                            </td>
+                            <td style="padding:8px 10px;text-align:center;border-left:1px solid var(--border-color);">
+                                <label style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">
+                                    <input type="checkbox" value="${escapeHtml(id)}" ${tabs.includes(id) ? 'checked' : ''} style="width:18px;height:18px;">
+                                    <span>${tabs.includes(id) ? '✓ Enabled' : '✗ Disabled'}</span>
+                                </label>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    // Select All / None handlers
+    document.getElementById('roleSelectAllTabs')?.addEventListener('click', () => {
+        document.querySelectorAll('#roleTabsList input[type="checkbox"]').forEach(cb => cb.checked = true);
+    });
+    document.getElementById('roleSelectNoneTabs')?.addEventListener('click', () => {
+        document.querySelectorAll('#roleTabsList input[type="checkbox"]').forEach(cb => cb.checked = false);
+    });
+    
     document.getElementById('roleDeleteBtn').style.display = (key && !DEFAULT_ROLES[key]) ? '' : 'none';
     const modal = document.getElementById('roleModal');
     modal.classList.remove('hidden');
