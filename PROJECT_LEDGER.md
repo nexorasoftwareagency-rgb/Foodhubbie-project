@@ -80,6 +80,104 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260929-1015-c9d2] PLAN-WEBSITE-ONBOARDING-APPROVAL verification pass — reject-path rules bug found + fixed
+- TIER: 3 (production security rules)
+- STATUS: COMPLETED
+- Verified all 8 plan steps against code: rules, signup.html + CTAs, approve-onboarding endpoint, #onboarding route + UI, locked gate (auth.js:252/299, state.js:57, ui.js:430, main.js:127 SAFE_ACTIONS), unlock-outlet action (restaurant-profile.js:262/1302), WhatsApp tab rename + `_checkBotStatus()` onboarding card (chat.js:379-470) — all present.
+- BUG FOUND (live REST test, `bot/verify-onboarding-rules.js`): **Reject button always 401'd.** `$reqId` `.validate` forced `status == 'pending'` (blocked the status→rejected transition) AND `rejectReason`/`reviewedAt`/`reviewedBy` weren't in the child allowlist (hit `$other: {".validate":"false"}`). Approve worked only because it goes through bot-control-api (Admin SDK bypasses rules). 3/3 client reject writes: 401.
+- FIX: `database.rules.json` — `$reqId` validate now allows `status=='pending'` (unauth create) OR `approved`/`rejected` when auth is super/supreme; added child validates for rejectReason (1-500), reviewedAt (number), reviewedBy (≤128), bid/oid (≤64).
+- Verified live post-deploy: unauth create 200 ✓, super reject write 200 ✓ (final state shows status/rejectReason/reviewedAt/reviewedBy), super locked write 200 ✓, unauth locked write 401 ✓, unauth read 401 ✓.
+- Plan doc status DRAFT → DONE. Cleanup: temp users/requests deleted, stray `locked` test field removed from real outlet.
+- Update (same task): EC2 deploy DONE via scp (ACCESS.md pattern) instead of git pull. Found + fixed crash: `server.js:29` required `../../shared/billing-defaults.cjs` (escapes repo — from commit b773eb6), MODULE_NOT_FOUND crash-loop on boot. Fixed to `../shared/`, scp'd server.js + shared/billing-defaults.cjs, pm2 restart, md5 match. Verified through tunnel: POST approve-onboarding 400 (auth, validation reached handler) / 401 (no auth) — was 404 before.
+
+### [20260928-1405-f8a1] Website onboarding + locked state + WhatsApp tab — Steps 1-7
+- TIER: 3 (production security rules + auth gates + new data flows)
+- STATUS: DONE
+- Started: 2026-09-28 (session)
+- Ended: 2026-09-28 14:05 UTC
+- Plan: `docs/PLAN-WEBSITE-ONBOARDING-APPROVAL.md`
+- **Step 1 — Rules:** Added `onboardingRequests` node (unauth write with `source: 'website'`, read = isSuper/isSupreme) + `locked` field on outlets (write = isSuper/isSupreme, read = auth). Deployed.
+- **Step 2 — Website signup:** Created `website/signup.html` (business/outlet/contact/admin-login/plan/whatsapp form → `onboardingRequests.push()`). Added CTAs from `index.html` + `book.html`. Deployed `hosting:website`.
+- **Step 3 — bot-control-api:** Added `/api/admin/approve-onboarding` endpoint — atomic server-side creation (bid/oid, outletNo, Auth user, admins mirror, outlet with `locked: true`, template mirror, request update with `adminPassword: null`). Syntax checked.
+- **Step 4 — Supreme Admin onboarding page:** Added `#onboarding` route + `onboarding-requests.js` (list with Pending/Approved/Rejected/All filters, KPIs, View/Approve/Reject actions). Sub-nav link with pending count badge. Built + deployed.
+- **Step 5 — Admin app locked state:** `auth.js` — locked check after disabled gate (sets `state.locked = true`, shows locked screen). Realtime `locked` listener (clears on unlock). `state.js` — `locked: false` field. `ui.js` — `showLockedScreen()` overlay. `main.js` — global action interceptor (blocks mutating actions when locked, whitelist: logout/toggleSidebar/switchOutlet/closeOrderDrawer/printReceiptById/chatOnWhatsapp/closeModal/closeDrawer). Built + deployed.
+- **Step 6 — Supreme Admin unlock:** `restaurant-profile.js` — "Unlock access" button (visible when `outlet.locked === true`) → sets `locked: false`. Admin app realtime listener picks it up → full access.
+- **Step 7 — WhatsApp tab:** Renamed "Chats" → "WhatsApp" in `index.html`. `chat.js` — `_checkBotStatus()` subscribes to `bot/{outlet}/pair`, shows onboarding card with QR pairing + step-by-step guide + manual when bot not connected, hides when connected. Built + deployed.
+- Files: `website/signup.html` (new), `database.rules.json`, `bot-control-api/server.js`, `SupremeAdmin/js/main.js`, `SupremeAdmin/index.html`, `SupremeAdmin/js/features/onboarding-requests.js` (new), `SupremeAdmin/js/features/restaurant-profile.js`, `Admin/js/auth.js`, `Admin/js/state.js`, `Admin/js/ui.js`, `Admin/js/main.js`, `Admin/index.html`, `Admin/js/features/chat.js`
+- Confidence: HIGH (all builds green, all deploys complete)
+
+### [20260928-1341-d5e6] Code review fixes: IST year, all-time due prefill, negative due clamp
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-09-28 (session)
+- Ended: 2026-09-28 13:41 UTC
+- Trigger: automated code review of uncommitted changes
+- Fixes (payment-record.js): (1) year dropdown uses IST year via `currentYm()` instead of local `getFullYear()`; (2) record-payment prefill uses all-time due (`{k:'all'}`) not scope due — Monthly scope with no month-due but outstanding all-time due now prefills correctly; (3) KPI Balance due clamps negative to 0 (`Math.max(stats.due, 0)`) — overpayment shows "₹0 settled" not "₹-51 settled".
+- Verification: `node --check` ✓; `tools/build.mjs --supreme` ✓; deployed `hosting:supreme`. LIVE E2E (temp super minted + deleted): All-time KPI "₹0 settled" ✓; Monthly scope KPI "₹0 settled" (was "₹-51 settled") ✓; year dropdown shows 2026 ✓; record payment modal prefill empty (all-time due = 0, settled) ✓. 0 console errors.
+- Note: review also flagged 3 issues in parallel-session code (database.rules.json admins role validation, staff isActive read gate, restaurant-onboarding focus) — not this session's changes, left for parallel session.
+- Confidence: HIGH
+
+### [20260928-133518-4382] Redesign Expenses Categories sub-tab: in-page form flow, category cards w/ budget usage, search, empty state
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-28 13:35 UTC
+- Files touched: Admin/index.html,Admin/js/features/expenses.js,Admin/js/main.js,Admin/js/ui.js,Admin/js/features/pos.js,Admin/chat.css,Admin/mobile-overrides.css,Admin/sw.js,tests/check-expenses.mjs,tests/check-keyboard.mjs,tests/serve-dist.mjs
+- Verified: check-expenses 37/37 exit0; check-keyboard 41/41 exit0; check-sw v5.5.0 controlling + 0 CSP errors; 3 category screenshots (desktop list/form, mobile) visually reviewed; node --check on all edited JS; tools/build.mjs success; prod expenseCategories back to 8 (ZZTest artifact removed via admin SDK)
+- NOT verified / open risk: no deploy (dist served live already; user deploys on request); no commit (unrequested); snapshot-server runs (8124) not against live 8123 on final pass
+- Confidence: HIGH
+- Ended: 2026-09-29 09:22 UTC
+
+### [20260928-1216-b2c4] Payment record page fixes: restore deleted payments, cost breakdown card, date+time, scroll verify
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-28 (session)
+- Ended: 2026-09-28 12:16 UTC
+- Trigger: user reported "only visible receipt of 17 rupees" (₹100 payment missing), "not scrolling seems limited", "Date is missing", "Usage not properly shown — should show Breakdown of Cost, not direct monthly only"
+- Root cause: prior session's cleanup deleted ALL 3 E2E payments including the user's own ₹100 (RCP-20260928--GH) — user's real payment, not just test data. Restored both payments (₹100 + ₹17.86) with exact original keys/amounts/receiptNos/timestamps via admin SDK. The ₹25 profile-E2E payment stays deleted (clearly test-only).
+- Fixes: (1) `billing-shared.js` scopeStats now returns `rates`, `mode`, `promoTokens` for breakdown rendering; (2) `payment-record.js` new "Cost breakdown" card (component × count × rate → amount, promo row, total = usage) scoped to All/Monthly/Yearly/Custom; (3) ledger Date column now shows date + IST time ("28 Sept 2026, 02:59 pm"); (4) KPI Usage small text cleaned (dropped "+ promo" wrap).
+- Verification: `node --check` ✓; `tools/build.mjs --supreme` ✓; deployed `hosting:supreme`. LIVE E2E (temp super minted + deleted): record page All-time — both payments visible (₹17.86 OB5 + ₹100 GH) with dates+times, cost breakdown QR 35×₹2=70 + Webview 7×₹3=21 + POS 12×₹2=24 + Other 1×₹2=2 + Promo 1×₹0.86 = ₹117.86 exact; Monthly scope — breakdown scoped to Sept (QR 18×2=36, Webview 6×3=18, POS 6×2=12, Promo 0.86 = ₹66.86); receipt popup date+time present ("28 Sept 2026, 02:59 pm IST"); scroll verified desktop (880px scrollable, no fixed overlays) + mobile 390×844 (1147px vertical scroll, all 3 tables h-scrollable); overview tab — Outstanding ₹0 settled, Sept usage ₹66.86, collected ₹117.86. 0 console errors. Screenshots: `.playwright-mcp/payment-record-page-v2.png`, `receipt-v2.png`, `payment-record-mobile.png`.
+- Confidence: HIGH
+
+### [20260928-0947-a7f3] Supreme Payment Management: 3rd tab + per-restaurant record page + profile billing money strip
+- TIER: 3 (production security rules + money-bearing writes)
+- STATUS: DONE
+- Started: 2026-09-28 (session)
+- Ended: 2026-09-28 09:47 UTC
+- Plan: `docs/PLAN-SUPREME-PAYMENT-MANAGEMENT.md` (v4, #Verify'd)
+- Files touched: `Admin/js/features/cost-math.js` → **moved to `shared/cost-math.js`** (+ `Admin/js/features/costs.js` import `../../shared/*`); `tools/build.mjs` (`supreme.shared:true` so `dist/shared/` emits); `database.rules.json` (`.validate` under `billing/payments/$id` + `billing/charges/$id`: amount number 0.01–1e7, method enum UPI/Cash/Card/Bank, period `/^[0-9]{4}-[0-9]{2}$/`, reason ≤200, note ≤500, receiptNo ≤64, createdAt number, delete allowed); NEW `SupremeAdmin/js/billing-shared.js` (scopeStats/monthlyRows/ledgerRows money math over shared cost-math, recordPaymentModal, addChargeModal, printReceipt popup); NEW `js/features/payment-overview.js` (list tab: KPIs, due-by-plan strip, plan/status filters, per-row Record →); NEW `js/features/payment-record.js` (All time/Monthly/Yearly/Custom scopes, KPI strip, monthly breakdown + totals, transaction ledger w/ running balance + Print receipt); `js/index.html` 3rd `dash-tab dash-payment` + `subnav-group[data-group=payment]`; `js/main.js` routes `#payments` + `#payments/{bid}/{oid}` (`dashboard:'payment'`, DASHBOARD_HOME, theme classes); `css/style.css` indigo `--accent-payment` token trio; `js/features/restaurant-profile.js` Billing card money strip (month usage/received + all-time due) + `Payment record →` + `profile-record-payment` action.
+- Verification: `node --check` all new/edited modules; `node shared/cost-math.js` self-check ✓; full `tools/build.mjs` ✓ (both dists got `shared/`); deployed `database` + `hosting:admin` + `hosting:supreme` (2 rule-syntax iterations: `hasOnly` is Firestore-only → dropped; RTDB `matches()` needs `/regex/` literal not quoted string). LIVE E2E (temp super minted via admin SDK, both deleted after): 3rd tab + `#payments` overview real numbers (₹117.86 outstanding, plan strip, filters, 7 rows incl. disabled); record page scopes (All→Monthly ₹66.86/30 orders); **parity vs Admin Costs tab** (30 orders, ₹66 + ₹0.86 promo = ₹66.86 exact); record payment from record page (prefill = live due) and from profile card (₹25) → both wrote `billing/payments`, toast + receipt-offer confirm; receipt popup content verified (date, business, method, all-time balance ₹0); REST QR order `source:'QR'` → usage +₹2 live (55→56 orders, ₹119.86). E2E fixes found & redeployed: modal result missing `createdAt` (Invalid Date on receipt), receipt mixed month-usage with all-paid (−51 → now all-time stats), business name fell to bid, hard-refresh route rendered "not found" before first snapshot (now waits for data), epoch `Jan 1970` zero-bucket row filtered, receipt label "Usage (all time)".
+- Cleanup: test order + all 3 E2E payments deleted (prod restored, cost-math recheck 55 orders/₹117.86/₹0 due); both temp super users + `admins/{uid}` entries deleted. Screenshots: `.playwright-mcp/payments-overview.png`, `payment-record-page.png`, `receipt.png`. 0 console errors on final pass (pre-existing identitytoolkit 400 only = deleted-session lookup).
+- Confidence: HIGH
+
+### [20260928-1318-ee42f89] Expenses tab + all 5 sub-tabs UI/UX pass
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-28 (session)
+- Ended: 2026-09-28 13:18 UTC
+- Files touched: Admin/index.html (hunk-staged — only my 3 hunks: `mobile-overrides.css?v=5.4.7`, `.expense-filter-dates` group, settings button styles; parallel Costs hunks left uncommitted), Admin/js/features/expenses.js, Admin/mobile-overrides.css, Admin/sw.js (`CACHE_NAME` v5.4.8), tests/check-expenses.mjs
+- Fixes: status badges invisible (missing `mob-badge-approved/pending/rejected` variants — white-on-white) + `status || 'pending'` normalize; category list raw lucide names → `<i data-lucide>` + `createIcons({root})`; report tables showed only col 1 (app-wide `min-width:860px` in ~420px cards → scoped `min-width:0` override + compact padding, grid minmax 320→420); Expense Manual `<a>` floated over Save (`width` ignored on inline anchor → `display:block`); Seed button glass-on-white → `.btn-secondary`; mobile subtab strip wraps to 2 rows (Settings was unreachable); history from/to dates fixed-width group stays one line on mobile; category rows single-line + icon; mobile Add Category respects card padding.
+- Verification: `node --check` ✓; build ✓ (new classes survived PurgeCSS); local 29/29 `check-expenses` (incl. new 6c reject branch + `openAddModal` retry helper + 6a poll cleanup); deployed `hosting:admin`; LIVE 29/29 + 41/41 keyboard; all 10 subtab shots (5×desktop+mobile) re-taken live and confirmed.
+- Confidence: HIGH
+
+### [20260928-1447-1b473c6] Expense modal/drawer scroll lock leak fix — release body overflow on all dismiss paths
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-28 (session)
+- Ended: 2026-09-28 14:47 UTC
+- Files touched: Admin/js/main.js (Escape fallback + generic close-btn), Admin/js/ui.js (switchTab drawer teardown), Admin/js/gestures.js (swipe-close callback), Admin/sw.js (CACHE_NAME v5.4.9), tests/check-expenses.mjs (2 new regression checks)
+- Fixes: leaked `document.body.style.overflow = 'hidden'` when expense modal closed via Escape (else branch bypassed closeExpenseModal); twin leaks in order drawer via switchTab tab-switch and swipe-to-close gesture — all froze scrolling on ALL tabs at ≤1024px where document is the scroller
+- Fix: 4 single-line unlocks at shared funnels (not per-modal): Escape fallback, generic .close-btn, switchTab drawer strip, swipe-close — each adds `document.body.style.overflow = ''`; conditional in switchTab (only if drawer was open) avoids clearing a modal's lock on history-back; sw.js CACHE_NAME v5.4.9 forces SW cache refresh since JS is served cache-first from precache
+- Verification: `node --check` ✓ ×6; build ✓ (dist has all 4 unlocks + v5.4.9); 2 new regression checks in check-expenses.mjs (lock sets on open, Escape releases); local 31/31 + live 31/31 + keyboard 41/41 (Escape drawer + POS modal paths confirmed unaffected); deployed `hosting:admin` (4 files)
+- Confidence: HIGH
+
+### [20260928-053538-867a] Redesign Add Restaurant onboarding as multi-step wizard + plan content
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-28 05:35 UTC
+- Ended: 2026-09-28 06:52 UTC
+- Verification: `node --check` clean; `tools/build.mjs --supreme` 276.8KB→191.8KB; PurgeCSS kept all new classes (`plan-pick`=10, `obw-grid`/`obw-pair`=2 each incl. media queries). Deployed `hosting:supreme` twice (wizard + `autocomplete="username"` fix). LIVE E2E via Playwright with temp super user (minted via admin SDK `admins/{uid}.isSuper`, deleted after): login → `#restaurants/onboard` → all 5 steps walked — empty-submit toast + focus to `#obw-business`, plan card select (`growth`), password-mismatch block ("Admin passwords do not match."), QR default checked, back-nav FormData fully retained, review summary correct with masked password. 0 console errors (only pre-existing TUNNEL_URL warning). Screenshots in `.playwright-mcp/wizard-review.png` + `wizard-review-step.png`.
+- Confidence: HIGH
+
 ### [20260927-170537-a2e7] outletNo: platform-wide outlet numbers for order IDs (03-161126-12)
 - TIER: 2 (medium-risk)
 - STATUS: DONE
@@ -114,7 +212,7 @@ Fragile Files before starting ANY task.
 - Started: 2026-09-27 08:47 UTC
 - Files touched: Admin/js/features/expenses.js, Admin/js/features/settings.js, Admin/js/ui.js
 - Verified: node --check clean on expenses.js, settings.js, ui.js; Admin build passes; rider-app build passes; database.rules.json valid JSON; dist assertions confirm BUSINESS_ID, EmailAuthProvider, reauthenticateWithCredential, auth all present
-- NOT verified / open risk: No live E2E test against production RTDB � these ReferenceErrors would only crash at runtime in the browser, not in node --check or esbuild
+- NOT verified / open risk: No live E2E test against production RTDB � these ReferenceErrors would only crash at runtime in the browser, not in node --check or esbuild
 - Confidence: HIGH
 - Ended: 2026-09-27 08:50 UTC
 
@@ -438,4 +536,27 @@ Fragile Files before starting ANY task.
 ### [20260711-034449-8631] Fix FCM push notifications
 - TIER: 2
 - STATUS: COMPLETED
+
+### [20260929-000000-0001] WhatsApp Platform Decision — Path B + Co-existence for All + Centralized Billing
+- TIER: 3 (strategic decision — defines entire WhatsApp architecture)
+- STATUS: DECIDED — Implementation Ready
+- Started: 2026-09-29
+- Decision: All restaurant numbers registered under Foodhubbie's REAL WABA (Path B); Co-existence enabled for ALL; Meta billing centralized on Foodhubbie account; restaurants billed via Supreme Admin Payment Management
+- Key architectural changes:
+  - Business Verification required for `1544720177433286` "Foodhubbie" (P0)
+  - Create REAL WABA "Foodhubbie Platform" under verified business (P0)
+  - Add `business_management` scope to system user `foodhubbiebot` (P0)
+  - Update EC2 `WABA_ID` → restart `bot-control-api` (P0)
+  - Per-restaurant onboarding via Supreme Admin Path B wizard (already built)
+  - Co-existence auto-detected via webhook `origin.type='business_app'` (already built)
+  - Billing: Meta → Foodhubbie (centralized); Foodhubbie → Restaurant (per-order/plan via Supreme Admin)
+- Files already built & deployed:
+  - Path B wizard: `SupremeAdmin/js/features/whatsapp-manage.js`
+  - Co-existence detect+guide: `whatsapp-manage.js:149-196`, `webhook-server/index.js:108-115`
+  - `waLinkSuccess()`: `bot-control-api/server.js:392-410`
+  - Payment Management: `payment-overview.js`, `payment-record.js`, `billing-shared.js`
+  - Bot template messaging: `bot/index.js`, `transport.js`, `whatsapp-send.js`
+- Full decision doc saved: `Credentials/WHATSAPP-COEXISTENCE-PLATFORM-DECISION.md`
+- Confidence: HIGH (all code exists; only Meta-side prerequisites remain)
+- Next Actions (P0): Business Verification → Real WABA → System User scope → EC2 config update → test one restaurant
 <!-- TASK_LOG_END -->

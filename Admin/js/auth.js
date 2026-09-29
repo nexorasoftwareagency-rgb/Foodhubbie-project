@@ -236,7 +236,29 @@ export function initAuth() {
             }
         }
 
-// --- Realtime disabled listener ---
+        // --- Locked-outlet gate ---
+        // Locked outlets allow login but block all mutating actions.
+        // The admin sees a locked screen until Supreme Admin unlocks.
+        if (!adminData.isSuper && !adminData.isSupreme && adminData.outlet) {
+            const oid = String(adminData.outlet).toLowerCase();
+            const bid = adminData.businessId || BUSINESS_BY_OUTLET[oid];
+            if (bid) {
+                try {
+                    const lockedSnap = await Promise.race([
+                        get(ref(db, `businesses/${bid}/outlets/${oid}/locked`)),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
+                    ]);
+                    if (lockedSnap.exists() && lockedSnap.val() === true) {
+                        state.locked = true;
+                        import('./ui.js').then(u => u.showLockedScreen());
+                    }
+                } catch (e) {
+                    console.warn("[Auth] Locked check failed:", e?.message || e);
+                }
+            }
+        }
+
+        // --- Realtime disabled listener ---
         // If the outlet gets disabled while admin is logged in, force sign-out immediately
         let _disabledUnsub = null;
         
@@ -257,6 +279,29 @@ export function initAuth() {
                         console.warn("[Auth] Outlet disabled in realtime, signing out:", user.email);
                         showAccessDenied('ACCESS DENIED', 'This restaurant has been disabled. You have been signed out.');
                         signOut(auth);
+                    }
+                });
+            }
+        }
+
+        // --- Realtime locked listener ---
+        // If the outlet gets unlocked while admin is logged in, clear the lock
+        let _lockedUnsub = null;
+        if (typeof window !== 'undefined') {
+            window.__lockedUnsubRef = () => _lockedUnsub;
+        }
+        if (!adminData.isSuper && !adminData.isSupreme && adminData.outlet) {
+            const oid = String(adminData.outlet).toLowerCase();
+            const bid = adminData.businessId || BUSINESS_BY_OUTLET[oid];
+            if (bid) {
+                _lockedUnsub = onValue(ref(db, `businesses/${bid}/outlets/${oid}/locked`), (snap) => {
+                    if (snap.exists() && snap.val() === true) {
+                        state.locked = true;
+                    } else {
+                        state.locked = false;
+                        // If the locked screen is showing, reload to clear it
+                        const lockedEl = document.getElementById('locked-screen');
+                        if (lockedEl) window.location.reload();
                     }
                 });
             }

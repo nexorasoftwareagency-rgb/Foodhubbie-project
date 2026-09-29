@@ -31,6 +31,9 @@
         <button class="dash-tab dash-agent" data-action="switch-dashboard" data-dashboard="agent">
           <svg data-lucide="message-circle"></svg> <span class="dash-tab-label">WhatsApp Agents</span>
         </button>
+        <button class="dash-tab dash-payment" data-action="switch-dashboard" data-dashboard="payment">
+          <svg data-lucide="credit-card"></svg> <span class="dash-tab-label">Payment Management</span>
+        </button>
       </div>
 
       <div id="app-user">
@@ -49,9 +52,13 @@
         <a href="#restaurants" class="nav-link" data-route="restaurants"><svg data-lucide="store"></svg> Restaurants</a>
         <a href="#analytics" class="nav-link" data-route="analytics"><svg data-lucide="bar-chart-3"></svg> Analytics</a>
         <a href="#notifications" class="nav-link" data-route="notifications"><svg data-lucide="bell"></svg> Notifications</a>
+        <a href="#onboarding" class="nav-link" data-route="onboarding" id="nav-onboarding"><svg data-lucide="user-plus"></svg> Onboarding <span class="nav-badge" id="onboarding-badge" style="display:none">0</span></a>
       </div>
       <div class="subnav-group" data-group="agent">
         <a href="#agents" class="nav-link" data-route="agents"><svg data-lucide="activity"></svg> Bot Fleet</a>
+      </div>
+      <div class="subnav-group" data-group="payment">
+        <a href="#payments" class="nav-link" data-route="payments"><svg data-lucide="credit-card"></svg> Usage &amp; Payments</a>
       </div>
     </nav>
 

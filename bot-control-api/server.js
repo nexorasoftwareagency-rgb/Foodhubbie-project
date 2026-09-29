@@ -26,7 +26,7 @@ const { pm2, connectOnce } = require('./pm2-client');
 const { startStatusWatcher } = require('./status-watcher');
 const { startOrchestrator } = require('./orchestrator');
 const sharp = require('sharp');
-const { getBillingDefaults } = require('../../shared/billing-defaults.cjs');
+const { getBillingDefaults } = require('../shared/billing-defaults.cjs');
 
 const PORT = process.env.BOT_CONTROL_PORT || 4000;
 

@@ -344,6 +344,7 @@ export function loadChat() {
     console.log('[Chat] Loading tab…');
     _wire();
     _wireBlockedMenus(); // ponytail: WhatsApp-style 3-dot menus
+    _checkBotStatus();
 
     // Single persistent listener. Keeps the sidebar badge alive across tabs
     // (WhatsApp-like) AND renders the thread list while this tab is visible.
@@ -373,6 +374,92 @@ export function loadChat() {
     _renderThreadList();
     _renderThreadView();
     _startUsageListener();
+}
+
+// ── WhatsApp bot onboarding ──────────────────────────────────────────
+let _pairUnsub = null;
+
+function _checkBotStatus() {
+    const outlet = Outlet.current;
+    if (_pairUnsub) { _pairUnsub(); _pairUnsub = null; }
+    _pairUnsub = onValue(Outlet.ref(`bot/${outlet}/pair`), (snap) => {
+        const pair = snap.val();
+        const connected = pair?.status === 'connected';
+        const tab = document.getElementById('tab-chat');
+        if (!tab) return;
+        if (connected) {
+            _hideOnboarding();
+        } else {
+            _showOnboarding(pair);
+        }
+    }, (err) => {
+        console.warn('[Chat] pair listener error:', err);
+    });
+}
+
+function _showOnboarding(pair) {
+    let el = document.getElementById('wa-onboarding');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'wa-onboarding';
+        el.style.cssText = 'position:absolute;inset:0;z-index:50;background:var(--bg-elevated,#121821);display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:24px;';
+        el.innerHTML = `
+            <div style="max-width:520px;width:100%;text-align:center">
+                <div style="font-size:48px;margin-bottom:12px">📱</div>
+                <h2 style="font-size:22px;font-weight:800;margin-bottom:8px">Connect Your WhatsApp Bot</h2>
+                <p style="color:var(--text-secondary);font-size:14px;margin-bottom:24px">Follow the steps below to link your WhatsApp Business number as a co-existence bot.</p>
+                <div style="background:var(--glass-bg,rgba(255,255,255,.04));border:1px solid var(--glass-border,rgba(255,255,255,.09));border-radius:14px;padding:20px;margin-bottom:16px">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:12px;text-align:left">Step-by-step guide:</div>
+                    <div style="text-align:left;font-size:13px;line-height:2;color:var(--text-secondary)">
+                        1. Open WhatsApp on your restaurant phone<br>
+                        2. Go to <strong>Settings → Linked Devices</strong><br>
+                        3. Click <strong>"Link a Device"</strong><br>
+                        4. Scan the QR code below with your phone
+                    </div>
+                </div>
+                <div id="wa-qr-container" style="display:flex;justify-content:center;margin-bottom:16px">
+                    <div style="width:200px;height:200px;background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#666;font-size:13px">Loading QR…</div>
+                </div>
+                <div id="wa-pair-status" style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">Waiting for QR code…</div>
+                <div style="background:var(--glass-bg,rgba(255,255,255,.04));border:1px solid var(--glass-border,rgba(255,255,255,.09));border-radius:14px;padding:16px;text-align:left;margin-bottom:16px">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:8px">📖 Full Manual</div>
+                    <div style="font-size:12px;line-height:1.8;color:var(--text-secondary)">
+                        <strong>Requirements:</strong><br>
+                        • A WhatsApp Business account (or personal WhatsApp)<br>
+                        • An Android or iOS phone with WhatsApp installed<br>
+                        • The phone must have an active internet connection<br><br>
+                        <strong>Troubleshooting:</strong><br>
+                        • QR expired? Refresh this page to get a new one<br>
+                        • Number banned? Contact Supreme Admin for a new number<br>
+                        • Already linked elsewhere? Unlink from other devices first<br><br>
+                        <strong>Need help?</strong> Contact Supreme Admin for assistance.
+                    </div>
+                </div>
+            </div>
+        `;
+        const chatApp = document.getElementById('chatApp');
+        if (chatApp) chatApp.appendChild(el);
+    }
+    el.style.display = 'flex';
+    _renderQR(pair);
+}
+
+function _hideOnboarding() {
+    const el = document.getElementById('wa-onboarding');
+    if (el) el.style.display = 'none';
+}
+
+function _renderQR(pair) {
+    const container = document.getElementById('wa-qr-container');
+    const statusEl = document.getElementById('wa-pair-status');
+    if (!container) return;
+    if (pair?.qr) {
+        container.innerHTML = `<img src="${pair.qr}" alt="WhatsApp QR Code" style="width:200px;height:200px;border-radius:12px" />`;
+        if (statusEl) statusEl.textContent = 'Scan this QR code with your phone';
+    } else {
+        container.innerHTML = `<div style="width:200px;height:200px;background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#666;font-size:13px">Waiting for QR…</div>`;
+        if (statusEl) statusEl.textContent = 'Waiting for QR code…';
+    }
 }
 
 export function cleanupChat() {

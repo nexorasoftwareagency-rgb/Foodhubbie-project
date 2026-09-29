@@ -1,6 +1,7 @@
 import { registerAction, navigate } from '/js/main.js';
 import { subscribe, isReadOnly } from '/js/data-store.js';
 import { refreshIcons, escapeHtml, statusPillHtml, statusLabel, formatDate, formatAge, formatUptime, renderOnboardingStepper, formatMemory, transportLabel, renderUptimeSparkline, showToast, showConfirm } from '/js/utils.js';
+import { scopeStats, inr, currentYm, monthLabel, recordPaymentModal, printReceipt } from '/js/billing-shared.js';
 
 const mainEl = document.getElementById('app-main');
 let currentBid = null;
@@ -241,7 +242,7 @@ function renderProfile(bid, oid, biz, outlet) {
       </div>
     </div>
 
-    ${renderBillingCard(outlet, readOnly)}
+    ${renderBillingCard(outlet, readOnly, bid, oid, biz)}
 
     <div class="glass-card" style="font-size:13px;margin-bottom:16px;border:1px solid ${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--glass-border,#2a2f3a)'}">
       <strong style="display:block;margin-bottom:6px;color:${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--status-offline,#f87171)'}">
@@ -254,8 +255,13 @@ function renderProfile(bid, oid, biz, outlet) {
            </button>`
         : `<div style="color:var(--text-secondary);margin-bottom:12px">Disabling pauses everything for this outlet — QR/menu ordering, dine-in sessions, staff login, and the WhatsApp bot. No data is deleted and it can be reactivated anytime.</div>
            <button class="btn btn-danger" data-action="disable-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
-             <svg data-lucide="pause-circle"></svg> Disable restaurant
-           </button>`}
+              <svg data-lucide="pause-circle"></svg> Disable restaurant
+            </button>`}
+      ${outlet.locked === true
+        ? `<div style="color:var(--status-degraded,#d97706);margin-bottom:12px">This restaurant is locked — the admin can log in but cannot use any features until unlocked.</div>
+           <button class="btn btn-primary" data-action="unlock-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
+              <svg data-lucide="lock-open"></svg> Unlock access
+            </button>` : ''}
     </div>
 
     <div class="glass-card accent-edge" style="margin-bottom:16px">
@@ -416,7 +422,7 @@ function renderProfile(bid, oid, biz, outlet) {
 // Admin Costs tab displays and tools/seed-billing-defaults.cjs seeds.
 // Grants go through a transaction on tokens/balance so concurrent grants
 // can't lose an increment, then record the pack for the history list.
-function renderBillingCard(outlet, readOnly) {
+function renderBillingCard(outlet, readOnly, bid, oid, biz) {
   const b = outlet.billing || null;
   const collapsed = collapsedSections.has('billing-body');
   const ro = readOnly ? 'disabled' : '';
@@ -441,6 +447,11 @@ function renderBillingCard(outlet, readOnly) {
   const bal = b.tokens?.balance ?? 0;
   const setupStatus = billingDraft?.setup ?? b.setup?.status ?? 'refundable';
   const w = b.tokenPacks?.welcome;
+  // Money strip — the same billing-shared math the Payment Management tab
+  // uses, so the profile and the tab can never disagree on a ₹ figure.
+  const ym = currentYm();
+  const month = scopeStats(outlet, { k: 'month', ym });
+  const all = scopeStats(outlet, { k: 'all' });
 
   return `<div class="glass-card" style="font-size:13px;margin-bottom:16px">
     ${header}
@@ -1288,6 +1299,27 @@ registerAction('reactivate-outlet', async () => {
   }
 });
 
+registerAction('unlock-outlet', async () => {
+  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
+  const outlet = lastRaw?.[currentBid]?.outlets?.[currentOid];
+  const name = outlet?.name || outlet?.settings?.Store?.storeName || 'this outlet';
+  const ok = await showConfirm({
+    title: `Unlock "${name}"?`,
+    body: 'Grants the restaurant admin full access to all features. They can already log in but are currently locked.',
+    confirmLabel: 'Unlock',
+  });
+  if (!ok) return;
+  try {
+    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}`).update({
+      locked: false,
+    });
+    showToast('Restaurant unlocked — admin now has full access.', 'success');
+  } catch (err) {
+    console.error('unlock outlet failed', err);
+    showToast('Unlock failed — check the console.', 'error');
+  }
+});
+
 registerAction('reconnect-whatsapp', async () => {
   const { launchWhatsAppSignup } = await import('/js/features/whatsapp-linking.js');
   launchWhatsAppSignup(currentBid, currentOid, {});
@@ -1466,5 +1498,33 @@ registerAction('billing-grant-tokens', async () => {
   } catch (err) {
     console.error('grant tokens failed', err);
     showToast('Grant failed — check the console.', 'error');
+  }
+});
+
+// ---- Payment Management (profile side) ------------------------------------
+// Same modal + receipt as the Payment Management tab and record page � all
+// three write businesses/{bid}/outlets/{oid}/billing/payments, so a payment
+// recorded here shows up on the tab immediately (one data-store listener).
+registerAction('profile-record-payment', async () => {
+  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
+  const outlet = lastRaw?.[currentBid]?.outlets?.[currentOid];
+  const bizData = lastRaw?.[currentBid];
+  if (!outlet) return showToast('Outlet not loaded yet.', 'error');
+  const due = scopeStats(outlet, { k: 'all' }).due;
+  const payment = await recordPaymentModal({ bid: currentBid, oid: currentOid, due: due > 0 ? due : 0 });
+  if (!payment) return;
+  const receipt = await showConfirm({
+    title: 'Payment recorded',
+    body: `Receipt ${payment.receiptNo} for ${inr(payment.amount)}. Create the printable receipt now?`,
+    confirmLabel: 'Create receipt',
+  });
+  if (receipt) {
+    const store = (outlet.settings && outlet.settings.Store) || {};
+    printReceipt({
+      businessName: bizData?.name || store.entityName || '',
+      outletName: outlet.name || store.storeName || currentOid,
+      payment,
+      stats: scopeStats(outlet, { k: 'all' }),
+    });
   }
 });

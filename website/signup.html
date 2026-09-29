@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register Your Restaurant — FoodHubbie ERP</title>
+<meta name="description" content="Register your restaurant on FoodHubbie ERP. Fill the form and our team will review and set up your account.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{--brand:#E84908;--brand-dark:#c23a05;--brand-light:#fff3e2;--ink:#111827;--muted:#6b7280;--bg:#fff;--soft:#faf8f6;--line:#e5e7eb;--radius:16px;--shadow:0 1px 3px rgba(0,0,0,.06);--shadow-lg:0 10px 40px rgba(0,0,0,.08)}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--ink);line-height:1.65;-webkit-font-smoothing:antialiased;padding-bottom:64px;background:var(--soft)}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+
+  header{position:sticky;top:0;background:rgba(255,255,255,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:100}
+  nav{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{font-weight:800;font-size:18px;text-decoration:none;color:var(--ink)}
+  .logo span{color:var(--brand)}
+  nav .links{display:flex;align-items:center;gap:24px}
+  nav a.link{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500}
+  nav a.link:hover{color:var(--ink)}
+
+  .hero{padding:72px 0 32px;text-align:center}
+  .kicker{color:var(--brand);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+  h1{font-size:clamp(28px,5vw,40px);letter-spacing:-.025em;font-weight:800;margin-bottom:12px}
+  .sub{color:var(--muted);font-size:17px;max-width:600px;margin:0 auto}
+
+  .form-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg);max-width:640px;margin:32px auto 0;padding:40px}
+  .form-card label{display:block;font-size:13px;font-weight:600;margin:18px 0 6px;color:var(--ink)}
+  .form-card input,.form-card select{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;background:#fff;color:var(--ink);transition:border-color .15s;outline:none}
+  .form-card input:focus,.form-card select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(232,73,8,.12)}
+  .form-card .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:560px){.form-card .row{grid-template-columns:1fr}}
+  .form-card .hint{font-size:12px;color:var(--muted);margin-top:5px}
+
+  .radio-group{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .radio-card{flex:1;min-width:140px;border:2px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s;position:relative}
+  .radio-card:hover{border-color:var(--brand)}
+  .radio-card.selected{border-color:var(--brand);background:var(--brand-light)}
+  .radio-card input{position:absolute;opacity:0;pointer-events:none}
+  .radio-card .radio-title{font-weight:700;font-size:14px;margin-bottom:2px}
+  .radio-card .radio-desc{font-size:12px;color:var(--muted)}
+
+  .submit-btn{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:10px;background:var(--brand);color:#fff;padding:16px;border-radius:12px;border:0;font-size:16px;font-weight:700;cursor:pointer;margin-top:26px;transition:all .2s}
+  .submit-btn:hover{background:var(--brand-dark);box-shadow:0 8px 24px rgba(232,73,8,.3)}
+  .submit-btn:disabled{opacity:.5;cursor:wait}
+
+  .success{display:none;margin-top:22px;background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:18px 20px;font-size:14px;color:#166534}
+  .success.show{display:block}
+
+  .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:100}
+  .bottom-nav .wrap{display:flex;justify-content:center;gap:0}
+  .bottom-nav a{flex:1;max-width:200px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px 10px;text-decoration:none;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-top:2px solid transparent}
+  .bottom-nav a:hover{color:var(--brand)}
+  .bottom-nav a.active{color:var(--brand);border-top-color:var(--brand)}
+  .nav-icon{font-size:20px}
+
+  footer{background:#0a0a0a;color:rgba(255,255,255,.5);padding:40px 0 24px;margin-top:56px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+  footer .logo{color:#fff;font-weight:800;font-size:16px}
+  footer .logo span{color:var(--brand)}
+  footer a{color:rgba(255,255,255,.5);text-decoration:none;font-size:13px}
+  footer a:hover{color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="index.html">Food<span>Hubbie</span> ERP</a>
+      <div class="links">
+        <a class="link" href="index.html">Home</a>
+        <a class="link" href="book.html">Book a Order</a>
+        <a class="link" href="contact.html">Contact</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <a href="index.html" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;margin-bottom:28px">← Back to Home</a>
+    <div class="kicker">New Restaurant Registration</div>
+    <h1>Register your restaurant</h1>
+    <p class="sub">Fill in your details and our team will review your application. Once approved, you'll get access to your restaurant dashboard.</p>
+  </div>
+</section>
+
+<div class="wrap">
+  <form class="form-card" id="signupForm" onsubmit="return handleSubmit(event)">
+    <div class="row">
+      <div>
+        <label for="fBusiness">Business Name *</label>
+        <input type="text" id="fBusiness" required placeholder="e.g. Pizza Palace" minlength="2" maxlength="80">
+      </div>
+      <div>
+        <label for="fOutlet">Outlet Name *</label>
+        <input type="text" id="fOutlet" required placeholder="e.g. Pizza Palace — Andheri" minlength="2" maxlength="80">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="fPhone">Contact Phone *</label>
+        <input type="tel" id="fPhone" required placeholder="e.g. 9724649971" minlength="10" maxlength="15">
+      </div>
+      <div>
+        <label for="fEmail">Contact Email *</label>
+        <input type="email" id="fEmail" required placeholder="e.g. owner@pizzapalace.com">
+      </div>
+    </div>
+
+    <hr style="border:0;border-top:1px solid var(--line);margin:24px 0">
+
+    <div class="row">
+      <div>
+        <label for="fAdminEmail">Admin Login Email *</label>
+        <input type="email" id="fAdminEmail" required placeholder="e.g. admin@pizzapalace.com">
+        <div class="hint">This email will be used to log in to your dashboard</div>
+      </div>
+      <div>
+        <label for="fAdminName">Admin Name *</label>
+        <input type="text" id="fAdminName" required placeholder="e.g. Rahul Sharma">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="fPassword">Admin Password *</label>
+        <input type="password" id="fPassword" required minlength="6" placeholder="Min 6 characters">
+      </div>
+      <div>
+        <label for="fPassword2">Confirm Password *</label>
+        <input type="password" id="fPassword2" required minlength="6" placeholder="Re-enter password">
+      </div>
+    </div>
+
+    <hr style="border:0;border-top:1px solid var(--line);margin:24px 0">
+
+    <label>Select Plan *</label>
+    <div class="radio-group" id="planGroup">
+      <label class="radio-card" data-value="starter">
+        <input type="radio" name="plan" value="starter" required>
+        <div class="radio-title">Starter</div>
+        <div class="radio-desc">₹2/order · QR + POS + WhatsApp</div>
+      </label>
+      <label class="radio-card" data-value="growth">
+        <input type="radio" name="plan" value="growth">
+        <div class="radio-title">Growth</div>
+        <div class="radio-desc">₹2/order · Advanced analytics</div>
+      </label>
+      <label class="radio-card" data-value="enterprise">
+        <input type="radio" name="plan" value="enterprise">
+        <div class="radio-title">Enterprise</div>
+        <div class="radio-desc">Custom rates · Multi-outlet</div>
+      </label>
+    </div>
+
+    <label>WhatsApp Bot *</label>
+    <div class="radio-group" id="waGroup">
+      <label class="radio-card" data-value="qr">
+        <input type="radio" name="whatsapp" value="qr" required>
+        <div class="radio-title">QR Code (Baileys)</div>
+        <div class="radio-desc">Free · Scan QR to connect</div>
+      </label>
+      <label class="radio-card" data-value="meta">
+        <input type="radio" name="whatsapp" value="meta">
+        <div class="radio-title">Meta Official</div>
+        <div class="radio-desc">₹500/mo · Official API</div>
+      </label>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submitBtn">Submit Application</button>
+
+    <div class="success" id="successMsg">
+      ✅ <b>Application received!</b><br>
+      Our team will review your registration and contact you within 24 hours.<br>
+      Once approved, you can log in to your dashboard with the email and password you provided.
+    </div>
+  </form>
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="index.html">Home</a> · <a href="book.html">Book a Order</a> · <a href="contact.html">Contact</a></div>
+  </div>
+</footer>
+
+<script>
+  // Radio card selection
+  document.querySelectorAll('.radio-group').forEach(function(group) {
+    group.addEventListener('click', function(e) {
+      var card = e.target.closest('.radio-card');
+      if (!card) return;
+      group.querySelectorAll('.radio-card').forEach(function(c) { c.classList.remove('selected'); });
+      card.classList.add('selected');
+      var input = card.querySelector('input');
+      if (input) input.checked = true;
+    });
+  });
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    var businessName = document.getElementById('fBusiness').value.trim();
+    var outletName = document.getElementById('fOutlet').value.trim();
+    var contactPhone = document.getElementById('fPhone').value.trim();
+    var contactEmail = document.getElementById('fEmail').value.trim();
+    var adminEmail = document.getElementById('fAdminEmail').value.trim();
+    var adminName = document.getElementById('fAdminName').value.trim();
+    var adminPassword = document.getElementById('fPassword').value;
+    var adminPassword2 = document.getElementById('fPassword2').value;
+    var plan = document.querySelector('input[name="plan"]:checked');
+    var whatsappConnect = document.querySelector('input[name="whatsapp"]:checked');
+
+    if (!businessName || !outletName || !contactPhone || !contactEmail) return false;
+    if (!adminEmail || !adminName || !adminPassword) return false;
+    if (adminPassword !== adminPassword2) {
+      alert('Passwords do not match.');
+      return false;
+    }
+    if (!plan || !whatsappConnect) {
+      alert('Please select a plan and WhatsApp option.');
+      return false;
+    }
+
+    var btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    try {
+      await fetch('https://foodhubbie-10-default-rtdb.firebaseio.com/onboardingRequests.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: businessName,
+          outletName: outletName,
+          contactPhone: contactPhone,
+          contactEmail: contactEmail,
+          adminEmail: adminEmail,
+          adminName: adminName,
+          adminPassword: adminPassword,
+          plan: plan.value,
+          whatsappConnect: whatsappConnect.value,
+          template: '',
+          source: 'website',
+          status: 'pending',
+          createdAt: Date.now()
+        })
+      });
+    } catch (err) {
+      console.warn('Save failed', err);
+    }
+
+    document.getElementById('successMsg').classList.add('show');
+
+    setTimeout(function () {
+      btn.disabled = false;
+      btn.textContent = 'Submit Application';
+    }, 3000);
+    return false;
+  }
+</script>
+
+</body>
+</html>

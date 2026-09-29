@@ -10,6 +10,8 @@
  *   #agents                      → bot-fleet-overview.js
  *   #analytics                   → restaurant-analytics.js (platform-wide)
  *   #analytics/{bid}/{oid}       → restaurant-analytics.js (single outlet)
+ *   #payments                    → payment-overview.js (usage + due per restaurant)
+ *   #payments/{bid}/{oid}        → payment-record.js (payments/charges/receipts)
  *
  * A route's render() may return a cleanup function (e.g. a data-store
  * unsubscribe) — handleRoute calls the previous page's cleanup before
@@ -42,11 +44,17 @@ const routes = [
       return mod('/js/features/restaurant-analytics.js').then((m) => m.render(bid, oid));
     } },
   { test: (h) => h === 'notifications', dashboard: 'restaurant', load: () => mod('/js/features/notifications.js').then((m) => m.render()) },
+  { test: (h) => h === 'onboarding', dashboard: 'restaurant', load: () => mod('/js/features/onboarding-requests.js').then((m) => m.render()) },
+  { test: (h) => h === 'payments', dashboard: 'payment', load: () => mod('/js/features/payment-overview.js').then((m) => m.render()) },
+  { test: (h) => h.startsWith('payments/'), dashboard: 'payment', load: (h) => {
+      const [, bid, oid] = h.split('/');
+      return mod('/js/features/payment-record.js').then((m) => m.render(bid, oid));
+    } },
 ];
 
 // Home route for each dashboard — used by the switcher when jumping
 // straight to "Restaurant Management" or "WhatsApp Agents".
-const DASHBOARD_HOME = { restaurant: 'restaurants', agent: 'agents' };
+const DASHBOARD_HOME = { restaurant: 'restaurants', agent: 'agents', payment: 'payments' };
 
 const mainEl = document.getElementById('app-main');
 const subnavEl = document.getElementById('app-subnav');
@@ -93,9 +101,9 @@ async function handleRoute() {
 // (Restaurant Management = orange, WhatsApp Agents = WhatsApp green) and
 // updates the switcher's pressed state.
 function setActiveDashboard(dashboard) {
-  mainEl.classList.remove('theme-restaurant', 'theme-agent');
+  mainEl.classList.remove('theme-restaurant', 'theme-agent', 'theme-payment');
   mainEl.classList.add(`theme-${dashboard}`);
-  subnavEl.classList.remove('theme-restaurant', 'theme-agent');
+  subnavEl.classList.remove('theme-restaurant', 'theme-agent', 'theme-payment');
   subnavEl.classList.add(`theme-${dashboard}`);
 
   document.querySelectorAll('.subnav-group').forEach((g) => {

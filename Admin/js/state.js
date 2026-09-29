@@ -53,6 +53,9 @@ export const state = {
     // null = not loaded yet / outlet keeps the built-in DEFAULT_ROLES (ui.js).
     roles: null,
 
+    // Locked outlet — admin can log in but can't use anything until Supreme Admin unlocks
+    locked: false,
+
     // Continuous notification sound
     unacknowledgedOrders: new Set(),  // Order IDs with sound playing
     continuousSoundInterval: null,     // setInterval ID for continuous sound

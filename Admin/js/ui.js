@@ -427,6 +427,30 @@ tableObserver.observe(observerTarget, { childList: true, subtree: true });
 
 export const toggleMobileCart = (state) => import('./features/pos.js').then(m => m.toggleMobileCart(state));
 
+export function showLockedScreen() {
+    let el = document.getElementById('locked-screen');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'locked-screen';
+        el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,10,10,.92);display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;';
+        el.innerHTML = `
+            <div style="max-width:480px;color:#fff">
+                <div style="font-size:48px;margin-bottom:16px">🔒</div>
+                <h2 style="font-size:24px;font-weight:800;margin-bottom:12px">Access Restricted</h2>
+                <p style="font-size:16px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:24px">
+                    Your restaurant is not yet activated.<br>
+                    Contact <strong>Supreme Admin</strong> for permission and pay the setup fee for access.
+                </p>
+                <button class="btn btn-primary" onclick="window.open('https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%20need%20access%20to%20my%20restaurant%20dashboard.','_blank')" style="padding:12px 24px;font-size:15px">
+                    Contact Supreme Admin
+                </button>
+            </div>
+        `;
+        document.body.appendChild(el);
+    }
+    el.style.display = 'flex';
+}
+
 export const ui = {
     showConfirm,
     showToast,

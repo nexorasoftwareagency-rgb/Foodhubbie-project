@@ -15,7 +15,7 @@ const COPY_EXTS = new Set(['.html', '.json', '.txt', '.png', '.jpeg', '.jpg', '.
 
 const TARGETS = {
   admin: { src: join(root, 'Admin'), dist: join(root, 'Admin', 'dist'), shared: true },
-  supreme: { src: join(root, 'SupremeAdmin'), dist: join(root, 'SupremeAdmin', 'dist'), shared: false },
+  supreme: { src: join(root, 'SupremeAdmin'), dist: join(root, 'SupremeAdmin', 'dist'), shared: true },
 };
 
 async function walk(dir) {

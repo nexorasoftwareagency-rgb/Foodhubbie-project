@@ -13,6 +13,8 @@ All 10 audit agents deployed. Key fixes:
 - **Multi-Bill**: Groups remain independent; `requestBill` writes to `orderGroups/$groupId/status`; close rejects mixed status
 - **Deployment**: `firebase deploy --only database,hosting` succeeds — 3 targets (admin, rider, menu) live
 - **Soft-Delete Restaurants (PLAN-SOFT-DELETE-RESTAURANT.md)**: Implemented + verified live. Per-outlet `disabled`/`disabledAt`/`disabledBy` on `businesses/{bid}/outlets/{oid}`; 9 rule gates on unauth order/table/session/group/request writes + public `disabled` read; Supreme tabs (Active|Disabled) + Danger Zone 3-step disable modal + reactivate; Admin login gate (`Admin/js/auth.js`); menu `screenDisabled` boot gate (`menu/js/app.js`) + `placeOrder` guard. Verify: `node --check` + live REST rule tests (active outlet QR write passes, disabled outlet blocked 401, super/own-admin can write flag, cross-outlet admin denied)
+- **Supreme Onboarding Wizard**: "Add Restaurant" redesigned as a 5-step wizard (Business → Plan → Admin login → WhatsApp → Review) in `SupremeAdmin/js/features/restaurant-onboarding.js` + `.obw-*` CSS block. Per-step validation with error toast + focus-to-field, plan cards, review summary (masked password), FormData retained across back-nav. Deployed + live E2E verified 2026-09-28 (screenshots: `.playwright-mcp/wizard-review*.png`).
+- **Payment Management (Supreme, PLAN-SUPREME-PAYMENT-MANAGEMENT.md)**: 3rd topbar tab (indigo) → `#payments` list of every restaurant's usage/due per plan (`payment-overview.js`) + `#payments/{bid}/{oid}` record page (All time/Monthly/Yearly/Custom, ledger + running balance, popup-print receipt) (`payment-record.js`) + profile Billing card money strip & "Record payment". Money math lives once in `SupremeAdmin/js/billing-shared.js` over `shared/cost-math.js` (moved from `Admin/js/features/` — sole prior importer `costs.js` now imports `../../shared/`; `tools/build.mjs` has `supreme.shared:true`). Writes `businesses/{bid}/outlets/{oid}/billing/{payments,charges}` (validated in `database.rules.json`, write = super/supreme). Deployed + live E2E verified 2026-09-28 (Admin Costs parity exact, record in both places, QR order +₹2; screenshots: `.playwright-mcp/payments-overview.png`, `payment-record-page.png`, `receipt.png`).
 
 ## Relevant Files
 - `menu/js/app.js` — Customer app (QR ordering, cart, customization)
@@ -27,7 +29,7 @@ All 10 audit agents deployed. Key fixes:
 - `menu/js/ui.js` — Customer UI components
 - `database.rules.json` — Firebase security rules (all fixes applied)
 - `shared/` — Shared Firebase config, formatters, DOM helpers
-- `tools/build.mjs` — Builds `Admin/dist`; ALSO copies repo-root `shared/` → `dist/shared/` (Admin js imports `../../shared/*`; never delete `shared/` and don't add an `Admin/shared/` duplicate)
+- `tools/build.mjs` — Builds `Admin/dist` + `SupremeAdmin/dist` (`supreme.shared:true`); ALSO copies repo-root `shared/` → `dist/shared/` (Admin js imports `../../shared/*`, Supreme `/shared/*`; never delete `shared/` and don't add an `Admin/shared/` duplicate)
 
 ## Key Decisions
 - `_effectiveTotal(sess)` replaces `sess.grandTotal` everywhere (table card, drawer, CSV, KPI)
