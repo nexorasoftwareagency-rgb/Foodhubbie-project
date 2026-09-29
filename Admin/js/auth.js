@@ -150,6 +150,30 @@ export function initAuth() {
                 // Regular Admin: Enforce outlet isolation
                 adminData.isSuper = false;
                 adminData.isSupreme = false;
+                
+                // Fix: If admin node exists but has no role, bootstrap from staff records
+                if (!adminData.role) {
+                    console.log("[Auth] Admin node missing role, attempting staff bootstrap...");
+                    for (const [oid, bid] of Object.entries(BUSINESS_BY_OUTLET)) {
+                        try {
+                            const staffSnap = await get(ref(db, `businesses/${bid}/outlets/${oid}/staff/${user.uid}`));
+                            const rec = staffSnap.val();
+                            if (staffSnap.exists() && rec.role) {
+                                adminData.role = rec.role;
+                                adminData.outlet = oid;
+                                adminData.name = rec.displayName || user.email;
+                                console.log("[Auth] Bootstrapped missing role from staff:", adminData.role, "outlet:", oid);
+                                
+                                // Write role back to admin node so fcmToken and future writes work
+                                await update(ref(db, `admins/${user.uid}`), { role: rec.role, outlet: oid })
+                                    .catch(e => console.warn("[Auth] Failed to write bootstrapped role:", e));
+                                break;
+                            }
+                        } catch (probeErr) {
+                            console.warn("[Auth] Staff probe failed for outlet:", oid, probeErr?.message || probeErr);
+                        }
+                    }
+                }
             }
 
             if (!adminData) {
