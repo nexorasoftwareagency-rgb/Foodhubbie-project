@@ -121,7 +121,7 @@ function _render() {
             const mode = _mode();
             const modeLabel = mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
             const setup = b.setup || {};
-            const setupStatus = setup.status || 'refundable';
+            const setupStatus = setup.status || 'non_refundable';
             const tp = b.tokenPacks || {};
             const welcome = tp.welcome || {};
             const bal = b.tokens?.balance ?? 0;
@@ -138,7 +138,7 @@ function _render() {
                         </div>
                         <div>
                             <div class="cost-detail-label">Setup status</div>
-                            <div class="cost-detail-value">${setupStatus === 'non_refundable' ? 'Non-refundable (Official)' : 'Refundable (Baileys)'}</div>
+                            <div class="cost-detail-value">${setupStatus === 'non_refundable' ? 'Non-refundable' : setupStatus.charAt(0).toUpperCase() + setupStatus.slice(1)}</div>
                         </div>
                         <div>
                             <div class="cost-detail-label">Token balance</div>

@@ -71,7 +71,7 @@ export async function render() {
 
         <section data-step="1" hidden>
           <h2 style="font-size:16px;margin:0 0 4px">Plan &amp; starting menu</h2>
-          <div class="panel-sub" style="margin-bottom:6px">Flat <strong>₹1–5 per order</strong> on every plan · one-time setup <strong>₹500</strong> — refundable or adjusted in your first bill.</div>
+          <div class="panel-sub" style="margin-bottom:6px">Flat <strong>₹1–5 per order</strong> on every plan · one-time setup <strong>₹500</strong> — non-refundable, adjusted in your first bill.</div>
           <div class="panel-sub" style="margin-bottom:14px">Pick the service tier that fits how this restaurant will operate. You can change it later from the profile.</div>
           <div class="obw-grid" style="margin-bottom:16px">
             ${PLANS.map((p, i) => `

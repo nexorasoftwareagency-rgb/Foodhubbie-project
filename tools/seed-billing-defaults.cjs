@@ -17,7 +17,7 @@ const FREE_TOKENS = 15;
 const DEFAULT_BILLING = {
   mode: 'per_order',
   rates: { QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2, promo: 1, commission1pct: 0.01 },
-  setup: { amount: 500, status: 'refundable', date: new Date(now).toISOString() },
+  setup: { amount: 500, status: 'non_refundable', date: new Date(now).toISOString() },
   tokens: { balance: FREE_TOKENS, updatedAt: now },
   tokenPacks: { welcome: { qty: FREE_TOKENS, priceRs: 0, note: 'Free welcome pack', grantedAt: now, grantedBy: 'system' } },
 };
@@ -30,13 +30,28 @@ async function main() {
     for (const oid of Object.keys(biz.outlets || {})) {
       const cur = await db.ref(`businesses/${bid}/outlets/${oid}/billing`).get();
       if (cur.exists()) {
+        const val = cur.val() || {};
+        // Wizard-stale billing (pre-2026-09-29): a bug shipped the abandoned
+        // monthly-plan model (monthlyRate, no rates/setup/tokens). Replace
+        // wholesale — those rows carry no money state (tokens.granted/used absent).
+        if (val.monthlyRate != null) {
+          await db.ref(`businesses/${bid}/outlets/${oid}/billing`).set(DEFAULT_BILLING);
+          console.log(`REPAIR ${bid}/${oid} — stale monthly-plan billing replaced with defaults`);
+          seeded++; continue;
+        }
         // Rate migrations on existing billing: POS ₹1/order (was ₹2), promo ₹1/token (was ₹0.86)
         for (const [key, want] of [['POS', 1], ['promo', 1]]) {
-          const have = cur.val()?.rates?.[key];
+          const have = val.rates?.[key];
           if (have != null && have !== want) {
             await db.ref(`businesses/${bid}/outlets/${oid}/billing/rates/${key}`).set(want);
             console.log(`PATCH ${bid}/${oid} rates/${key} ${have} → ${want}`);
           }
+        }
+        // Setup policy: fee is non-refundable (2026-09-29). Only rows still in the
+        // old 'refundable' default move; paid/adjusted/refunded history is kept.
+        if (val.setup?.status === 'refundable') {
+          await db.ref(`businesses/${bid}/outlets/${oid}/billing/setup/status`).set('non_refundable');
+          console.log(`PATCH ${bid}/${oid} setup.status refundable → non_refundable`);
         }
         console.log(`skip  ${bid}/${oid} (billing exists)`); skipped++; continue;
       }

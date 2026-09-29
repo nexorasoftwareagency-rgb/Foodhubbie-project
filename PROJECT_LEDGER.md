@@ -80,6 +80,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260929-135429-0e83] Setup fee 500 -> non-refundable everywhere: copy (website+wizard), billing seeds, costs label de-tie from transport, profile dropdown; sync EC2
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-09-29 13:54 UTC
+- Files touched: website/index.html,website/signup.html,shared/billing-defaults.js,shared/billing-defaults.cjs,tools/seed-billing-defaults.cjs,Admin/js/features/costs.js,Admin/sw.js,SupremeAdmin/js/features/restaurant-onboarding.js,SupremeAdmin/js/features/restaurant-profile.js,SupremeAdmin/shared/billing-defaults.js(deleted)
+- Verified: 15/15 live hosting checks PASS; DB audit 7/7 non_refundable pre/post; seed migration 7 PATCH lines; EC2 md5 match + pm2 stable + tunnel 401-alive; dist greps correct; node assert .cjs shape; no stale monthlyRate rows existed
+- NOT verified / open risk: full wizard E2E restaurant create (no browser MCP this session) - verified statically via built dist: import path + billing:M() + ESM content
+- Confidence: HIGH
+- Ended: 2026-09-29 14:08 UTC
+
 ### [20260929-1015-c9d2] PLAN-WEBSITE-ONBOARDING-APPROVAL verification pass — reject-path rules bug found + fixed
 - TIER: 3 (production security rules)
 - STATUS: COMPLETED
@@ -559,4 +569,32 @@ Fragile Files before starting ANY task.
 - Full decision doc saved: `Credentials/WHATSAPP-COEXISTENCE-PLATFORM-DECISION.md`
 - Confidence: HIGH (all code exists; only Meta-side prerequisites remain)
 - Next Actions (P0): Business Verification → Real WABA → System User scope → EC2 config update → test one restaurant
+
+### [20260929-000000-0002] business_management scope granted + token rotated + templates APPROVED
+- TIER: 2 (secrets rollout across EC2 + code fallback)
+- STATUS: DONE
+- Started: 2026-09-29
+- How: Playwright (CDP on profile copy — Chrome 136+ blocks CDP on default profile) drove BM System users → Generate-token wizard → app Foodhubbie → expiry Never → permissions incl. `business_management`; token generated manually by owner in wizard, verified by script
+- Token: new 204-char SYSTEM_USER token, scopes `business_management` + `whatsapp_business_*` + `manage_app_solution` + `whatsapp_business_manage_events` + `public_profile`; saved `Credentials/WA_PERMANENT_TOKEN_NEW.txt`; old 197-char token still valid (not revoked)
+- Code: `whatsapp-graph.js` `listWabas()` — `/me/businesses` returns `data:[]` for system-user tokens (Meta quirk) → fallback `{META_BUSINESS_ID}/owned_whatsapp_business_accounts` (verified returns the WABA); `ecosystem-bot-control.config.js` gains `META_BUSINESS_ID: 1544720177433286` (repo) — runnable check: local listWabas both paths pass
+- EC2 rollout: backups `*.bak-20260929`; `.env` `WA_PERMANENT_TOKEN` → new; config env now carries `META_SYSTEM_USER_TOKEN` + `META_APP_ID` + `META_APP_SECRET` + `WA_PERMANENT_TOKEN` + `REDIS_URL` (fixes orchestrator-spawn map reading absent keys); pm2 reload/restart; verified sha256: api META token, bots id4+id12 WA token = NEW; `quota/accounts` probes 401 (alive)
+- Templates: **all 9 PENDING → APPROVED** (order_placed, order_confirmed_dinein, order_confirmed_delivery_v2, order_ready_v3, order_delivered_v3, order_cancelled, rider_assigned, greeting_welcome, proactive_promo); OTP trio stays REJECTED (by design, plain text); `PROACTIVE_TEMPLATE` fixed `promo_offer` → `proactive_promo`, `PROACTIVE_LANGUAGE` `en_IN` → `en` (both .env + pm2 env, applied with bot restart — bots ONLINE + re-authed)
+- Verification: `node --check` whatsapp-graph ✅; local listWabas enum+fast path ✅; EC2 3-way sha256 (.env=config=running env) ✅; all 4 pm2 processes online ✅
+- Confidence: HIGH
+- Remaining: Business Verification wizard OPEN in automation Chrome (business.facebook.com → Security Centre → Verify your business): country=India done, business type = Sole proprietorship (user's choice), current step = "Add business details" (phone with IN +91 code — needs code confirmation, + website) → confirm connection → upload documents → Meta review; **user is completing it manually in their browser**. After approval: create real WABA under 1544720177433286 → update `WABA_ID` on EC2 → restart bot-control-api → flip outlet transport to `meta` on real number; old token revocation optional via BM UI
+
+### [20260929-000000-0003] Business Verification started — website blocker documented, domain deferred ~10 days
+- TIER: 2 (Meta verification progress + decisions)
+- STATUS: IN PROGRESS — paused on Website field
+- Started: 2026-09-29
+- What happened:
+  - Verification wizard started (BM → Security Centre → Verify your business, use case = Meta for Developers): country **India**, business type **Sole proprietorship** chosen by owner; wizard at **Add business details** (phone + website); owner driving it manually in their own browser
+  - **Website rejected:** `https://foodhubbie-web.web.app/` → Meta "common website domain" error — shared Firebase Hosting domains (`*.web.app`/`*.firebaseapp.com`) are blacklisted (same class as gmail/yahoo)
+  - Decision: **no domain yet — buying in ~10 days**; candidates `foodhubbie.com`/`.in`/`.co` checked via DNS 2026-09-29 → no NS records, likely available. Workaround first: **clear Website → Next** (likely optional); if Next hard-requires it → pause until domain → wire to Firebase Hosting (auto SSL) → enter `https://foodhubbie.com`
+  - UDYAM certificate extracted for exact form values (model can't read PDFs → installed `pypdf`, text extracted): FOODHUBBIE / Proprietary / UDYAM-BR-31-0042040 / Parsa, Chapra, Saran, Bihar 841219 / phone 9724649971 / owner Shah Nilesh Rakesh (PAN + bank details deliberately NOT copied into repo docs — PII)
+  - Ready for next steps: OTP to 9724649971, UDYAM PDF upload, Meta review ~1–5 days
+- Docs written: `docs/META-PLATFORM-AUDIT.md` — new sections *Token rotation + business_management (2026-09-29)*, *Business verification — started 2026-09-29* (canonical form details table + blocker + post-approval sequence), *Templates — mass approval 2026-09-29* (9 approved list, OTP trio rejected by design, PROACTIVE_TEMPLATE fix)
+- Verification: user reported form rejection; DNS availability check run; audit doc edited
+- Confidence: HIGH
+- Next Actions: (1) owner clears Website → Next → OTP + UDYAM upload; (2) ~10 days: buy domain → ping me to wire Firebase Hosting → resume form if website was required; (3) after Meta approval → real WABA → `WABA_ID` → transport `meta`; (4) optional: revoke old 197-char token via BM UI
 <!-- TASK_LOG_END -->

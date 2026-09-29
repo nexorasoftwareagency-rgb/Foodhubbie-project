@@ -38,8 +38,9 @@ firebase.messaging().onBackgroundMessage((payload) => {
 
 // Bumped whenever any precached app file changes: the fetch handler is
 // stale-while-revalidate, so mixed old/new module pairs can serve until the
-// name changes force a clean re-cache (Locked outlet gate + WhatsApp tab onboarding: auth.js, ui.js, main.js, chat.js).
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.5.3';
+// name changes force a clean re-cache (Locked outlet gate + WhatsApp tab onboarding: auth.js, ui.js, main.js, chat.js;
+// setup fee non-refundable policy: costs.js + shared/billing-defaults.*).
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.5.4';
 const ASSETS_TO_CACHE = [
   './index.html',
   './style.css?v=5.4.6',

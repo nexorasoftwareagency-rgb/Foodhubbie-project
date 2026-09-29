@@ -445,7 +445,7 @@ function renderBillingCard(outlet, readOnly, bid, oid, biz) {
   const mode = b.mode === 'commission_1pct' ? 'commission_1pct' : 'per_order';
   const rates = b.rates || {};
   const bal = b.tokens?.balance ?? 0;
-  const setupStatus = billingDraft?.setup ?? b.setup?.status ?? 'refundable';
+  const setupStatus = billingDraft?.setup ?? b.setup?.status ?? 'non_refundable';
   const w = b.tokenPacks?.welcome;
   // Money strip — the same billing-shared math the Payment Management tab
   // uses, so the profile and the tab can never disagree on a ₹ figure.
@@ -480,7 +480,7 @@ function renderBillingCard(outlet, readOnly, bid, oid, biz) {
           ${mode === 'per_order' ? 'Switch to 1% of sales' : 'Switch to per-order'}
         </button>
         <select id="billingSetupStatus" class="text-input" style="width:auto" data-billing-draft="setup" ${ro}>
-          ${['refundable', 'paid', 'adjusted', 'refunded'].map((s) => `<option value="${s}" ${setupStatus === s ? 'selected' : ''}>Setup: ${s}</option>`).join('')}
+          ${['non_refundable', 'refundable', 'paid', 'adjusted', 'refunded'].map((s) => `<option value="${s}" ${setupStatus === s ? 'selected' : ''}>Setup: ${s}</option>`).join('')}
         </select>
         <button class="btn btn-ghost btn-sm" data-action="billing-save-setup" ${ro} title="${roTitle}">Save setup</button>
       </div>
