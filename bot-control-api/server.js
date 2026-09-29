@@ -26,6 +26,7 @@ const { pm2, connectOnce } = require('./pm2-client');
 const { startStatusWatcher } = require('./status-watcher');
 const { startOrchestrator } = require('./orchestrator');
 const sharp = require('sharp');
+const { getBillingDefaults } = require('../../shared/billing-defaults.cjs');
 
 const PORT = process.env.BOT_CONTROL_PORT || 4000;
 
@@ -268,6 +269,133 @@ app.post('/api/admin/update-password', requireSuperOnly, async (req, res) => {
   } catch (err) {
     console.error('update-password failed', err);
     res.status(500).json({ error: `Password update failed — ${err.message}` });
+  }
+});
+
+// Approve a website onboarding request — creates the full outlet + Auth user
+// atomically. Called from the Supreme Admin onboarding-requests page.
+app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => {
+  const { reqKey, businessName, outletName, contactPhone, contactEmail, adminEmail, adminPassword, plan, template, whatsappConnect } = req.body || {};
+  if (!reqKey || !businessName || !outletName || !adminEmail || !adminPassword) {
+    return res.status(400).json({ error: 'reqKey, businessName, outletName, adminEmail, adminPassword are required' });
+  }
+  if (adminPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+  try {
+    // Verify the request is still pending
+    const reqSnap = await admin.database().ref(`onboardingRequests/${reqKey}`).get();
+    const reqData = reqSnap.val();
+    if (!reqData) return res.status(404).json({ error: 'Onboarding request not found' });
+    if (reqData.status !== 'pending') return res.status(409).json({ error: `Request already ${reqData.status}` });
+
+    // Check for duplicate admin email
+    try {
+      const existing = await admin.auth().getUserByEmail(adminEmail);
+      return res.status(409).json({ error: `Admin email ${adminEmail} already exists (uid: ${existing.uid})` });
+    } catch (err) {
+      if (err.code !== 'auth/user-not-found') throw err;
+    }
+
+    // Generate bid/oid
+    const bid = admin.database().ref('businesses').push().key.toLowerCase();
+    const oid = admin.database().ref(`businesses/${bid}/outlets`).push().key.toLowerCase();
+
+    // Allocate outlet number
+    let outletNo = null;
+    try {
+      const noSnap = await admin.database().ref('meta/outletCounter').runTransaction(cur => (cur || 0) + 1);
+      outletNo = String(noSnap.snapshot.val() || '').padStart(2, '0') || null;
+    } catch (e) {
+      console.warn('[approve-onboarding] outletCounter failed (non-fatal):', e.message);
+    }
+
+    // Read template defaults
+    let tplDefaults = null;
+    if (template) {
+      const tplSnap = await admin.database().ref(`appTemplates/${template}`).get();
+      tplDefaults = tplSnap.val()?.defaults || null;
+    }
+
+    // Mirror template into menuBank
+    const _slug = (name) => String(name || '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'item';
+    const bankUpdates = {};
+    if (tplDefaults) {
+      Object.values(tplDefaults.categories || {}).forEach(c => {
+        if (c && c.name) {
+          bankUpdates[`menuBank/categories/${_slug(c.name)}`] = {
+            ...c, sourceBid: bid, sourceOid: oid,
+            updatedAt: admin.database.ServerValue.TIMESTAMP,
+          };
+        }
+      });
+      Object.values(tplDefaults.dishes || {}).forEach(d => {
+        if (d && d.name) {
+          bankUpdates[`menuBank/dishes/${_slug(`${d.name}-${d.category || 'other'}`)}`] = {
+            ...d, sourceBid: bid, sourceOid: oid,
+            updatedAt: admin.database.ServerValue.TIMESTAMP,
+          };
+        }
+      });
+    }
+
+    // Create Auth user
+    let uid;
+    try {
+      const user = await admin.auth().getUserByEmail(adminEmail);
+      uid = user.uid;
+      await admin.auth().updateUser(uid, { password: adminPassword });
+    } catch (err) {
+      if (err.code !== 'auth/user-not-found') throw err;
+      const created = await admin.auth().createUser({ email: adminEmail, password: adminPassword });
+      uid = created.uid;
+    }
+
+    // Write admins/{uid} mirror
+    await admin.database().ref(`admins/${uid}`).set({
+      email: adminEmail, outlet: oid, name: outletName, role: 'Admin', businessId: bid,
+    });
+
+    // Write outlet with locked: true
+    const now = admin.database.ServerValue.TIMESTAMP;
+    await admin.database().ref().update({
+      [`businesses/${bid}`]: {
+        name: businessName,
+        contactPhone: contactPhone || null,
+        contactEmail: contactEmail || null,
+        plan: plan || 'starter',
+        createdAt: now,
+        outlets: {
+          [oid]: {
+            name: outletName,
+            contactPhone: contactPhone || null,
+            createdAt: now,
+            ...(outletNo ? { outletNo } : {}),
+            whatsapp: { status: 'pending' },
+            locked: true,
+            ...(tplDefaults || {}),
+billing: getBillingDefaults(),
+            settings: { ...(tplDefaults?.settings || {}), features: { ...(tplDefaults?.settings?.features || {}), discountApproval: false } },
+          },
+        },
+      },
+      ...bankUpdates,
+    });
+
+    // Update onboarding request
+    await admin.database().ref(`onboardingRequests/${reqKey}`).update({
+      status: 'approved',
+      bid, oid,
+      reviewedAt: now,
+      reviewedBy: req.auth?.uid || null,
+      adminPassword: null,
+    });
+
+    res.json({ ok: true, bid, oid, uid, email: adminEmail, password: adminPassword, loginUrl: 'https://foodhubbie-admins.web.app' });
+  } catch (err) {
+    console.error('approve-onboarding failed', err);
+    res.status(500).json({ error: `Approval failed — ${err.message}` });
   }
 });
 
