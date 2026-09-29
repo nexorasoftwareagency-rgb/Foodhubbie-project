@@ -451,9 +451,20 @@ function renderBillingCard(outlet, readOnly) {
         <div class="detail-cell"><div class="detail-label">Promo token balance</div><div class="detail-value mono">${bal}</div></div>
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
-        Rates: QR ₹${rates.QR ?? 2} · POS ₹${rates.POS ?? 2} · Delivery ₹${rates.webview_delivery ?? 3} · WhatsApp ₹${rates.WA ?? 3} · other ₹${rates.other ?? 2} · promo ₹${rates.promo ?? 0.86}/token${w ? ` · welcome pack: ${w.qty} free` : ''}
+        Rates: QR ₹${rates.QR ?? 2} · POS ₹${rates.POS ?? 1} · Delivery ₹${rates.webview_delivery ?? 3} · WhatsApp ₹${rates.WA ?? 3} · other ₹${rates.other ?? 2} · promo ₹${rates.promo ?? 0.86}/token${w ? ` · welcome pack: ${w.qty} free` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;padding:10px 12px;background:var(--bg-elevated-2,#eef2f7);border:1px solid var(--glass-border,rgba(15,23,42,.10));border-radius:10px">
+        <div class="detail-cell"><div class="detail-label">Usage · ${monthLabel(ym)}</div><div class="detail-value">${inr(month.usage)} <span style="font-size:11px;color:var(--text-tertiary)">${month.orders} orders</span></div></div>
+        <div class="detail-cell"><div class="detail-label">Received · ${monthLabel(ym)}</div><div class="detail-value">${inr(month.paid)}</div></div>
+        <div class="detail-cell"><div class="detail-label">All-time due</div><div class="detail-value" style="font-weight:800;color:${all.due > 0.009 ? 'var(--status-offline,#dc2626)' : 'var(--status-online,#16a34a)'}">${all.due > 0.009 ? inr(all.due) : 'Settled'}</div></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-ghost btn-sm" data-action="navigate" data-href="payments/${escapeHtml(bid)}/${escapeHtml(oid)}">Payment record →</button>
+        ${readOnly ? '' : `<button class="btn btn-primary btn-sm" data-action="profile-record-payment" title="${roTitle}">
+          <svg data-lucide="indian-rupee" style="width:13px;height:13px"></svg> Record payment
+        </button>`}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <button class="btn btn-ghost btn-sm" data-action="billing-toggle-mode" ${ro} title="${mode === 'per_order' ? 'Charge WhatsApp delivery orders at 1% of order value instead of the flat rate' : 'Go back to flat per-order rates'}">
           ${mode === 'per_order' ? 'Switch to 1% of sales' : 'Switch to per-order'}
         </button>
@@ -1387,7 +1398,7 @@ registerAction('billing-toggle-mode', async () => {
     title: next === 'commission_1pct' ? 'Switch to 1% of sales?' : 'Switch to per-order billing?',
     body: next === 'commission_1pct'
       ? `WhatsApp delivery orders are billed at 1% of order value instead of the flat ₹${b.rates?.WA ?? 3}. QR, POS and other sources stay per-order.`
-      : `Every source goes back to flat per-order rates (QR ₹${b.rates?.QR ?? 2} · POS ₹${b.rates?.POS ?? 2}, WhatsApp delivery ₹${b.rates?.WA ?? 3}).`,
+      : `Every source goes back to flat per-order rates (QR ₹${b.rates?.QR ?? 2} · POS ₹${b.rates?.POS ?? 1}, WhatsApp delivery ₹${b.rates?.WA ?? 3}).`,
     confirmLabel: 'Switch mode',
   });
   if (!ok) return;
