@@ -3,6 +3,32 @@ import { db, auth, Outlet, tenantPath, ref, get, update, set, EmailAuthProvider,
 import { logAudit, showToast, showConfirm, getSkeletonRows, hashPin, escapeHtml } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { completeSiteRefresh } from '../pwa.js';
+import { DEFAULT_ROLES } from '../ui.js';
+
+// Auto-create default roles when Staff Management feature is first enabled
+async function initializeDefaultRoles() {
+    try {
+        const rolesRef = Outlet.ref('settings/roles');
+        const snap = await get(rolesRef);
+        if (snap.exists()) return; // Already initialized
+
+        // Convert DEFAULT_ROLES to the format expected (key: {name, level, tabs})
+        const defaultRoles = {};
+        for (const [key, role] of Object.entries(DEFAULT_ROLES)) {
+            defaultRoles[key] = {
+                name: role.name,
+                level: role.level,
+                tabs: role.tabs
+            };
+        }
+        await set(rolesRef, defaultRoles);
+        state.roles = defaultRoles;
+        logAudit('Settings', 'Initialized default roles for Staff Management', 'Global');
+    } catch (e) {
+        console.error('[Settings] Failed to initialize default roles:', e);
+        showToast('Staff Management is on, but default roles could not be created — check your permissions.', 'error');
+    }
+}
 
 // --- STATE & UTILS ---
 const SETTINGS_PATHS = {
@@ -100,9 +126,16 @@ function applyExpenseFeatureUI() {
     if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
     // Note: Expense tab visibility is handled in main.js initTabs()
 }
+// Staff Management feature UI
+function applyStaffManagementFeatureUI() {
+    const on = isChecked('featureStaffManagement');
+    const st = document.getElementById('featureStaffManagementStatus');
+    if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
+}
 document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'featureDiscountApproval') applyFeatureUI();
     if (e.target && e.target.id === 'featureExpense') applyExpenseFeatureUI();
+    if (e.target && e.target.id === 'featureStaffManagement') applyStaffManagementFeatureUI();
 });
 const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcons({ root }));
 
@@ -181,6 +214,19 @@ export async function loadStoreSettings() {
         state.features.expense = featSnap.val()?.expense === true;
         setChecked('featureExpense', state.features.expense);
         applyExpenseFeatureUI();
+
+        // 2a-3. Staff Management feature flag
+        state.features.staffManagement = featSnap.val()?.staffManagement === true;
+        setChecked('featureStaffManagement', state.features.staffManagement);
+        applyStaffManagementFeatureUI();
+        // Gate the sub-tab on the flag (same pattern as the Expenses nav gate)
+        const smTab = document.querySelector('.settings-subtab[data-subtab="staff-management"]');
+        if (smTab) {
+            smTab.style.display = state.features.staffManagement ? '' : 'none';
+            if (!state.features.staffManagement && smTab.classList.contains('active')) {
+                document.querySelector('.settings-subtab[data-subtab="general"]')?.click();
+            }
+        }
 
         // 2b. Dine-In Settings (tax, service charge, QR ordering base URL)
         const dineSnap = await get(Outlet.ref('dineinSettings'));
@@ -376,11 +422,14 @@ export async function saveStoreSettings() {
         // Feature flags (Settings > Features). Tracked so we can demand a hard refresh on change.
         const featureDiscountEnabled = isChecked('featureDiscountApproval');
         const featureExpenseEnabled = isChecked('featureExpense');
+        const featureStaffManagementEnabled = isChecked('featureStaffManagement');
         const featureDiscountChanged = featureDiscountEnabled !== state.features.discountApproval;
         const featureExpenseChanged = featureExpenseEnabled !== state.features.expense;
-        const featureChanged = featureDiscountChanged || featureExpenseChanged;
+        const featureStaffManagementChanged = featureStaffManagementEnabled !== state.features.staffManagement;
+        const featureChanged = featureDiscountChanged || featureExpenseChanged || featureStaffManagementChanged;
         updates[tenantPath(Outlet.current, 'settings/features/discountApproval')] = featureDiscountEnabled;
         updates[tenantPath(Outlet.current, 'settings/features/expense')] = featureExpenseEnabled;
+        updates[tenantPath(Outlet.current, 'settings/features/staffManagement')] = featureStaffManagementEnabled;
         const taxRates = _readTaxRates();
         updates[tenantPath(Outlet.current, 'dineinSettings')] = {
             qrBaseUrl: val('settingQrBaseUrl'),
@@ -401,10 +450,17 @@ export async function saveStoreSettings() {
         document.getElementById('displayCoords').innerText = `${lat}, ${lng}`;
         if (window.updateOutletStatusIndicator) window.updateOutletStatusIndicator(storeData.shopStatus);
 
+        // Auto-create default roles if Staff Management feature just enabled —
+        // runs BEFORE the refresh prompt so the write isn't raced off the page.
+        if (featureStaffManagementChanged && featureStaffManagementEnabled) {
+            await initializeDefaultRoles();
+        }
+
         // Feature toggles take effect on load — one popup, then the nuclear refresh.
         if (featureChanged) {
             state.features.discountApproval = featureDiscountEnabled;
             state.features.expense = featureExpenseEnabled;
+            state.features.staffManagement = featureStaffManagementEnabled;
             await completeSiteRefresh('Settings saved. A hard refresh is required to activate this feature change. Refresh now?');
         }
 

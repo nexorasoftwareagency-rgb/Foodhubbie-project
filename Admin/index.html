@@ -3257,8 +3257,39 @@
                                 spending across outlets. <strong>Benefits:</strong> keeps costs visible, alerts on budget
                                 overruns, and costs nothing while off.</p>
 
-                                <a href="manual.html#expenses" target="_blank" rel="noopener"><i data-lucide="book-open" class="icon-14"></i>
+                                <a href="manual.html#expenses-module-user-manual" target="_blank" rel="noopener"><i data-lucide="book-open" class="icon-14"></i>
                                 Read the expense manual</a>
+
+                            </div>
+
+
+                            <div class="settings-section-card mb-14" style="border:1px solid var(--border-color);border-radius:12px;padding:16px;">
+
+                                <div class="flex-between flex-center mb-10" style="flex-wrap:wrap;gap:10px;">
+
+                                    <div>
+
+                                        <strong style="display:block;font-size:13px;color:var(--text-primary);">Staff Management
+                                        & Role Permissions</strong>
+
+                                        <span id="featureStaffManagementStatus" class="text-muted-small">Currently: Inactive</span>
+
+                                    </div>
+
+                                    <label class="toggle-switch" style="margin:0;">
+
+                                        <input type="checkbox" id="featureStaffManagement">
+
+                                        <span class="toggle-slider"></span>
+
+                                    </label>
+
+                                </div>
+
+                                <p class="text-secondary-small note-small mb-10">Define custom roles with granular tab access, manage staff accounts with role-based permissions, and control who can access Settings. <strong>Benefits:</strong> enforces least-privilege, audit trail for all changes, and costs nothing while off.</p>
+
+                                <a href="manual.html#staff-management-module-user-manual" target="_blank" rel="noopener"><i data-lucide="book-open" class="icon-14"></i>
+                                Read the staff management manual</a>
 
                             </div>
 
@@ -5362,7 +5393,7 @@
                     <button type="button" class="btn-primary w-full mt-16 p-12 br-12 font-weight-700" data-action="saveExpenseSettings">
                         <i data-lucide="save" class="icon-16"></i> Save Settings
                     </button>
-                    <a href="manual.html#expenses" target="_blank" rel="noopener" class="btn-secondary w-full mt-8 p-12 br-12 font-weight-600 text-center" style="display:block;">
+                    <a href="manual.html#expenses-module-user-manual" target="_blank" rel="noopener" class="btn-secondary w-full mt-8 p-12 br-12 font-weight-600 text-center" style="display:block;">
                         <i data-lucide="book-open" class="icon-16"></i> Expense Manual
                     </a>
                 </div>
@@ -7323,6 +7354,11 @@
                 <div class="form-group-mini">
 
                     <label class="form-label-small">Allowed Tabs</label>
+
+                    <div class="flex-row flex-gap-8 mb-8" style="flex-wrap:wrap;">
+                        <button type="button" id="roleSelectAllTabs" class="btn-secondary btn-small"><i data-lucide="check-square" class="icon-12"></i> Select All</button>
+                        <button type="button" id="roleSelectNoneTabs" class="btn-secondary btn-small"><i data-lucide="square" class="icon-12"></i> Select None</button>
+                    </div>
 
                     <div id="roleTabsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:6px;"></div>
 
