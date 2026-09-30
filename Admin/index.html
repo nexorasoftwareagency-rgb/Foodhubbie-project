@@ -5031,56 +5031,26 @@
 
         </div>
 
-        <div class="mob-card mob-table-card" style="margin-top:12px;" data-cost-section="breakdown">
+        <div class="cost-breakdown-stack" data-cost-section="breakdown">
 
-            <h4 class="section-card-heading"><i data-lucide="layers" class="icon-14"></i> Cost by order source</h4>
+            <div class="mob-card mob-table-card">
 
-            <table style="width:100%;font-size:13px;">
+                <h4 class="section-card-heading"><i data-lucide="layers" class="icon-14"></i> Cost by order source</h4>
 
-                <thead>
+                <div id="costBreakdownBody"><div class="costx-empty">Loading…</div></div>
 
-                    <tr style="text-align:left;color:#64748b;">
+            </div>
 
-                        <th style="padding:6px 8px;">Source</th>
+            <div class="mob-card mob-table-card">
 
-                        <th style="text-align:right;">Rate</th>
+                <h4 class="section-card-heading"><i data-lucide="calendar-days" class="icon-14"></i> Date-wise usage</h4>
 
-                        <th style="text-align:right;">Orders</th>
+                <div id="costDayBody"><div class="costx-empty">Loading…</div></div>
 
-                        <th style="text-align:right;padding-right:8px;">Cost</th>
+            </div>
 
-                    </tr>
-
-                </thead>
-
-                <tbody id="costBreakdownBody"><tr><td colspan="4" style="color:#64748b;padding:8px;">Loading…</td></tr></tbody>
-
-            </table>
-
-            <h4 class="section-card-heading" style="margin-top:16px;"><i data-lucide="calendar-days" class="icon-14"></i> Date-wise usage</h4>
-
-            <table style="width:100%;font-size:13px;">
-
-                <thead>
-
-                    <tr style="text-align:left;color:#64748b;">
-
-                        <th style="padding:6px 8px;">Day</th>
-
-                        <th style="text-align:right;">Orders</th>
-
-                        <th style="text-align:right;padding-right:8px;">Cost</th>
-
-                    </tr>
-
-                </thead>
-
-                <tbody id="costDayBody"><tr><td colspan="3" style="color:#64748b;padding:8px;">Loading…</td></tr></tbody>
-
-            </table>
-
-            <!-- Billing configuration breakdown (read-only, mirrors Supreme Admin) -->
-            <div id="costBillingBreakdown" style="margin-top:16px;"></div>
+            <!-- Billing configuration (own card, read-only, mirrors Supreme Admin) -->
+            <div id="costBillingBreakdown"></div>
 
         </div>
 

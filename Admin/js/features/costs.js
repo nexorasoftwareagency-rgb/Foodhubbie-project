@@ -139,19 +139,24 @@ function _render() {
     }
     _setText('costKpiOrders', String(idx.count));
 
-    // --- cost by source ---
+    // --- cost by source: proportional rows (share bar) ---
     const bb = document.getElementById('costBreakdownBody');
     if (bb) {
-        const rows = Object.entries(idx.bySource);
-        bb.innerHTML = rows.length ? rows.map(([src, v]) => `<tr>
-            <td style="padding:6px 8px;font-weight:700;">${_label(src)}</td>
-            <td style="text-align:right;">${mode === 'commission_1pct' && src === 'webview_delivery' ? '1% of order' : _inr(rates[src] ?? rates.other)}</td>
-            <td style="text-align:right;">${v.orders}</td>
-            <td style="text-align:right;padding-right:8px;font-weight:700;">${_inr(v.cost)}</td>
-        </tr>`).join('') : '<tr><td colspan="4" style="color:#64748b;padding:8px;">No orders in this range</td></tr>';
+        const rows = Object.entries(idx.bySource).sort((a, b) => b[1].cost - a[1].cost);
+        const total = idx.total || 0;
+        bb.innerHTML = rows.length ? rows.map(([src, v]) => {
+            const share = total > 0 ? Math.max(1, Math.round(v.cost / total * 100)) : 0;
+            const rateTxt = mode === 'commission_1pct' && src === 'webview_delivery' ? '1% of order' : _inr(rates[src] ?? rates.other);
+            return `<div class="costx-row">
+                <div class="costx-line1"><span class="costx-name">${_label(src)}</span><span class="costx-cost">${_inr(v.cost)}</span></div>
+                <div class="costx-line2"><span>${rateTxt} × ${v.orders} order${v.orders === 1 ? '' : 's'}</span><span>${share}%</span></div>
+                <div class="costx-bar"><i style="width:${share}%"></i></div>
+            </div>`;
+        }).join('') + `<div class="costx-total"><span>Total</span><span>${_inr(total)} · ${idx.count} order${idx.count === 1 ? '' : 's'}</span></div>`
+            : '<div class="costx-empty">No orders in this range</div>';
     }
 
-    // --- date-wise usage (per-day cost within the range) ---
+    // --- date-wise usage: per-day rows (busiest day = full bar) ---
     const db = document.getElementById('costDayBody');
     if (db) {
         const byDay = {};
@@ -161,14 +166,18 @@ function _render() {
             (byDay[d] = byDay[d] || {})[id] = o;
         }
         const days = Object.keys(byDay).sort().reverse();
+        const dayIdx = {};
+        let maxDay = 0;
+        for (const d of days) { dayIdx[d] = computeCostIndex(byDay[d], rates, mode); maxDay = Math.max(maxDay, dayIdx[d].total); }
         db.innerHTML = days.length ? days.map(d => {
-            const di = computeCostIndex(byDay[d], rates, mode);
-            return `<tr>
-                <td style="padding:6px 8px;font-weight:700;">${new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</td>
-                <td style="text-align:right;">${di.count}</td>
-                <td style="text-align:right;padding-right:8px;font-weight:700;">${_inr(di.total)}</td>
-            </tr>`;
-        }).join('') : '<tr><td colspan="3" style="color:#64748b;padding:8px;">No orders in this range</td></tr>';
+            const di = dayIdx[d];
+            const w = di.total > 0 && maxDay > 0 ? Math.max(2, Math.round(di.total / maxDay * 100)) : 0;
+            return `<div class="costx-row">
+                <div class="costx-line1"><span class="costx-name">${new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span><span class="costx-cost">${_inr(di.total)}</span></div>
+                <div class="costx-line2"><span>${di.count} order${di.count === 1 ? '' : 's'}</span></div>
+                <div class="costx-bar"><i style="width:${w}%"></i></div>
+            </div>`;
+        }).join('') : '<div class="costx-empty">No orders in this range</div>';
     }
 
     // --- promo token balance KPI ---
@@ -184,14 +193,14 @@ function _render() {
     _setText('costKpiPromo', _inr(used * PROMO_RATE));
     _setText('costKpiPromoTrend', `${used} token${used === 1 ? '' : 's'} used × ₹${PROMO_RATE}`);
 
-    // --- billing configuration breakdown (read-only) ---
+    // --- billing configuration breakdown (own card, read-only) ---
     const billingDiv = document.getElementById('costBillingBreakdown');
     if (billingDiv) {
         if (!_billing || typeof _billing !== 'object') {
             billingDiv.innerHTML = `
-                <div class="mob-card mob-table-card" style="margin-top:12px;">
+                <div class="mob-card mob-table-card">
                     <h4 class="section-card-heading"><i data-lucide="wallet" class="icon-14"></i> Billing configuration</h4>
-                    <div style="color:#64748b;padding:8px;">Not seeded — run <code class="mono" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">tools/seed-billing-defaults.cjs</code> to initialize.</div>
+                    <div style="color:#64748b;">Not seeded — run <code class="mono" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">tools/seed-billing-defaults.cjs</code> to initialize.</div>
                 </div>`;
         } else {
             const b = _billing;
@@ -207,7 +216,7 @@ function _render() {
             const totalUsed = (b.tokens?.used || 0);
 
             billingDiv.innerHTML = `
-                <div class="cost-billing">
+                <div class="mob-card mob-table-card">
                     <h4 class="section-card-heading"><i data-lucide="wallet" class="icon-14"></i> Billing configuration</h4>
                     <div class="cost-detail-grid">
                         <div>
