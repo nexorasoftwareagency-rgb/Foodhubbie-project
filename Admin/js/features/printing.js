@@ -54,6 +54,107 @@ export function loadJSPDF() {
     return _jspdfPromise;
 }
 
+// ==== MINIMAL REPORT CHROME (start) ====
+// Professional A4 report kit: white bg, hairlines, neutral ink, no gradient/badge art.
+// Pure jsPDF drawing — node-smoke-testable by extracting between the CHROME markers.
+const R_INK = [15, 23, 42];
+const R_MUTED = [100, 116, 139];
+const R_FAINT = [148, 163, 184];
+const R_LINE = [226, 232, 240];
+
+/** Eyebrow title + date, report name headline, meta line(s), hairline. Returns KPI y. */
+export function reportHead(doc, { title, subtitle, meta, meta2 }) {
+    const pw = doc.internal.pageSize.getWidth(), M = 14;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+    doc.setTextColor(...R_FAINT);
+    doc.text(String(title || '').toUpperCase(), M, 16, { charSpace: 1.2 });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+    doc.text(new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }), pw - M, 16, { align: 'right' });
+    let sz = 17;
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(...R_INK); doc.setFontSize(sz);
+    const w = doc.getTextWidth(String(subtitle || ''));
+    if (w > pw - 2 * M) sz = Math.max(11, sz * (pw - 2 * M) / w);
+    doc.setFontSize(sz);
+    doc.text(String(subtitle || ''), M, 27);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.setTextColor(...R_MUTED);
+    doc.text(String(meta || ''), M, 33.5);
+    if (meta2) doc.text(String(meta2), M, 38.5);
+    doc.setDrawColor(...R_LINE); doc.setLineWidth(0.3);
+    const ruleY = meta2 ? 43 : 39;
+    doc.line(M, ruleY, pw - M, ruleY);
+    return ruleY + 6;
+}
+
+/** 4 hairline KPI cards (white fill, no shadow). Returns section-gap y. */
+export function reportKpis(doc, kpis, y) {
+    const pw = doc.internal.pageSize.getWidth(), M = 14, gap = 6, cardH = 24;
+    const cardW = (pw - 2 * M - 3 * gap) / 4;
+    (kpis || []).forEach(([label, value], i) => {
+        const x = M + i * (cardW + gap);
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(...R_LINE); doc.setLineWidth(0.25);
+        doc.roundedRect(x, y, cardW, cardH, 2.5, 2.5, 'FD');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
+        doc.setTextColor(...R_FAINT);
+        doc.text(String(label), x + 5, y + 8.5, { charSpace: 0.4 });
+        doc.setFontSize(11.5); doc.setTextColor(...R_INK);
+        doc.text(String(value), x + 5, y + 18);
+    });
+    return y + cardH + 8;
+}
+
+/** Ink tick + section label, muted count right. Returns table startY. */
+export function reportSection(doc, { label, right, y }) {
+    const pw = doc.internal.pageSize.getWidth(), M = 14;
+    doc.setFillColor(...R_INK);
+    doc.rect(M, y, 3.5, 6, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
+    doc.setTextColor(...R_INK);
+    doc.text(String(label || ''), M + 6, y + 4.5, { charSpace: 0.5 });
+    if (right) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+        doc.setTextColor(140, 136, 130);
+        doc.text(String(right), pw - M, y + 4.5, { align: 'right' });
+    }
+    return y + 12;
+}
+
+/** Continuation-page header for autoTable didDrawPage (pages >= 2). */
+export function reportContinued(doc, label, storeName) {
+    const pw = doc.internal.pageSize.getWidth(), M = 14;
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, pw, 20, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+    doc.setTextColor(...R_INK);
+    doc.text(String(label || ''), M, 9);
+    doc.setFontSize(7.5); doc.setTextColor(...R_MUTED);
+    doc.text(String(storeName || ''), M, 14.5);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+    doc.setTextColor(...R_FAINT);
+    doc.text('Continued', pw - M, 12, { align: 'right' });
+    doc.setDrawColor(...R_LINE); doc.setLineWidth(0.3);
+    doc.line(M, 18, pw - M, 18);
+}
+
+/** Footer post-pass: hairline + store left, Page X of Y right. */
+export function reportFoot(doc, storeName) {
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const M = 14;
+    const total = doc.getNumberOfPages();
+    for (let p = 1; p <= total; p++) {
+        doc.setPage(p);
+        doc.setDrawColor(...R_LINE); doc.setLineWidth(0.3);
+        doc.line(M, ph - 14, pw - M, ph - 14);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+        doc.setTextColor(...R_FAINT);
+        doc.text(String(storeName || ''), M, ph - 9);
+        doc.text(`Page ${p} of ${total}`, pw - M, ph - 9, { align: 'right' });
+    }
+}
+// ==== MINIMAL REPORT CHROME (end) ====
+
 // Settings Cache to reduce lag on subsequent prints
 let settingsCache = {
     store: null,

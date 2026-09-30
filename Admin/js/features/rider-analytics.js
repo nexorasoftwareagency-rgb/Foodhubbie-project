@@ -376,8 +376,8 @@ async function _exportPDF() {
             '₹' + Number(o.total || 0),
             o.status || ''
         ]),
-        theme: 'grid',
-        headStyles: { fillColor: [6, 95, 70] }
+        theme: 'plain',
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
     });
     doc.save(`Rider_Report_${name.replace(/\s+/g, '_')}_${_lastFrom}_to_${_lastTo}.pdf`);
 }

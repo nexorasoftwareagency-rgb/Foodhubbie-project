@@ -1,6 +1,6 @@
 import { Outlet, get, query, orderByChild, push, set, update, remove } from '../firebase.js';
 import { escapeHtml, showToast, formatDate, getISTDateString } from '../utils.js';
-import { loadJSPDF } from './printing.js';
+import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
 import { logger } from '../utils/logger.js';
 
 let _expenseData = [];
@@ -580,93 +580,25 @@ export async function downloadExpensePDF() {
         if (snap.exists() && snap.val().storeName) storeName = snap.val().storeName;
     } catch (_) {}
 
-    const primary = [232, 73, 8];
-    const ink = [15, 23, 42];
-    const pw = doc.internal.pageSize.getWidth();
-    const ph = doc.internal.pageSize.getHeight();
-    const M = 14;
     const rs = n => _currency + Math.round(Number(n || 0)).toLocaleString('en-IN');
-    const mix = (a, b, t) => {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return a;
-    return a.map((v, i) => Math.round(v + (b[i] - v) * t));
-};
 
     const rows = _expenseData;
     const totalAmount = rows.reduce((s, e) => s + Number(e.amount || 0), 0);
     const totalCount = rows.length;
 
-    // Hero band
-    const heroH = 54, steps = 54;
-    const A = [176, 47, 6], B = [232, 73, 8], C = [255, 132, 56];
-    for (let i = 0; i < steps; i++) {
-        const t = i / (steps - 1);
-        doc.setFillColor(...(t < 0.5 ? mix(A, B, t * 2) : mix(B, C, (t - 0.5) * 2)));
-        doc.rect(0, heroH * i / steps, pw, heroH / steps + 0.6, 'F');
-    }
-    doc.setGState(new doc.GState({ opacity: 0.1 }));
-    doc.setFillColor(255, 255, 255);
-    doc.circle(pw - 26, 14, 28, 'F');
-    doc.circle(pw - 74, 47, 13, 'F');
-    doc.circle(20, 52, 20, 'F');
-    doc.setGState(new doc.GState({ opacity: 1 }));
-
-    // FH badge + brand block
-    doc.setFillColor(255, 255, 255);
-    doc.circle(M + 13, 22, 12.5, 'F');
-    doc.setTextColor(...primary);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(15);
-    doc.text('FH', M + 13, 27, { align: 'center' });
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10);
-    doc.text('FOODHUBBIE', M + 30, 13.5, { charSpace: 2.2 });
-    let nameSize = 21;
-    doc.setFontSize(nameSize);
-    const nameW = doc.getTextWidth(storeName);
-    const nameMax = pw - (M + 30) - M;
-    if (nameW > nameMax) nameSize = Math.max(12, nameSize * nameMax / nameW);
-    doc.setFontSize(nameSize);
-    doc.text(storeName, M + 30, 27);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(255, 220, 205);
-    doc.text(`Expense Report  ·  ${rows.length} expenses  ·  Generated ${new Date().toLocaleString('en-IN')}`, M + 30, 35);
-
-    // KPI cards
-    const cardY = 46, cardH = 26, gap = 6;
-    const cardW = (pw - 2 * M - 3 * gap) / 4;
-    const kpis = [
+    // Minimal chrome: eyebrow + store name + hairline, neutral KPI cards, ink section label
+    const kpiY = reportHead(doc, {
+        title: 'Expense Report',
+        subtitle: storeName,
+        meta: `${rows.length} expenses  ·  Generated ${new Date().toLocaleString('en-IN')}`
+    });
+    const secY = reportKpis(doc, [
         ['TOTAL EXPENSES', rs(totalAmount)],
         ['TOTAL ENTRIES', String(totalCount)],
         ['AVG EXPENSE', rs(totalCount ? totalAmount / totalCount : 0)],
-        ['THIS MONTH', rs(0)] // placeholder
-    ];
-    kpis.forEach(([label, value], i) => {
-        const x = M + i * (cardW + gap);
-        doc.setFillColor(234, 228, 224);
-        doc.roundedRect(x + 0.7, cardY + 0.9, cardW, cardH, 3, 3, 'F');
-        doc.setFillColor(255, 255, 255);
-        doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.setTextColor(150, 145, 140);
-        doc.text(label, x + 5, cardY + 10, { charSpace: 0.3 });
-        doc.setFontSize(12);
-        doc.setTextColor(...ink);
-        doc.text(value, x + 5, cardY + 21);
-    });
-
-    // Section label
-    doc.setFillColor(...primary);
-    doc.rect(M, 85, 3.5, 6, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(...ink);
-    doc.text('EXPENSE DETAILS', M + 6, 89.5, { charSpace: 0.5 });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(140, 136, 130);
-    doc.text(`${rows.length} entries`, pw - M, 89.5, { align: 'right' });
+        ['THIS MONTH', rs(0)]
+    ], kpiY);
+    const startY = reportSection(doc, { label: 'EXPENSE DETAILS', right: `${rows.length} entries`, y: secY });
 
     const tableData = rows.map(e => [
         formatDate(e.date || e.createdAt) || '—',
@@ -683,14 +615,14 @@ export async function downloadExpensePDF() {
         foot: [['Grand Total', '', '', rs(totalAmount), '', '']],
         showFoot: 'lastPage',
         rowPageBreak: 'avoid',
-        theme: 'grid',
-        headStyles: { fillColor: ink, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: ink, lineWidth: 0.2 },
+        theme: 'plain',
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 8.5 },
         bodyStyles: {
-            fontSize: 8, textColor: [30, 41, 59], lineColor: [236, 231, 227], lineWidth: 0.2, valign: 'middle',
-            cellPadding: { top: 2.2, bottom: 2.2, left: 3, right: 3 }
+            fontSize: 8, textColor: [30, 41, 59], valign: 'middle',
+            cellPadding: { top: 2.4, bottom: 2.4, left: 3, right: 3 }
         },
-        alternateRowStyles: { fillColor: [255, 247, 243] },
-        footStyles: { fillColor: ink, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: ink, lineWidth: 0.2 },
+        alternateRowStyles: { fillColor: [250, 250, 251] },
+        footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 8.5 },
         columnStyles: {
             0: { cellWidth: 26 },
             1: { cellWidth: 24 },
@@ -699,46 +631,16 @@ export async function downloadExpensePDF() {
             4: { cellWidth: 20 },
             5: { cellWidth: 16, halign: 'center' }
         },
-        margin: { top: 26, left: M, right: M, bottom: 18 },
-        startY: 96,
+        margin: { top: 26, left: 14, right: 14, bottom: 18 },
+        startY,
         didDrawPage: () => {
             if (doc.internal.getCurrentPageInfo().pageNumber === 1) return;
-            doc.setFillColor(255, 249, 246);
-            doc.rect(0, 0, pw, 22, 'F');
-            doc.setFillColor(...primary);
-            doc.rect(0, 0, pw, 2.6, 'F');
-            doc.circle(M + 7, 13, 7, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(9);
-            doc.text('FH', M + 7, 16.2, { align: 'center' });
-            doc.setTextColor(...ink);
-            doc.setFontSize(10);
-            doc.text('Expense Report', M + 18, 12);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(8.5);
-            doc.setTextColor(...primary);
-            doc.text(storeName, M + 18, 17.5);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(7.5);
-            doc.setTextColor(140, 136, 130);
-            doc.text('Continued', pw - M, 14.5, { align: 'right' });
+            reportContinued(doc, 'Expense Report', storeName);
         },
     });
 
     // Footer post-pass
-    const totalPages = doc.getNumberOfPages();
-    for (let p = 1; p <= totalPages; p++) {
-        doc.setPage(p);
-        doc.setDrawColor(236, 231, 227);
-        doc.setLineWidth(0.3);
-        doc.line(M, ph - 14, pw - M, ph - 14);
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(7.5);
-        doc.setTextColor(148, 143, 138);
-        doc.text(`Powered by FoodHubbie ERP  ·  ${storeName}`, M, ph - 9);
-        doc.text(`Page ${p} of ${totalPages}`, pw - M, ph - 9, { align: 'right' });
-    }
+    reportFoot(doc, storeName);
 
     doc.setProperties({
         title: `Expense Report - ${storeName}`,
@@ -791,8 +693,9 @@ export async function downloadReportPDF() {
             startY: y + 3,
             head: [head],
             body: rows,
+            theme: 'plain',
             styles: { fontSize: 8 },
-            headStyles: { fillColor: [232, 73, 8] }
+            headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
         });
         y = doc.lastAutoTable.finalY + 10;
     };
