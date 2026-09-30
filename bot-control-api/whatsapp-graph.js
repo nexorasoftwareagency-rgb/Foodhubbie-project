@@ -46,15 +46,26 @@ async function listWabas() {
   // /me/businesses → owned_whatsapp_business_accounts. Keep it permissive —
   // if we can't enumerate, the caller can supply WABA_ID.
   const res = await gql('me/businesses?fields=id,name,owned_whatsapp_business_accounts{id,name}');
-  if (!res.ok) return [];
-  const data = await res.json();
-  const wabas = [];
-  for (const biz of data.data || []) {
-    for (const waba of biz.owned_whatsapp_business_accounts?.data || []) {
-      wabas.push({ id: waba.id, name: waba.name || biz.name });
+  if (res.ok) {
+    const data = await res.json();
+    const wabas = [];
+    for (const biz of data.data || []) {
+      for (const waba of biz.owned_whatsapp_business_accounts?.data || []) {
+        wabas.push({ id: waba.id, name: waba.name || biz.name });
+      }
+    }
+    if (wabas.length) return wabas;
+  }
+  // ponytail: system-user tokens get data:[] from /me/businesses — enumerate
+  // via the known business portfolio instead (needs business_management scope).
+  if (process.env.META_BUSINESS_ID) {
+    const r2 = await gql(`${process.env.META_BUSINESS_ID}/owned_whatsapp_business_accounts?fields=id,name`);
+    if (r2.ok) {
+      const d2 = await r2.json();
+      return (d2.data || []).map((w) => ({ id: w.id, name: w.name }));
     }
   }
-  return wabas;
+  return [];
 }
 
 /** List phone numbers on a WABA. */

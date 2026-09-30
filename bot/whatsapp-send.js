@@ -74,9 +74,9 @@ async function sendWhatsAppUrlButton(phoneNumberId, accessToken, to, { body, url
   });
 }
 
-async function sendWhatsAppTemplate(phoneNumberId, accessToken, to, { name, language = 'en', body }) {
-  const template = { name, language: { code: language } };
-  template.components = body ? [{ type: 'BODY', parameters: [{ type: 'text', text: body }] }] : [];
+async function sendWhatsAppTemplate(phoneNumberId, accessToken, to, { name, language = 'en', components = [] }) {
+  // components: array of { type: 'BODY', parameters: [{ type: 'text', text: 'val' }, ...] }
+  const template = { name, language: { code: language }, components };
   return _postToGraph(phoneNumberId, accessToken, { messaging_product: 'whatsapp', to, type: 'template', template });
 }
 

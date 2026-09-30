@@ -339,6 +339,82 @@ class OutboundTracker {
     }
 }
 
+// ── Ban-proofing: outbound pacing + wrong-message freeze ──────────────
+// Spec: (a) random 4–8s break between bot sends to the same chat;
+// (b) 3 continuous non-order-intent messages while the bot waits for
+// "menu"/"order" → the bot goes silent toward that JID for 30 minutes
+// (chat replies + promos/generic dropped; transactional order notices
+// keep flowing — approved utility templates, and dropping them would
+// mark a real order "sent" when it wasn't). Admins never accumulate
+// strikes (gated at the call site in index.js).
+// ponytail: in-memory per-JID state — a restart clears freezes/strikes;
+// move to Redis (status:* pattern) only if freezes must survive restarts.
+const FREEZE_STRIKES = 3;
+const FREEZE_MS = 30 * 60 * 1000;
+const STRIKE_CONTINUOUS_MS = 15 * 60 * 1000;
+const OUTBOUND_GAP_MIN_MS = 4000;
+const OUTBOUND_GAP_MAX_MS = 8000;
+const _jidStrikes = new Map();     // last-10-digits → { strikes, lastAt, frozenUntil }
+const _lastOutboundAt = new Map(); // jid → last-send timestamp
+
+function freezeKeyOf(jid) {
+    const digits = String(jid || '').replace(/[^0-9]/g, '');
+    return digits.length >= 10 ? digits.slice(-10) : null;
+}
+
+function isJidFrozen(jid) {
+    const key = freezeKeyOf(jid);
+    const s = key ? _jidStrikes.get(key) : null;
+    if (!s || !s.frozenUntil) return false;
+    if (s.frozenUntil <= Date.now()) { _jidStrikes.delete(key); return false; }
+    return true;
+}
+
+// Count a wrong message; returns true when the 30-min freeze just triggered
+// (caller must stop replying — this is the 3rd strike).
+function recordWrongMessage(jid) {
+    const key = freezeKeyOf(jid);
+    if (!key) return false;
+    const now = Date.now();
+    const s = _jidStrikes.get(key) || { strikes: 0 };
+    if (s.strikes && now - (s.lastAt || 0) > STRIKE_CONTINUOUS_MS) s.strikes = 0;
+    s.strikes += 1;
+    s.lastAt = now;
+    if (s.strikes >= FREEZE_STRIKES) {
+        s.strikes = 0;
+        s.frozenUntil = now + FREEZE_MS;
+        console.log(`[FREEZE] 🔇 ${maskJid(jid)} hit ${FREEZE_STRIKES} wrong messages — silent for 30 min`);
+        _jidStrikes.set(key, s);
+        return true;
+    }
+    _jidStrikes.set(key, s);
+    if (_jidStrikes.size > 500) _jidStrikes.clear(); // ponytail: blunt eviction, fine at this scale
+    return false;
+}
+
+function clearWrongStrikes(jid) {
+    const key = freezeKeyOf(jid);
+    if (key) _jidStrikes.delete(key);
+}
+
+// Random 4–8s minimum gap before the next send to the same person.
+async function paceOutboundTo(jid) {
+    try {
+        const key = String(jid || '');
+        if (!key || key.includes('@g.us') || key.includes('@broadcast') || key.includes('@newsletter')) return;
+        const now = Date.now();
+        const last = _lastOutboundAt.get(key) || 0;
+        const gap = OUTBOUND_GAP_MIN_MS + Math.floor(Math.random() * (OUTBOUND_GAP_MAX_MS - OUTBOUND_GAP_MIN_MS + 1));
+        const wait = last + gap - now;
+        if (wait > 0) {
+            console.log(`[PACER] ⏳ ${wait}ms before next send to ${maskJid(key)}`);
+            await new Promise((r) => setTimeout(r, wait));
+        }
+        _lastOutboundAt.set(key, Date.now());
+        if (_lastOutboundAt.size > 1000) _lastOutboundAt.clear();
+    } catch (_) { /* pacing must never break a send */ }
+}
+
 module.exports = {
     formatJid, maskJid, isBlockedJid,
     formatOrderId,
@@ -347,5 +423,6 @@ module.exports = {
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
     isSocketDead,
     getBroadcastDelayRangeMs, sleep,
-    RateLimiter, OutboundTracker, BaileysSendTracker
+    RateLimiter, OutboundTracker, BaileysSendTracker,
+    isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo
 };

@@ -97,7 +97,7 @@ test('sendWhatsAppTemplate: body component only when a {{1}} variable is supplie
         writable: true, configurable: true
     });
     await waSend.sendWhatsAppTemplate('PN', 'TOK', '919700000000', { name: 'bot_live_update' });
-    await waSend.sendWhatsAppTemplate('PN', 'TOK', '919700000000', { name: 'announcement', body: 'Hi {{1}}!' });
+    await waSend.sendWhatsAppTemplate('PN', 'TOK', '919700000000', { name: 'announcement', components: [{ type: 'BODY', parameters: [{ type: 'text', text: 'Hi {{1}}!' }] }] });
     assert.strictEqual(captured.length, 2);
     // no-variable template → no components
     assert.deepStrictEqual(captured[0].body.template.components, []);
@@ -140,7 +140,37 @@ test('discountAmount: food-subtotal base, maxCap, stacking cap', () => {
     const b = discountAmount({ mode: 'percent', value: 20, stackable: true }, 500);
     assert.strictEqual(a + b, 50 + 100);
     // …and the grand total is capped at food subtotal (evaluateDiscount: Math.min(total, subtotal))
-    const heavy = discountAmount({ mode: 'percent', value: 80 }, 500)
-        + discountAmount({ mode: 'percent', value: 80 }, 500);
+    const heavy = discountAmount({ mode: 'percent', value: 80, stackable: true }, 500)
+        + discountAmount({ mode: 'percent', value: 80, stackable: true }, 500);
     assert.strictEqual(Math.min(heavy, 500), 500);
+});
+
+// BAN-PROOFING: 3 continuous wrong messages while the bot waits for
+// "menu"/"order" → 30-min silent freeze; intent resets; outbound pacer
+// enforces the random 4–8s per-chat gap.
+test('ban-proofing: 3 strikes freeze, menu clears, pacer enforces 4-8s gap', async () => {
+    const { isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo } = require('../utils');
+    const jid = '919000000001@s.whatsapp.net';
+    // strikes 1-2 → bot still replies
+    assert.strictEqual(recordWrongMessage(jid), false);
+    assert.strictEqual(recordWrongMessage(jid), false);
+    assert.strictEqual(isJidFrozen(jid), false);
+    // strike 3 → freeze triggers, caller must go silent
+    assert.strictEqual(recordWrongMessage(jid), true);
+    assert.strictEqual(isJidFrozen(jid), true);
+    // other jids unaffected
+    assert.strictEqual(isJidFrozen('919000000002@s.whatsapp.net'), false);
+    // menu/order intent clears strikes + freeze
+    clearWrongStrikes(jid);
+    assert.strictEqual(isJidFrozen(jid), false);
+    // unkeyable jid (<10 digits) never counts
+    assert.strictEqual(recordWrongMessage('123'), false);
+    // pacer: first send immediate, second to the same chat waits ≥ 4s
+    const pj = '919000000003@s.whatsapp.net';
+    const t0 = Date.now();
+    await paceOutboundTo(pj);
+    assert.ok(Date.now() - t0 < 2000, 'first send must not wait');
+    const t1 = Date.now();
+    await paceOutboundTo(pj);
+    assert.ok(Date.now() - t1 >= 4000, 'second send must wait the random 4-8s gap');
 });

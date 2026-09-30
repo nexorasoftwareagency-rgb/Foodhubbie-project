@@ -59,7 +59,8 @@ const {
     getISTDateInfo, getISTDateString, isShopOpen,
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
-    isSocketDead, RateLimiter, isBlockedJid, OutboundTracker, BaileysSendTracker
+    isSocketDead, RateLimiter, isBlockedJid, OutboundTracker, BaileysSendTracker,
+    isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo
 } = require('./utils');
 
 // ── Outbound tracker (best-effort analytics, never blocks sends) ──────
@@ -412,7 +413,10 @@ function initCommandListener(sock) {
             } else if (cmd.action === "SEND_GENERIC_MESSAGE") {
                 const jid = formatJid(cmd.phone);
                 if (jid) {
-                    if (sock.user?.id?.startsWith('meta:') && typeof sock.sendTemplate === 'function') {
+                    if (isJidFrozen(jid)) {
+                        // BAN-PROOFING: frozen chat → silent (see handler gate).
+                        console.log(`[FREEZE] 🔇 generic message to frozen ${maskJid(jid)} dropped`);
+                    } else if (sock.user?.id?.startsWith('meta:') && typeof sock.sendTemplate === 'function') {
                         try {
                             // Proactive (biz-initiated) plain text is dropped by Meta
                             // with 131047 outside the 24h service window — send via an
@@ -668,6 +672,30 @@ async function sendImage(sock, to, image, text, outlet = 'outlet', skipContact =
             console.log(`[SEND FAIL] to ${maskJid(to)} trackType=${trackType} — both image and text-fallback failed`);
             return false;
         }
+    }
+}
+
+async function sendTemplateMessage(sock, to, templateName, components, outlet = 'outlet', trackType = 'order_notification') {
+    if (isBlockedJid(to, blockedNumbers)) {
+        console.log(`[BLOCKED] Skipping template to ${(to || '').replace(/[^0-9]/g, '').slice(-4)}`);
+        return true;
+    }
+    const _isBaileys = !sock.user?.id?.startsWith('meta:');
+    if (_isBaileys) {
+        const phone = (to || '').replace(/[^0-9]/g, '');
+        await baileysSendTracker.waitBeforeSend(phone);
+        baileysSendTracker.trackSend(phone);
+    }
+    try {
+        await sock.sendTemplate(to, { name: templateName, language: 'en', components });
+        outboundTracker.trackSend(outlet, trackType);
+        _onSendSuccess();
+        console.log(`[TEMPLATE SEND OK] ${templateName} to ${maskJid(to)} trackType=${trackType}`);
+        return true;
+    } catch (err) {
+        console.error(`[TEMPLATE SEND FAIL] ${templateName} to ${maskJid(to)}:`, err.message);
+        _onSendFailure();
+        return false;
     }
 }
 
@@ -956,7 +984,16 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
         const maskedJid = maskJid(jid);
         console.log(`[Status Update] 🔍 Processing Order #${formatOrderId(order.orderId || id)} | Status: ${currentStatus} | OTP Changed: ${isOtpChanged} | Target: ${maskedJid} | CachedStatus: ${currentProcessedStatus?.status || 'null'} | isNew: ${isNew}`);
 
-        if (!currentProcessedStatus || currentProcessedStatus.status !== currentStatus || isNew || isOtpChanged || shouldSendOtpMessage) {
+        // `isNew` deliberately NOT part of this condition anymore: with the
+        // per-order lock above + status written only AFTER a confirmed send
+        // (:saveProcessedStatus below), a fresh read here already returns
+        // status=null on first delivery and status=<current> once sent.
+        // The old `|| isNew` bypass made child_added resend notifications a
+        // racing child_changed had already delivered (duplicate ORDER PLACED
+        // invoices, seen live 2026-09-21) — and it no longer serves a
+        // purpose: a failed send leaves status un-advanced, so the retry
+        // path still re-enters this branch.
+        if (!currentProcessedStatus || currentProcessedStatus.status !== currentStatus || isOtpChanged || shouldSendOtpMessage) {
             const currentRider = order.riderId || order.assignedRider || "";
             const lastRider = currentProcessedStatus?.riderId || "";
             const isRiderChanged = currentRider && currentRider !== lastRider;
@@ -995,18 +1032,53 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             let msg = "";
             let img = null;
 
+            let templateName = null;
+            let templateComponents = null;
+
             if (statusLower === "placed") {
+                templateName = "order_placed";
+                templateComponents = [{
+                    type: "BODY",
+                    parameters: [{ type: "text", text: formatOrderInvoice(id, order) }]
+                }];
+                // Legacy text/image path — used by Baileys (no sendTemplate).
                 msg = `🎉 *ORDER PLACED!* ${OUTLET_EMOJI}\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}We've received your order and our team is reviewing it now. ⏳\nYou'll get an update as soon as it's confirmed! ❤️`;
                 img = botSettings.imgPlacedPng || botSettings.imgPlaced || botSettings.imgConfirmedPng || botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "confirmed") {
-                if (isDineIn && isNew) {
-                    const outletName = order.outlet?.toUpperCase() || 'OUR RESTAURANT';
-                    msg = `🏪 *WELCOME TO ${outletName}!* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour counter order has been *CONFIRMED*! 🎊\n🆔 *Order ID:* #${formatOrderId(order.orderId || id)}\n👤 *Customer:* ${order.customerName || 'Guest'}\n${order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour delicious meal is being prepared right now! 👨‍🍳🔥\n_Thank you for dining with us!_ 🙏`;
+                if (isDineIn) {
+                    templateName = "order_confirmed_dinein";
+                    templateComponents = [{
+                        type: "BODY",
+                        parameters: [
+                            { type: "text", text: (order.outlet || '').toUpperCase() || 'OUR RESTAURANT' },
+                            { type: "text", text: formatOrderId(order.orderId || id) },
+                            { type: "text", text: order.customerName || 'Guest' },
+                            { type: "text", text: order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : '' }
+                        ]
+                    }];
+                    msg = `🏪 *WELCOME TO ${(order.outlet || '').toUpperCase() || 'OUR RESTAURANT'}!* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour counter order has been *CONFIRMED*! 🎊\n🆔 *Order ID:* #${formatOrderId(order.orderId || id)}\n👤 *Customer:* ${order.customerName || 'Guest'}\n${order.tableNo ? `🪑 *Table No:* ${order.tableNo}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━\nYour delicious meal is being prepared right now! 👨‍🍳🔥\n_Thank you for dining with us!_ 🙏`;
                 } else {
+                    templateName = "order_confirmed_delivery_v2";
+                    templateComponents = [{
+                        type: "BODY",
+                        parameters: [
+                            { type: "text", text: formatOrderInvoice(id, order) },
+                            { type: "text", text: getFoodFunnyProgress("Confirmed") }
+                        ]
+                    }];
                     msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}Your order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")}`;
                 }
                 img = botSettings.imgConfirmedPng || botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "ready" || statusLower === "packed") {
+                templateName = "order_ready_v3";
+                templateComponents = [{
+                    type: "BODY",
+                    parameters: [
+                        { type: "text", text: formatOrderId(order.orderId || id) },
+                        { type: "text", text: isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵" },
+                        { type: "text", text: getFoodFunnyProgress("Ready") }
+                    ]
+                }];
                 msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${formatOrderId(order.orderId || id)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")}`;
                 img = botSettings.imgReadyPng || botSettings.imgReady || fallbackImg;
 
@@ -1054,6 +1126,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     }
                 }
 
+                // OTP messages MUST be plain text (24h window) — Meta rejects OTP templates
                 if (isOtpChanged) {
                     msg = `🔑 *NEW DELIVERY OTP!* 🔄\n━━━━━━━━━━━━━━━━━━━━\nYour previous code is now invalid. Please use the new one below for your delivery #${formatOrderId(order.orderId || id)}:\n🔑 *NEW OTP:* ${otp}${riderInfoText}\n💰 *Total:* ₹${order.total || 0}\n_Share this code ONLY with the rider upon arrival._`;
                 } else {
@@ -1066,25 +1139,54 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     otp = Math.floor(1000 + Math.random() * 9000).toString();
                     await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
+                // OTP message — plain text (24h window)
                 msg = `📍 *RIDER HAS REACHED!* 🚨\n━━━━━━━━━━━━━━━━━━━━\nOur rider has arrived at your location for order #${formatOrderId(order.orderId || id)}.\n🔑 *OTP:* ${otp} (Please share with rider)\nKripya order lene ke liye taiyar rahein. Shukriya! 🙏`;
                 img = botSettings.imgOutPng || botSettings.imgOut || fallbackImg;
             } else if (statusLower === "delivered" || statusLower === "served") {
+                templateName = "order_delivered_v3";
+                templateComponents = [{
+                    type: "BODY",
+                    parameters: [
+                        { type: "text", text: isDineIn ? 'SERVED' : 'DELIVERED' },
+                        { type: "text", text: formatOrderId(order.orderId || id) },
+                        { type: "text", text: order.paymentMethod || 'COD' },
+                        { type: "text", text: String(order.total || 0) },
+                        { type: "text", text: getFunnyFoodJoke() }
+                    ]
+                }];
                 msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${formatOrderId(order.orderId || id)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
                 img = botSettings.imgDeliveredPng || botSettings.imgDelivered || fallbackImg;
             } else if (statusLower === "cancelled") {
+                templateName = "order_cancelled";
+                templateComponents = [{
+                    type: "BODY",
+                    parameters: [
+                        { type: "text", text: formatOrderId(order.orderId || id) },
+                        { type: "text", text: order.cancelReason || "Store Busy / Technical Issue" }
+                    ]
+                }];
                 msg = `❌ *ORDER CANCELLED* ❌\n━━━━━━━━━━━━━━━━━━━━\nAapka order #${formatOrderId(order.orderId || id)} cancel ho gaya hai. 😔\nReason: ${order.cancelReason || "Store Busy / Technical Issue"}\nKoi sawaal ho toh humse baat karein. 🙏`;
             }
 
             const prevStatus = currentProcessedStatus?.status || "None";
             console.log(`[BOT] 🔔 Status Change for #${formatOrderId(order.orderId || id)}: ${prevStatus} -> ${currentStatus} (${jid ? 'Valid JID' : 'NO JID'})`);
 
-            if (msg) {
+            let sendResult = false;
+            // Template path only when the transport actually supports it
+            // (meta) — Baileys has no sendTemplate → legacy text/image path.
+            if (templateName && templateComponents && typeof sock.sendTemplate === 'function') {
+                console.log(`[BOT] 📧 Sending ${currentStatus} via template "${templateName}" to ${maskJid(jid)}...`);
+                await orderRateLimiter.wait();
+                const orderTrackType = (statusLower === 'placed' || statusLower === 'confirmed') ? 'order_notification' : 'order_update';
+                sendResult = await sendTemplateMessage(sock, jid, templateName, templateComponents, order.outlet || 'outlet', orderTrackType);
+            } else if (msg) {
                 console.log(`[BOT] 📧 Sending ${currentStatus} notification to ${maskJid(jid)}...`);
                 await orderRateLimiter.wait();
                 const orderTrackType = (statusLower === 'placed' || statusLower === 'confirmed') ? 'order_notification' : 'order_update';
-                const sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'outlet', true, orderTrackType);
+                sendResult = await sendImage(sock, jid, img, msg, order.outlet || 'outlet', true, orderTrackType);
+            }
 
-                if (sendResult) {
+            if (sendResult) {
                     // Only NOW is this status considered "processed" — the
                     // customer actually received it (or it was a permanent,
                     // non-retryable skip like a blocked number).
@@ -1101,7 +1203,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                         success: true,
                         timestamp: Date.now()
                     }, order.outlet || OUTLET).catch(() => { });
-                } else {
+                } else if (templateName || msg) {
                     // Send genuinely failed. Deliberately leave `status`
                     // un-advanced in the cache so the next child_changed
                     // event for this order (or a bot restart) re-enters this
@@ -1126,16 +1228,15 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                         success: false,
                         timestamp: Date.now()
                     }, order.outlet || OUTLET).catch(() => { });
+                } else {
+                    // No message/template defined for this status — still mark as processed
+                    await saveProcessedStatus(id, {
+                        ...(currentProcessedStatus || {}),
+                        status: currentStatus,
+                        lastOtp: storedOTP,
+                        timestamp: Date.now()
+                    });
                 }
-            } else {
-                // If no message defined for this status, still mark as processed
-                await saveProcessedStatus(id, {
-                    ...(currentProcessedStatus || {}),
-                    status: currentStatus,
-                    lastOtp: storedOTP,
-                    timestamp: Date.now()
-                });
-            }
         } else {
             if (currentProcessedStatus && currentProcessedStatus.status === currentStatus) {
                 console.log(`[Status Update] ⏭️ Skipping #${formatOrderId(order.orderId || id)}: status '${currentStatus}' already processed (cached: '${currentProcessedStatus.status}')`);
@@ -1369,6 +1470,7 @@ async function startBot() {
         }
     };
     sock.sendMessage = async function(jid, content, opts) {
+        await paceOutboundTo(jid);
         const textPreview = content?.text ? content.text.slice(0, 60) : (content?.caption ? content.caption.slice(0, 60) : 'non-text');
         try {
             const result = await _origSendMessage(jid, content, opts);
@@ -1436,10 +1538,16 @@ async function startBot() {
     if (typeof sock.sendTemplate === 'function') {
         const _origSendTemplate = sock.sendTemplate.bind(sock);
         sock.sendTemplate = async function(jid, opts = {}) {
+            await paceOutboundTo(jid);
             const result = await _origSendTemplate(jid, opts);
             const msgId = result?.key?.id || result?.messages?.[0]?.id || result;
             if (opts?._logChat !== false) {
-                _logOutboundChat(jid, opts?.body || '', msgId);
+                // Chat tab: `body` (promo/generic) or the component parameter
+                // texts (order-status templates — sendTemplateMessage passes
+                // no body, which used to log an empty bubble).
+                const compText = Array.isArray(opts.components)
+                    ? opts.components.flatMap(c => c.parameters || []).map(p => p.text).filter(Boolean).join('\n') : '';
+                _logOutboundChat(jid, opts?.body || compText, msgId);
             }
             return result;
         };
@@ -1447,6 +1555,7 @@ async function startBot() {
     if (typeof sock.sendButton === 'function') {
         const _origSendButton = sock.sendButton.bind(sock);
         sock.sendButton = async function(jid, opts = {}) {
+            await paceOutboundTo(jid);
             const result = await _origSendButton(jid, opts);
             const msgId = result?.key?.id || result?.messages?.[0]?.id || result;
             if (opts?._logChat !== false) {
@@ -1858,9 +1967,13 @@ async function sendDailyReportSafely(dateOverride = null) {
             // IMPORTANT: opt-out keys are stored as last-10-digits (matches
             // the customers/ keys) so the recipient filter can use a simple
             // set-membership check.
+            // `isAuthorized` is declared OUTSIDE the try so the ban-proofing
+            // strike logic (below, in the state machine) can skip admins —
+            // an admin must never freeze themselves out of reports/alerts.
+            let isAuthorized = false;
             try {
                 const adminNumbers = await getCachedAdminJids();
-                const isAuthorized = adminNumbers.includes(sender) || sender.startsWith(DEVELOPER_NUMBER);
+                isAuthorized = adminNumbers.includes(sender) || sender.startsWith(DEVELOPER_NUMBER);
                 if (!isAuthorized && text) {
                     const optOutKey = sender.replace(/[^0-9]/g, '').slice(-10);
                     if (/^(stop|unsubscribe|opt[\s-]?out)$/i.test(text)) {
@@ -1905,6 +2018,18 @@ async function sendDailyReportSafely(dateOverride = null) {
                 }
             } catch (optOutErr) {
                 console.error("[Promo] Opt-out handler error:", optOutErr.message);
+            }
+
+            // BAN-PROOFING: frozen jid → total silence (no processing, no
+            // reply). Runs AFTER the opt-out block so STOP/START state
+            // changes still land. Only chat/marketing paths respect the
+            // freeze — transactional order notifications keep flowing
+            // (ban-safe approved utility templates; never marked sent-but-
+            // dropped). Strikers are gated on !isAuthorized, so admins are
+            // never frozen.
+            if (isJidFrozen(sender)) {
+                console.log(`[FREEZE] 🔇 ignoring message from frozen ${maskJid(sender)}`);
+                return;
             }
 
             // Show typing indicator (fire-and-forget — don't block processing)
@@ -2027,11 +2152,16 @@ async function sendDailyReportSafely(dateOverride = null) {
                 // order yet. Only explicit order-intent words trigger the full flow.
                 if (user.step === "AWAITING_ORDER_INTENT") {
                     if (/^(menu|order)$/i.test(text.trim())) {
+                        clearWrongStrikes(sender);
                         const store = await getData("settings/Store", OUTLET);
                         await resendMenuCTA(sock, sender, user, store, null);
                         user.step = "WEBVIEW";
                         return;
                     }
+                    // BAN-PROOFING: non-intent while explicitly waiting for
+                    // "menu"/"order" = strike; 3 continuous → 30-min freeze
+                    // (silent on the 3rd — no nudge). Admins never strike.
+                    if (!isAuthorized && recordWrongMessage(sender)) return;
                     // Already handled by the opt-out/rejection block above for exact
                     // matches; anything else just gets one quiet nudge, no CTA.
                     return sock.sendMessage(sender, { text: `🍽️ *Khana order karne ke liye:* **Menu** ya **Order** type karein — link turant milega! 🙏` });
@@ -2043,13 +2173,16 @@ async function sendDailyReportSafely(dateOverride = null) {
                 if (user.step === "WEBVIEW") {
                     // C3: Menu keywords → resend just the menu CTA
                     if (/^(order|menu|food|start|restart|hi+|hello+|hey+)$/i.test(text)) {
+                        if (/^(order|menu)$/i.test(text.trim())) clearWrongStrikes(sender);
                         return resendMenuCTA(sock, sender, user);
                     }
                     // C4: Track/status keywords → nudge to use webview
                     if (/^(track|status|where)$/i.test(text)) {
                         return sock.sendMessage(sender, { text: "📋 Tap the menu link above to order again. Your recent orders will show in the webview." });
                     }
-                    // C5: Anything else → nudge + resend the menu CTA
+                    // C5: Anything else → strike first (silent on the 3rd),
+                    // then nudge + resend the menu CTA. Admins never strike.
+                    if (!isAuthorized && recordWrongMessage(sender)) return;
                     return resendMenuCTA(sock, sender, user, null, null, `💡 *Tap below to browse & order!*`);
                 }
 

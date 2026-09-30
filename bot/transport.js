@@ -85,7 +85,21 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
     async sendTemplate(jid, opts = {}) {
       const to = toPlainPhone(jid);
       if (!to) throw new Error(`Invalid JID: ${jid}`);
-      return waSend.sendWhatsAppTemplate(phoneNumberId, accessToken, to, opts);
+      // opts: { name, language, body?, components? } — callers that only pass
+      // `body` (promo/SEND_GENERIC) need it mapped to the template's single
+      // {{1}} BODY parameter; otherwise it was silently dropped and the
+      // template's static text went out instead of the intended content.
+      // A no-variable template (e.g. proactive_promo) rejects the extra
+      // parameter with code 100 → caller's existing text fallback kicks in.
+      let components = opts.components;
+      if ((!components || !components.length) && opts.body) {
+        components = [{ type: 'BODY', parameters: [{ type: 'text', text: String(opts.body) }] }];
+      }
+      return waSend.sendWhatsAppTemplate(phoneNumberId, accessToken, to, {
+        name: opts.name,
+        language: opts.language || 'en',
+        components
+      });
     },
     async readMessages() { /* no-op: Meta API has no read receipts */ },
     async sendPresenceUpdate() { /* no-op: Meta API has no typing indicator */ },

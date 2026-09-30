@@ -5,7 +5,8 @@
  */
 
 const {
-    formatJid, getISTDateInfo, randomBetween, isSocketDead, OutboundTracker
+    formatJid, getISTDateInfo, randomBetween, isSocketDead, OutboundTracker,
+    isJidFrozen, maskJid
 } = require('./utils');
 const { db, resolvePath } = require('./firebase');
 const { paceBurstSend } = require('./send-pacer');
@@ -34,6 +35,13 @@ let _promoEnabledCache = { value: true, ts: 0 };
 let _dailyLimitCache = { value: PROMO_WARMUP_DAILY_LIMITS[0], ts: 0 };
 
 async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet) {
+    // BAN-PROOFING: a frozen chat (3 wrong messages → 30-min silence) must
+    // receive NO outbound at all — promos included. Transactional order
+    // notifications deliberately still flow (approved utility templates).
+    if (isJidFrozen(jid)) {
+        console.log(`[FREEZE] 🔇 promo to frozen ${maskJid(jid)} dropped`);
+        return;
+    }
     let finalText = text;
     if (sendStopMsg && !/stop/i.test(finalText)) finalText += '\n------------------------\n_Reply STOP to unsubscribe._';
     try {
