@@ -10614,14 +10614,14 @@ body.pos-selection-mode .walkin-picker {
 
 /* ---- Costs tab: tables (structured) ---- */
 #tab-costs table { width: 100%; border-collapse: collapse; font-size: 13px; }
-#tab-costs thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: 700; padding: 7px 8px; border-bottom: 2px solid #e2e8f0; text-align: right; white-space: nowrap; }
+#tab-costs thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #334155; font-weight: 800; padding: 7px 8px; border-bottom: 2px solid #cbd5e1; text-align: right; white-space: nowrap; }
 #tab-costs thead th:first-child { text-align: left; }
 #tab-costs [data-cost-section="feed"] thead th:nth-child(2) { text-align: left; }
-#tab-costs tbody td { padding: 9px 8px; text-align: right; color: #334155; font-variant-numeric: tabular-nums; }
-#tab-costs tbody td:first-child { text-align: left; font-weight: 700; color: #0f172a; }
-#tab-costs tbody td:last-child { font-weight: 700; color: #0f172a; }
+#tab-costs tbody td { padding: 9px 8px; text-align: right; color: #1e293b; font-weight: 600; font-variant-numeric: tabular-nums; }
+#tab-costs tbody td:first-child { text-align: left; font-weight: 800; color: #0f172a; }
+#tab-costs tbody td:last-child { font-weight: 800; color: #0f172a; }
 #tab-costs [data-cost-section="feed"] tbody td:nth-child(2) { text-align: left; }
-#tab-costs tbody td[colspan] { text-align: left; color: #94a3b8; font-weight: 500; }
+#tab-costs tbody td[colspan] { text-align: left; color: #94a3b8; font-weight: 600; }
 #tab-costs tbody tr.cost-row-excluded td { opacity: 0.55; }
 #tab-costs .cost-src-chip { display: inline-block; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
 #tab-costs .cost-excluded-tag { color: #ef4444; }
