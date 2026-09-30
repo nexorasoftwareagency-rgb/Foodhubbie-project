@@ -4946,7 +4946,15 @@
                 <button class="cost-subtab" data-cost-tab="connect">Connect</button>
             </div>
 
-            <span id="costMonthLabel" class="costs-month"></span>
+            <div class="costs-range">
+                <div class="costs-range-chips">
+                    <button type="button" class="costs-chip active" data-cost-range="this">This month</button>
+                    <button type="button" class="costs-chip" data-cost-range="last">Last month</button>
+                </div>
+                <label class="costs-date"><span>From</span><input type="date" id="costDateFrom"></label>
+                <label class="costs-date"><span>To</span><input type="date" id="costDateTo"></label>
+                <span id="costMonthLabel" class="costs-month"></span>
+            </div>
 
         </div>
 
@@ -4958,7 +4966,7 @@
 
                     <div class="mob-kpi-icon"><i data-lucide="calculator" class="icon-18"></i></div>
 
-                    <span class="mob-kpi-label">Cost Index (this month)</span>
+                    <span class="mob-kpi-label">Cost Index (range)</span>
 
                 </div>
 
@@ -5041,6 +5049,28 @@
                 </thead>
 
                 <tbody id="costBreakdownBody"><tr><td colspan="4" style="color:#64748b;padding:8px;">Loading…</td></tr></tbody>
+
+            </table>
+
+            <h4 class="section-card-heading" style="margin-top:16px;"><i data-lucide="calendar-days" class="icon-14"></i> Date-wise usage</h4>
+
+            <table style="width:100%;font-size:13px;">
+
+                <thead>
+
+                    <tr style="text-align:left;color:#64748b;">
+
+                        <th style="padding:6px 8px;">Day</th>
+
+                        <th style="text-align:right;">Orders</th>
+
+                        <th style="text-align:right;padding-right:8px;">Cost</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody id="costDayBody"><tr><td colspan="3" style="color:#64748b;padding:8px;">LoadingΓÇª</td></tr></tbody>
 
             </table>
 

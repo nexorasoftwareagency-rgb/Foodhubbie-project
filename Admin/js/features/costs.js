@@ -1,7 +1,8 @@
 /**
  * FoodHubbie ERP | COSTS TAB (Admin/js/features/costs.js)
  * ============================================================================
- * Live "cost of running the software" index for the current month:
+ * Live "cost of running the software" index for a selectable date range
+ * (default: current month; From/To date inputs + This/Last month chips):
  *   - every new order (onChildAdded) is identified by source and priced:
  *       QR ₹2 · POS counter ₹1 · webview_delivery (WhatsApp flow) ₹3 · other ₹2
  *       (commission_1pct mode → 1% of order total instead, Official pack)
@@ -14,7 +15,7 @@
  * Pure math lives in ../../shared/cost-math.js (node-runnable self-check).
  * ============================================================================
  */
-import { Outlet, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt } from '../firebase.js';
+import { Outlet, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { DEFAULT_RATES, PROMO_RATE, sourceOf, feeOf, computeCostIndex } from '../../shared/cost-math.js';
 
 let _unsubs = [];
@@ -24,6 +25,9 @@ let _campaigns = null;
 let _lastIndex = 0;
 let _renderTimer = null;
 let _subtabsWired = false;
+let _rangeWired = false;
+let _range = null;           // { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
+let _orderUnsubs = [];
 
 function _wireSubtabs() {
     if (_subtabsWired) return;
@@ -43,8 +47,62 @@ function _wireSubtabs() {
     });
 }
 
+function _wireRange() {
+    if (_rangeWired) return;
+    _rangeWired = true;
+    document.getElementById('costDateFrom')?.addEventListener('change', _onDateInput);
+    document.getElementById('costDateTo')?.addEventListener('change', _onDateInput);
+    document.getElementById('tab-costs')?.addEventListener('click', e => {
+        const b = e.target.closest('[data-cost-range]');
+        if (!b) return;
+        _applyRange(_monthRange(b.dataset.costRange === 'last' ? -1 : 0));
+    });
+}
+
+function _onDateInput() {
+    const from = document.getElementById('costDateFrom')?.value;
+    const to = document.getElementById('costDateTo')?.value;
+    if (!from || !to) return;
+    _applyRange(from <= to ? { from, to } : { from: to, to: from });
+}
+
+function _applyRange(r) {
+    _range = r;
+    const fi = document.getElementById('costDateFrom'), ti = document.getElementById('costDateTo');
+    if (fi) fi.value = r.from;
+    if (ti) ti.value = r.to;
+    const thisR = _monthRange(0), lastR = _monthRange(-1);
+    document.querySelectorAll('#tab-costs [data-cost-range]').forEach(b => {
+        const m = b.dataset.costRange === 'last' ? lastR : thisR;
+        b.classList.toggle('active', r.from === m.from && r.to === m.to);
+    });
+    _subscribeOrders();
+    _scheduleRender();
+}
+
+function _subscribeOrders() {
+    _orderUnsubs.forEach(u => { try { u(); } catch (e) { /* already unsubscribed */ } });
+    _orderUnsubs = [];
+    _orders = {}; _lastIndex = 0;
+    // end bound: day + U+F8FF (highest BMP char) = inclusive prefix upper bound
+    const q = query(Outlet.ref('orders'), orderByChild('createdAt'), startAt(_range.from), endAt(_range.to + ''));
+    _orderUnsubs.push(onChildAdded(q, s => { _orders[s.key] = s.val(); _scheduleRender(); }));
+    _orderUnsubs.push(onChildChanged(q, s => { _orders[s.key] = s.val(); _scheduleRender(); }));
+}
+
 const _inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-const _monthPrefix = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-`; };
+const _dayStr = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const _monthRange = off => {
+    const n = new Date();
+    const f = new Date(n.getFullYear(), n.getMonth() + off, 1);
+    return { from: _dayStr(f), to: _dayStr(new Date(f.getFullYear(), f.getMonth() + 1, 0)) };
+};
+const _rangeLabel = () => {
+    if (!_range) return '';
+    const f = new Date(_range.from + 'T00:00:00'), t = new Date(_range.to + 'T00:00:00');
+    if (_range.from.slice(0, 7) === _range.to.slice(0, 7)) return f.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    return `${f.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – ${t.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+};
 const _rates = () => ({ ...DEFAULT_RATES, ...(_billing && typeof _billing === 'object' ? _billing.rates || {} : {}) });
 const _mode = () => (_billing && typeof _billing === 'object' && _billing.mode === 'commission_1pct') ? 'commission_1pct' : 'per_order';
 
@@ -66,7 +124,7 @@ function _render() {
     const mode = _mode();
     const idx = computeCostIndex(_orders, rates, mode);
 
-    _setText('costMonthLabel', new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }));
+    _setText('costMonthLabel', _rangeLabel());
 
     const idxEl = document.getElementById('costKpiIndex');
     if (idxEl) {
@@ -90,7 +148,27 @@ function _render() {
             <td style="text-align:right;">${mode === 'commission_1pct' && src === 'webview_delivery' ? '1% of order' : _inr(rates[src] ?? rates.other)}</td>
             <td style="text-align:right;">${v.orders}</td>
             <td style="text-align:right;padding-right:8px;font-weight:700;">${_inr(v.cost)}</td>
-        </tr>`).join('') : '<tr><td colspan="4" style="color:#64748b;padding:8px;">No orders yet this month</td></tr>';
+        </tr>`).join('') : '<tr><td colspan="4" style="color:#64748b;padding:8px;">No orders in this range</td></tr>';
+    }
+
+    // --- date-wise usage (per-day cost within the range) ---
+    const db = document.getElementById('costDayBody');
+    if (db) {
+        const byDay = {};
+        for (const [id, o] of Object.entries(_orders)) {
+            const d = String(o?.createdAt || '').slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+            (byDay[d] = byDay[d] || {})[id] = o;
+        }
+        const days = Object.keys(byDay).sort().reverse();
+        db.innerHTML = days.length ? days.map(d => {
+            const di = computeCostIndex(byDay[d], rates, mode);
+            return `<tr>
+                <td style="padding:6px 8px;font-weight:700;">${new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</td>
+                <td style="text-align:right;">${di.count}</td>
+                <td style="text-align:right;padding-right:8px;font-weight:700;">${_inr(di.total)}</td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="3" style="color:#64748b;padding:8px;">No orders in this range</td></tr>';
     }
 
     // --- promo token balance KPI ---
@@ -182,18 +260,18 @@ function _render() {
                 <td style="text-align:right;">${_inr(o.total)}</td>
                 <td style="text-align:right;padding-right:8px;font-weight:700;">${fee === null ? '—' : _inr(fee)}</td>
             </tr>`;
-        }).join('') : '<tr><td colspan="4" style="color:#64748b;padding:8px;">No orders yet this month</td></tr>';
+        }).join('') : '<tr><td colspan="4" style="color:#64748b;padding:8px;">No orders in this range</td></tr>';
     }
 }
 
 export function loadCosts() {
     cleanupCosts();
     _wireSubtabs();
-    _orders = {}; _billing = null; _campaigns = null; _lastIndex = 0;
+    _wireRange();
+    _billing = null; _campaigns = null;
+    _range = _range || _monthRange(0);
+    _applyRange(_range);
 
-    const q = query(Outlet.ref('orders'), orderByChild('createdAt'), startAt(_monthPrefix()));
-    _unsubs.push(onChildAdded(q, s => { _orders[s.key] = s.val(); _scheduleRender(); }));
-    _unsubs.push(onChildChanged(q, s => { _orders[s.key] = s.val(); _scheduleRender(); }));
     _unsubs.push(onValue(Outlet.ref('billing'),
         s => { _billing = s.val() || null; _scheduleRender(); },
         () => { _billing = false; _scheduleRender(); }));
@@ -206,5 +284,7 @@ export function loadCosts() {
 export function cleanupCosts() {
     _unsubs.forEach(u => { try { u(); } catch (e) { /* already unsubscribed */ } });
     _unsubs = [];
+    _orderUnsubs.forEach(u => { try { u(); } catch (e) { /* already unsubscribed */ } });
+    _orderUnsubs = [];
     if (_renderTimer) { clearTimeout(_renderTimer); _renderTimer = null; }
 }

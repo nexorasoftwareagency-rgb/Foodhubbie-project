@@ -10601,6 +10601,17 @@ body.pos-selection-mode .walkin-picker {
 #tab-costs .costs-head .cost-subtabs { margin-bottom: 0; }
 #tab-costs .costs-month { font-size: 12px; font-weight: 600; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 5px 12px; border-radius: 999px; white-space: nowrap; }
 
+/* ---- Costs tab: date-range filter ---- */
+#tab-costs .costs-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#tab-costs .costs-range-chips { display: flex; gap: 2px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 3px; }
+#tab-costs .costs-chip { border: none; background: transparent; font-size: 12px; font-weight: 600; color: #475569; padding: 4px 11px; border-radius: 999px; cursor: pointer; transition: all 0.15s ease; }
+#tab-costs .costs-chip.active { background: var(--primary, #E84908); color: #fff; }
+#tab-costs .costs-date { display: flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; }
+#tab-costs .costs-date input { font: inherit; font-size: 12px; font-weight: 600; color: #1e293b; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 7px; max-width: 132px; }
+@media (max-width: 768px) {
+    #tab-costs .costs-range { width: 100%; }
+}
+
 /* ---- Costs tab: table headers ---- */
 #tab-costs thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
 
