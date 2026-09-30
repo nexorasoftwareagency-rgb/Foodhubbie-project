@@ -7,6 +7,7 @@ import path from 'path';
 const PORT = 8124;
 const OWNER_UID = 'ZoDidAOi3fUyOXNWn559r87dADo2';
 const STALE = 'STALE_FOREIGN_UID_X';
+const ADMIN_URL = process.env.ADMIN_URL || '';
 
 let pass = 0, fail = 0;
 const log = (...a) => console.log('[Fix]', ...a);
@@ -20,10 +21,10 @@ const payload = { iss: sa.client_email, sub: sa.client_email, aud: 'https://iden
 const sig = crypto.createSign('RSA-SHA256').update(`${b64(header)}.${b64(payload)}`).sign(sa.private_key.replace(/\\n/g, '\n'), 'base64url');
 const token = `${b64(header)}.${b64(payload)}.${sig}`;
 
-const server = spawn(process.execPath, [path.resolve('tests/serve-dist.mjs')], {
+const server = ADMIN_URL ? null : spawn(process.execPath, [path.resolve('tests/serve-dist.mjs')], {
   env: { ...process.env, PORT: String(PORT), SERVE_ROOT: 'Admin/dist' }, stdio: 'ignore'
 });
-await new Promise(r => setTimeout(r, 700));
+if (server) await new Promise(r => setTimeout(r, 700));
 
 const signIn = (page) => page.evaluate(async (t) => {
   const { signInWithCustomToken } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
@@ -37,7 +38,7 @@ try {
   const pageErrors = [];
   page.on('pageerror', e => pageErrors.push(String(e)));
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(ADMIN_URL || `http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#loginEmail', { timeout: 20000 });
   await signIn(page);
   await page.waitForSelector('.layout:not(.hidden)', { timeout: 30000 });
@@ -101,7 +102,7 @@ try {
   assert(pageErrors.length === 0, `0 pageErrors (got ${pageErrors.length}${pageErrors.length ? ': ' + pageErrors[0] : ''})`);
 } finally {
   await browser.close().catch(() => {});
-  server.kill();
+  server?.kill();
 }
 log(`RESULT ${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
