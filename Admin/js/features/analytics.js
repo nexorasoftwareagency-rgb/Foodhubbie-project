@@ -19,12 +19,8 @@ export function setOutletFilter(value) {
 export async function loadReports() {
     await _loadChartJS();
 
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
-
-    const fromVal = getISTDateString(yesterday);
-    const toVal = getISTDateString(today);
+    const toVal = getISTDateString(new Date());
+    const fromVal = toVal;
 
     const fromEl = document.getElementById('reportFrom');
     const toEl = document.getElementById('reportTo');
