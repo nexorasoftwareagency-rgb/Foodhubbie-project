@@ -94,6 +94,7 @@ Fragile Files before starting ANY task.
 - NOT verified / open risk: Manager/Cashier/Waiter logins (same DEFAULT_ROLES mapping path as Owner, only owner account exists); staff-login name source; renamed outlet-gate custom role labels (fill runs before loadOutletGates with DEFAULT_ROLES ï¿½ standard labels match)
 - Confidence: HIGH
 - Ended: 2026-09-30 03:30 UTC
+- Deployed: commit 27a1d9e pushed; hosting:admin released (this chip + claim task 023514 both live) â€” post-deploy live E2E: role-chip-check 8/8 + POS no-PIN/reports-claim spot-check 5/5 on foodhubbie-admins.web.app, 0 pageErrors
 
 ### [20260930-024936-a0c9] Block promotional messaging on Baileys transport (ban risk) - official meta API only
 - TIER: 2 (medium-risk)
@@ -106,8 +107,8 @@ Fragile Files before starting ANY task.
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-09-30 02:35 UTC
-- Verified: build green; 9/9 playwright (dist==working tree): POS opens with NO PIN prompt + counterStaffUid auto-signed + menu rendered + no access-denied; resolveOperatorClaim returns '{Role} — {Name}'; receipt template shows claim + omits when empty; reports screen claim textContent 'By Owner — pizza'; reports PDF export generated Sales_Report_2026-09-01_to_2026-09-30.pdf (30D range); 0 pageErrors; claim-pos/claim-reports screenshots pixel-verified on disk
-- NOT verified / open risk: real placed-order print E2E (resolver + template tested standalone instead); PDF bytes not scanned for claim text (shared _claimText verified on screen); read tool served shuffled screenshot bytes — verified via pixel sampling instead
+- Verified: build green; 9/9 playwright (dist==working tree): POS opens with NO PIN prompt + counterStaffUid auto-signed + menu rendered + no access-denied; resolveOperatorClaim returns '{Role} ï¿½ {Name}'; receipt template shows claim + omits when empty; reports screen claim textContent 'By Owner ï¿½ pizza'; reports PDF export generated Sales_Report_2026-09-01_to_2026-09-30.pdf (30D range); 0 pageErrors; claim-pos/claim-reports screenshots pixel-verified on disk
+- NOT verified / open risk: real placed-order print E2E (resolver + template tested standalone instead); PDF bytes not scanned for claim text (shared _claimText verified on screen); read tool served shuffled screenshot bytes ï¿½ verified via pixel sampling instead
 - Confidence: HIGH
 - Ended: 2026-09-30 02:52 UTC
 
