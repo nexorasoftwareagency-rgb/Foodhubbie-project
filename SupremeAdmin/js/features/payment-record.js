@@ -288,7 +288,7 @@ function renderBreakdown() {
       <td style="text-align:right">${inr(r.usage)}</td>
       <td style="text-align:right">${inr(r.charges)}</td>
       <td style="text-align:right">${inr(r.paid)}</td>
-      <td style="text-align:right;font-weight:700;color:${r.due > 0.009 ? 'var(--status-offline,#dc2626)' : 'var(--status-online,#16a34a)'}">${inr(r.due)}</td>
+      <td style="text-align:right;font-weight:700;color:${r.due > 0.009 ? 'var(--status-offline,#dc2626)' : 'var(--status-online,#16a34a)'}">${inr(Math.max(r.due, 0))}</td>
     </tr>`).join('') + `
     <tr style="font-weight:800;border-top:2px solid var(--glass-border,rgba(15,23,42,.10))">
       <td>Total</td>
@@ -296,7 +296,7 @@ function renderBreakdown() {
       <td style="text-align:right">${inr(sum('usage'))}</td>
       <td style="text-align:right">${inr(sum('charges'))}</td>
       <td style="text-align:right">${inr(sum('paid'))}</td>
-      <td style="text-align:right">${inr(sum('due'))}</td>
+      <td style="text-align:right">${inr(Math.round(rows.reduce((a, r) => a + Math.max(r.due, 0), 0) * 100) / 100)}</td>
     </tr>`;
 }
 

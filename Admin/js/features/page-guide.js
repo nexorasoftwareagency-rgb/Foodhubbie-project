@@ -536,7 +536,7 @@ expenses: [
     {
         icon: 'key',
         title: 'POS Sign-In (Role-Based)',
-        body: 'POS opens automatically when your role has <strong>POS (Walk-in)</strong> access — the logged-in user is signed in for the shift, so no PIN prompt appears at start. The 4-digit Counter PIN still guards what it should: discount ceilings and manager approval (Security Audit → <strong>Reset PIN</strong> regenerates it; stored as a SHA-256 hash).<br><br><strong>Example:</strong> Rajesh (Cashier role, POS access) logs in and opens POS at 8:00 AM — the menu loads immediately and his bills are claimed <strong>By Cashier — Rajesh</strong>. At 12:30 PM he applies a 15% manual discount on a ₹500 bill — his 10% ceiling triggers the manager PIN prompt. Priya (Manager) enters her PIN, both names logged.'
+        body: 'POS opens automatically when your role has <strong>POS (Walk-in)</strong> access — the logged-in user is signed in for the shift, so no PIN prompt appears at start. Manual discounts above a staff member\'s ceiling ask for the <strong>Manager PIN</strong> (Settings → Security, stored as a SHA-256 hash).<br><br><strong>Example:</strong> Rajesh (Cashier role, POS access) logs in and opens POS at 8:00 AM — the menu loads immediately and his bills are claimed <strong>By Cashier — Rajesh</strong>. At 12:30 PM he applies a 15% manual discount on a ₹500 bill — his 10% ceiling triggers the manager PIN prompt. Priya (Manager) enters her PIN, both names logged.'
     },
     {
         icon: 'percent',

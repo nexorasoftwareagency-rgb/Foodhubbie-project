@@ -131,7 +131,7 @@ function renderPlanStrip() {
     if (!p) byPlan.set(r.plan, (p = { count: 0, owing: 0, due: 0 }));
     p.count++;
     if (r.due > 0.009) p.owing++;
-    p.due += r.due;
+    p.due += Math.max(r.due, 0); // credit on one outlet must not shrink another's debt chip
   }
   const label = (p) => p.charAt(0).toUpperCase() + p.slice(1);
   strip.style.display = 'flex';

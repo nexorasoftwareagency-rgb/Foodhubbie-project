@@ -46,7 +46,9 @@ export async function loadWalkinMenu() {
             grid.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">🚫</div><h4>Access Denied</h4><p>Your role does not have access to the POS.</p></div>';
             return;
         }
-        if (!getCounterStaffUid() && state.adminData?.uid) {
+        // Unconditional re-sign: sessionStorage can hold a stale uid from a
+        // previous login on this tab (shared till) — always trust current user.
+        if (state.adminData?.uid) {
             sessionStorage.setItem('counterStaffUid', state.adminData.uid);
         }
 
@@ -430,11 +432,7 @@ export function clearWalkinCart() {
 export function endShift() {
     clearCounterStaffSession();
     clearWalkinCart();
-    ui.showToast('Shift ended. Counter PIN cleared.', 'success');
-    // Only reload walkin menu if a counter staff was signed in (they need to re-enter PIN)
-    if (sessionStorage.getItem('counterStaffUid')) {
-        loadWalkinMenu();
-    }
+    ui.showToast('Shift ended. Re-open the POS tab to sign in again.', 'success');
 }
 
 export async function renderWalkinCart() {

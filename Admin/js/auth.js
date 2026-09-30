@@ -1,6 +1,6 @@
 import { auth, db, Outlet, EmailAuthProvider, ref, get, onValue, onAuthStateChanged, signInWithEmailAndPassword, signOut, reauthenticateWithCredential, serverTimestamp, set, push, BUSINESS_BY_OUTLET } from './firebase.js';
 import { state } from './state.js';
-import { showToast, logAudit } from './utils.js';
+import { showToast, logAudit, clearCounterStaffSession } from './utils.js';
 import * as ui from './ui.js';
 import { initRealtimeListeners } from './features/orders.js';
 import { loadRiders } from './features/riders.js';
@@ -89,6 +89,9 @@ export function initAuth() {
     }
 
     onAuthStateChanged(auth, async (user) => {
+        // Auth boundary: shift uid always tracks the current login (shared tills)
+        if (user) sessionStorage.setItem('counterStaffUid', user.uid);
+        else clearCounterStaffSession();
         console.log("[Auth] State change detected:", user ? `Logged in as ${user.email}` : "Logged out");
         if (!user) {
             state.adminData = null;

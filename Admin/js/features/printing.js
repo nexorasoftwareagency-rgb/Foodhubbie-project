@@ -1,22 +1,20 @@
 import { Outlet, get, query, orderByChild, equalTo, limitToLast } from '../firebase.js';
 import { updateStatus } from './orders.js';
 import { standardizeOrderData, showToast, formatOrderId } from '../utils.js';
-import { state } from '../state.js';
 import { getRoles } from '../ui.js';
 
 /**
- * Small receipt/report claim: "By {Role} — {Name}".
- * Shift staff (counterStaffUid) wins, then the logged-in admin. '' = omit line.
+ * Receipt claim: "By {Role} — {Name}" of the ORDER's operator.
+ * Record-driven only — never the printer's identity: '' when the order has
+ * no counterStaffUid (legacy/QR) or no resolvable record → line omitted.
  */
 export async function resolveOperatorClaim(staffUid) {
+    if (!staffUid) return '';
     try {
-        const uid = staffUid || sessionStorage.getItem('counterStaffUid') || state.adminData?.uid;
-        let name = '', role = '';
-        if (uid) {
-            const s = (await get(Outlet.staff(uid))).val();
-            if (s && s.isActive !== false) { name = s.displayName || ''; role = s.role || ''; }
-        }
-        if (!name) { name = state.adminData?.name || state.adminData?.email || ''; role = state.adminData?.role || ''; }
+        let rec = (await get(Outlet.staff(staffUid))).val();
+        if (!rec || rec.isActive === false) rec = (await get(Outlet.ref(`admins/${staffUid}`))).val();
+        const name = rec?.displayName || rec?.name || '';
+        const role = rec?.role || '';
         const label = getRoles()[String(role).toLowerCase().trim()]?.name || role;
         return (name && label) ? `${label} — ${name}` : '';
     } catch (e) {

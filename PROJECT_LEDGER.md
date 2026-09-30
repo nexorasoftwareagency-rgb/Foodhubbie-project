@@ -86,6 +86,15 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260930-042439-f848] Review-findings fixes: stale counterStaffUid attribution (money path), printer-fallback claim, dead PIN code + stale copy
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-30 04:24 UTC
+- Verified: build green; role-chip-check 8/8 (auth boot regression) + tests/attribution-check.mjs 11/11: F3 resolver record-driven (null/undefined uid -> '', owner uid -> 'Owner � pizza' via admins fallback, unresolvable -> ''), F1a POS entry re-signs stale uid overwritten, F1b logout clears + login re-signs current uid immediately + POS re-entry correct (caught live: re-login while walkin tab active never re-ran loadWalkinMenu � fixed by auth-boundary sign-in), endShift clears + toast without PIN wording + no dead check, 0 pageErrors
+- NOT verified / open risk: multi-agent cross-review (3 explore agents failed: opencode.ai DNS) � verified by single-agent deep read with file:line evidence; Manager/Cashier/Waiter ceiling paths (same gate code, owner-only creds); deleted verifyCounterPin (zero refs after promptCounterPinSignIn removal, grep-proven)
+- Confidence: HIGH
+- Ended: 2026-09-30 04:31 UTC
+
 ### [20260930-025638-ac70] Dashboard top area: show logged-in Role + Name (any role) on desktop topbar + mobile header
 - TIER: 1 (low-risk)
 - STATUS: DONE

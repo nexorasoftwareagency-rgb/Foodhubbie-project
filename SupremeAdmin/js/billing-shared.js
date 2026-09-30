@@ -61,7 +61,6 @@ export const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximum
 
 const list = (obj) => (obj ? Object.entries(obj).map(([id, v]) => ({ id, ...(v || {}) })) : []);
 const ordersOf = (o) => list(o.orders);
-const isExcluded = (o) => o.status === 'Cancelled' || o.status === 'Refunded';
 
 function billingOf(outlet) {
   const b = outlet.billing || {};
@@ -143,7 +142,7 @@ export function ledgerRows(outlet, scope) {
   const rows = [];
   let cumCharges = 0, cumPaid = 0;
   for (const c of list(outlet.billing?.charges)) {
-    if (inScope(tsOf(c), scope)) rows.push({ ts: tsOf(c), kind: 'charge', amount: Number(c.amount || 0), desc: c.reason || 'Charge', id: c.id });
+    if (inScope(tsOf(c), scope)) rows.push({ ts: tsOf(c), kind: 'charge', amount: Number(c.amount || 0), desc: c.reason || 'Charge', period: c.period || '', id: c.id });
   }
   for (const p of list(outlet.billing?.payments)) {
     if (inScope(tsOf(p), scope)) rows.push({ ts: tsOf(p), kind: 'payment', amount: Number(p.amount || 0), desc: p.method || 'Payment', note: p.note || '', receiptNo: p.receiptNo || '', period: p.period || '', id: p.id, method: p.method, createdBy: p.createdBy || '' });
@@ -158,7 +157,7 @@ export function ledgerRows(outlet, scope) {
 }
 
 // ---- modals -------------------------------------------------------------
-function mountModal(id, html) {
+function mountModal(id, html, onDismiss) {
   const root = document.getElementById('modal-root');
   root.innerHTML = `<div class="modal open" id="${id}">${html}</div>`;
   const modal = document.getElementById(id);
@@ -167,9 +166,12 @@ function mountModal(id, html) {
     document.removeEventListener('keydown', onKey);
     setTimeout(() => { if (root.firstChild === modal || document.getElementById(id) === modal) root.innerHTML = ''; }, 180);
   };
-  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+  // every dismiss path must resolve the caller's promise — Esc/backdrop used to
+  // close silently and hang `await recordPaymentModal(...)` forever
+  const dismiss = () => { close(); onDismiss?.(); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); dismiss(); } };
   document.addEventListener('keydown', onKey);
-  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  modal.addEventListener('click', (e) => { if (e.target === modal) dismiss(); });
   return { modal, close };
 }
 
@@ -198,7 +200,7 @@ export function recordPaymentModal({ bid, oid, due = 0 }) {
           <button class="btn btn-ghost" data-pay="cancel">Cancel</button>
           <button class="btn btn-primary" data-pay="ok">Record payment</button>
         </div>
-      </div>`);
+      </div>`, () => resolve(null));
     modal.querySelector('#pm-amount').focus();
     const done = (val) => { close(); resolve(val); };
     modal.addEventListener('click', async (e) => {
@@ -249,7 +251,7 @@ export function addChargeModal({ bid, oid }) {
           <button class="btn btn-ghost" data-ch="cancel">Cancel</button>
           <button class="btn btn-primary" data-ch="ok">Add charge</button>
         </div>
-      </div>`);
+      </div>`, () => resolve(null));
     modal.querySelector('#ch-amount').focus();
     const done = (val) => { close(); resolve(val); };
     modal.addEventListener('click', async (e) => {

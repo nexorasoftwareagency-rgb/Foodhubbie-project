@@ -1508,7 +1508,6 @@ registerAction('billing-grant-tokens', async () => {
 registerAction('profile-record-payment', async () => {
   if (isReadOnly()) return showToast("Your account is view-only.", 'error');
   const outlet = lastRaw?.[currentBid]?.outlets?.[currentOid];
-  const bizData = lastRaw?.[currentBid];
   if (!outlet) return showToast('Outlet not loaded yet.', 'error');
   const due = scopeStats(outlet, { k: 'all' }).due;
   const payment = await recordPaymentModal({ bid: currentBid, oid: currentOid, due: due > 0 ? due : 0 });
@@ -1519,12 +1518,16 @@ registerAction('profile-record-payment', async () => {
     confirmLabel: 'Create receipt',
   });
   if (receipt) {
-    const store = (outlet.settings && outlet.settings.Store) || {};
+    // re-read AFTER the write: Firebase snapshots are immutable, the pre-modal
+    // refs still miss this payment and the receipt would print the old balance
+    const live = lastRaw?.[currentBid];
+    const o = live?.outlets?.[currentOid] || outlet;
+    const store = (o.settings && o.settings.Store) || {};
     printReceipt({
-      businessName: bizData?.name || store.entityName || '',
-      outletName: outlet.name || store.storeName || currentOid,
+      businessName: live?.name || store.entityName || '',
+      outletName: o.name || store.storeName || currentOid,
       payment,
-      stats: scopeStats(outlet, { k: 'all' }),
+      stats: scopeStats(o, { k: 'all' }),
     });
   }
 });
