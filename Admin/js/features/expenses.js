@@ -1005,23 +1005,30 @@ async function renderExpenseCategoryList() {
             const over = budget > 0 && used > budget;
             const warn = budget > 0 && !over && pct >= Number(c.alertThreshold || 80);
             const barColor = over ? '#EF4444' : warn ? '#F59E0B' : color;
+            const state = over ? 'over' : warn ? 'warn' : 'ok';
+            const name = escapeHtml(c.name || c.id);
             const usage = budget
-                ? `<div class="ecat-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+                ? `<div class="ecat-hero">
+                       <span class="ecat-spent"${over ? ' style="color:#EF4444"' : ''}>${fmtMoney(used)}</span>
+                       <span class="ecat-pct ecat-pct-${state}">${pct}%</span>
+                   </div>
+                   <div class="ecat-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
                        <span class="ecat-bar-fill" style="width:${pct}%;background:${barColor}"></span>
                    </div>
-                   <div class="ecat-spend-row"><span${over ? ' class="ecat-over"' : ''}>${over ? 'Over by ' + fmtMoney(used - budget) : fmtMoney(used) + ' spent'}</span><span>of ${fmtMoney(budget)}/mo</span></div>`
-                : `<div class="ecat-spend-row"><span class="ecat-muted">No budget set</span><span class="ecat-muted">${fmtMoney(used)} this month</span></div>`;
+                   <div class="ecat-spend-row"><span>of ${fmtMoney(budget)}/mo</span><span${over ? ' class="ecat-over"' : ''}>${over ? 'Over by ' + fmtMoney(used - budget) : fmtMoney(budget - used) + ' left'}</span></div>`
+                : `<div class="ecat-hero"><span class="ecat-spent">${fmtMoney(used)}</span></div>
+                   <div class="ecat-spend-row"><span class="ecat-muted">No budget set</span><span class="ecat-muted">this month</span></div>`;
             return `
-                <div class="ecat-card" data-cat-id="${c.id}">
+                <div class="ecat-card ecat-card-${state}" data-cat-id="${c.id}">
                     <div class="ecat-card-top">
                         <span class="ecat-icon" style="background:${color}1F;color:${color}">${iconHtml}</span>
-                        <span class="ecat-name">${escapeHtml(c.name || c.id)}</span>
+                        <span class="ecat-name">${name}</span>
                         ${c.isSystem ? '<span class="ecat-sys" title="System category">System</span>' : ''}
                     </div>
                     ${usage}
                     <div class="ecat-actions">
-                        <button type="button" class="btn-secondary btn-small" data-action="editExpenseCategory" data-id="${c.id}">Edit</button>
-                        <button type="button" class="btn-danger btn-small" data-action="deleteExpenseCategory" data-id="${c.id}">Delete</button>
+                        <button type="button" class="ecat-icon-btn" data-action="editExpenseCategory" data-id="${c.id}" title="Edit" aria-label="Edit ${name}"><i data-lucide="edit-2" class="icon-14"></i></button>
+                        <button type="button" class="ecat-icon-btn ecat-danger" data-action="deleteExpenseCategory" data-id="${c.id}" title="Delete" aria-label="Delete ${name}"><i data-lucide="trash-2" class="icon-14"></i></button>
                     </div>
                 </div>`;
         }).join('');
