@@ -382,19 +382,28 @@ let _pairUnsub = null;
 function _checkBotStatus() {
     const outlet = Outlet.current;
     if (_pairUnsub) { _pairUnsub(); _pairUnsub = null; }
-    _pairUnsub = onValue(Outlet.ref(`bot/${outlet}/pair`), (snap) => {
-        const pair = snap.val();
-        const connected = pair?.status === 'connected';
+    let pair = null;
+    let waActive = false;
+    const apply = () => {
         const tab = document.getElementById('tab-chat');
         if (!tab) return;
-        if (connected) {
-            _hideOnboarding();
-        } else {
-            _showOnboarding(pair);
-        }
+        if ((pair && pair.status === 'connected') || waActive) _hideOnboarding();
+        else _showOnboarding(pair);
+    };
+    const unsubPair = onValue(Outlet.ref(`bot/${outlet}/pair`), (snap) => {
+        pair = snap.val();
+        apply();
     }, (err) => {
         console.warn('[Chat] pair listener error:', err);
     });
+    // Supreme Meta-linked outlets never write bot/pair (transport=meta skips the
+    // Baileys pair chain) — also treat outlets/{oid}/whatsapp.status 'active'
+    // (written by Embedded Signup linking) as connected.
+    const unsubWa = onValue(Outlet.ref('whatsapp/status'), (snap) => {
+        waActive = snap.val() === 'active';
+        apply();
+    }, () => {});
+    _pairUnsub = () => { unsubPair(); unsubWa(); };
 }
 
 function _showOnboarding(pair) {
