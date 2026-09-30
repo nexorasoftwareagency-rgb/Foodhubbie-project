@@ -1,5 +1,6 @@
 import { Outlet, tenantRef, db, ref, get, query, orderByChild, startAt, endAt } from '../firebase.js';
-import { ui } from '../ui.js';
+import { state } from '../state.js';
+import { ui, getRoles } from '../ui.js';
 import { showToast, formatDate, getISTDateString, formatOrderId, _loadChartJS } from '../utils.js';
 import { loadJSPDF } from './printing.js';
 import { initMobileAnalyticsUI, renderMobileAnalytics, cleanupMobileAnalytics } from './analytics-mobile.js';
@@ -8,6 +9,16 @@ let salesData = [];
 let prevPeriodData = [];
 let _isLoading = false;
 let _currentOutletFilter = 'current';
+
+/** Small claim line: "By {Role} — {Name}" for the logged-in operator. */
+const _claimText = () => {
+    const rd = state.adminData || {};
+    const name = rd.name || rd.email || '';
+    if (!name) return '';
+    const k = String(rd.role || '').toLowerCase().trim();
+    const label = rd.isSuper ? rd.role : (getRoles()[k]?.name || rd.role || 'Staff');
+    return `By ${label} — ${name}`;
+};
 
 export function setOutletFilter(value) {
     if (!value) value = 'current';
@@ -31,6 +42,8 @@ export async function loadReports() {
     if (outletEl) outletEl.value = _currentOutletFilter;
 
     console.log(`[Reports] Initializing with default range: ${fromVal} to ${toVal}`);
+    const claimEl = document.getElementById('reportClaimLine');
+    if (claimEl) claimEl.textContent = _claimText();
     initMobileAnalyticsUI(generateCustomReport);
     generateCustomReport();
 
@@ -259,6 +272,8 @@ export async function downloadPDF() {
     doc.setFontSize(8.5);
     doc.setTextColor(255, 220, 205);
     doc.text(`Sales Report  ·  ${from} to ${to}  ·  ${totalOrders.toLocaleString('en-IN')} orders  ·  Generated ${new Date().toLocaleDateString('en-IN')}`, M + 30, 35);
+    const pdfClaim = _claimText();
+    if (pdfClaim) doc.text(pdfClaim, M + 30, 40);
 
     // KPI stat cards overlapping the hero edge
     const cardY = 46, cardH = 26, gap = 6;

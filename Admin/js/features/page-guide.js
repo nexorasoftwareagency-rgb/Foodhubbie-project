@@ -531,12 +531,12 @@ expenses: [
     {
         icon: 'plus-circle',
         title: 'Add Staff Member',
-        body: 'Click <strong>Add Staff</strong> to create a new account. Enter: email, full name, role, and an initial password. The system creates a Firebase Auth account and sends a <strong>password reset email</strong> so the staff member sets their own password. The owner never sees the staff\'s final password.<br><br><strong>Example:</strong> You hire a new cashier "Rohit". Fill: rohith@email.com, "Rohit Kumar", Role: Cashier, Initial Password: "Welcome123". Rohit gets an email, clicks the link, sets his own password "Rohit@2024", then signs in at POS with Counter PIN "4711".'
+        body: 'Click <strong>Add Staff</strong> to create a new account. Enter: email, full name, role, and an initial password. The system creates a Firebase Auth account and sends a <strong>password reset email</strong> so the staff member sets their own password. The owner never sees the staff\'s final password.<br><br><strong>Example:</strong> You hire a new cashier "Rohit". Fill: rohith@email.com, "Rohit Kumar", Role: Cashier, Initial Password: "Welcome123". Rohit gets an email, clicks the link, sets his own password "Rohit@2024", then signs in — his Cashier role includes POS access, so the till opens with no extra PIN.'
     },
     {
         icon: 'key',
-        title: 'Counter PIN (Shift Sign-In)',
-        body: 'Each staff member sets a <strong>4-digit Counter PIN</strong> on first POS/Table sign-in. This PIN identifies them at the till. If a staff member forgets their PIN, click <strong>Reset PIN</strong> to generate a new temporary PIN (displayed once — share securely). The PIN is stored as a SHA-256 hash.<br><br><strong>Example:</strong> Rajesh opens POS at 8:00 AM. Prompt: "Enter your 4-digit Counter PIN". He enters "4711". System verifies hash, stores his UID in session. At 12:30 PM he applies 15% manual discount on a ₹500 bill — his 10% ceiling triggers Manager PIN prompt. Priya (Manager) enters her PIN, both names logged.'
+        title: 'POS Sign-In (Role-Based)',
+        body: 'POS opens automatically when your role has <strong>POS (Walk-in)</strong> access — the logged-in user is signed in for the shift, so no PIN prompt appears at start. The 4-digit Counter PIN still guards what it should: discount ceilings and manager approval (Security Audit → <strong>Reset PIN</strong> regenerates it; stored as a SHA-256 hash).<br><br><strong>Example:</strong> Rajesh (Cashier role, POS access) logs in and opens POS at 8:00 AM — the menu loads immediately and his bills are claimed <strong>By Cashier — Rajesh</strong>. At 12:30 PM he applies a 15% manual discount on a ₹500 bill — his 10% ceiling triggers the manager PIN prompt. Priya (Manager) enters her PIN, both names logged.'
     },
     {
         icon: 'percent',
@@ -546,7 +546,7 @@ expenses: [
     {
         icon: 'user-x',
         title: 'Disable / Enable Account',
-        body: 'Click <strong>Disable</strong> to deactivate a staff account — they cannot sign in or use Counter PIN. Click <strong>Enable</strong> to restore access. Disabled accounts remain in the list with a red badge. Owners cannot disable their own account.<br><br><strong>Example:</strong> Cashier "Sanjay" leaves. You click Disable on his row. He tries to open POS → "Invalid Counter PIN". Two weeks later he returns → you click Enable → he can sign in again with same PIN.'
+        body: 'Click <strong>Disable</strong> to deactivate a staff account — they cannot sign in or use Counter PIN. Click <strong>Enable</strong> to restore access. Disabled accounts remain in the list with a red badge. Owners cannot disable their own account.<br><br><strong>Example:</strong> Cashier "Sanjay" leaves. You click Disable on his row. He can no longer sign in to the dashboard. Two weeks later he returns → you click Enable → he signs in normally and his role reopens POS.'
     },
     {
         icon: 'shield',

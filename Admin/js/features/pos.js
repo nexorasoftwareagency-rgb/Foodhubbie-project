@@ -5,9 +5,9 @@
 
 import { state } from '../state.js';
 import { db, auth, Outlet, tenantRef, serverTimestamp, get, set, runTransaction, ref, isConnected, onConnectionChange } from '../firebase.js';
-import { standardizeOrderData, haptic, escapeHtml, playSuccessSound, logAudit, gateManualDiscountPin, promptCounterPinSignIn, clearCounterStaffSession, getCounterStaffUid } from '../utils.js';
+import { standardizeOrderData, haptic, escapeHtml, playSuccessSound, logAudit, gateManualDiscountPin, clearCounterStaffSession, getCounterStaffUid } from '../utils.js';
 import { autoDeductStock } from './inventory.js';
-import { ui, loadLucide } from '../ui.js';
+import { ui, loadLucide, canAccessTab } from '../ui.js';
 import { printOrderReceipt } from './printing.js';
 import { t } from '../l10n.js';
 import { evaluateDiscount, recordDiscountUsage, clearDiscountCache, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
@@ -39,13 +39,15 @@ export async function loadWalkinMenu() {
     }
 
     try {
-        // Check for Counter PIN sign-in (shift start)
-        if (!getCounterStaffUid()) {
-            const signedIn = await promptCounterPinSignIn();
-            if (!signedIn) {
-                grid.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">🔐</div><h4>Shift Sign-In Required</h4><p>Enter your Counter PIN to start your shift.</p><button class="btn-primary mt-16" onclick="location.reload()">Retry</button></div>';
-                return;
-            }
+        // Role gate: switchTab already enforced canAccessTab('walkin') to reach
+        // this view — re-check here (direct calls), then auto sign-in the logged-in
+        // user for attribution + discount ceiling. No Counter PIN prompt at start.
+        if (!canAccessTab('walkin')) {
+            grid.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">🚫</div><h4>Access Denied</h4><p>Your role does not have access to the POS.</p></div>';
+            return;
+        }
+        if (!getCounterStaffUid() && state.adminData?.uid) {
+            sessionStorage.setItem('counterStaffUid', state.adminData.uid);
         }
 
         grid.innerHTML = '<div class="pos-loader">Loading Menu...</div>';

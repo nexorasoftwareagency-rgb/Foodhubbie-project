@@ -408,6 +408,21 @@ export function initAuth() {
         const emailDisplay = document.getElementById("userEmailDisplay");
         if (emailDisplay) emailDisplay.innerText = user.email;
 
+        // Top identity: role + name (any role) — desktop topbar + mobile header
+        const rd = adminData || {};
+        const rdLabel = (rd.isSuper || rd.isSupreme)
+            ? (rd.role || 'Admin')
+            : (ui.getRoles()[String(rd.role || '').toLowerCase().trim()]?.name || rd.role || 'Admin');
+        const rdName = rd.name || rd.email || user.email || '';
+        if (rdName) for (const rid of ['userRoleDisplay', 'mobileRoleDisplay']) {
+            const el = document.getElementById(rid);
+            if (el) {
+                const b = document.createElement('b');
+                b.textContent = rdLabel;
+                el.replaceChildren(b, ' — ' + rdName);
+            }
+        }
+
         // Ensure admin node exists with required fields (email, outlet) for FCM token storage
         if (!adminNodeExists && adminData) {
             const adminNode = {

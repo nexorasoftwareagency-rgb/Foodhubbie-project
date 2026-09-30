@@ -10637,3 +10637,8 @@ body.pos-selection-mode .walkin-picker {
 .rt-chip:hover { border-color: var(--primary, #E84908); }
 .rt-chip.on { border-color: var(--primary, #E84908); background: rgba(232, 73, 8, 0.06); color: var(--primary, #E84908); font-weight: 600; }
 .rt-chip.on i, .rt-chip.on svg { opacity: 1; }
+
+/* Operator identity chip — topbar role + name (desktop) and mobile header line */
+.user-role-chip { background: var(--bg-subtle, #f1f5f9); border: 1px solid var(--border-light, #e2e8f0); border-radius: 20px; padding: 3px 10px; font-size: 12px; color: var(--text-muted, #64748b); white-space: nowrap; }
+.user-role-chip b { color: var(--primary, #E84908); font-weight: 700; }
+.mobile-role-chip { display: block; font-size: 10px; font-weight: 600; color: var(--text-muted, #64748b); text-align: center; }

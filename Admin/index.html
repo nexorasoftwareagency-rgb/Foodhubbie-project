@@ -784,6 +784,8 @@
 
                     <h2 id="mobileTabTitle" class="premium-font">Dashboard</h2>
 
+                    <span id="mobileRoleDisplay" class="mobile-role-chip"></span>
+
                 </div>
 
                 <div class="mobile-header-right">
@@ -863,6 +865,8 @@
                 <div class="user-display">
 
                     <span id="syncStatus" class="status-indicator disconnected" title="Firebase Connection Status"></span>
+
+                    <span id="userRoleDisplay" class="user-role-chip" title="Signed-in role and name"></span>
 
                     <span id="userEmailDisplay" class="user-email"></span>
 
@@ -3471,6 +3475,7 @@
             </div>
         </div>
         <p class="mob-hero-sub">Overview of your business</p>
+        <p class="mob-hero-sub" id="reportClaimLine" style="font-size:0.7rem; opacity:0.8; margin-top:2px;"></p>
     </div>
 
     <!-- ---------- Date range + quick presets + filters ---------- -->
@@ -5070,7 +5075,7 @@
 
                 </thead>
 
-                <tbody id="costDayBody"><tr><td colspan="3" style="color:#64748b;padding:8px;">LoadingΓÇª</td></tr></tbody>
+                <tbody id="costDayBody"><tr><td colspan="3" style="color:#64748b;padding:8px;">Loading…</td></tr></tbody>
 
             </table>
 

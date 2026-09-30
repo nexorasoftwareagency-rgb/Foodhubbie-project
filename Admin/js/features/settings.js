@@ -720,7 +720,8 @@ const _receiptLiveSample = {
         { name: 'Farmhouse Pizza', size: 'Large', quantity: 1, price: 399 },
         { name: 'Garlic Bread Sticks', quantity: 2, price: 99 }
     ],
-    subtotal: 597, taxName: 'GST', tax: 30, total: 627, customerName: 'Preview Guest'
+    subtotal: 597, taxName: 'GST', tax: 30, total: 627, customerName: 'Preview Guest',
+    claimBy: 'Cashier — Preview Cashier'
 };
 let _receiptLiveTimer = null;
 function renderReceiptLivePreview() {

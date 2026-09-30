@@ -1,6 +1,29 @@
 import { Outlet, get, query, orderByChild, equalTo, limitToLast } from '../firebase.js';
 import { updateStatus } from './orders.js';
 import { standardizeOrderData, showToast, formatOrderId } from '../utils.js';
+import { state } from '../state.js';
+import { getRoles } from '../ui.js';
+
+/**
+ * Small receipt/report claim: "By {Role} — {Name}".
+ * Shift staff (counterStaffUid) wins, then the logged-in admin. '' = omit line.
+ */
+export async function resolveOperatorClaim(staffUid) {
+    try {
+        const uid = staffUid || sessionStorage.getItem('counterStaffUid') || state.adminData?.uid;
+        let name = '', role = '';
+        if (uid) {
+            const s = (await get(Outlet.staff(uid))).val();
+            if (s && s.isActive !== false) { name = s.displayName || ''; role = s.role || ''; }
+        }
+        if (!name) { name = state.adminData?.name || state.adminData?.email || ''; role = state.adminData?.role || ''; }
+        const label = getRoles()[String(role).toLowerCase().trim()]?.name || role;
+        return (name && label) ? `${label} — ${name}` : '';
+    } catch (e) {
+        console.warn('[Print] Operator claim resolve failed:', e);
+        return '';
+    }
+}
 
 let _jspdfLoaded = false;
 let _jspdfPromise = null;
@@ -132,6 +155,7 @@ export async function printOrderReceipt(rawOrder, isReprint = false) {
         return;
     }
 
+    o.claimBy = o.claimBy || await resolveOperatorClaim(rawOrder.counterStaffUid);
     const html = window.ReceiptTemplates.generateThermalReceipt(o, store, isReprint);
     
     // Cache the generated HTML for future reprints

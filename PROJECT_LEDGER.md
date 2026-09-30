@@ -86,6 +86,15 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260930-025638-ac70] Dashboard top area: show logged-in Role + Name (any role) on desktop topbar + mobile header
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-09-30 02:56 UTC
+- Verified: build green; 8/8 playwright (tests/role-chip-check.mjs: local dist + SA-minted custom-token sign-in as owner uid � no password needed): desktop chip 'Owner � pizza' (bold role, em-dash name) visible in topbar, email kept; mobile chip visible under Dashboard title at 390px, desktop-only topbar chip hidden; 0 pageErrors; screenshots role-chip-desktop.png (1440x900) + role-chip-mobile.png (390x844) visually confirmed (orange bold 'Owner' pill + mobile line)
+- NOT verified / open risk: Manager/Cashier/Waiter logins (same DEFAULT_ROLES mapping path as Owner, only owner account exists); staff-login name source; renamed outlet-gate custom role labels (fill runs before loadOutletGates with DEFAULT_ROLES � standard labels match)
+- Confidence: HIGH
+- Ended: 2026-09-30 03:30 UTC
+
 ### [20260930-024936-a0c9] Block promotional messaging on Baileys transport (ban risk) - official meta API only
 - TIER: 2 (medium-risk)
 - STATUS: DONE

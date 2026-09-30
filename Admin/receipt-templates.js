@@ -181,6 +181,7 @@ window.ReceiptTemplates = {
                 </div>` : ''}
 
                 <div class="footer center">
+                    ${order.claimBy ? `<div class="bold" style="font-size:0.7rem; margin-top:6px;">By ${this.escapeHtml(order.claimBy)}</div>` : ''}
                     ${(!store.config || store.config.showTagline !== false) ? `<div class="bold">${this.escapeHtml(store.tagline || 'Thank You! Visit Again')}</div>` : ''}
                     ${(!store.config || store.config.showPoweredBy !== false) ? `
                     <div style="margin-top:5px; font-size: 0.65rem; opacity:0.7;">
