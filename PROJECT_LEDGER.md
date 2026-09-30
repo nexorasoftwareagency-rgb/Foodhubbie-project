@@ -14,6 +14,7 @@ Fragile Files before starting ANY task.
 - **Firebase v12**: `enableIndexedDbPersistence` removed — offline persistence is now automatic. No action needed.
 
 <!-- STANDING_DECISIONS_START -->
+- [2026-09-30 02:42 UTC] Ban-proofing (4-8s per-chat pacing + 3-strike 30-min freeze) is BAILEYS-TRANSPORT SCOPE ONLY. When official WhatsApp Business API (meta transport - user's 'best experience delivery' plan) is enabled after WABA lands: SKIP paceOutboundTo + strike/freeze (Meta enforces its own messaging limits; unofficial-account ban risk does not exist there). Current code paces ALL transports (wrappers at bot/index.js:1473 sendMessage / :1541 sendTemplate incl. meta / :1558 sendButton) - gate NOT implemented now because meta path is unreachable/untestable until WABA; add the transport==='meta' skip as a checklist item at flip time together with the existing template param re-verification.
 - [2026-09-30 01:14 UTC] Both pm2 bot processes run transport=baileys (id4=live roshani-pizza, id12=wizard-test outlet -P-TahoJb732KsrERdxm never QR-paired since Sep 25). Template sends only activate when typeof sock.sendTemplate === function (meta transport); Baileys uses restored legacy msg/img text-image path. When business verification lands + real WABA flips an outlet to BOT_TRANSPORT=meta, re-verify: template param counts vs Graph, body-to-{{1}} mapping (proactive_promo has NO vars -> code100 -> text fallback), and chat-log component text.
 - [2026-09-30 01:14 UTC] Bot ban-proofing state lives in bot/utils.js (in-memory Maps): paceOutboundTo (4-8s random per-chat gap) is wired into ALL 3 send wrappers in bot/index.js; freeze (3 continuous non-intent strikes in AWAITING/WEBVIEW -> 30-min silence) is enforced ONLY at the message handler + marketing gates (sendPromotionalMessage, SEND_GENERIC). Transactional order-status notices are DELIBERATELY never frozen (utility templates are ban-safe; dropping them would mark real orders sent-but-not-delivered). Admins never accumulate strikes (isAuthorized gate) or they would lose reports/alerts. Extend in utils.js, never re-add freeze-drop to the generic send wrappers.
 - [2026-08-12 02:20 UTC] **DUAL-TRANSPORT WHATSAPP BOT (per restaurant)**: each restaurant/business supports BOTH Meta Cloud API (`BOT_TRANSPORT=meta`) and Baileys (`BOT_TRANSPORT=baileys`). ONLY ONE is active per restaurant at a time. Transport is controlled remotely from **Supreme Admin → Restaurants Profiles → WhatsApp Baileys section** (Scan QR button → shows QR + live status), mirrored on the WhatsApp second dashboard. Meta API is the default/primary; Baileys used when a restaurant wants a real number via QR. Bot reads transport mode from Firebase `bot/{outlet}/transport` (or env default), switchable at runtime.
@@ -84,6 +85,11 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260930-023514-9455] POS: drop Counter PIN shift prompt (role tab-access auto sign-in); add By {Role} - {Name} claim to receipts + Reports (screen + PDF)
+- TIER: 2 (medium-risk)
+- STATUS: IN PROGRESS
+- Started: 2026-09-30 02:35 UTC
+
 ### [20260930-021844-1cfc] Redesign Expenses Categories sub-tab: modernize category cards (hero spend, pct badge, thicker bar, icon actions) + toolbar polish; keep DOM contract
 - TIER: 2 (medium-risk)
 - STATUS: DONE
