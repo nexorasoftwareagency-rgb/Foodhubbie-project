@@ -5031,26 +5031,56 @@
 
         </div>
 
-        <div class="cost-breakdown-stack" data-cost-section="breakdown">
+        <div class="mob-card mob-table-card" style="margin-top:12px;" data-cost-section="breakdown">
 
-            <div class="mob-card mob-table-card">
+            <h4 class="section-card-heading"><i data-lucide="layers" class="icon-14"></i> Cost by order source</h4>
 
-                <h4 class="section-card-heading"><i data-lucide="layers" class="icon-14"></i> Cost by order source</h4>
+            <table>
 
-                <div id="costBreakdownBody"><div class="costx-empty">Loading…</div></div>
+                <thead>
 
-            </div>
+                    <tr>
 
-            <div class="mob-card mob-table-card">
+                        <th>Source</th>
 
-                <h4 class="section-card-heading"><i data-lucide="calendar-days" class="icon-14"></i> Date-wise usage</h4>
+                        <th>Rate</th>
 
-                <div id="costDayBody"><div class="costx-empty">Loading…</div></div>
+                        <th>Orders</th>
 
-            </div>
+                        <th>Cost</th>
 
-            <!-- Billing configuration (own card, read-only, mirrors Supreme Admin) -->
-            <div id="costBillingBreakdown"></div>
+                    </tr>
+
+                </thead>
+
+                <tbody id="costBreakdownBody"><tr><td colspan="4">Loading…</td></tr></tbody>
+
+            </table>
+
+            <h4 class="section-card-heading" style="margin-top:16px;"><i data-lucide="calendar-days" class="icon-14"></i> Date-wise usage</h4>
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>Day</th>
+
+                        <th>Orders</th>
+
+                        <th>Cost</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody id="costDayBody"><tr><td colspan="3">Loading…</td></tr></tbody>
+
+            </table>
+
+            <!-- Billing configuration breakdown (read-only, mirrors Supreme Admin) -->
+            <div id="costBillingBreakdown" style="margin-top:16px;"></div>
 
         </div>
 
@@ -5059,25 +5089,25 @@
 
             <h4 class="section-card-heading"><i data-lucide="list" class="icon-14"></i> Recent orders — live cost feed</h4>
 
-            <table style="width:100%;font-size:13px;">
+            <table>
 
                 <thead>
 
-                    <tr style="text-align:left;color:#64748b;">
+                    <tr>
 
-                        <th style="padding:6px 8px;">Order</th>
+                        <th>Order</th>
 
                         <th>Source</th>
 
-                        <th style="text-align:right;">Order total</th>
+                        <th>Order total</th>
 
-                        <th style="text-align:right;padding-right:8px;">Cost</th>
+                        <th>Cost</th>
 
                     </tr>
 
                 </thead>
 
-                <tbody id="costFeedBody"><tr><td colspan="4" style="color:#64748b;padding:8px;">Loading…</td></tr></tbody>
+                <tbody id="costFeedBody"><tr><td colspan="4">Loading…</td></tr></tbody>
 
             </table>
 

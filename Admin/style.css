@@ -10612,23 +10612,22 @@ body.pos-selection-mode .walkin-picker {
     #tab-costs .costs-range { width: 100%; }
 }
 
-/* ---- Costs tab: table headers ---- */
-#tab-costs thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
-
-/* ---- Costs tab: breakdown (bar rows) ---- */
-#tab-costs .cost-breakdown-stack { display: flex; flex-direction: column; gap: 12px; }
-#tab-costs .costx-row { padding: 9px 0; border-bottom: 1px dashed #eef2f7; }
-#tab-costs .costx-row:last-child { border-bottom: none; }
-#tab-costs .costx-line1, #tab-costs .costx-line2 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-#tab-costs .costx-name { font-size: 13px; font-weight: 700; color: #0f172a; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tab-costs .costx-cost { font-size: 13px; font-weight: 700; color: #0f172a; font-variant-numeric: tabular-nums; white-space: nowrap; }
-#tab-costs .costx-line2 { margin-top: 2px; font-size: 11px; color: #94a3b8; }
-#tab-costs .costx-bar { height: 4px; background: #f1f5f9; border-radius: 999px; margin-top: 7px; overflow: hidden; }
-#tab-costs .costx-bar i { display: block; height: 100%; background: var(--primary, #E84908); border-radius: 999px; }
-#tab-costs .costx-total { display: flex; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 12.5px; font-weight: 700; color: #0f172a; font-variant-numeric: tabular-nums; }
-#tab-costs .costx-empty { color: #94a3b8; font-size: 12.5px; padding: 8px 0 2px; }
+/* ---- Costs tab: tables (structured) ---- */
+#tab-costs table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#tab-costs thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: 700; padding: 7px 8px; border-bottom: 2px solid #e2e8f0; text-align: right; white-space: nowrap; }
+#tab-costs thead th:first-child { text-align: left; }
+#tab-costs [data-cost-section="feed"] thead th:nth-child(2) { text-align: left; }
+#tab-costs tbody td { padding: 9px 8px; text-align: right; color: #334155; font-variant-numeric: tabular-nums; }
+#tab-costs tbody td:first-child { text-align: left; font-weight: 700; color: #0f172a; }
+#tab-costs tbody td:last-child { font-weight: 700; color: #0f172a; }
+#tab-costs [data-cost-section="feed"] tbody td:nth-child(2) { text-align: left; }
+#tab-costs tbody td[colspan] { text-align: left; color: #94a3b8; font-weight: 500; }
+#tab-costs tbody tr.cost-row-excluded td { opacity: 0.55; }
+#tab-costs .cost-src-chip { display: inline-block; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+#tab-costs .cost-excluded-tag { color: #ef4444; }
 
 /* ---- Costs tab: billing configuration (read-only) ---- */
+#tab-costs .cost-billing { margin-top: 4px; padding-top: 16px; border-top: 1px dashed #e2e8f0; }
 #tab-costs .cost-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
 #tab-costs .cost-detail-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; color: #64748b; margin-bottom: 3px; }
 #tab-costs .cost-detail-value { font-size: 15px; font-weight: 700; color: #0f172a; }
