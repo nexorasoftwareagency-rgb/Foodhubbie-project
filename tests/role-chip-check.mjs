@@ -60,7 +60,7 @@ try {
 
   // 3. Desktop topbar
   const desk = (await page.locator('#userRoleDisplay').textContent())?.trim();
-  assert(desk === 'Owner \u2014 pizza', `desktop chip text = "${desk}"`);
+  assert(desk === 'Owner \u2014 Roshani Pizza', `desktop chip text = "${desk}"`);
   assert(await page.locator('#userRoleDisplay').isVisible(), 'desktop chip visible in topbar');
   const bold = (await page.locator('#userRoleDisplay b').textContent())?.trim();
   assert(bold === 'Owner', `bold role = "${bold}"`);
@@ -72,7 +72,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(800);
   const mob = (await page.locator('#mobileRoleDisplay').textContent())?.trim();
-  assert(mob === 'Owner \u2014 pizza', `mobile chip text = "${mob}"`);
+  assert(mob === 'Owner \u2014 Roshani Pizza', `mobile chip text = "${mob}"`);
   assert(await page.locator('#mobileRoleDisplay').isVisible(), 'mobile chip visible under title');
   assert(!(await page.locator('#userRoleDisplay').isVisible()), 'desktop chip hidden on mobile');
   await page.screenshot({ path: 'tests/test-results/role-chip-mobile.png' });
