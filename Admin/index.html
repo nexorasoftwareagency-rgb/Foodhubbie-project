@@ -7133,7 +7133,7 @@
 
     <div id="expenseModal" class="modal" role="dialog" aria-modal="true" aria-label="Add Expense">
 
-        <div class="modal-content glass-card" style="max-width:520px;">
+        <div class="modal-content glass-card" style="max-width:560px;">
 
             <div class="modal-header">
 
@@ -7147,19 +7147,27 @@
 
                 <div class="modal-body p-20">
 
-                    <div class="form-group-mini">
+                    <div class="exp-amount-hero">
 
-                        <label class="form-label-small">Date <span class="required-star">*</span></label>
+                        <label class="form-label-small" for="expenseAmount">Amount <span class="required-star">*</span></label>
 
-                        <input type="date" id="expenseDate" class="form-input w-100" required>
+                        <div class="exp-amount-box">
+
+                            <span class="exp-rupee" aria-hidden="true">₹</span>
+
+                            <input type="number" id="expenseAmount" class="exp-amount-input" step="0.01" min="0.01" placeholder="0" inputmode="decimal" required>
+
+                        </div>
 
                     </div>
 
                     <div class="form-group-mini">
 
-                        <label class="form-label-small">Category <span class="required-star">*</span></label>
+                        <span class="form-label-small">Category <span class="required-star">*</span></span>
 
-                        <select id="expenseCategory" class="form-input w-100" required>
+                        <div class="exp-cat-tiles hidden" id="expenseCategoryTiles"></div>
+
+                        <select id="expenseCategory" class="form-input w-100" aria-label="Category">
 
                             <option value="">Select Category...</option>
 
@@ -7167,19 +7175,23 @@
 
                     </div>
 
-                    <div class="form-group-mini">
+                    <div class="exp-form-row">
 
-                        <label class="form-label-small">Amount (Rs.) <span class="required-star">*</span></label>
+                        <div class="form-group-mini">
 
-                        <input type="number" id="expenseAmount" class="form-input w-100" step="0.01" min="0.01" required>
+                            <label class="form-label-small" for="expenseDate">Date <span class="required-star">*</span></label>
 
-                    </div>
+                            <input type="date" id="expenseDate" class="form-input w-100" required>
 
-                    <div class="form-group-mini">
+                        </div>
 
-                        <label class="form-label-small">Description</label>
+                        <div class="form-group-mini">
 
-                        <textarea id="expenseDescription" class="form-input w-100" rows="3" placeholder="e.g. Electricity bill, rent, supplies..." maxlength="200"></textarea>
+                            <label class="form-label-small" for="expenseDescription">Description</label>
+
+                            <textarea id="expenseDescription" class="form-input w-100" rows="2" placeholder="e.g. Electricity bill, rent, supplies..." maxlength="200"></textarea>
+
+                        </div>
 
                     </div>
 

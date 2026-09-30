@@ -854,6 +854,7 @@ export async function openAddExpenseModal() {
     document.getElementById('expenseAmount').value = '';
     document.getElementById('expenseDescription').value = '';
     document.getElementById('expenseCategory').value = '';
+    _syncCategoryTiles();
     document.getElementById('expenseModalTitle').textContent = 'Add Expense';
     document.getElementById('expenseForm').dataset.editId = '';
     await loadExpenseCategories(); // awaited so callers can set field values after this
@@ -905,6 +906,36 @@ function populateCategorySelect(select, categories) {
         opt.textContent = cat.name || cat.id;
         if (cat.color) opt.style.color = cat.color;
         select.appendChild(opt);
+    });
+    _renderCategoryTiles(select, categories);
+}
+
+// Tiles are the visual picker; the select stays in the DOM as the value source
+// (submit/edit/reset read+write it) and remains visible when categories are empty
+// or the load failed — never leave the category field with no control at all.
+function _renderCategoryTiles(select, categories) {
+    const tiles = document.getElementById('expenseCategoryTiles');
+    if (!tiles) return;
+    if (!categories.length) { tiles.classList.add('hidden'); select.classList.remove('hidden'); return; }
+    select.classList.add('hidden');
+    tiles.classList.remove('hidden');
+    tiles.innerHTML = categories.map(c => {
+        const color = /^#[0-9a-fA-F]{6}$/.test(c.color || '') ? c.color : '#E84908';
+        const icon = /^[a-z0-9-]{1,40}$/.test(c.icon || '') ? c.icon : 'folder';
+        return `<button type="button" class="exp-cat-tile" data-cat-id="${escapeHtml(c.id)}" aria-pressed="false" style="--tile-color:${color}"><i data-lucide="${icon}" class="icon-16"></i><span>${escapeHtml(c.name || c.id)}</span></button>`;
+    }).join('');
+    if (typeof lucide !== 'undefined') lucide.createIcons({ root: tiles });
+    _syncCategoryTiles();
+}
+
+function _syncCategoryTiles() {
+    const sel = document.getElementById('expenseCategory');
+    const tiles = document.getElementById('expenseCategoryTiles');
+    if (!sel || !tiles) return;
+    tiles.querySelectorAll('.exp-cat-tile').forEach(t => {
+        const on = t.dataset.catId === sel.value;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
 }
 
@@ -1049,6 +1080,14 @@ export function initExpenseModals() {
     // Add Expense Form
     const form = document.getElementById('expenseForm');
     if (form) {
+        // Category tiles → hidden select stays the source of truth
+        const catSel = document.getElementById('expenseCategory');
+        document.getElementById('expenseCategoryTiles')?.addEventListener('click', (e) => {
+            const tile = e.target.closest('.exp-cat-tile');
+            if (!tile || !catSel) return;
+            catSel.value = tile.dataset.catId;
+            _syncCategoryTiles();
+        });
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const date = document.getElementById('expenseDate').value;
@@ -1239,6 +1278,7 @@ export async function editExpense(expenseId) {
         await openAddExpenseModal();
         document.getElementById('expenseDate').value = exp.date || '';
         document.getElementById('expenseCategory').value = exp.categoryId || '';
+        _syncCategoryTiles();
         document.getElementById('expenseAmount').value = exp.amount || '';
         document.getElementById('expenseDescription').value = exp.description || '';
         document.getElementById('expenseModalTitle').textContent = 'Edit Expense';
