@@ -83,7 +83,7 @@ function renderSignIn() {
       </button>
       <div class="auth-divider"><span>or</span></div>
       <form id="email-signin-form" class="auth-form">
-        <input type="email" id="email-input" placeholder="Email" autocomplete="email" required />
+        <input type="email" id="email-input" placeholder="Email" autocomplete="username" required />
         <input type="password" id="password-input" placeholder="Password" autocomplete="current-password" required />
         <button type="submit" class="btn btn-ghost">Sign in with password</button>
       </form>
