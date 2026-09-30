@@ -6,7 +6,7 @@
  */
 import { registerAction } from '/js/main.js';
 import { isReadOnly } from '/js/data-store.js';
-import { exportXlsx, refreshIcons, escapeHtml, debounce, showToast, showConfirm } from '/js/utils.js';
+import { exportXlsx, refreshIcons, escapeHtml, debounce, showToast, showConfirm, formatDate, formatAge } from '/js/utils.js';
 
 const mainEl = document.getElementById('app-main');
 let inquiries = [];
@@ -16,6 +16,8 @@ let ref = null;
 let onValue = null;
 
 export function render() {
+  filter = 'all';
+  search = '';
   mainEl.innerHTML = `
     <div class="panel-header">
       <div>

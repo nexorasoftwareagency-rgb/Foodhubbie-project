@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { escapeHtml, playNotificationSound, formatOrderId } from '../utils.js';
+import { escapeHtml, playNotificationSound, formatOrderId, stopContinuousSound } from '../utils.js';
 
 /**
  * SHOW ALERT
@@ -154,6 +154,8 @@ export function testNotification() {
 export function clearAllNotifications() {
     state.notifications = [];
     state.isNotificationPending = false;
+    state.unacknowledgedOrders.clear();
+    stopContinuousSound();
     updateNotificationUI();
 }
 
@@ -222,10 +224,14 @@ export function showNativeNotification(title, body) {
 
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
         navigator.serviceWorker.ready.then(reg => {
-            reg.showNotification(title, options);
-        });
+            reg.showNotification(title, options).catch(e => console.warn('Notification failed:', e));
+        }).catch(e => console.warn('Notification failed:', e));
     } else {
-        new Notification(title, options);
+        try {
+            new Notification(title, options);
+        } catch (e) {
+            console.warn('Notification failed:', e);
+        }
     }
 }
 

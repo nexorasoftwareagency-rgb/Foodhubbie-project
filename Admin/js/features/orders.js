@@ -65,27 +65,29 @@ export function initRealtimeListeners() {
     const currentOrdersRef = Outlet.ref("orders");
 
     _ordersChildUnsub = onChildAdded(currentOrdersRef, snap => {
-        if (!firstLoad) {
-            const order = snap.val();
-            if (!order) return;
-            const orderTime = typeof order.createdAt === 'number' ? order.createdAt : new Date(order.createdAt).getTime();
-            const isRecent = orderTime && (Date.now() - orderTime) < 120000;
-            const isPostLoad = orderTime && orderTime > loadTime - 5000;
-            if (order.status === "Placed" && isRecent && isPostLoad) {
-                showAlert(order);
-                addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
-                state.unacknowledgedOrders.add(snap.key);
-                startContinuousSound();
-                setTimeout(() => { highlightOrder(snap.key); }, 1000);
-            }
+        const order = snap.val();
+        if (!order) return;
+        state.orderStatusSeen.set(snap.key, order.status || '');
+        if (firstLoad) return;
+        const orderTime = typeof order.createdAt === 'number' ? order.createdAt : new Date(order.createdAt).getTime();
+        const isRecent = orderTime && (Date.now() - orderTime) < 120000;
+        const isPostLoad = orderTime && orderTime > loadTime - 5000;
+        if (order.status === "Placed" && isRecent && isPostLoad) {
+            showAlert(order);
+            addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
+            state.unacknowledgedOrders.add(snap.key);
+            startContinuousSound();
+            setTimeout(() => { highlightOrder(snap.key); }, 1000);
         }
     });
 
     _ordersChangedUnsub = onChildChanged(currentOrdersRef, snap => {
         const order = snap.val();
         if (order) {
-            // Handle Pending→Placed transition for QR/dine-in orders
-            if (order.status === "Placed" && !state.unacknowledgedOrders.has(snap.key)) {
+            const prevStatus = state.orderStatusSeen.get(snap.key);
+            state.orderStatusSeen.set(snap.key, order.status || '');
+            // Notify only on a real transition INTO Placed (not edits to an existing Placed order)
+            if (order.status === "Placed" && prevStatus !== "Placed" && !state.unacknowledgedOrders.has(snap.key)) {
                 showAlert(order);
                 addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
                 state.unacknowledgedOrders.add(snap.key);
@@ -99,7 +101,8 @@ export function initRealtimeListeners() {
                     stopContinuousSound();
                 }
             }
-            if (order.status === "Delivered") {
+            // Notify only on a real transition INTO Delivered (not edits to an existing Delivered order)
+            if (order.status === "Delivered" && prevStatus !== "Delivered") {
                 addNotification(`Order Delivered (#${formatOrderId(order.orderId || snap.key)})`, `Customer: ${order.customerName || 'Walk-in'} • ₹${order.total}`, 'delivered', state.currentOutlet);
             }
         }

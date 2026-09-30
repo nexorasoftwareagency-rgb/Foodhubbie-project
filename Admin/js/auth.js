@@ -1,6 +1,6 @@
-import { auth, db, Outlet, tenantRef, EmailAuthProvider, ref, get, onValue, onAuthStateChanged, signInWithEmailAndPassword, signOut, onChildAdded, reauthenticateWithCredential, serverTimestamp, set, push, BUSINESS_BY_OUTLET } from './firebase.js';
+import { auth, db, Outlet, EmailAuthProvider, ref, get, onValue, onAuthStateChanged, signInWithEmailAndPassword, signOut, reauthenticateWithCredential, serverTimestamp, set, push, BUSINESS_BY_OUTLET } from './firebase.js';
 import { state } from './state.js';
-import { showToast, logAudit, formatOrderId } from './utils.js';
+import { showToast, logAudit } from './utils.js';
 import * as ui from './ui.js';
 import { initRealtimeListeners } from './features/orders.js';
 import { loadRiders } from './features/riders.js';
@@ -16,9 +16,7 @@ const ADMIN_CONFIG = {
 let _disabledUnsub = null;
 
 function cleanupSession() {
-    if (_newOrderUnsub) { _newOrderUnsub(); _newOrderUnsub = null; }
     if (_disabledUnsub) { _disabledUnsub(); _disabledUnsub = null; }
-    _lastNewOrder = '';
 }
 
 
@@ -449,10 +447,8 @@ export function initAuth() {
         initRealtimeListeners();
         setupCapacitorFCM(user.uid);
         setupAdminFCM(user.uid);
-        initNewOrderNotifications();
         if (!document._switchOutletListenerBound) {
             document.addEventListener('switchOutlet', () => {
-                initNewOrderNotifications();
                 loadOutletGates(); // feature flags + role matrix follow the new outlet
             });
             document._switchOutletListenerBound = true;
@@ -545,38 +541,6 @@ export function userLogout() {
     if (_disabledUnsub) { _disabledUnsub(); _disabledUnsub = null; }
     cleanupSession();
     signOut(auth);
-}
-
-// Track last notified order ID to avoid duplicate browser notifications
-let _lastNewOrder = '';
-let _newOrderUnsub = null;
-
-function initNewOrderNotifications() {
-    if (!('Notification' in window)) return;
-    if (Notification.permission === 'default') {
-        Notification.requestPermission();
-    }
-    // Cleanup previous listener if any
-    if (_newOrderUnsub) { _newOrderUnsub(); _newOrderUnsub = null; }
-    const outlet = window.currentOutlet || 'pizza';
-    const r = tenantRef(outlet, 'orders');
-    let initial = true;
-    _newOrderUnsub = onChildAdded(r, (snap) => {
-        if (initial) { initial = false; return; }
-        const order = snap.val();
-        if (!order || order.orderId === _lastNewOrder) return;
-        const status = (order.status || '').toLowerCase();
-        if (status !== 'placed') return;
-        _lastNewOrder = order.orderId;
-        if (Notification.permission === 'granted') {
-            const n = new Notification('\uD83D\uDD04 New Order Received!', {
-                body: `#${formatOrderId(order.orderId || snap.key)} — ${order.customerName || 'Customer'} — ₹${order.total || 0}`,
-                icon: '/icon-erp-logo.jpeg',
-                tag: `order-${snap.key}`
-            });
-            n.onclick = () => { window.focus(); ui.switchTab('orders'); n.close(); };
-        }
-    });
 }
 
 /**

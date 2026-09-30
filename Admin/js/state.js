@@ -59,4 +59,5 @@ export const state = {
     // Continuous notification sound
     unacknowledgedOrders: new Set(),  // Order IDs with sound playing
     continuousSoundInterval: null,     // setInterval ID for continuous sound
+    orderStatusSeen: new Map(),       // order key → last seen status (transition dedupe for order notifications)
 };

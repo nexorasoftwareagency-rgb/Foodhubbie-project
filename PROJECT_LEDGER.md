@@ -14,6 +14,8 @@ Fragile Files before starting ANY task.
 - **Firebase v12**: `enableIndexedDbPersistence` removed — offline persistence is now automatic. No action needed.
 
 <!-- STANDING_DECISIONS_START -->
+- [2026-09-30 01:14 UTC] Both pm2 bot processes run transport=baileys (id4=live roshani-pizza, id12=wizard-test outlet -P-TahoJb732KsrERdxm never QR-paired since Sep 25). Template sends only activate when typeof sock.sendTemplate === function (meta transport); Baileys uses restored legacy msg/img text-image path. When business verification lands + real WABA flips an outlet to BOT_TRANSPORT=meta, re-verify: template param counts vs Graph, body-to-{{1}} mapping (proactive_promo has NO vars -> code100 -> text fallback), and chat-log component text.
+- [2026-09-30 01:14 UTC] Bot ban-proofing state lives in bot/utils.js (in-memory Maps): paceOutboundTo (4-8s random per-chat gap) is wired into ALL 3 send wrappers in bot/index.js; freeze (3 continuous non-intent strikes in AWAITING/WEBVIEW -> 30-min silence) is enforced ONLY at the message handler + marketing gates (sendPromotionalMessage, SEND_GENERIC). Transactional order-status notices are DELIBERATELY never frozen (utility templates are ban-safe; dropping them would mark real orders sent-but-not-delivered). Admins never accumulate strikes (isAuthorized gate) or they would lose reports/alerts. Extend in utils.js, never re-add freeze-drop to the generic send wrappers.
 - [2026-08-12 02:20 UTC] **DUAL-TRANSPORT WHATSAPP BOT (per restaurant)**: each restaurant/business supports BOTH Meta Cloud API (`BOT_TRANSPORT=meta`) and Baileys (`BOT_TRANSPORT=baileys`). ONLY ONE is active per restaurant at a time. Transport is controlled remotely from **Supreme Admin → Restaurants Profiles → WhatsApp Baileys section** (Scan QR button → shows QR + live status), mirrored on the WhatsApp second dashboard. Meta API is the default/primary; Baileys used when a restaurant wants a real number via QR. Bot reads transport mode from Firebase `bot/{outlet}/transport` (or env default), switchable at runtime.
 - [2026-08-12 02:20 UTC] **STATIC IMAGES FOR FIREBASE HOSTING**: brand/menu images may be placed directly in the project directory (e.g. `menu/images/`, `assets/`) and deployed with Firebase Hosting, referenced via relative URLs like `/images/logo.png`. No Firebase Storage upload needed for static brand assets.
 - [2026-08-04 10:00 UTC] PowerShell version-bump/edits on files with non-ASCII (emoji, ₹, typography) MUST use the UTF-8-safe pattern: `[System.IO.File]::ReadAllText(path, UTF8)` + `WriteAllText(path, content, UTF8Encoding($false))`. NEVER `Get-Content`/`Set-Content` — the 5.3.16 bump corrupted every emoji in Admin/index.html + sw.js (mojibake "ðŸ�½ï¸�"). Signature of corruption = C1 control chars U+0080–U+009F.
@@ -41,6 +43,8 @@ Fragile Files before starting ANY task.
 - **`rider-app/src/services/orderService.ts`**: Core delivery lifecycle. `assertProximity` has GPS accuracy guard.
 
 <!-- FRAGILE_FILES_START -->
+- `bot/utils.js` � Hosts the shared ban-proofing module (paceOutboundTo/recordWrongMessage/isJidFrozen/clearWrongStrikes, module-level Maps) exported to index.js + promotions.js, plus maskJid/RateLimiter/OutboundTracker used across the bot. Behavior changes here hit every send path and every outlet; covered by bot/tests/unit.test.js ban-proofing test - keep it green. (flagged 2026-09-30 01:14 UTC)
+- `bot/index.js` � Send wrappers carry 4 stacked concerns (chat-log, G5 quota counter, per-chat pacing, conversation logs) and the status-notification send block chooses template-vs-text by transport; the ban-proofing freeze gates live in the message handler (isAuthorized hoisted). Any edit here needs impact_scan first - breaking a wrapper silently loses chat history or quota counts. (flagged 2026-09-30 01:14 UTC)
 - `Admin/index.html` & `Admin/sw.js` — contain emoji/₹/typography; any version bump/edit MUST use the UTF-8-safe PowerShell pattern (Standing Decision 2026-08-04) or all non-ASCII corrupts
 - `tools/build.mjs` � PurgeCSS safelist (runtime-composed classes) � any new dynamically-built CSS class family must be added here or it gets purged from dist (flagged 2026-08-03 19:39 UTC)
 - database.rules.json — multi-role complex rules
@@ -80,6 +84,51 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260930-021844-1cfc] Redesign Expenses Categories sub-tab: modernize category cards (hero spend, pct badge, thicker bar, icon actions) + toolbar polish; keep DOM contract
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-30 02:18 UTC
+- Files touched: Admin/js/features/expenses.js, Admin/mobile-overrides.css
+- Verified: node --check + build OK; Playwright vs built dist: 8 cards, 7 pct badges+bars, 16 icon action buttons, edit-icon opens form with Rent values, Back restores list, search empty-state works, 0 console errors; 2 screenshots inspected; temp admin deleted; server stopped
+- NOT verified / open risk: live deploy (not deployed); over/warn card states (no category over budget this month to render); mobile-chome viewport
+- Confidence: HIGH
+- Ended: 2026-09-30 02:25 UTC
+
+### [20260930-021841-b602] Desktop regression of final merged Staff Mgmt two-page design (post role-card sweep 711d91c)
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-09-30 02:18 UTC
+- Verified: 9/9 playwright desktop 1440x900 vs dist==HEAD 711d91c, 0 pageErrors; pill switch both ways + aria-selected, count chip 5/5, 6-col header exact (Name|Counter PIN|Discount Ceiling|Last Signed In|Status|Actions, no Role), role-group headers, 5 role cards + chip clouds; screenshots sm-desktop-{staff,roles}.png reviewed
+- NOT verified / open risk: role modal open/save flows not re-run (unchanged code, previously verified); live deploy untouched (already at 711d91c)
+- Confidence: HIGH
+- Ended: 2026-09-30 02:19 UTC
+
+### [20260930-020129-d3cd] Notification tab review fixes: missing imports crash + duplicate/stale OS notifications
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-30 02:01 UTC
+- Confidence: MEDIUM
+- Ended: 2026-09-30 02:12 UTC
+
+### [20260930-013658-9010] Redesign Expense tab Add Expense form: modernize modal (hero amount, category icon tiles, compact grid) preserving DOM contract
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-30 01:36 UTC
+- Files touched: Admin/index.html, Admin/mobile-overrides.css, Admin/js/features/expenses.js
+- Verified: node --check OK; build OK; Playwright vs built dist: 8 tiles render, tile click writes select+1 active, select hidden, edit-from-History restores active tile+title/amount/date, 0 console errors; 3 screenshots inspected (hero/tile-active/edit); temp e2e admin deleted (user+mirror gone)
+- NOT verified / open risk: live deploy (not deployed); real expense submit write (handler untouched); mobile-chone viewport
+- Confidence: HIGH
+- Ended: 2026-09-30 01:49 UTC
+
+### [20260930-013331-7616] Mobile viewpoint: verify Staff Mgmt two-pane redesign at iPhone 13 (390px); fix grid min-content propagation
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-09-30 01:33 UTC
+- Verified: 8/8 playwright checks iPhone13 390px (dist :8124), 0 pageErrors; screenshots sm-mobile-{staff,staff-scrolled,roles}.png reviewed; root fix [data-settings-section=staff-management]{min-width:0} style.css:2406 (grid item min-width:auto propagated table min-content 937px, masked by body overflow-x hidden); build green
+- NOT verified / open risk: not deployed (min-width fix pending commit decision � style.css entangled with parallel uncommitted WIP); desktop re-run of 9-check suite not repeated after CSS change (CSS scoped to one attribute selector)
+- Confidence: HIGH
+- Ended: 2026-09-30 01:33 UTC
+
 ### [20260929-161329-a46b] tests/wizard-billing.spec.js: wizard E2E asserts billing defaults (non_refundable setup, rates, tokens); temp super + cleanup
 - TIER: 2 (medium-risk)
 - STATUS: DONE
@@ -640,4 +689,13 @@ Fragile Files before starting ANY task.
 - Noted (pre-existing, untouched): id12 (`bot--P-Taho...` = wizard-created test business/outlet `-P-TahoJb732KsrERdxm`) has **never had an open WA connection in its log since Sep 25** (no QR pairing ever completed); pm2 "online" ≠ WhatsApp connected. No production outlet affected
 - Confidence: HIGH
 - Next Actions: (1) watch next live order on pizza → single PLACED + text/image notification path on Baileys; (2) watch `[PACER]`/`[FREEZE]` logs for behavior; (3) when business verification + real WABA land → meta transport flips on and template path activates there; (4) if a variable MARKETING template is wanted for outside-24h promos, submit one with `{{1}}`
+### [20260930-000000-0006] Notification review fixes deployed + live E2E (closes d3cd verification gap)
+- TIER: 2 (deploy + verification for task 20260930-020129-d3cd)
+- STATUS: DONE
+- Started: 2026-09-30
+- What happened: rebuilt all targets (`tools/build.mjs`), dist marker-grep ✅, deployed `firebase deploy --only hosting:admin,hosting:supreme` (75 + 32 files, release complete). LIVE asset checks all pass: supreme `js/features/notifications.js` serves `formatAge`, admin `js/auth.js` has NO `initNewOrderNotifications`, admin `js/features/orders.js` has `orderStatusSeen`, admin notifs has `stopContinuousSound`
+- Live E2E (Playwright; temp super user minted via `bot/service-account.json` + `admins/{uid}.isSuper`, deleted in cleanup): Supreme `#notifications` renders — KPIs (1/1/0) + row showing `20d ago` / `10 Sept 2026` (`formatAge`/`formatDate` = the two functions that crashed the tab) + Mark read / Reply actions. Filter-reset fix proven: search `zzzz` → navigate to Restaurants → return → input `""`, filter `all`, row visible (pre-fix stale module vars kept table empty). Screenshot: `.playwright-mcp/notifications-tab-live.png`. Console: only a transient securetoken 400 at login + pre-existing TUNNEL_URL warning — no errors from the changed code
+- NOT verified live (Admin side — no login creds available; `tests/utils.js` password appears redacted): `orderStatusSeen` transition dedupe, clearAllNotifications sound stop, legacy-listener removal. Code-reviewed + build-parse verified only
+- Confidence: HIGH (Supreme fix) / MEDIUM (Admin runtime behavior)
+- Next Actions: watch the first live QR order after this deploy — Pending→Placed must notify exactly once, and editing an old Placed order must notify zero times; if wrong, inspect `state.orderStatusSeen` seeding in `Admin/js/features/orders.js:67-109`
 <!-- TASK_LOG_END -->

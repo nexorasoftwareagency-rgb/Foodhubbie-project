@@ -7,6 +7,7 @@ import { cleanupFeedbacks } from './features/feedback.js';
 import { cleanupLiveRiderTracker } from './features/tracker.js';
 import { cleanupRiderAnalytics } from './features/rider-analytics.js';
 import * as ui from './ui.js';
+import { updateNotificationUI } from './features/notifications.js';
 
 export function clearStateForOutletSwitch() {
     console.log("[State] Clearing state for outlet isolation...");
@@ -28,6 +29,8 @@ export function clearStateForOutletSwitch() {
     state.riderStatsData = {};
     state.notifications = [];
     state.unacknowledgedOrders.clear();
+    state.orderStatusSeen.clear();
+    updateNotificationUI();
 
     const containers = [
         'categoryList', 'menuGrid', 'walkinDishGrid', 'walkinCategoryTabs',
