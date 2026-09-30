@@ -6,7 +6,7 @@
 
 const {
     formatJid, getISTDateInfo, randomBetween, isSocketDead, OutboundTracker,
-    isJidFrozen, maskJid
+    isJidFrozen, maskJid, isMetaTransport
 } = require('./utils');
 const { db, resolvePath } = require('./firebase');
 const { paceBurstSend } = require('./send-pacer');
@@ -35,6 +35,12 @@ let _promoEnabledCache = { value: true, ts: 0 };
 let _dailyLimitCache = { value: PROMO_WARMUP_DAILY_LIMITS[0], ts: 0 };
 
 async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet) {
+    // BAN-RISK: promotional sends are official-API (meta) only — Baileys bulk
+    // promos are the top account-ban trigger. Hard block (throw → counted failed).
+    if (!isMetaTransport(sock)) {
+        console.warn(`[Promo] ⛔ blocked on Baileys transport — promos are official-API only (${maskJid(jid)})`);
+        throw new Error('promo-blocked-transport');
+    }
     // BAN-PROOFING: a frozen chat (3 wrong messages → 30-min silence) must
     // receive NO outbound at all — promos included. Transactional order
     // notifications deliberately still flow (approved utility templates).
@@ -48,7 +54,7 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, ou
         // Meta transport: promotional sends are biz-initiated — plain text is
         // dropped with 131047 outside the 24h window. Try an approved template
         // first; fall back to the legacy text/image path (delivers in-window).
-        const isMetaSock = !!sock.user?.id?.startsWith('meta:');
+        const isMetaSock = isMetaTransport(sock);
         if (isMetaSock && typeof sock.sendTemplate === 'function') {
             try {
                 await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'bot_live_update', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
@@ -202,6 +208,7 @@ async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, sendStopMsg,
             return { ok: true, attempts: attempt };
         } catch (err) {
             lastErr = err;
+            if (err.message === 'promo-blocked-transport') return { ok: false, error: err.message, attempts: attempt };
             console.warn(`[Promo] Attempt ${attempt}/${maxRetries} failed for ${jid}: ${err.message || err}`);
             if (attempt < maxRetries) await new Promise(r => setTimeout(r, 5000));
         }
@@ -249,6 +256,14 @@ async function runPromotionCampaign(sock, cmd, ctx) {
     const { campaignId, template, mediaUrl, recipients = [], quietHours, requestedBy, greeting = false, menuText = null, menuImageUrl = null, sendStopMsg = true, isTest = false } = cmd;
     if (!campaignId || !Array.isArray(recipients) || recipients.length === 0) {
         console.warn(`[Promo] Invalid campaign command: ${campaignId}`);
+        return;
+    }
+    // BAN-RISK: campaigns never start on Baileys — pause with a visible reason
+    // (Admin shows pauseReason). Re-enabled automatically when meta transport
+    // (official WhatsApp API) is active.
+    if (!isMetaTransport(sock)) {
+        console.warn(`[Promo] ⛔ Campaign ${campaignId} blocked — promotional sends are official-API (meta) only; outlet is on Baileys.`);
+        await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({ status: 'paused', pauseReason: 'transport-blocked' });
         return;
     }
     const list = recipients.slice(0, PROMO_DAILY_LIMIT);

@@ -174,3 +174,15 @@ test('ban-proofing: 3 strikes freeze, menu clears, pacer enforces 4-8s gap', asy
     await paceOutboundTo(pj);
     assert.ok(Date.now() - t1 >= 4000, 'second send must wait the random 4-8s gap');
 });
+
+// BAN-RISK: promotional bulk sends are official-API (meta) only — they are the
+// top account-ban trigger on Baileys, so the promo engine hard-blocks there.
+test('promo transport gate: meta allows, Baileys blocks', () => {
+    const { isMetaTransport } = require('../utils');
+    assert.strictEqual(isMetaTransport({ user: { id: 'meta:1000000000' } }), true);
+    assert.strictEqual(isMetaTransport({ user: { id: '1234567890:abcdefghijklmnop=' } }), false);
+    assert.strictEqual(isMetaTransport({ user: {} }), false);
+    assert.strictEqual(isMetaTransport({}), false);
+    assert.strictEqual(isMetaTransport(null), false);
+    assert.strictEqual(isMetaTransport(undefined), false);
+});

@@ -415,6 +415,12 @@ async function paceOutboundTo(jid) {
     } catch (_) { /* pacing must never break a send */ }
 }
 
+// Promotional bulk sends are OFFICIAL-API (meta) only — on Baileys (unofficial
+// WhatsApp Web) they are the top account-ban trigger, so they are hard-blocked.
+function isMetaTransport(sock) {
+    return !!(sock && sock.user && String(sock.user.id).startsWith('meta:'));
+}
+
 module.exports = {
     formatJid, maskJid, isBlockedJid,
     formatOrderId,
@@ -424,5 +430,6 @@ module.exports = {
     isSocketDead,
     getBroadcastDelayRangeMs, sleep,
     RateLimiter, OutboundTracker, BaileysSendTracker,
-    isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo
+    isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo,
+    isMetaTransport
 };
