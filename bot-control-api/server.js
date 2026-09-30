@@ -261,9 +261,12 @@ app.post('/api/admin/update-password', requireSuperOnly, async (req, res) => {
     const outletSnap = await admin.database().ref(`businesses/${bid}/outlets/${oid}`).get();
     const outlet = outletSnap.val() || {};
     const outletName = outlet.name || oid;
-    await admin.database().ref(`admins/${uid}`).set({
-      email, outlet: oid, name: outletName, role: 'owner', businessId: bid,
-    });
+    const ownerSnap = await admin.database().ref(`admins/${uid}`).get();
+    if (!ownerSnap.exists()) {
+      await admin.database().ref(`admins/${uid}`).set({
+        email, outlet: oid, name: outletName, role: 'owner', businessId: bid,
+      });
+    }
     await admin.database().ref(`businesses/${bid}/outlets/${oid}/adminLogin`).set({ email, password: newPassword });
     res.json({ ok: true, uid });
   } catch (err) {
@@ -352,9 +355,11 @@ app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => 
       uid = created.uid;
     }
 
-    // Write admins/{uid} mirror
-    await admin.database().ref(`admins/${uid}`).set({
-      email: adminEmail, outlet: oid, name: outletName, role: 'owner', businessId: bid,
+    // Write admins/{uid} mirror — merge (never clobber owner-managed name/fcmToken/isSuper); seed name only for new records
+    const curAdmin = (await admin.database().ref(`admins/${uid}`).get()).val();
+    await admin.database().ref(`admins/${uid}`).update({
+      email: adminEmail, outlet: oid, businessId: bid, role: 'owner',
+      ...(curAdmin ? {} : { name: outletName }),
     });
 
     // Write outlet with locked: true
