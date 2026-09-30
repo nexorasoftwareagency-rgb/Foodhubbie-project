@@ -80,6 +80,23 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20260929-161329-a46b] tests/wizard-billing.spec.js: wizard E2E asserts billing defaults (non_refundable setup, rates, tokens); temp super + cleanup
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-29 16:13 UTC
+- Files touched: tests/wizard-billing.spec.js
+- Verified: npx playwright test --project=chromium 1 passed (17.7s): wizard created outlet, billing asserted (non_refundable setup, rates exact, tokens 15, no monthlyRate); cleanup verified post-run: business node gone, 0 leftover e2e users/admins
+- NOT verified / open risk: runs chromium desktop project only (mobile project skipped by design)
+- Confidence: HIGH
+- Ended: 2026-09-29 16:15 UTC
+
+### [20260929-160651-f077] Redesign Staff Management settings section: split into two in-page tabs (Staff | Roles & Access), pane-scoped actions, staff count chip
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-29 16:06 UTC
+- Confidence: HIGH
+- Ended: 2026-09-29 16:19 UTC
+
 ### [20260929-135429-0e83] Setup fee 500 -> non-refundable everywhere: copy (website+wizard), billing seeds, costs label de-tie from transport, profile dropdown; sync EC2
 - TIER: 3 (high-risk)
 - STATUS: DONE
@@ -597,4 +614,30 @@ Fragile Files before starting ANY task.
 - Verification: user reported form rejection; DNS availability check run; audit doc edited
 - Confidence: HIGH
 - Next Actions: (1) owner clears Website → Next → OTP + UDYAM upload; (2) ~10 days: buy domain → ping me to wire Firebase Hosting → resume form if website was required; (3) after Meta approval → real WABA → `WABA_ID` → transport `meta`; (4) optional: revoke old 197-char token via BM UI
+### [20260929-000000-0004] Fix duplicate ORDER PLACED sends — removed `|| isNew` dedup bypass
+- TIER: 2 (bot notification correctness)
+- STATUS: DONE
+- Started: 2026-09-29
+- Symptom (from live `chats/roshani-pizza/8084243031` audit): orders `#gcjhY` + `#1OxVk` (Sep 21) received the identical "ORDER PLACED" invoice twice in the same second (different msgIds = two real WhatsApp sends)
+- Root cause analysis (corrected twice during investigation — be honest about this):
+  1. First hypothesis (orderRef listener stacking across reconnects) was WRONG: listeners are module-guarded by `firebaseListenersInitialized` (index.js:215/:1600/:1791); cmdRef has its own `.off` at :389
+  2. Real cause: `handleOrderStatusUpdate` condition `|| isNew` (index.js:983) — `child_added` calls it with `isNew=true` (:1788), which bypasses the `status already processed` check that `child_changed` respects. When racing `child_changed` (triggered by webview finalization's `stockDeducted` write / FCM watcher's `_fcmSent` write) had already SAVED status after a confirmed send, `child_added` still re-sent. Lock (`_orderStatusLocks`) + post-send-only status writes (added in Sep 19-20 restartEpoch-era fixes) made the bypass redundant and unsafe
+- Fix: removed `|| isNew` from the send condition + explanatory comment (bot/index.js:983). Retry path intact: failed sends leave `status` un-advanced → next event re-enters. `isNew` still used for `isDineIn && isNew` (:1041) and logging
+- Verification: `node --check` ✅ local+EC2; `node --test tests/unit.test.js` 12/12 ✅ (integration test hangs locally — pre-existing, needs EC2 network; unit suite doesn't cover this function); deployed to EC2 (`bot/index.js.bak-20260929` backup), `pm2 restart 4 12`, both bots ONLINE + re-authed ✅
+- Also noted (no action): RTDB `.indexOn` warning only fires for ad-hoc `orderByChild('meta/lastTs')` queries — Admin reads whole `chats` node (chat.js:37, wa-analytics.js:167), existing `meta` `.indexOn:["lastTs"]` (rules:441) covers app needs
+- Confidence: HIGH
+- Next Actions: none — watch next webview order for single PLACED send
+### [20260929-000000-0005] Ban-proofing implemented + template-migration review fixes deployed
+- TIER: 2 (bot ban-proofing + notification correctness)
+- STATUS: DONE
+- Started: 2026-09-29
+- What shipped:
+  - **(A) Ban-proofing (new, per spec):** (1) random **4–8s per-chat outbound pacing** — `paceOutboundTo()` in `bot/utils.js`, called from all 3 patched send wrappers (`sendMessage`/`sendTemplate`/`sendButton` in index.js); (2) **3 continuous wrong messages → 30-min silent freeze** — `recordWrongMessage()`/`isJidFrozen()`/`clearWrongStrikes()` (utils.js), counted only in `AWAITING_ORDER_INTENT` + `WEBVIEW` C5 branches (non-intent text; `menu`/`order` clears), handler returns early when frozen (after the opt-out block so STOP/START still lands), `proactive_promo`-style marketing (`sendPromotionalMessage`, `SEND_GENERIC_MESSAGE`) drops when frozen
+  - **Design decisions (adversarial review caught these mid-build):** transactional order-status notices **keep flowing** during a freeze (approved utility templates = ban-safe; dropping them would mark a real order "sent" when it wasn't) — freeze = chat replies + marketing only; **admins never accumulate strikes** (`isAuthorized` hoisted out of the opt-out try; strike calls gated `!isAuthorized` — otherwise an admin could freeze themselves out of reports/alerts); in-memory state (restart clears) — Redis upgrade path noted in comment
+  - **(B) Review fixes on the uncommitted template migration:** **High#1** `transport.js sendTemplate` silently dropped `body` (promo/SEND_GENERIC content replaced by template's static text) → now maps `body` → single `{{1}}` BODY component; `proactive_promo` has **NO variables** (verified via Graph) → code 100 → callers' existing text fallback delivers correct content (outside-24h promo still needs a variable MARKETING template — platform limitation). **High#2** template branch ran unconditionally → Baileys outlets (both bots run `transport=baileys`) hit `sock.sendTemplate is not a function` → restored legacy `msg`/`img` strings for all 5 template statuses (from `git show HEAD:bot/index.js`) + call-site guard `typeof sock.sendTemplate === 'function'` → text/image path on Baileys, templates only on meta. **Med#3** `isDineIn && isNew` → `isDineIn` (template + msg). **Med#4** template param counts verified vs Graph API: order_placed 1 / dinein 4 / delivery 2 / ready 3 / delivered 5 / cancelled 2 = code ✅ (all 9 approved templates fetched via `Credentials/WA_PERMANENT_TOKEN_NEW.txt`). **Low#5** template chat bubbles logged component parameter texts instead of empty
+- Tests: `node --test bot/tests/unit.test.js` **13/13** (new `ban-proofing` test: strikes 1-2 reply, 3rd freezes, menu clears, unrelated jid isolated, pacer first-send immediate + second ≥4s) — helpers moved to `bot/utils.js` (exported) so they're testable; `node --check` on index/utils/transport/promotions ✅ local + EC2
+- Deploy: backups `/var/www/foodhubbie/bot/*.bak-20260929-2` (index/utils/transport/promotions) → scp (byte-exact sizes) → EC2 `node --check` ✅ → `pm2 restart 4 12` + `pm2 save` → id4 (roshani-pizza, real outlet) startup sequence clean: Command Listener → BLOCKED → **BOT IS ONLINE → [AUTH]** ✅
+- Noted (pre-existing, untouched): id12 (`bot--P-Taho...` = wizard-created test business/outlet `-P-TahoJb732KsrERdxm`) has **never had an open WA connection in its log since Sep 25** (no QR pairing ever completed); pm2 "online" ≠ WhatsApp connected. No production outlet affected
+- Confidence: HIGH
+- Next Actions: (1) watch next live order on pizza → single PLACED + text/image notification path on Baileys; (2) watch `[PACER]`/`[FREEZE]` logs for behavior; (3) when business verification + real WABA land → meta transport flips on and template path activates there; (4) if a variable MARKETING template is wanted for outside-24h promos, submit one with `{{1}}`
 <!-- TASK_LOG_END -->

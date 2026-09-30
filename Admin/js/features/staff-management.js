@@ -17,6 +17,17 @@ export function setStaffTableState(state) {
 // Global retry handler for error state
 window.staffManagementRetry = () => loadStaffList();
 
+// Two-page layout inside the section: Staff | Roles & Access
+function showSmPage(page) {
+    document.querySelectorAll('[data-sm-pane]').forEach(el => { el.style.display = el.dataset.smPane === page ? '' : 'none'; });
+    document.querySelectorAll('.sm-subtab').forEach(b => {
+        const on = b.dataset.smPage === page;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+}
+document.querySelectorAll('.sm-subtab').forEach(b => { b.onclick = () => showSmPage(b.dataset.smPage); });
+
 const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcons({ root }));
 
 // --- ROLE HIERARCHY ---
@@ -290,6 +301,14 @@ export function renderStaffTable() {
     if (!tbody) return;
     
     const canManage = canViewStaffManagement();
+
+    // Pane header count chip
+    const countEl = document.getElementById('smStaffCount');
+    if (countEl && _staffTableState === 'ready') {
+        const total = _staffListCache.length;
+        const active = _staffListCache.filter(s => s.isActive).length;
+        countEl.textContent = total ? `${total} team member${total === 1 ? '' : 's'} · ${active} active` : 'No staff yet';
+    }
     
     // Loading state
     if (_staffTableState === 'loading') {

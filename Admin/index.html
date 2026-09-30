@@ -2242,7 +2242,7 @@
 
                         <div class="glass-card p-20 grid-full" data-settings-section="staff-management">
 
-                            <div class="flex-between flex-center mb-20">
+                            <div class="flex-between mb-20" style="flex-wrap:wrap;gap:10px;align-items:center;">
 
                                 <div>
 
@@ -2252,9 +2252,27 @@
 
                                 </div>
 
-                                <button id="btnAddStaff" class="btn-primary"><i data-lucide="plus" class="icon-14"></i> Add Staff</button>
+                            </div>
+
+                            <div class="sm-subtabs" role="tablist" aria-label="Staff Management pages">
+
+                                <button type="button" class="sm-subtab active" data-sm-page="staff" role="tab" aria-selected="true">Staff</button>
+
+                                <button type="button" class="sm-subtab" data-sm-page="roles" role="tab" aria-selected="false">Roles &amp; Access</button>
 
                             </div>
+
+                            <!-- Page 1: Staff accounts -->
+
+                            <div data-sm-pane="staff">
+
+                                <div class="flex-between mb-16" style="flex-wrap:wrap;gap:10px;align-items:center;">
+
+                                    <span id="smStaffCount" class="text-muted-small">Loading staff…</span>
+
+                                    <button id="btnAddStaff" class="btn-primary"><i data-lucide="plus" class="icon-14"></i> Add Staff</button>
+
+                                </div>
 
                             <div class="table-container" style="overflow-x:auto;">
 
@@ -2296,19 +2314,15 @@
 
                             </div>
 
-                            <!-- Roles & Tab Access -->
+                            </div>
 
-                            <div style="border-top:1px solid var(--border-color);margin-top:24px;padding-top:20px;">
+                            <!-- Page 2: Roles & Tab Access -->
 
-                                <div class="flex-between flex-center mb-20">
+                            <div data-sm-pane="roles" style="display:none;">
 
-                                    <div>
+                                <div class="flex-between mb-16" style="flex-wrap:wrap;gap:10px;align-items:center;">
 
-                                        <h4 class="mb-4"><i data-lucide="shield-check" class="icon-16"></i> Roles &amp; Tab Access</h4>
-
-                                        <p class="text-muted-small">Define which dashboard tabs each role can open. Custom roles apply to this outlet only.</p>
-
-                                    </div>
+                                    <span class="text-muted-small">Define which dashboard tabs each role can open. Custom roles apply to this outlet only.</span>
 
                                     <button id="btnAddRole" class="btn-primary"><i data-lucide="plus" class="icon-14"></i> New Role</button>
 
