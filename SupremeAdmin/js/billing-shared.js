@@ -121,21 +121,6 @@ export function monthlyRows(outlet) {
     .sort((a, b) => (a.ym < b.ym ? 1 : -1));
 }
 
-export function yearlyRows(rows) {
-  const byYear = new Map();
-  for (const r of rows) {
-    const y = r.ym.slice(0, 4);
-    let a = byYear.get(y);
-    if (!a) byYear.set(y, (a = { ym: y, orders: 0, usage: 0, charges: 0, paid: 0, due: 0 }));
-    a.orders += r.orders;
-    a.usage = Math.round((a.usage + r.usage) * 100) / 100;
-    a.charges = Math.round((a.charges + r.charges) * 100) / 100;
-    a.paid = Math.round((a.paid + r.paid) * 100) / 100;
-  }
-  for (const a of byYear.values()) a.due = Math.round((a.usage + a.charges - a.paid) * 100) / 100;
-  return [...byYear.values()].sort((a, b) => (a.ym < b.ym ? 1 : -1));
-}
-
 /** Payments + charges in scope, oldest first, with running balance after each row. */
 export function ledgerRows(outlet, scope) {
   const s = scopeStats(outlet, scope);

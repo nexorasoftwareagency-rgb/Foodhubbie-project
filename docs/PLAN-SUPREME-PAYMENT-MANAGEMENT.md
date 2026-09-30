@@ -16,9 +16,9 @@ Build order: steps 1→10, one by one, each verified before the next.
 ## Pages
 
 ### 1. Tab — `#payments` (`payment-overview.js`) — direct complete list
-- KPIs: **Due (all outlets, all-time)** · **Usage (this month)** · **Collected (this month)** · outlets with due.
-- Table: Business | Outlet | Plan (`biz.plan` + mode) | **Usage (this month)** | **Paid (this month)** | **Due (all time)** | pill (Settled/Partial/Pending) | **Record payment** | **Record page →** (row click too).
-- Rates legend line. Record payment → shared modal (no navigation).
+- KPIs: **Outstanding (all outlets, all-time) + owing count** · **Usage (this month)** · **Collected (this month)** · restaurants (+ disabled count).
+- Table: Outlet | Business | Plan chip | Orders | **Usage (all time)** | **Paid (all time)** | **Due (all time** — red amount, green "Settled" at zero**)** | **Record →** (this outlet's Record page). All-time ₹ on purpose: parity with the Admin Costs tab and the profile Billing card; plan/status filters + per-plan due rollup strip above the table.
+- Record payment modal lives on the Record page and the profile Billing card (no direct modal from the tab).
 
 ### 2. Payment Record Page — `#payments/{bid}/{oid}` (`payment-record.js`) — NEW requirement
 Complete per-restaurant statement:
