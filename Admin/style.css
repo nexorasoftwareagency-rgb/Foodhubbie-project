@@ -2402,6 +2402,8 @@ tr.premium-row-v4:focus-visible {
     width: 100%;
     box-sizing: border-box;
 }
+/* grid item min-width:auto lets wide tables (staff/roles) propagate min-content past the viewport; overflow wrappers inside handle scroll */
+[data-settings-section="staff-management"] { min-width: 0; }
 
 .settings-subtabs, .cost-subtabs, .sm-subtabs { display:flex; gap:4px; padding:4px; background:var(--bg-subtle, #f1f5f9); border-radius:10px; margin-bottom:20px; width:fit-content; }
 .settings-subtab, .cost-subtab, .sm-subtab { background:transparent; border:none; padding:8px 20px; font-weight:500; color:var(--neutral-600, #475569); cursor:pointer; border-radius:7px; font-size:13px; transition:all 0.2s ease; }
@@ -10609,3 +10611,18 @@ body.pos-selection-mode .walkin-picker {
 #tab-costs .cost-detail-value { font-size: 15px; font-weight: 700; color: #0f172a; }
 #tab-costs .cost-rate-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 #tab-costs .cost-rate-chip { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 3px 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #334155; }
+
+/* ===== Staff Management redesign (tabs + role cards + modal chips) ===== */
+.staff-table th { white-space: nowrap; }
+.role-card { background: var(--bg-elevated, #fff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.role-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.role-card-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.role-card-meta { font-size: 12px; color: var(--text-muted, #94a3b8); }
+.role-card-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+.rc-count { font-size: 11px; font-weight: 600; color: var(--text-secondary, #64748b); background: var(--bg-subtle, #f1f5f9); border-radius: 20px; padding: 3px 9px; white-space: nowrap; }
+.sm-tab-chip { font-size: 11px; padding: 3px 9px; border-radius: 6px; background: var(--bg-subtle, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); color: var(--text-secondary, #475569); white-space: nowrap; }
+.rt-chip { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 9px; font-size: 12px; cursor: pointer; background: var(--bg-elevated, #fff); transition: all 0.15s ease; user-select: none; }
+.rt-chip i, .rt-chip svg { opacity: 0.25; flex-shrink: 0; }
+.rt-chip:hover { border-color: var(--primary, #E84908); }
+.rt-chip.on { border-color: var(--primary, #E84908); background: rgba(232, 73, 8, 0.06); color: var(--primary, #E84908); font-weight: 600; }
+.rt-chip.on i, .rt-chip.on svg { opacity: 1; }
