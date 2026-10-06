@@ -8,7 +8,6 @@ function mod(name) {
     if (!_modCache[name]) _modCache[name] = import(`./features/${name}.js`);
     return _modCache[name];
 }
-
 let _lucidePromise = null;
 export async function loadLucide() {
     if (window.lucide) return window.lucide;
@@ -221,6 +220,12 @@ export const switchTab = async (tabId, skipHistory = false) => {
             }
         }
     });
+
+    // Settings registers its delegated subtab handler at module eval — load it
+    // before the tab is visible so the first subtab click can't land in the gap.
+    // (Preloading at boot was worse: settings.js ran pre-auth and its blocked-
+    // numbers read was denied, leaving an empty cache that Save then wrote as null.)
+    if (tabId === 'settings') await mod('settings').catch(e => console.warn('[UI] settings module load failed:', e));
 
     // Switch Content Tabs
     document.querySelectorAll('.tab-content').forEach(div => {

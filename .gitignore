@@ -64,6 +64,7 @@ tmp_check.js
 
 # Root scratch scripts from ad-hoc fix/check runs — never commit
 /check_*.js
+/check-*.js
 /fix_*.js
 /update_*.js
 /insert_feature*.js
@@ -71,6 +72,9 @@ tmp_check.js
 /find_marker.js
 /receipt_*.js
 /receipt_*.html
+
+# Office lock files — never commit
+~$*
 /expenses_*.html
 /expenses_*.md
 /EXPENSES_EXAMPLES.md
@@ -123,7 +127,7 @@ tools/ssm-*.ps1
 .pw-profile/
 
 # Stray empty file
-{
+[{]
 
 
 playwright-report/
