@@ -56,7 +56,7 @@ try {
   });
   assert(claims.none === '', `F3 legacy/no uid -> '' (got "${claims.none}")`);
   assert(claims.undef === '', `F3 undefined uid -> '' (got "${claims.undef}")`);
-  assert(claims.owner === 'Owner \u2014 pizza', `F3 owner uid -> admin record (got "${claims.owner}")`);
+  assert(claims.owner === 'Owner \u2014 Roshani Pizza', `F3 owner uid -> admin record (got "${claims.owner}")`);
   assert(claims.bogus === '', `F3 unresolvable uid -> '' (got "${claims.bogus}")`);
 
   // F1a: stale foreign uid in sessionStorage is overwritten on POS entry

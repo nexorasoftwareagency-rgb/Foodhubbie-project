@@ -122,6 +122,15 @@ Fragile Files before starting ANY task.
 - Fix: data rename + 2-line test expectation update
 - Verified: Claude — 2026-09-30 — self, cross-model — PASS
 
+### [20260930-150323-ccsm] fp2w addendum: attribution-check.mjs:59 stale name expectation
+- STATUS: DONE / PRIORITY: low / Started: 150323 / Ended: 150323
+- What: attribution-check F3 owner-claim assertion still expected "Owner — pizza" after the rename; updated to "Owner — Roshani Pizza". Full gate re-run: guard tripwire 5/5, live chip 8/8, attribution 11/11 (one transient auth/network-request-failed on first run, clean on retry).
+- Files/lines: tests/attribution-check.mjs:59
+- Evidence: node tests/attribution-check.mjs → RESULT 11/11 passed
+- Fix: 1-line expectation update
+- Verified: Claude — 2026-09-30 — self — PASS
+
+
 ### [20260930-151341-c723] Runtime verify: orders notification transition dedupe (watch item from task 20260930-020129-d3cd) - live E2E: exactly one notification per real transition INTO Placed/Delivered, zero on page load, zero on non-transition edits; test orders cleaned up
 - TIER: 2 (medium-risk)
 - STATUS: DONE
