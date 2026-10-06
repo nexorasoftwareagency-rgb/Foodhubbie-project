@@ -298,7 +298,7 @@ export function printReceipt({ businessName, outletName, payment, stats }) {
   <div class="row"><span>Usage (all time)</span><b>${inr(stats.usage)}</b></div>
   <div class="row"><span>Extra charges</span><b>${inr(stats.charges)}</b></div>
   <div class="row"><span>Paid to date</span><b>${inr(stats.paid)}</b></div>
-  <div class="tot"><span>Balance due</span><span>${inr(stats.due)}</span></div>
+  <div class="tot"><span>Balance due</span><span>${inr(Math.max(stats.due, 0))}</span></div>
   <div class="muted" style="margin-top:10px">Generated ${escapeHtml(when)} IST · Food-Hubbie platform billing · ${escapeHtml(businessName || '')}</div>
   <div class="btns"><button onclick="window.print()">Print / Save PDF</button></div>
 </div></body></html>`);

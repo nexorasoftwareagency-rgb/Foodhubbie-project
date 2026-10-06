@@ -17,7 +17,6 @@ import { PROMO_RATE } from '/shared/cost-math.js';
 
 const mainEl = document.getElementById('app-main');
 let state = null; // {bid, oid, scope, ym, year, from, to, outlet, ledger}
-let allTimeStatsCache = null; // Cache for all-time stats to avoid recomputation
 
 export function render(bid, oid) {
   state = {
@@ -175,11 +174,6 @@ function renderAll() {
   const s = state.outlet;
   const scope = state.scope;
   const stats = scopeStats(s, scope);
-  
-  // Cache all-time stats for receipt printing
-  if (scope.k === 'all') {
-    allTimeStatsCache = stats;
-  }
 
   const sub = document.getElementById('pr-sub');
   if (sub) sub.textContent = `${scopeLabel(scope)} scope`;
@@ -296,7 +290,7 @@ function renderBreakdown() {
       <td style="text-align:right">${inr(sum('usage'))}</td>
       <td style="text-align:right">${inr(sum('charges'))}</td>
       <td style="text-align:right">${inr(sum('paid'))}</td>
-      <td style="text-align:right">${inr(Math.round(rows.reduce((a, r) => a + Math.max(r.due, 0), 0) * 100) / 100)}</td>
+      <td style="text-align:right">${inr(Math.max(sum('due'), 0))}</td>
     </tr>`;
 }
 
@@ -343,16 +337,11 @@ async function onRecordPayment() {
 }
 
 function printPaymentReceipt(payment) {
-  // Use cached all-time stats if current scope is 'all', otherwise compute
-  const stats = (state.scope.k === 'all' && allTimeStatsCache)
-    ? allTimeStatsCache
-    : scopeStats(state.outlet, { k: 'all' });
-  
   printReceipt({
     businessName: businessName(state.outlet, state.bid),
     outletName: state.name,
     payment,
-    stats,
+    stats: scopeStats(state.outlet, { k: 'all' }),
   });
 }
 
