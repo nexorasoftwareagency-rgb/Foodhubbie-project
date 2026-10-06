@@ -87,19 +87,79 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261005-130207-e3c5] Review follow-up: gitignore root hyphenated check-*.js scratch scripts + Office ~$ lock files
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-05 13:02 UTC
+- Files touched: .gitignore
+- Verified: git check-ignore -v matches /check-*.js and ~$* for both files; git status no longer lists either
+- Confidence: HIGH
+- Ended: 2026-10-05 13:02 UTC
+
+### [20260930-212914-qy19] Fix admins/{uid} clobber on update-password/provision (bot-control-api) + live e2e
+- STATUS: DONE / PRIORITY: high (data-loss) / Started: 212914 / Ended: 212914
+- What: audited every admins/* writer; update-password mirror write now create-only (if (!ownerSnap.exists())); approve-onboarding now update() merge seeding outletName only for new records — old wholesale set() reverted owner name to outletName (pizza→Roshani Pizza would revert) and erased fcmToken/isSuper; auth.js:440 + staff-management:106 verified safe (creation-only / new-uid-only).
+- Files/lines: bot-control-api/server.js:261-270 (create-only guard), 355-361 (merge + conditional name); tests/admin-mirror-guard-check.mjs; tests/admin-mirror-e2e-check.mjs
+- Evidence: node --check OK; tripwire 5/5; EC2 deploy via SSM (gzip+base64, md5 differs from .bak, node -c passed, pm2 restart under ubuntu, proc 15:47, tunnel healthy); live e2e through real tunnel 11/11 (create-branch name=oid, KeepMe + zzKeep survive second update, cleanup complete); owner record verified untouched (name=Roshani Pizza)
+- Fix: conditional/merge writes in both bot-control-api endpoints (root cause: set() replaces whole node)
+- Verified: Claude — 2026-09-30 — self, live-EC2-e2e — PASS
+
+### [20260930-153108-5be7] Notification popup improvements (items 1-4 approved): fix sw.js notificationclick focus bug (relative-vs-absolute URL never matches -> duplicate tabs), stable per-order tags shared across app+FCM sources (kills double popup + background Action Center stacking), data.url on all notifications, ?order=<key> deep-link -> auto-switch to Orders tab + highlightOrder; add push handler to sw.js so FCM background popups get the same icon/tag/deep-link styling
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-30 15:31 UTC
+- Files touched: Admin/js/features/notifications.js, Admin/js/features/orders.js, Admin/sw.js, Admin/js/auth.js, bot/index.js, bot/tests/unit.test.js, tests/notif-popup-check.mjs, tests/sw-notificationclick-check.mjs, tests/fcm-push-check.mjs, tests/mk-probe-src.mjs
+- Verified: popup E2E 13/13 (Placed popup tag order-<key> + data.url, Delivered replaces same tag = 1 popup, direct ?order boot opens Orders tab + highlightOrder marks row, cleanup null, 0 pageErrors); sw unit 13/13 driving shipped Admin/dist/sw.js (FCM styling tag/deep-link/icon, notificationclick focuses existing tab instead of duplicate, navigates ?order, cold-start openWindow absolute, no-data fallback); bot node --test 15/15 incl new data-only regression guard; node --check bot/index.js; build OK, minify-safe literals
+- NOT verified / open risk: real FCM delivery to a browser (Playwright Chromium push service never delivers - probe push event never fired even with probe-instrumented SW; env limitation, not a sw.js bug); EC2 bot deploy of the data-only fix (pm2 4/12 restart pending user go-ahead); hosting:admin deploy held - concurrent session has uncommitted WIP in Admin/ (staff-management.js, ui.js, style.css)
+- Confidence: HIGH
+- Ended: 2026-09-30 16:14 UTC
+
+### [20260930-205444-fp2w] Owner rename: admins/ZoD name pizza → Roshani Pizza
+- STATUS: DONE / PRIORITY: low / Started: 205444 / Ended: 205444
+- What: RTDB REST PATCH admins/ZoDidAOi3fUyOXNWn559r87dADo2 name (readback verified; email/role/outlet untouched); role-chip-check.mjs:63,75 expectations updated; chip now "Owner — Roshani Pizza". Caveat left as-is: bot-control-api server.js:264/356 overwrite owner name with outletName on update-password/provision.
+- Files/lines: tests/role-chip-check.mjs:63,75; RTDB admins/ZoDidAOi3fUyOXNWn559r87dADo2/name
+- Evidence: ADMIN_URL=live tests/role-chip-check.mjs → RESULT 8/8 passed (desktop+mobile "Owner — Roshani Pizza", 0 pageErrors); REST readback {"name":"Roshani Pizza","role":"owner"}
+- Fix: data rename + 2-line test expectation update
+- Verified: Claude — 2026-09-30 — self, cross-model — PASS
+
+### [20260930-151341-c723] Runtime verify: orders notification transition dedupe (watch item from task 20260930-020129-d3cd) - live E2E: exactly one notification per real transition INTO Placed/Delivered, zero on page load, zero on non-transition edits; test orders cleaned up
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-30 15:13 UTC
+- Files touched: tests/notify-dedupe-check.mjs (new, untracked scratch E2E)
+- Verified: 15/15 playwright E2E vs LIVE foodhubbie-admins.web.app as real owner (SA custom token, role-chip recipe): live bundle confirmed d3cd build via minify-safe markers (orderStatusSeen present, _lastNewOrder + initNewOrderNotifications gone in orders.js+auth.js - dist is minified so local ids like prevStatus/firstLoad get renamed); exactly-once semantics proven live: create Pending=0, Pending->Placed=1, edit-while-Placed=0 dup, Placed->Confirmed=0, ->Delivered=+1, backdated direct-Placed create while live=0 (isRecent gate), FULL PAGE RELOAD with existing Placed/Delivered orders=0 (firstLoad gate = the original d3cd regression); 0 pageErrors; screenshot tests/test-results/notify-dedupe.png; side effects zero: test orders backdated+type Dine-in+no phone+_fcmSent pre-set+no riderId+source test_notify -> DB post-check 0 zztest orders, 0 bot/logs entries, EC2 pm2 logs(4) 800 lines = 0 matches for zztest/STA00/NotifyTest; cleanup verified null twice (in-run + post-run admin SDK)
+- NOT verified / open risk: genuine customer QR order racing the session (same code path as tested transitions, not staged against a real order); alert-box + notification sound UX not asserted (list counts only); script left untracked by design
+- Confidence: HIGH
+- Ended: 2026-09-30 15:19 UTC
+
+### [20260930-150606-f27c] Fix blocked-numbers data loss: revert ui.js settings preload, close subtab race in switchTab (load module before unhide)
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-09-30 15:06 UTC
+- Files touched: Admin/js/ui.js
+- Verified: node --check OK; build green; new E2E 7/7 (settings NOT evaluated pre-auth, evaluated on-demand post-auth, staff subtab click after visibility lands, 0 pageErrors); attribution-check 11/11
+- NOT verified / open risk: chat.js _blockNumber writes window.__blockedNumbers unguarded - needs settings loaded once (pre-existing at HEAD, out of scope)
+- Confidence: HIGH
+- Ended: 2026-09-30 15:10 UTC
+
 ### [20260930-042439-f848] Review-findings fixes: stale counterStaffUid attribution (money path), printer-fallback claim, dead PIN code + stale copy
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-09-30 04:24 UTC
-- Verified: build green; role-chip-check 8/8 (auth boot regression) + tests/attribution-check.mjs 11/11: F3 resolver record-driven (null/undefined uid -> '', owner uid -> 'Owner � pizza' via admins fallback, unresolvable -> ''), F1a POS entry re-signs stale uid overwritten, F1b logout clears + login re-signs current uid immediately + POS re-entry correct (caught live: re-login while walkin tab active never re-ran loadWalkinMenu � fixed by auth-boundary sign-in), endShift clears + toast without PIN wording + no dead check, 0 pageErrors
-- NOT verified / open risk: multi-agent cross-review (3 explore agents failed: opencode.ai DNS) � verified by single-agent deep read with file:line evidence; Manager/Cashier/Waiter ceiling paths (same gate code, owner-only creds); deleted verifyCounterPin (zero refs after promptCounterPinSignIn removal, grep-proven)
+- Verified: build green; role-chip-check 8/8 (auth boot regression) + tests/attribution-check.mjs 11/11: F3 resolver record-driven (null/undefined uid -> '', owner uid -> 'Owner � pizza' via admins fallback, unresolvable -> ''), F1a POS entry re-signs stale uid overwritten, F1b logout clears + login re-signs current uid immediately + POS re-entry correct (caught live: re-login while walkin tab active never re-ran loadWalkinMenu � fixed by auth-boundary sign-in), endShift clears + toast without PIN wording + no dead check, 0 pageErrors
+- NOT verified / open risk: multi-agent cross-review (3 explore agents failed: opencode.ai DNS) � verified by single-agent deep read with file:line evidence; Manager/Cashier/Waiter ceiling paths (same gate code, owner-only creds); deleted verifyCounterPin (zero refs after promptCounterPinSignIn removal, grep-proven)
 - Confidence: HIGH
 - Ended: 2026-09-30 04:31 UTC
 
 ### [20260930-032202-df4e] Payments review fixes: add missing billing payments/charges .validate rules; receipt stale-snapshot; Esc-dismiss promise resolve; charge period badge; clamp negative due; drop dead isExcluded
 - TIER: 3 (high-risk)
-- STATUS: IN PROGRESS
+- STATUS: DONE
 - Started: 2026-09-30 03:22 UTC
+- Files touched: SupremeAdmin/js/billing-shared.js, SupremeAdmin/js/features/payment-overview.js, SupremeAdmin/js/features/payment-record.js, SupremeAdmin/js/features/restaurant-profile.js, database.rules.json
+- Verified: node --check x4 + JSON.parse(rules) + tools/build.mjs OK; deploy pre-check caught matches() string-arg syntax error, fixed to regex literal; firebase deploy --only hosting:supreme,database release complete; live REST rules test 21/21 (valid payment no-note/with-note 200, valid charge 200, amount 0.005/1e8 + method Bitcoin + period 2026-9 + missing period + 201-char reason + missing createdAt all 401 and not persisted, deletes 200, temp supreme + test rows cleaned); remote dist marker: isExcluded gone
+- NOT verified / open risk: Esc-dismiss and profile receipt re-print not re-driven in browser (code-reviewed; both modal callers null-safe)
+- Confidence: HIGH
+- Ended: 2026-09-30 12:40 UTC
 
 ### [20260930-025638-ac70] Dashboard top area: show logged-in Role + Name (any role) on desktop topbar + mobile header
 - TIER: 1 (low-risk)
