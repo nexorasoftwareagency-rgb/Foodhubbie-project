@@ -81,6 +81,15 @@ Fragile Files before starting ANY task.
 - Outcome: All items delivered, ready for production deploy after issue fixes
 - Confidence: High
 
+### [20261013-214952-3j5i] Full playwright regression (24 tests, live) — verdict: no regression in session scope
+- STATUS: DONE / PRIORITY: medium / Started: 214952 / Ended: 214952
+- What: full suite run + targeted reruns. Session scope all green: chip 8/8, attribution 11/11, mirror guard 5/5, mirror e2e 11/11, wizard-billing, walkout rules x2, chromium core tabs x3, QR order chain (run2: order->accept->ready all passed).
+- Failures (none in session scope): (1) run1 DNS ERR_NAME_NOT_RESOLVED x5 - network flake, resolved on rerun; (2) stuck #initial-loader over #loginBtn once in ~6 form logins (live boot flake) -> orderId cascade - tests 92-195 structurally cannot recover orderId on retry (design flaw in critical-flows, parallel WIP file); (3) Served text-wait 10s timeout once - orders/KDS = parallel active zone (orders.js + critical-flows + utils.js dirty/mid-edit between runs, line numbers shifted); (4) mobile nav-btn hidden - utils.js goToTablesTab clicks first (desktop) nav match, mobile 2nd element never selected (harness); (5) trace artifact ENOENTs - concurrent playwright runs over shared test-results.
+- Files/lines: tests/critical-flows.spec.js:51-195 (orderId chain), tests/utils.js:50/55->82 (loader/nav), playwright.config.js (mobile project)
+- Evidence: run1 8F/5P/10NR (11.2m), run2-subset 8F/8P (13.7m), chain-run3 QR pass + 1 loader-stuck, isolated-served = orderId null by design; DNS recheck 200 OK
+- Fix: none in my scope; recommend parallel: orderId recovery in retry/beforeAll, mobile nav selector nth, loader-stuck watchdog
+- Verified: Claude — 2026-10-13 — self — PASS (verdict)
+
 ### [20260711-034449-8631] Fix FCM push notifications
 - TIER: 2 (medium)
 - STATUS: COMPLETED
