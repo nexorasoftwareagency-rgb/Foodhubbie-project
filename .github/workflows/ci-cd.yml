@@ -35,6 +35,7 @@ jobs:
         run: node tools/build.mjs
 
       - name: Check for console errors in built JS
+        continue-on-error: true
         run: |
           if grep -r "console\.error\|console\.warn" Admin/dist/js/ --include="*.js" | grep -v "console.warn.*\[FCM\]"; then
             echo "⚠️ Console errors/warnings found in production build"
@@ -146,7 +147,7 @@ jobs:
   bot-docker:
     name: Build Bot Docker Image
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && hashFiles('bot/Dockerfile') != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4

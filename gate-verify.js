@@ -113,9 +113,9 @@ check('Outlet.ref falls back to tenantRef', /return tenantRef\(this\.current/.te
 // ---- 6. rider-app constants.ts — tenantPath + BUSINESS_ID ----
 console.log('\n[6] rider-app/src/lib/constants.ts');
 const riderSrc = read('rider-app/src/lib/constants.ts');
-check('BUSINESS_BY_OUTLET map', /export const BUSINESS_BY_OUTLET/.test(riderSrc));
+check('outlet-to-business dynamic resolver', /export async function resolveBusinessIdForOutlet/.test(riderSrc));
 check('tenantPath helper', /export function tenantPath/.test(riderSrc));
-check('orders dbPath tenant-scoped', /singleOrder: \(outlet: OutletId, orderId: string\) => tenantPath\(outlet, `orders\/\$\{orderId\}`\)/.test(riderSrc));
+check('orders dbPath tenant-scoped', /singleOrder: \(outlet: OutletId, orderId: string\) => `businesses\/\$\{getBusinessIdForOutletSync\(outlet\)\}\/outlets\/\$\{outlet\}\/orders\/\$\{orderId\}`/.test(riderSrc));
 check('settlements stays platform-root', /settlements: \(rId: string\) => `settlements\/\$\{rId\}`/.test(riderSrc));
 
 // ---- 7. syntax check all touched bot/admin/menu JS ----
