@@ -28,8 +28,10 @@ firebase.messaging().onBackgroundMessage((payload) => {
       badge: './icon-erp-logo.jpeg',
       vibrate: [200, 100, 200],
       requireInteraction: true,
-      tag: `order-${data.orderId || Date.now()}`,
-      data: { url: './index.html' }
+      // Same tag namespace as the in-page showNativeNotification
+      // (notifications.js): app popup for the same order REPLACES this one.
+      tag: data.orderId ? `order-${data.orderId}` : `order-${Date.now()}`,
+      data: { url: data.orderId ? `./index.html?order=${encodeURIComponent(data.orderId)}` : './index.html' }
     }
   );
 });
@@ -174,13 +176,24 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Notification click: open admin dashboard
+// Notification click: focus the already-open dashboard (never open a
+// duplicate tab — the old `c.url === './index.html'` compare could never
+// match absolute client URLs, so every click spawned a second tab).
+// Deep-link notifications (?order=<key>) navigate the focused tab so the
+// app boots straight into the Orders tab and highlights that order.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || './index.html';
+  let url;
+  try { url = new URL(event.notification.data?.url || './index.html', self.registration.scope).href; }
+  catch { url = self.registration.scope + 'index.html'; }
   event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-    for (const c of clientList) {
-      if (c.url === url && 'focus' in c) return c.focus();
+    const existing = clientList.find(c => c.url.startsWith(self.registration.scope));
+    if (existing) {
+      if (existing.focus) existing.focus();
+      if (url.includes('?order=') && existing.url !== url && existing.navigate) {
+        return existing.navigate(url).catch(() => {});
+      }
+      return;
     }
     if (clients.openWindow) return clients.openWindow(url);
   }));

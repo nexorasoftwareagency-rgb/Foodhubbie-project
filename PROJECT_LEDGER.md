@@ -87,6 +87,34 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261013-152258-68e0] notif popup re-verify: E2E 11/13 regression root-caused (date-default range excludes backdated test order; un-awaited initial switchTab race; concurrent session clobbered auth.js) - fix test date-set, await switchTab + 20s poll, rebuild, re-verify 13/13
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-13 15:22 UTC
+- Files touched: Admin/js/auth.js, tests/notif-popup-check.mjs, tests/deeplink-debug.mjs, Admin/dist
+- Verified: popup E2E 13/13 x2 consecutive (headed), sw-notificationclick unit 13/13, bot unit 15/15 (incl data-only tripwire), tools/build.mjs clean
+- NOT verified / open risk: real FCM push delivery (Playwright env-dead), hosting:admin deploy (held for concurrent session WIP), commits (user has not requested)
+- Confidence: HIGH
+- Ended: 2026-10-13 15:23 UTC
+
+### [20261006-100859-d7a8] notif popup re-verify: E2E 11/13 regression root-caused (product date-default range excludes backdated test order; un-awaited initial switchTab race in ?order= deep-link; concurrent session clobbered auth.js mid-task) - fix date-set in test, await switchTab + 20s poll, rebuild, re-verify
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-06 10:08 UTC
+- NOT verified / open risk: duplicate entry from interrupted start - real record is 20261013-152258-68e0
+- Confidence: HIGH
+- Ended: 2026-10-13 16:09 UTC
+
+### [20261006-094326-6322] Admin-claims fix: remove 3 hardcoded emails from database.rules.json admins rules, replace with auth.token.admin custom claim (set-admin-claims.cjs tool); claims first, then rules push; CI deploys database on push
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-06 09:43 UTC
+- Files touched: database.rules.json,tools/set-admin-claims.cjs
+- Verified: dry-run SAFE -> claim set for roshanipizza -> rules committed f3d08fd + pushed + deployed; live getRules(): emails gone, claim gate present, byte-equals committed file; fresh token verifyIdToken admin:true; PUT admins/{uid} via ?auth= -> 200; non-claim throwaway user PUT -> 401 (temp user deleted)
+- NOT verified / open risk: UI sign-out/in on owner devices (user action, zero outage anyway: role-owner self-write branch covers roshanipizza without claim); CI database deploy (did not run in 5min, deployed manually); dead emails nexorasoftware@gmail/roshanisudha have no Auth accounts at all
+- Confidence: HIGH
+- Ended: 2026-10-06 10:09 UTC
+
 ### [20261005-130207-e3c5] Review follow-up: gitignore root hyphenated check-*.js scratch scripts + Office ~$ lock files
 - TIER: 1 (low-risk)
 - STATUS: DONE

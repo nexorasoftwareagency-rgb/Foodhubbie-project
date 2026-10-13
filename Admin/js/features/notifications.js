@@ -57,7 +57,7 @@ export function showAlert(data, type = 'info') {
  * ADD NOTIFICATION
  * Adds a notification to the in-app notification list and triggers sound/OS alerts.
  */
-export function addNotification(title, sub, type = 'info', outlet = null) {
+export function addNotification(title, sub, type = 'info', outlet = null, orderKey = null) {
     const notif = {
         id: Date.now(),
         title,
@@ -78,7 +78,7 @@ export function addNotification(title, sub, type = 'info', outlet = null) {
 
     if (type === 'new' || type === 'delivered') {
         playNotificationSound();
-        showNativeNotification(title, sub);
+        showNativeNotification(title, sub, orderKey);
     }
 }
 
@@ -210,7 +210,7 @@ function renderNotifItem(n, isFull = false) {
 /**
  * NATIVE OS NOTIFICATIONS
  */
-export function showNativeNotification(title, body) {
+export function showNativeNotification(title, body, orderKey = null) {
     if (Notification.permission !== "granted") return;
 
     const options = {
@@ -218,8 +218,13 @@ export function showNativeNotification(title, body) {
         icon: 'icon-erp-logo.jpeg',
         badge: 'icon-erp-logo.jpeg',
         vibrate: [200, 100, 200],
-        tag: `order-${Date.now()}`,
-        requireInteraction: true
+        // Stable per-order tag shared with sw.js onBackgroundMessage
+        // (order-<RTDB key>): Chrome REPLACES the FCM popup with the app's
+        // Placed/Delivered update for the same order instead of stacking
+        // two popups, and repeated statuses never pile up in Action Center.
+        tag: orderKey ? `order-${orderKey}` : `order-${Date.now()}`,
+        requireInteraction: true,
+        data: { url: orderKey ? `./index.html?order=${encodeURIComponent(orderKey)}` : './index.html' }
     };
 
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {

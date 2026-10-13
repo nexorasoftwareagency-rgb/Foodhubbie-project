@@ -74,7 +74,7 @@ export function initRealtimeListeners() {
         const isPostLoad = orderTime && orderTime > loadTime - 5000;
         if (order.status === "Placed" && isRecent && isPostLoad) {
             showAlert(order);
-            addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
+            addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet, snap.key);
             state.unacknowledgedOrders.add(snap.key);
             startContinuousSound();
             setTimeout(() => { highlightOrder(snap.key); }, 1000);
@@ -89,7 +89,7 @@ export function initRealtimeListeners() {
             // Notify only on a real transition INTO Placed (not edits to an existing Placed order)
             if (order.status === "Placed" && prevStatus !== "Placed" && !state.unacknowledgedOrders.has(snap.key)) {
                 showAlert(order);
-                addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet);
+                addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet, snap.key);
                 state.unacknowledgedOrders.add(snap.key);
                 startContinuousSound();
                 setTimeout(() => { highlightOrder(snap.key); }, 1000);
@@ -103,7 +103,7 @@ export function initRealtimeListeners() {
             }
             // Notify only on a real transition INTO Delivered (not edits to an existing Delivered order)
             if (order.status === "Delivered" && prevStatus !== "Delivered") {
-                addNotification(`Order Delivered (#${formatOrderId(order.orderId || snap.key)})`, `Customer: ${order.customerName || 'Walk-in'} • ₹${order.total}`, 'delivered', state.currentOutlet);
+                addNotification(`Order Delivered (#${formatOrderId(order.orderId || snap.key)})`, `Customer: ${order.customerName || 'Walk-in'} • ₹${order.total}`, 'delivered', state.currentOutlet, snap.key);
             }
         }
     });

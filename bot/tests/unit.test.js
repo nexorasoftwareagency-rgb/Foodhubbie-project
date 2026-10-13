@@ -186,3 +186,18 @@ test('promo transport gate: meta allows, Baileys blocks', () => {
     assert.strictEqual(isMetaTransport(null), false);
     assert.strictEqual(isMetaTransport(undefined), false);
 });
+
+// DOUBLE-POPUP regression: admin FCM must be data-only. A notification
+// payload makes the Firebase SW SDK auto-display its own untagged popup
+// AND THEN call onBackgroundMessage -> two stacked popups whenever the
+// dashboard is hidden. Rider keeps notification (its registered /sw.js has
+// no Firebase push handler at all).
+test('admin FCM send is data-only; rider send keeps notification payload', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
+    const adminFn = src.slice(src.indexOf('async function sendFCMToAdmins'), src.indexOf('async function sendFCMToRider'));
+    const riderFn = src.slice(src.indexOf('async function sendFCMToRider'));
+    assert.ok(adminFn.includes('sendEachForMulticast'), 'admin send uses multicast');
+    assert.ok(!adminFn.includes('notification:'), 'sendFCMToAdmins must not send a notification payload');
+    assert.ok(riderFn.includes('notification:'), 'sendFCMToRider keeps its notification payload');
+});

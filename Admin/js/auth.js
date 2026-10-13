@@ -474,7 +474,23 @@ export function initAuth() {
 
         // Initial Tab Navigation (Respect Hash or Default to Dashboard)
         const initialTab = window.location.hash.replace('#', '') || 'dashboard';
-        ui.switchTab(initialTab, true);
+        await ui.switchTab(initialTab, true);
+
+        // OS notification deep-link: ?order=<key> (set by sw.js
+        // notificationclick) -> open Orders tab and highlight that row
+        // once the realtime snapshot has rendered it. Initial switch is
+        // awaited above so this one cannot interleave with it.
+        const deepLinkOrder = new URLSearchParams(window.location.search).get('order');
+        if (deepLinkOrder) {
+            ui.switchTab('orders', true);
+            (async () => {
+                const { highlightOrder } = await import('./features/notifications.js');
+                for (let i = 0; i < 40; i++) {
+                    if (document.getElementById(`row-${deepLinkOrder}`)) { highlightOrder(deepLinkOrder); return; }
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            })();
+        }
         window.hideLoader?.();
     });
 }

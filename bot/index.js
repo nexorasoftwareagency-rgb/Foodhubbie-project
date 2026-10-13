@@ -827,7 +827,10 @@ async function sendFCMToAdmins(orderId, order) {
         const body = `${order.customerName || 'Customer'} · ₹${order.total || 0} · ${outlet.toUpperCase()}`;
         const results = await admin.messaging().sendEachForMulticast({
             tokens: unique,
-            notification: { title, body },
+            // Data-only on purpose: admin sw.js has onBackgroundMessage, and a
+            // notification payload would make the Firebase SDK auto-display its
+            // own untagged popup AND THEN call our handler -> two stacked popups
+            // whenever the dashboard is hidden. data.title/body carry the text.
             data: { orderId, outlet, type: 'new_order', title, body },
             android: { priority: "high" },
             webpush: { headers: { Urgency: "high" } }
