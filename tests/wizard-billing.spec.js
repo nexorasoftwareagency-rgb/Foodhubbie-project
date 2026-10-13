@@ -8,14 +8,24 @@
 // user + created business are removed in finally.
 const { test, expect } = require('@playwright/test');
 const path = require('path');
-const admin = require(path.join(__dirname, '..', 'bot', 'node_modules', 'firebase-admin'));
-const serviceAccount = require(path.join(__dirname, '..', 'bot', 'service-account.json'));
+const fs = require('fs');
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: 'https://foodhubbie-10-default-rtdb.firebaseio.com',
-  });
+// CI: bot/node_modules is not installed and bot/service-account.json is
+// gitignored — the test self-skips there, runs fully in local/dev checkouts.
+const botDir = path.join(__dirname, '..', 'bot');
+const HAS_BACKEND =
+  fs.existsSync(path.join(botDir, 'service-account.json')) &&
+  fs.existsSync(path.join(botDir, 'node_modules', 'firebase-admin'));
+let admin = null;
+if (HAS_BACKEND) {
+  admin = require(path.join(botDir, 'node_modules', 'firebase-admin'));
+  const serviceAccount = require(path.join(botDir, 'service-account.json'));
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      databaseURL: 'https://foodhubbie-10-default-rtdb.firebaseio.com',
+    });
+  }
 }
 
 const SUPREME = 'https://foodhubbie-supremeadmin.web.app';
@@ -29,6 +39,7 @@ async function findBusinessByName(name) {
 test.describe('wizard billing regression', () => {
   test('Add Restaurant wizard writes correct billing defaults', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium', 'desktop-only wizard regression');
+    test.skip(!admin, 'bot service-account/node_modules unavailable (CI)');
     test.setTimeout(120000);
 
     const stamp = Date.now();
