@@ -96,6 +96,31 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261013-172054-84f6] optimistic UI for admin order actions: updateStatus + assignRider flip the row before write echo (optimisticApply helper patches ordersMap/liveOrdersMap/ordersPageData + renderOrders(null), revert in catch); check tests/optimistic-ui-check.mjs
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-13 17:20 UTC
+- Files touched: Admin/js/features/orders.js, tests/optimistic-ui-check.mjs, Admin/dist
+- Verified: optimistic-ui-check 8/8 (optimistic render +12ms vs write echo +22ms, settled chip = server truth, 0 pageErrors), popup E2E 13/13, sw unit 13/13, build clean
+- NOT verified / open risk: revert path under a rules-denied write (no safe way to force denial in E2E; revert reuses existing catch + lastOrdersSnap render); assignRider click-path not E2E'd (same helper as status path)
+- Confidence: HIGH
+- Ended: 2026-10-13 17:21 UTC
+
+### [20261013-170902-869e] Optimistic-UI + latency batch: checkout contact save parallelized; placeOrder cart-check hoisted + assertOutletEnabled/ensureSession parallel (6->5 critical RTTs); waiter/water/clean/bill request buttons confirm optimistically with background write + rollback; tracking bill button single-flight + optimistic; KDS _advanceOrder single-flight disable per order
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-13 17:09 UTC
+- Files touched: menu/js/app.js,menu/js/order.js,Admin/js/features/tables.js,Admin/dist (rebuilt)
+- Verified: node --check all 3 files; node tools/build.mjs --admin; node tests/attribution-check.mjs 11/11; full git-diff self-review (single-flight/rollback/detached-node paths)
+- NOT verified / open risk: no live menu E2E for optimistic request buttons or parallel checkout RTTs (heavy Playwright critical-flows not run from this session); not yet deployed
+- Confidence: HIGH
+- Ended: 2026-10-13 17:09 UTC
+
+### [20261013-165801-45e4] E2E critical-flows checkup: fix order-ID prefix regex, KDS duplicate-instance selectors, auth restore (throttle), orderId worker-restart persistence, Served assertion - full suite 12/12
+- TIER: 2 (medium-risk)
+- STATUS: IN PROGRESS
+- Started: 2026-10-13 16:58 UTC
+
 ### [20261013-152258-68e0] notif popup re-verify: E2E 11/13 regression root-caused (date-default range excludes backdated test order; un-awaited initial switchTab race; concurrent session clobbered auth.js) - fix test date-set, await switchTab + 20s poll, rebuild, re-verify 13/13
 - TIER: 2 (medium-risk)
 - STATUS: DONE

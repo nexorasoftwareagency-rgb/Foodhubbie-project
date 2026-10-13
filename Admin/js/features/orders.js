@@ -339,6 +339,30 @@ function renderStatusDropdown(currentStatus, type, orderId, order) {
 }
 
 /**
+ * OPTIMISTIC APPLY
+ * Flip an order's row instantly (before the write round-trip) by patching
+ * every local copy and re-rendering without the listener snapshot. The
+ * server echo (renderOrders with snap) is the source of truth; callers get
+ * a revert() to run in their catch.
+ * ponytail: an unrelated snapshot landing mid-write can flash the old value
+ * for one frame — settle-flagging until ack if that ever shows in practice.
+ */
+function optimisticApply(id, fields) {
+    const copies = [state.ordersMap.get(id), state.liveOrdersMap.get(id),
+        state.ordersPageData.find(o => o.id === id)].filter(Boolean);
+    const prev = copies.map(o => ({ o, snap: { ...o } }));
+    copies.forEach(o => Object.assign(o, fields));
+    renderOrders(null);
+    return () => {
+        prev.forEach(({ o, snap }) => {
+            Object.keys(fields).forEach(k => { if (!(k in snap)) delete o[k]; });
+            Object.assign(o, snap);
+        });
+        renderOrders(null);
+    };
+}
+
+/**
  * RENDER ORDERS
  */
 export async function renderOrders(snap) {
@@ -1093,6 +1117,9 @@ export async function updateStatus(id, status) {
         }
     }
 
+    // Optimistic: flip the row now; listener echo confirms, catch reverts.
+    const revertOptimistic = optimisticApply(id, updates);
+
     try {
         logger.firebase('ORDERS', `Saving status update: orders/${id} → ${status}`);
         await update(Outlet.ref(`orders/${id}`), updates);
@@ -1101,6 +1128,7 @@ export async function updateStatus(id, status) {
         logger.success('ORDERS', `Status updated: ${id} → ${status}`);
         closeOrderDrawer();
     } catch (e) {
+        revertOptimistic();
         logger.error('ORDERS', `Status update failed: ${e.message}`, e);
         showToast("Update failed: " + e.message, "error");
         renderOrders(state.lastOrdersSnap);
@@ -1113,6 +1141,7 @@ export async function assignRider(id, riderId) {
         return;
     }
     logger.info('ORDERS', `Assigning rider ${riderId} to order ${id}`);
+    let revertOptimistic = () => {};
     try {
         const riderSnap = await get(ref(db, `riders/${riderId}`));
         const rider = riderSnap.val();
@@ -1150,6 +1179,10 @@ export async function assignRider(id, riderId) {
 
         // Manual assignment only - Rider will handle status advancement via "PICKUP"
         logger.firebase('ORDERS', `Saving rider assignment: orders/${id}`);
+        // Optimistic: flip the row now (assignedAt omitted — it's a server
+        // timestamp sentinel, echo adds it); catch reverts.
+        const { assignedAt: _a, ...optimistic } = updateData;
+        revertOptimistic = optimisticApply(id, optimistic);
         await update(Outlet.ref(`orders/${id}`), updateData);
         showToast(`Rider ${rider.name} assigned. Status updated if needed.`, "success");
         
@@ -1159,6 +1192,7 @@ export async function assignRider(id, riderId) {
         logAudit("Orders", `Assigned Rider: ${rider.name} to #${formatOrderId(order.orderId || id)}`, id);
         logger.success('ORDERS', `Rider ${rider.name} assigned to ${id}`);
     } catch (e) {
+        revertOptimistic();
         logger.error('ORDERS', `Rider assignment failed: ${e.message}`, e);
         showToast("Assignment failed: " + e.message, "error");
     }
