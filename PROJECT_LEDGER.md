@@ -97,6 +97,21 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261014-233503-a5ee] Combo Add-flow UI redesign + dish-style image upload + shared combo math
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-14 23:35 UTC
+- Files touched: Admin/js/features/catalog.js, Admin/js/features/pos.js, menu/js/app.js, menu/js/delivery.js, database.rules.json, shared/combo-math.js, menu/shared/combo-math.js
+- Verified: node --check all edited JS; admin dist rebuild; combo-math node self-check (%20 of 257=206 exact-sum reconciliation, fixed 30 -> 227, over-discount floors 0); browser E2E local dist: 22-dish picker, search filter, qty steppers, live preview math, inline validation blocks empty/over-100%/fixed-over-total/bad-dates, Esc+overlay close, image upload via Update Photo button (preview toggle + placeholder hide), create writes image, delete removes combo+RTDB null after cleanup; menu local E2E: combo card 257->206 20% OFF, add-to-cart cart total exactly 206 (55x2+96 reconciliation); deleteCombo cleanup on prod test outlet; attribution 10/11 (10/11 same on clean HEAD - F3 owner-label drift is pre-existing live-data, not this change)
+- NOT verified / open risk: WhatsApp webview combo rendering (needs live bot session); delivery.js menu path (same code as app.js, not browser-tested); rules .validate on live deploy (not deployed); iOS Safari date-input behavior
+- Confidence: HIGH
+- Ended: 2026-10-14 23:35 UTC
+
+### [20261014-233242-18be] notification UX: richer admin FCM body, popup actions (View/Confirm), per-type color, promo tag dedup, badge.png, rich image
+- TIER: 2 (medium-risk)
+- STATUS: IN PROGRESS
+- Started: 2026-10-14 23:32 UTC
+
 ### [20261014-180319-b6a0] EC2 restart + Phase 6 automated E2E verification: bot-control-api pm2 restart, /tenant-api/notify live (401), optimistic-ui 8/8, check-sw pass, fcm-push headless-limited, plan doc Phase 6 updated
 - TIER: 1 (low-risk)
 - STATUS: DONE
@@ -966,4 +981,22 @@ Fragile Files before starting ANY task.
 - Files: `Admin/js/features/pos.js` (3-site filter), `tests/verify-combo-no-stack.cjs` (new, reuses mint+injectAuth pattern), `tests/mint-token.cjs` (already committed).
 - Confidence: HIGH (root cause proven via RTDB discount reads + live before/after screenshots)
 - Next: if business wants combo lines exempt from global/coupon discounts too, that requires excluding combo subtotal from the `subtotal` param — larger change, not done (YAGNI until asked).
+<!-- TASK_LOG_END -->
+
+### [20261014-173000-combos-pill-filter] "Combos" category pill in menu filters (QR menu + delivery webview)
+
+- STATUS: DONE
+- What happened: added a synthetic "Combos" category pill to `#categoryPillsRow` (alongside All/Pizza/Burger/…) on both QR menu and delivery webview, so customers can filter to show ONLY combo offers without scrolling past the full dish list.
+- Changes:
+  1. `menu/js/ui.js` — `renderCategoryPills(categories, activeId, onSelect, hasCombos=false)` now injects a `{id:'__combos', name:'Combos'}` pill right after "All" when `M.combos.length > 0`. Pure UI, no filtering logic change in the function itself.
+  2. `menu/js/app.js` — `renderMenuScreen` passes `M.combos.length > 0` as 4th arg; computes `combosOnly = M.activeCategory === '__combos'`; when true, hides `#dishListContainer` and `#menuSectionTitle` (removes `hidden` otherwise); skips category filtering when `combosOnly` so `_renderComboOffers()` remains the sole renderer. `_addComboToCart` unchanged.
+  3. `menu/js/delivery.js` — identical changes to `renderMenuScreen` + `_renderComboOffers` for the WhatsApp webview surface.
+- HTML unchanged: `#categoryPillsRow` → `#comboOffersSection`/`#comboOffersGrid` → `#menuSectionTitle` → `#dishListContainer` already correctly ordered in both `menu/index.html` and `menu/delivery.html`.
+- Verify: `tests/verify-combos-pill.cjs` (new) — seeds a live 15% "Pill Test Combo" (109+119=228→194) via REST + owner idToken, then:
+  - QR menu (`/?o=pizza&b=roshani-pizza&t=<fresh token>`): dismisses welcome screen via DOM click on `#btnStartOrdering` (Playwright's `locator.click()` fails because the welcome overlay's button reports `visible:false` even with a valid rect — race between session auto-advance and manual start). Pills list contains "Combos" ✅. Click Combos → `#dishListContainer` hidden, `#menuSectionTitle` hidden, `#comboOffersSection` visible with 1 `.combo-card` ✅. Click back to "All" → dishList visible again ✅. Screenshots `.playwright-mcp/pill-qr-all.png`, `pill-qr-combos.png`.
+  - Delivery (`/delivery.html?o=pizza&b=roshani-pizza`): pills contain "Combos" ✅, same hide/show behavior ✅. Screenshot `.playwright-mcp/pill-delivery-combos.png`.
+  - Cleanup: combo deleted (DELETE 200). Test combo data not persisted.
+- Files: `menu/js/ui.js`, `menu/js/app.js`, `menu/js/delivery.js`, `tests/verify-combos-pill.cjs` (new).
+- Confidence: HIGH (both surfaces live-verified end-to-end with real seeded combo, screenshots captured)
+- Next: none — Combos pill shipped. If business wants the pill to also appear when only some categories have combos (not just when any combo exists), revisit the `hasCombos` condition.
 <!-- TASK_LOG_END -->

@@ -212,10 +212,10 @@ export function updateRunningBillStrip(session, groupOrders, groupTotal) {
     }
 }
 
-export function renderCategoryPills(categories, activeId, onSelect) {
+export function renderCategoryPills(categories, activeId, onSelect, hasCombos = false) {
     const row = document.getElementById('categoryPillsRow');
     if (!row) return;
-    const pills = [{ id: 'all', name: 'All' }, ...categories];
+    const pills = [{ id: 'all', name: 'All' }, ...(hasCombos ? [{ id: '__combos', name: 'Combos' }] : []), ...categories];
     row.innerHTML = pills.map(c => `
         <button class="category-pill ${activeId === c.id ? 'active' : ''}" data-cat="${esc(c.id)}">${esc(c.name)}</button>`).join('');
     row.querySelectorAll('.category-pill').forEach(btn => btn.addEventListener('click', () => onSelect(btn.dataset.cat)));

@@ -10,6 +10,8 @@ import { placeOrder } from './order.js';
 import { validateCoupon } from './discount.js';
 import * as UI from './ui.js';
 import { haptic } from './ui.js';
+import { esc } from './ui.js';
+import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
 import { isIOS, isStandalone, canShowNativeInstallPrompt, promptInstall, getStoredPhone, savePhone, subscribeToNotifications } from './pwa-install.js';
 import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
 
@@ -445,22 +447,34 @@ async function loadMenu() {
     M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.stock !== false).map(([id, d]) => ({ id, ...d }));
     const now = Date.now();
     M.combos = Object.entries(comboSnap.val() || {})
-        .filter(([, c]) => (c.startAt || 0) <= now && now <= (c.endAt || 0))
+        .filter(([, c]) => isComboActive(c, now))
         .map(([id, c]) => ({ id, ...c }));
     renderMenuScreen();
 }
 
 function renderMenuScreen(searchTerm) {
-    UI.renderCategoryPills(M.categories, M.activeCategory, (catId) => {     M.activeCategory = catId; document.getElementById('dishSearchInput').value = ''; renderMenuScreen(); });
+    UI.renderCategoryPills(M.categories, M.activeCategory, (catId) => {     M.activeCategory = catId; document.getElementById('dishSearchInput').value = ''; renderMenuScreen(); }, M.combos.length > 0);
 
-    _renderComboOffers();
+    const combosOnly = M.activeCategory === '__combos';
+    _renderComboOffers(combosOnly);
 
     let dishes = M.dishes;
-    if (M.activeCategory !== 'all') {
+    if (M.activeCategory !== 'all' && !combosOnly) {
         const activeCat = M.categories.find(c => c.id === M.activeCategory);
         if (activeCat) dishes = dishes.filter(d => d.category === activeCat.name);
     }
     if (searchTerm) dishes = dishes.filter(d => (d.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // Hide dish list when "Combos" filter is active
+    const dishList = document.getElementById('dishListContainer');
+    const dishTitle = document.getElementById('menuSectionTitle');
+    if (combosOnly) {
+        if (dishList) dishList.classList.add('hidden');
+        if (dishTitle) dishTitle.classList.add('hidden');
+        return;
+    }
+    if (dishList) dishList.classList.remove('hidden');
+    if (dishTitle) dishTitle.classList.remove('hidden');
 
     const activeCategoryName = M.activeCategory === 'all' ? 'Popular Items' : (M.categories.find(c => c.id === M.activeCategory)?.name || 'Items');
     UI.renderDishList(dishes, { searchTerm, activeCategoryName }, openCustomize);
@@ -482,15 +496,13 @@ function _renderComboOffers() {
             const d = M.dishes.find(x => x.id === it.dishId);
             return s + ((d ? (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0) * (it.qty || 1));
         }, 0);
-        const comboPrice = c.discountType === 'percentage'
-            ? Math.round(originalTotal * (1 - (Number(c.discountValue) || 0) / 100))
-            : Math.max(0, originalTotal - (Number(c.discountValue) || 0));
+        const comboPrice = comboPriceTotal(originalTotal, c.discountType, c.discountValue);
         return `
         <div class="combo-card" data-combo-id="${c.id}">
-            <div class="combo-card-img">${c.image ? `<img src="${c.image}" alt="${c.name}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+            <div class="combo-card-img">${c.image ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
             <div class="combo-card-body">
-                <div class="combo-card-title">${c.name}</div>
-                <div class="combo-card-items">${dishNames}</div>
+                <div class="combo-card-title">${esc(c.name)}</div>
+                <div class="combo-card-items">${esc(dishNames)}</div>
                 <div class="combo-card-price-row">
                     <span class="combo-card-orig">₹${originalTotal}</span>
                     <span class="combo-card-price">₹${comboPrice}</span>
@@ -515,31 +527,28 @@ function _addComboToCart(comboId) {
         return;
     }
     const now = Date.now();
-    if (!((combo.startAt || 0) <= now && now <= (combo.endAt || 0))) {
+    if (!isComboActive(combo, now)) {
         UI.showToast('This combo is no longer active');
         return;
     }
     touchSession();
     const items = combo.items || [];
-    const totalUnits = items.reduce((s, it) => s + (it.qty || 1), 0) || 1;
-    let added = 0;
+    const entries = [];
     items.forEach(it => {
         const dish = M.dishes.find(d => d.id === it.dishId);
         if (!dish) return;
         const base = Number(dish.price ?? (dish.sizes ? Object.values(dish.sizes)[0] : 0)) || 0;
-        let unit = base;
-        if (combo.discountType === 'percentage') {
-            unit = Math.round(base * (1 - (Number(combo.discountValue) || 0) / 100));
-        } else {
-            unit = Math.max(0, base - (Number(combo.discountValue) || 0) / totalUnits);
-        }
-        unit = Math.round(unit);
+        entries.push({ dish, base, qty: it.qty || 1 });
+    });
+    const prices = bakeComboUnitPrices(entries.map(e => ({ base: e.base, qty: e.qty })), combo.discountType, combo.discountValue);
+    let added = 0;
+    entries.forEach((e, i) => {
         addLine({
-            dishId: dish.id, name: dish.name, img: dish.image,
+            dishId: e.dish.id, name: e.dish.name, img: e.dish.image,
             size: 'Regular', addons: [], instructions: '',
-            qty: it.qty || 1, unitPrice: unit
+            qty: e.qty, unitPrice: prices[i]
         });
-        added += (it.qty || 1);
+        added += e.qty;
     });
     if (added > 0) {
         clearDiscountIfCartChanged();
