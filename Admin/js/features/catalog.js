@@ -218,6 +218,7 @@ export function loadMenu() {
 
     // Only clean up the dishes listener, NOT categories
     if (_dishesUnsub) { _dishesUnsub(); _dishesUnsub = null; }
+    if (_combosUnsub) { _combosUnsub(); _combosUnsub = null; }
     // Show skeleton while data loads
     grid.innerHTML = Array.from({ length: 6 }, () =>
         '<div class="skeleton-dish-card" style="animation: skeleton-pulse 1.2s ease-in-out infinite alternate;"></div>'
@@ -848,6 +849,193 @@ export async function runImageMigration() {
         } catch (err) {
             console.error("Migration Failed:", err);
             showToast("Critical Error: Migration failed.", "error");
+        }
+    });
+}
+
+// ---------------- Combo Offers (RTDB: outlets/{oid}/combos/{cid}) ----------------
+let _combosUnsub = null;
+
+export function loadCombos() {
+    if (_combosUnsub) { _combosUnsub(); _combosUnsub = null; }
+    const list = document.getElementById('comboList');
+    const empty = document.getElementById('noCombosMsg');
+    if (!list) return;
+    list.innerHTML = getSkeletonRows(3, 1);
+    _combosUnsub = onValue(Outlet.ref('combos'), async snap => {
+        const combos = [];
+        snap.forEach(ch => combos.push({ id: ch.key, ...ch.val() }));
+        if (combos.length === 0) {
+            list.innerHTML = '';
+            if (empty) empty.style.display = '';
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+        let dishNames = {};
+        try {
+            const dishesSnap = await get(Outlet.ref('dishes'));
+            dishesSnap.forEach(ch => { dishNames[ch.key] = ch.val()?.name || ch.key; });
+        } catch (_) {}
+        const now = Date.now();
+        list.innerHTML = combos.map(c => {
+            const active = (c.startAt || 0) <= now && now <= (c.endAt || 0);
+            const itemsTxt = (c.items || []).map(it => `${dishNames[it.dishId] || it.dishId} x${it.qty}`).join(', ');
+            const disc = c.discountType === 'percentage' ? `${c.discountValue}% off` : `₹${c.discountValue} off`;
+            const fmt = ms => ms ? new Date(ms).toLocaleDateString() : '—';
+            return `
+            <div class="glass-card p-20">
+                <div class="flex-between flex-center mb-8">
+                    <h4>${escapeHtml(c.name || 'Unnamed Combo')}</h4>
+                    <span class="stock-badge ${active ? 'available' : 'out'}">${active ? 'Active' : 'Inactive'}</span>
+                </div>
+                <p class="text-secondary-small mb-8"><strong>${escapeHtml(disc)}</strong> · ${escapeHtml(itemsTxt)}</p>
+                <p class="text-secondary-small mb-12">Valid: ${fmt(c.startAt)} → ${fmt(c.endAt)}</p>
+                <div class="flex-row flex-gap-10">
+                    <button class="btn-secondary btn-small" data-action="editCombo" data-id="${c.id}"><i data-lucide="edit-3" class="icon-14"></i> Edit</button>
+                    <button class="btn-secondary btn-small" data-action="deleteCombo" data-id="${c.id}"><i data-lucide="trash-2" class="icon-14"></i> Delete</button>
+                </div>
+            </div>`;
+        }).join('');
+        loadLucide().then(() => window.lucide?.createIcons({ root: list }));
+    });
+}
+
+export const editCombo = (id) => showComboModal(id);
+
+export async function deleteCombo(id) {
+    const comboSnap = await get(Outlet.ref(`combos/${id}`));
+    const name = comboSnap.val()?.name || 'this combo';
+    if (!(await showDeleteConfirm(name, "Delete this combo? This cannot be undone."))) return;
+    try {
+        await remove(Outlet.ref(`combos/${id}`));
+        showToast("Combo deleted", "success");
+    } catch (err) {
+        console.error("[Combos] Delete failed:", err);
+        showToast("Failed to delete combo.", "error");
+    }
+}
+
+export async function showComboModal(comboId = null) {
+    if (!window.currentOutlet || window.currentOutlet === 'null' || window.currentOutlet === 'undefined') {
+        return showToast("Error: Current outlet context is missing. Please refresh or select an outlet first.", "error");
+    }
+
+    const dishesSnap = await get(Outlet.ref('dishes'));
+    const dishes = [];
+    dishesSnap.forEach(ch => dishes.push({ id: ch.key, ...ch.val() }));
+
+    let combo = null;
+    if (comboId) {
+        const snap = await get(Outlet.ref(`combos/${comboId}`));
+        combo = snap.exists() ? snap.val() : null;
+    }
+
+    const selectedIds = combo?.items?.map(i => i.dishId) || [];
+    const dishOptions = dishes.map(d => {
+        const price = d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0);
+        return `<option value="${d.id}" ${selectedIds.includes(d.id) ? 'selected' : ''}>${escapeHtml(d.name)} — ₹${price}</option>`;
+    }).join('');
+
+    const toInputDate = ms => ms ? new Date(ms).toISOString().split('T')[0] : '';
+    const today = new Date().toISOString().split('T')[0];
+    const in30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+
+    document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal active" id="comboModal" role="dialog" aria-modal="true" aria-label="${comboId ? 'Edit Combo' : 'Create Combo'}">
+        <div class="modal-content glass-card">
+            <div class="modal-header">
+                <h2 class="modal-title">${comboId ? 'Edit Combo' : 'Create Combo'}</h2>
+                <button class="close-btn" id="comboModalClose" aria-label="Close" title="Close"><i data-lucide="x" class="icon-18"></i></button>
+            </div>
+            <form id="comboForm">
+                <div class="form-row">
+                    <label>Combo Name</label>
+                    <input type="text" id="comboName" class="form-input" maxlength="50" placeholder="e.g. Family Pizza Deal" value="${escapeHtml(combo?.name || '')}" required>
+                </div>
+                <div class="form-row">
+                    <label>Select Dishes (Ctrl/Cmd+click for multiple)</label>
+                    <select id="comboDishes" multiple class="form-input" style="min-height:120px;" required>${dishOptions}</select>
+                </div>
+                <div class="form-row">
+                    <label>Quantity per dish</label>
+                    <input type="number" id="comboQty" class="form-input" value="1" min="1" max="20" required>
+                </div>
+                <div class="form-row">
+                    <label>Discount Type</label>
+                    <select id="comboDiscountType" class="form-input">
+                        <option value="percentage" ${combo?.discountType === 'percentage' ? 'selected' : ''}>Percentage (%)</option>
+                        <option value="fixed" ${combo?.discountType === 'fixed' ? 'selected' : ''}>Fixed Amount (₹)</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>Discount Value</label>
+                    <input type="number" id="comboDiscountValue" class="form-input" min="0" value="${combo?.discountValue ?? ''}" required>
+                </div>
+                <div class="form-row">
+                    <label>Active From</label>
+                    <input type="date" id="comboStartAt" class="form-input" value="${combo ? toInputDate(combo.startAt) : today}" required>
+                </div>
+                <div class="form-row">
+                    <label>Active Until</label>
+                    <input type="date" id="comboEndAt" class="form-input" value="${combo ? toInputDate(combo.endAt) : in30}" required>
+                </div>
+                <div class="form-row">
+                    <label>Thumbnail URL (optional)</label>
+                    <input type="text" id="comboImage" class="form-input" placeholder="https://example.com/image.png" value="${escapeHtml(combo?.image || '')}">
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-primary">${comboId ? 'Update' : 'Create'} Combo</button>
+                    <button type="button" class="btn-secondary" id="comboCancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>`);
+    loadLucide().then(() => window.lucide?.createIcons({ root: document.getElementById('comboModal') }));
+
+    const close = () => document.getElementById('comboModal')?.remove();
+    document.getElementById('comboModalClose').addEventListener('click', close);
+    document.getElementById('comboCancel').addEventListener('click', close);
+
+    document.getElementById('comboForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('comboName').value.trim();
+        const sel = Array.from(document.getElementById('comboDishes').selectedOptions);
+        if (!name) return showToast("Please enter a combo name", "warning");
+        if (sel.length === 0) return showToast("Select at least one dish", "warning");
+
+        const qty = parseInt(document.getElementById('comboQty').value, 10) || 1;
+        const items = sel.map(o => {
+            const d = dishes.find(x => x.id === o.value);
+            const price = d?.price ?? (d?.sizes ? Object.values(d.sizes)[0] : 0);
+            return { dishId: o.value, qty, price: typeof price === 'number' ? price : Number(price) || 0 };
+        });
+
+        const discountType = document.getElementById('comboDiscountType').value;
+        const discountValue = parseFloat(document.getElementById('comboDiscountValue').value);
+        const startAt = new Date(document.getElementById('comboStartAt').value).getTime();
+        const endAt = new Date(document.getElementById('comboEndAt').value).getTime() + 86399999;
+        if (!(discountValue >= 0)) return showToast("Invalid discount value", "warning");
+        if (!(endAt > startAt)) return showToast("End date must be after start date", "warning");
+
+        const payload = {
+            name, items, discountType, discountValue, startAt, endAt,
+            image: document.getElementById('comboImage').value.trim() || null,
+            sourceOid: Outlet.current,
+            updatedAt: Date.now()
+        };
+
+        try {
+            if (comboId) {
+                await update(Outlet.ref(`combos/${comboId}`), payload);
+                showToast("Combo updated!", "success");
+            } else {
+                await set(push(Outlet.ref('combos')), { ...payload, createdAt: Date.now() });
+                showToast("Combo created!", "success");
+            }
+            close();
+        } catch (err) {
+            console.error("[Combos] Save failed:", err);
+            showToast("Failed to save combo: " + err.message, "error");
         }
     });
 }

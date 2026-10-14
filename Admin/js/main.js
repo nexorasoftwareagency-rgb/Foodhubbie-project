@@ -257,6 +257,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'openPOSSelectionModal': logger.info('POS', `Open selection modal: ${id}`); (await useMod('pos')).openPOSSelectionModal(id); break;
                 case 'hidePOSSelectionModal': logger.info('POS', 'Hide selection modal'); (await useMod('pos')).hidePOSSelectionModal(); break;
                 case 'addToWalkinCartFromModal': logger.info('POS', 'Add to cart from modal'); (await useMod('pos')).addToWalkinCartFromModal(); break;
+                case 'addComboToWalkinCart': logger.info('POS', `Add combo to walkin cart: ${id}`); (await useMod('pos')).addComboToWalkinCart(id); break;
                 case 'adjustPOSModalQty': logger.info('POS', `Adjust modal qty: ${val}`); (await useMod('pos')).adjustPOSModalQty(parseInt(val, 10)); break;
                 case 'openCartAddonPicker': logger.info('POS', `Open cart addon picker: ${id}`); (await useMod('pos')).openCartAddonPicker(id); break;
                 case 'walkinQtyChange': logger.info('POS', `Cart qty change: ${id} (${val})`); (await useMod('pos')).walkinQtyChange(id, parseInt(val, 10)); break;
@@ -274,6 +275,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'editDish': logger.info('CATALOG', `Edit dish: ${id}`); (await useMod('catalog')).editDish(id); break;
                 case 'deleteDish': logger.info('CATALOG', `Delete dish: ${id}`); (await useMod('catalog')).deleteDish(id); break;
                 case 'editCategory': logger.info('CATALOG', `Edit category: ${id}`); (await useMod('catalog')).editCategory(id); break;
+                case 'addCombo': logger.info('CATALOG', 'Add combo'); (await useMod('catalog')).showComboModal(); break;
+                case 'editCombo': logger.info('CATALOG', `Edit combo: ${id}`); (await useMod('catalog')).editCombo(id); break;
+                case 'deleteCombo': logger.info('CATALOG', `Delete combo: ${id}`); (await useMod('catalog')).deleteCombo(id); break;
                 case 'adjustStock': logger.info('INVENTORY', `Adjust stock: ${id} (${val})`); (await useMod('inventory')).adjustStock(id, parseInt(val, 10)); break;
                 case 'editInventoryItem': logger.info('INVENTORY', `Edit item: ${id}`); (await useMod('inventory')).editInventoryItem(id); break;
                 case 'deleteInventoryItem': logger.info('INVENTORY', `Delete item: ${id}`); (await useMod('inventory')).deleteInventoryItem(id); break;

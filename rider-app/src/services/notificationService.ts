@@ -6,7 +6,9 @@ import type { RiderNotification } from "@/types";
 import { updateFcmToken } from "@/services/riderService";
 import { toast } from "@/hooks/use-toast";
 
-const VAPID_KEY = ""; // Set via Firebase console → Project Settings → Cloud Messaging → Web Push certificates
+// VAPID key for FCM web push — same key used across all apps
+// Generated from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates
+const VAPID_KEY = 'BFHbCr_SScii8rW4StcVhhRvcN188KrtMS0UzKEOtoInLE6w_xzixmjX2rNaXnPcHIH-ged1CjjFjtpJbQeKJoA';
 
 export function subscribeNotifications(
   uid: string,

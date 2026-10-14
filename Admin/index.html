@@ -548,6 +548,16 @@
 
                 </li>
 
+                <li id="menu-combos" title="Manage Combo Offers">
+
+                    <button data-action="switchTab" data-tab="combos" class="nav-btn">
+
+                        <i data-lucide="tag"></i> <span>Combos</span>
+
+                    </button>
+
+                </li>
+
                 <li id="menu-menu-browser" title="Browse Menu by Category — Quick Setup">
 
                     <button data-action="switchTab" data-tab="menu-browser" class="nav-btn">
@@ -1483,6 +1493,21 @@
 
             
             
+
+                        <!-- COMBOS TAB -->
+            <div id="tab-combos" class="tab-content hidden">
+                <div class="panel">
+                    <div class="panel-header flex-between-header">
+                        <h3 class="desktop-only">Combo Offers</h3>
+                        <button id="btnAddCombo" class="btn-secondary" data-action="addCombo">
+                            <i data-lucide="plus"></i> Add Combo
+                        </button>
+                    </div>
+                    <p class="text-secondary-small mb-14">Combos appear at the top of the customer QR menu and WhatsApp webview. Each combo bundles dishes at a discount for a limited time.</p>
+                    <div id="comboList" class="dashboard-grid"></div>
+                    <div id="noCombosMsg" class="text-secondary-small text-center p-16">No combos yet. Click "Add Combo" to create one.</div>
+                </div>
+            </div>
 
             <!-- MENU BROWSER TAB -->
 
@@ -3111,7 +3136,7 @@
                             <div id="noOffersMsg" class="text-secondary-small text-center p-16">No offers configured. Click "Add Offer" to create one.</div>
                         </div>
 
-                        <!-- Delivery Fees -->
+<!-- Delivery Fees -->
 
                         <div class="glass-card p-20" data-settings-section="delivery-fee">
 
@@ -4726,6 +4751,7 @@
                         <div class="promo-campaigns-tabs" role="tablist">
                             <button class="promo-campaign-tab active" data-panel="active">Active</button>
                             <button class="promo-campaign-tab" data-panel="history">History</button>
+                            <button class="promo-campaign-tab" data-panel="notifications">App Notifications</button>
                         </div>
                         <div class="promo-campaigns-actions">
                             <button class="btn-danger btn-sm" id="btnPromoKillAll" disabled>
@@ -4752,6 +4778,44 @@
                                 <i data-lucide="archive" class="promo-empty-icon"></i>
                                 <p>Past campaigns will appear here.</p>
                             </div>
+                        </div>
+                    </div>
+
+                    <div id="promoNotificationsPane" class="promo-campaign-panel hidden">
+                        <div class="promo-notifications-header">
+                            <h3>Push Notifications to App Users</h3>
+                            <p class="text-muted-small">Send instant push notifications to customers who installed your restaurant's app and enabled notifications.</p>
+                        </div>
+                        <div class="promo-notifications-stats">
+                            <div class="stat-card">
+                                <span id="pushSubCount" class="stat-value">—</span>
+                                <span class="stat-label">Subscribers</span>
+                            </div>
+                            <div class="stat-card">
+                                <span id="pushSubUpdated" class="stat-value">—</span>
+                                <span class="stat-label">Last updated</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pushNotifTitle" class="text-muted-small">Title</label>
+                            <input type="text" id="pushNotifTitle" class="search-input-group" placeholder="Special Offer!" maxlength="100">
+                        </div>
+                        <div class="form-group">
+                            <label for="pushNotifBody" class="text-muted-small">Message</label>
+                            <textarea id="pushNotifBody" rows="3" class="search-input-group" placeholder="20% off all pizzas today only!" maxlength="200"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="pushNotifTestMode"> <span>Test mode (send to my device only)</span>
+                            </label>
+                        </div>
+                        <div class="flex-row flex-gap-8">
+                            <button class="btn-primary" id="btnSendPushNotif" disabled>
+                                <i data-lucide="send"></i> <span>Send Notification</span>
+                            </button>
+                            <button class="btn-secondary" id="btnRefreshPushSubs">
+                                <i data-lucide="refresh-cw"></i> <span>Refresh subscriber count</span>
+                            </button>
                         </div>
                     </div>
                 </div>

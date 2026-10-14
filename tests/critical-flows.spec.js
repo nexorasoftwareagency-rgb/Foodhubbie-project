@@ -5,6 +5,12 @@
  */
 
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+// Survives worker restarts mid-run (a hard failure restarts the worker and
+// would otherwise null orderId for the whole chain)
+const ID_FILE = path.join(os.tmpdir(), 'foodhubbie-e2e-order-id');
 const {
   login,
   clearSWAndCaches,
@@ -34,6 +40,7 @@ test.describe('FoodHubbie ERP - Critical Flows', () => {
   let orderId = null;
 
   test.beforeAll(async ({ browser }) => {
+    fs.rmSync(ID_FILE, { force: true });
     const context = await browser.newContext();
     const page = await context.newPage();
     await clearSWAndCaches(page);
@@ -46,6 +53,7 @@ test.describe('FoodHubbie ERP - Critical Flows', () => {
 
   test.beforeEach(async ({ page }) => {
     await clearSWAndCaches(page);
+    if (!orderId && fs.existsSync(ID_FILE)) orderId = fs.readFileSync(ID_FILE, 'utf8').trim() || null;
   });
 
   test('QR Menu: Place order from customer', async ({ page }) => {
@@ -84,6 +92,7 @@ test.describe('FoodHubbie ERP - Critical Flows', () => {
     expect(shortId).toBeTruthy();
     orderId = await resolveFullOrderId(page, shortId);
     expect(orderId).toBeTruthy();
+    fs.writeFileSync(ID_FILE, orderId);
     console.log('[Test] Order ID:', orderId);
 
     await takeScreenshot(page, 'qr-order-placed');
@@ -96,10 +105,10 @@ test.describe('FoodHubbie ERP - Critical Flows', () => {
     await login(page);
     await goToTablesTab(page);
 
-    await page.waitForSelector(`[data-action="advanceTableOrder"][data-id="${orderId}"]`, { timeout: 30000 });
+    await page.waitForSelector(`#tab-tables [data-action="advanceTableOrder"][data-id="${orderId}"]`, { timeout: 30000 });
     await acceptOrderInKDS(page, orderId);
 
-    await page.waitForSelector(`[data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Ready"]`, { timeout: 10000 });
+    await page.waitForSelector(`#tab-tables [data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Ready"]`, { timeout: 10000 });
     console.log('[Test] Order accepted, now in Preparing');
 
     await takeScreenshot(page, 'kds-order-accepted');
@@ -113,7 +122,7 @@ test.describe('FoodHubbie ERP - Critical Flows', () => {
     await goToTablesTab(page);
 
     await markReadyInKDS(page, orderId);
-    await page.waitForSelector(`[data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Served"]`, { timeout: 10000 });
+    await page.waitForSelector(`#tab-tables [data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Served"]`, { timeout: 10000 });
     console.log('[Test] Order marked Ready');
 
     await takeScreenshot(page, 'kds-order-ready');
@@ -127,7 +136,10 @@ test.describe('FoodHubbie ERP - Critical Flows', () => {
     await goToTablesTab(page);
 
     await serveOrderInKDS(page, orderId);
-    await page.waitForSelector(`text=Served`, { timeout: 10000 });
+    // Served orders are filtered out of the KDS (tables.js _dineInOrders) — card disappearance is the signal
+    await expect(
+      page.locator(`#tab-tables [data-action="advanceTableOrder"][data-id="${orderId}"]`)
+    ).toHaveCount(0, { timeout: 10000 });
     console.log('[Test] Order served');
 
     await takeScreenshot(page, 'kds-order-served');
@@ -249,7 +261,7 @@ test.describe('Admin Dashboard - Core Features', () => {
     await page.goto(TEST_URLS.admin);
     await login(page);
 
-    await page.click('button:has-text("Orders")');
+    await page.click('button:has-text("Orders"):visible');
     await page.waitForSelector('#tab-orders:not(.hidden)', { timeout: 10000 });
 
     await expect(page.locator('#orderSearch')).toBeVisible();
@@ -260,10 +272,9 @@ test.describe('Admin Dashboard - Core Features', () => {
     await page.goto(TEST_URLS.admin);
     await login(page);
     await goToTablesTab(page);
-
-    await expect(page.locator('#kdsColumnNew')).toBeVisible();
-    await expect(page.locator('#kdsColumnPreparing')).toBeVisible();
-    await expect(page.locator('#kdsColumnReady')).toBeVisible();
+    await expect(page.locator('#tab-tables [data-kds-col="new"]')).toBeVisible();
+    await expect(page.locator('#tab-tables [data-kds-col="preparing"]')).toBeVisible();
+    await expect(page.locator('#tab-tables [data-kds-col="ready"]')).toBeVisible();
 
     console.log('[Test] KDS columns loaded successfully');
   });

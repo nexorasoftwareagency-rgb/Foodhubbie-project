@@ -56,6 +56,7 @@ export const TAB_DEFS = [
     ['dashboard', 'Dashboard'], ['orders', 'Orders'], ['live', 'Kitchen Display'],
     ['walkin', 'POS (Walk-in)'], ['tables', 'Tables'], ['promotions', 'Promotions'],
     ['discounts', 'Discounts'], ['menu', 'Menu'], ['categories', 'Categories'],
+    ['combos', 'Combos'],
     ['menu-browser', 'Menu Browser'], ['inventory', 'Inventory'], ['riders', 'Riders'],
     ['customers', 'Customers'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
     ['riderAnalytics', 'Rider Analytics'], ['feedback', 'Feedback'], ['liveTracker', 'Live Tracker'],
@@ -298,6 +299,11 @@ export const switchTab = async (tabId, skipHistory = false) => {
                     const { loadCategories, loadMenu } = await mod('catalog');
                     loadCategories();
                     loadMenu();
+                    break;
+                }
+                case 'combos': {
+                    const { loadCombos } = await mod('catalog');
+                    loadCombos();
                     break;
                 }
                 case 'menu-browser': {

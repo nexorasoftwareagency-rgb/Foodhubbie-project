@@ -7,6 +7,7 @@
 <title>FoodHubbie — Order</title>
 <meta name="theme-color" content="#E84908">
 <link rel="manifest" href="manifest.json">
+<script src="js/dynamic-manifest.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="css/app.css">
@@ -87,6 +88,12 @@
         </div>
 
         <div class="category-pills" id="categoryPillsRow"></div>
+
+        <!-- Combo Offers (top of menu, above dishes) -->
+        <div id="comboOffersSection" class="combo-offers-section hidden">
+            <div class="menu-section-title">Combo Offers</div>
+            <div id="comboOffersGrid" class="combo-offers-grid"></div>
+        </div>
 
         <div class="menu-section-title" id="menuSectionTitle">Popular Items</div>
         <div class="dish-list" id="dishListContainer"></div>
@@ -458,6 +465,42 @@
         </div>
         <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Stay Connected</div>
         <div style="padding:2px 16px 12px; font-size:12px; color:var(--text-sub);">Loved the food? Let others know, and stay in touch with us.</div>
+        
+        <!-- PWA Install Card (Chromium only, shown when prompt available) -->
+        <div id="pwaInstallCard" class="pwa-install-card hidden">
+            <div class="pwa-card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <div class="pwa-card-body">
+                <div class="pwa-card-title">Install the FoodHubbie App</div>
+                <div class="pwa-card-sub">One-tap ordering, instant status updates, and offline access to your orders.</div>
+            </div>
+            <button class="btn-pwa-install" id="btnPwaInstall">Install</button>
+        </div>
+
+        <!-- iOS Instructions Card (iOS only, shown when not standalone) -->
+        <div id="pwaIosCard" class="pwa-ios-card hidden">
+            <div class="pwa-card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </div>
+            <div class="pwa-card-body">
+                <div class="pwa-card-title">Add to Home Screen</div>
+                <div class="pwa-card-sub">Tap the Share icon <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> then <strong>Add to Home Screen</strong> to install.</div>
+            </div>
+        </div>
+
+        <!-- Push Notifications Card (all platforms) -->
+        <div id="pwaNotifyCard" class="pwa-notify-card hidden">
+            <div class="pwa-card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            </div>
+            <div class="pwa-card-body">
+                <div class="pwa-card-title">Get Offers & Updates</div>
+                <div class="pwa-card-sub">Receive exclusive deals, order status alerts, and new menu notifications.</div>
+            </div>
+            <button class="btn-pwa-notify" id="btnPwaNotify">Enable</button>
+        </div>
+
         <div id="promotionsLinksContainer" class="promotions-links"></div>
     </div>
 
@@ -497,6 +540,9 @@
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(function(err) {
     console.warn('[PWA] SW registration failed:', err);
+  });
+  navigator.serviceWorker.register('firebase-messaging-sw.js').catch(function(err) {
+    console.warn('[PWA] FCM SW registration failed:', err);
   });
 }
 </script>

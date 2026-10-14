@@ -2,9 +2,16 @@
  * Test utilities and helpers for FoodHubbie ERP E2E tests
  */
 
+// Secret stays out of git: E2E_ADMIN_PASSWORD env wins, else the gitignored
+// Credentials/e2e-admin-password.txt; placeholder keeps a fresh clone honest.
+const fs = require('fs');
+const path = require('path');
 const ADMIN_CREDENTIALS = {
   email: 'roshanipizza@gmail.com',
-  password: 'REDACTED-PASSWORD-ROTATE-ME'
+  password: process.env.E2E_ADMIN_PASSWORD || (() => {
+    try { return fs.readFileSync(path.join(__dirname, '..', 'Credentials', 'e2e-admin-password.txt'), 'utf8').trim(); }
+    catch { return 'REDACTED-PASSWORD-ROTATE-ME'; }
+  })()
 };
 
 const TEST_URLS = {
@@ -14,11 +21,35 @@ const TEST_URLS = {
 
 const FIREBASE_DB = 'https://foodhubbie-10-default-rtdb.firebaseio.com/businesses/roshani-pizza/outlets/pizza';
 
+let cachedAuthEntry = null;
+
 /**
- * Login to admin dashboard
+ * Login to admin dashboard. Reuses the persisted firebase:authUser entry after
+ * the first real sign-in (repeated signInWithPassword trips Identity Toolkit
+ * throttle and hangs the form).
  */
 async function login(page) {
+  // addInitScript re-applies on every navigation/reload — race-proof vs page.evaluate after goto
+  if (cachedAuthEntry) {
+    await page.addInitScript((e) => {
+      try { localStorage.setItem(e.k, e.v); } catch (err) { /* ignore */ }
+    }, cachedAuthEntry);
+  }
   await page.goto(TEST_URLS.admin);
+
+  if (cachedAuthEntry) {
+    const restored = await page
+      .waitForSelector('.layout:not(.hidden)', { timeout: 30000 })
+      .then(() => true)
+      .catch(() => false);
+    if (restored) {
+      await page.waitForTimeout(2000);
+      console.log('[Utils] Login restored from cached auth');
+      return;
+    }
+    console.log('[Utils] Cached auth rejected, falling back to form login');
+  }
+
   await page.waitForSelector('#loginEmail', { timeout: 30000 });
 
   await page.fill('#loginEmail', ADMIN_CREDENTIALS.email);
@@ -28,6 +59,13 @@ async function login(page) {
   // Wait for dashboard to load
   await page.waitForSelector('.layout:not(.hidden)', { timeout: 30000 });
   await page.waitForTimeout(2000); // Allow full initialization
+
+  cachedAuthEntry = await page.evaluate(() => {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith('firebase:authUser:')) return { k, v: localStorage.getItem(k) };
+    }
+    return null;
+  });
 
   console.log('[Utils] Login successful');
 }
@@ -52,7 +90,8 @@ async function clearSWAndCaches(page) {
  * Navigate to Tables tab
  */
 async function goToTablesTab(page) {
-  await page.click('button:has-text("Tables")');
+  // :visible — on mobile the desktop sidebar nav-btn matches first but is hidden
+  await page.click('button:has-text("Tables"):visible');
   await page.waitForSelector('#tab-tables:not(.hidden)', { timeout: 10000 });
   await page.waitForTimeout(1000);
   console.log('[Utils] Navigated to Tables tab');
@@ -147,7 +186,7 @@ async function placeOrderFromQR(page) {
   await page.waitForSelector('#trackingOrderId', { timeout: 20000 });
   await page.waitForFunction(() => {
     const el = document.getElementById('trackingOrderId');
-    return el && /^#\d{6}-\d+/.test((el.textContent || '').trim());
+    return el && /^#(?:\S+-)?\d{6}-\d+/.test((el.textContent || '').trim());
   }, { timeout: 15000 });
   console.log('[Utils] Order placed successfully');
 }
@@ -157,7 +196,7 @@ async function placeOrderFromQR(page) {
  */
 async function getOrderId(page) {
   const text = await page.locator('#trackingOrderId').textContent();
-  const match = (text || '').match(/#(\d{6}-\d+)/);
+  const match = (text || '').match(/#((?:\S+-)?\d{6}-\d+)/);
   return match ? match[1] : null;
 }
 
@@ -167,7 +206,7 @@ async function getOrderId(page) {
  */
 async function resolveFullOrderId(page, shortId) {
   if (!shortId) return null;
-  if (/^\d{6}-\d+$/.test(shortId)) return shortId;
+  if (/^(?:\S+-)?\d{6}-\d+$/.test(shortId)) return shortId;
   const res = await page.request.get(`${FIREBASE_DB}/orders.json`);
   const orders = await res.json().catch(() => ({}));
   if (!orders) return null;
@@ -189,7 +228,7 @@ async function waitForOrderInAdmin(page, orderId) {
  * Accept order in KDS
  */
 async function acceptOrderInKDS(page, orderId) {
-  const selector = `[data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Confirmed"]`;
+  const selector = `#tab-tables [data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Confirmed"]`;
   await page.waitForSelector(selector, { timeout: 15000 });
   await page.click(selector);
   await page.waitForTimeout(1000);
@@ -200,7 +239,7 @@ async function acceptOrderInKDS(page, orderId) {
  * Mark order Ready in KDS
  */
 async function markReadyInKDS(page, orderId) {
-  const selector = `[data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Ready"]`;
+  const selector = `#tab-tables [data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Ready"]`;
   await page.waitForSelector(selector, { timeout: 15000 });
   await page.click(selector);
   await page.waitForTimeout(1000);
@@ -211,7 +250,7 @@ async function markReadyInKDS(page, orderId) {
  * Serve order in KDS
  */
 async function serveOrderInKDS(page, orderId) {
-  const selector = `[data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Served"]`;
+  const selector = `#tab-tables [data-action="advanceTableOrder"][data-id="${orderId}"][data-next="Served"]`;
   await page.waitForSelector(selector, { timeout: 15000 });
   await page.click(selector);
   await page.waitForTimeout(1000);

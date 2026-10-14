@@ -10,12 +10,14 @@ import { placeOrder } from './order.js';
 import { validateCoupon } from './discount.js';
 import * as UI from './ui.js';
 import { haptic } from './ui.js';
+import { isIOS, isStandalone, canShowNativeInstallPrompt, promptInstall, getStoredPhone, savePhone, subscribeToNotifications } from './pwa-install.js';
+import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
 
 // ---------------------------------------------------------------
 // Module state for menu browsing
 // ---------------------------------------------------------------
 const M = {
-    categories: [], dishes: [],
+    categories: [], dishes: [], combos: [],
     activeCategory: 'all',
     draftDish: null, draftSize: null, draftAddons: [], draftQty: 1,
     _savedDraft: null, // preserved draft when group choice interrupts customization
@@ -436,45 +438,22 @@ function onCartChanged() {
 // MENU
 // ---------------------------------------------------------------
 async function loadMenu() {
-    const [catSnap, dishSnap, comboSnap] = await Promise.all([get(outletRef('categories')), get(outletRef('dishes')), get(outletRef('combos'))]);
+    const [catSnap, dishSnap, comboSnap] = await Promise.all([
+        get(outletRef('categories')), get(outletRef('dishes')), get(outletRef('combos'))
+    ]);
     M.categories = Object.entries(catSnap.val() || {}).map(([id, c]) => ({ id, ...c }));
     M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.stock !== false).map(([id, d]) => ({ id, ...d }));
-    M.combos = Object.entries(comboSnap.val() || {}).filter(([, c]) => c.startAt <= Date.now() && c.endAt >= Date.now()).map(([cid, c]) => ({ id: cid, ...c }));
+    const now = Date.now();
+    M.combos = Object.entries(comboSnap.val() || {})
+        .filter(([, c]) => (c.startAt || 0) <= now && now <= (c.endAt || 0))
+        .map(([id, c]) => ({ id, ...c }));
     renderMenuScreen();
 }
 
 function renderMenuScreen(searchTerm) {
     UI.renderCategoryPills(M.categories, M.activeCategory, (catId) => {     M.activeCategory = catId; document.getElementById('dishSearchInput').value = ''; renderMenuScreen(); });
 
-    // --- Render Combo Offers from M.combos ---
-    const activeCombos = M.combos || [];
-    let comboHTML = '';
-    if (activeCombos.length > 0) {
-        comboHTML = `
-            <div class="combo-carousel">
-                ${activeCombos.map(c => `
-                    <div class="combo-card">
-                        <div class="combo-card-img" style="background: var(--bg); aspect-ratio: 16/9; object-fit: cover;">
-                            ${c.image ? `<img src="${c.image}" alt="${c.name}" class="combo-img">` : `<div class="combo-placeholder">Combo</div>`}
-                        </div>
-                        <div class="combo-card-body">
-                            <h5 class="combo-card-title">${c.name}</h5>
-                            <div class="combo-card-discount">
-                                ${c.discountType === 'percentage' ? `${c.discountValue}% off` : `₹${c.discountValue} off`}
-                            </div>
-                            <button class="combo-add-btn" data-combo-id="${c.id}" style="width:100%;">
-                                <span>Add Combo</span>
-                                <svg class="icon" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h4v-6h6z"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
-                <div class="combo-load-more" style="text-align:center;margin-top:12px;font-size:12px;color:var(--muted);">Show more combos</div>
-            </div>
-        `;
-    } else {
-        comboHTML = '<p class="text-secondary-small text-center">No active combos right now.</p>';
-    }
+    _renderComboOffers();
 
     let dishes = M.dishes;
     if (M.activeCategory !== 'all') {
@@ -485,27 +464,89 @@ function renderMenuScreen(searchTerm) {
 
     const activeCategoryName = M.activeCategory === 'all' ? 'Popular Items' : (M.categories.find(c => c.id === M.activeCategory)?.name || 'Items');
     UI.renderDishList(dishes, { searchTerm, activeCategoryName }, openCustomize);
+}
 
-    // Attach "Add combo" handlers
-    document.querySelectorAll('.combo-add-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const comboId = btn.getAttribute('data-combo-id');
-            const outletRef = Outlet.ref();
-            const comboRef = outletRef(`combos/${comboId}`);
-            const comboSnap = await get(comboRef);
-            if (!comboSnap.exists()) return showToast("Combo not found", "error");
-            const combo = comboSnap.val();
-
-            // Add combo items to cart
-            const items = combo.items || [];
-            // Push each dish into the session cart with its qty
-            items.forEach(item => {
-                // Use the existing cart-add logic; for now, just show a toast
-                // TODO: integrate with actual cart state
-                showToast(`Added ${combo.name} items to cart`, "success");
-            });
-        });
+function _renderComboOffers() {
+    const section = document.getElementById('comboOffersSection');
+    const grid = document.getElementById('comboOffersGrid');
+    if (!section || !grid) return;
+    if (!M.combos.length) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    grid.innerHTML = M.combos.map(c => {
+        const dishNames = (c.items || []).map(it => {
+            const d = M.dishes.find(x => x.id === it.dishId);
+            return `${d ? d.name : it.dishId} x${it.qty || 1}`;
+        }).join(', ');
+        const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
+        const originalTotal = (c.items || []).reduce((s, it) => {
+            const d = M.dishes.find(x => x.id === it.dishId);
+            return s + ((d ? (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0) * (it.qty || 1));
+        }, 0);
+        const comboPrice = c.discountType === 'percentage'
+            ? Math.round(originalTotal * (1 - (Number(c.discountValue) || 0) / 100))
+            : Math.max(0, originalTotal - (Number(c.discountValue) || 0));
+        return `
+        <div class="combo-card" data-combo-id="${c.id}">
+            <div class="combo-card-img">${c.image ? `<img src="${c.image}" alt="${c.name}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+            <div class="combo-card-body">
+                <div class="combo-card-title">${c.name}</div>
+                <div class="combo-card-items">${dishNames}</div>
+                <div class="combo-card-price-row">
+                    <span class="combo-card-orig">₹${originalTotal}</span>
+                    <span class="combo-card-price">₹${comboPrice}</span>
+                    <span class="combo-card-disc">${disc}</span>
+                </div>
+                <button class="combo-card-btn" data-action="addCombo" data-id="${c.id}">Add Combo</button>
+            </div>
+        </div>`;
+    }).join('');
+    grid.querySelectorAll('[data-action="addCombo"]').forEach(btn => {
+        btn.addEventListener('click', () => _addComboToCart(btn.getAttribute('data-id')));
     });
+}
+
+function _addComboToCart(comboId) {
+    const combo = M.combos.find(c => c.id === comboId);
+    if (!combo) return;
+    if (Session.session?.status === 'expired') { UI.showScreen('screenSessionExpired'); return; }
+    const gStatus = Session.session?.orderGroups?.[Session.currentGroupId]?.status;
+    if (gStatus === 'billing' || gStatus === 'paid' || Session.session?.status === 'billing') {
+        UI.showToast('Cannot add items — bill already requested for this group');
+        return;
+    }
+    const now = Date.now();
+    if (!((combo.startAt || 0) <= now && now <= (combo.endAt || 0))) {
+        UI.showToast('This combo is no longer active');
+        return;
+    }
+    touchSession();
+    const items = combo.items || [];
+    const totalUnits = items.reduce((s, it) => s + (it.qty || 1), 0) || 1;
+    let added = 0;
+    items.forEach(it => {
+        const dish = M.dishes.find(d => d.id === it.dishId);
+        if (!dish) return;
+        const base = Number(dish.price ?? (dish.sizes ? Object.values(dish.sizes)[0] : 0)) || 0;
+        let unit = base;
+        if (combo.discountType === 'percentage') {
+            unit = Math.round(base * (1 - (Number(combo.discountValue) || 0) / 100));
+        } else {
+            unit = Math.max(0, base - (Number(combo.discountValue) || 0) / totalUnits);
+        }
+        unit = Math.round(unit);
+        addLine({
+            dishId: dish.id, name: dish.name, img: dish.image,
+            size: 'Regular', addons: [], instructions: '',
+            qty: it.qty || 1, unitPrice: unit
+        });
+        added += (it.qty || 1);
+    });
+    if (added > 0) {
+        clearDiscountIfCartChanged();
+        UI.showToast(`${combo.name} added — ${added} item${added > 1 ? 's' : ''}`);
+    } else {
+        UI.showToast('Combo dishes unavailable');
+    }
 }
 
 let _searchTimer;
@@ -749,10 +790,8 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async () => 
 
     try {
         const note = document.getElementById('checkoutNote')?.value.trim() || '';
-        // Independent PII write — run it alongside the order pipeline instead of
-        // blocking checkout for a full round-trip (order payload carries the name;
-        // phone lands in tableSessionsContact on its own).
-        saveCheckoutContact(name, phone, M.guestCount, note).catch(e => console.warn('[Checkout] contact save failed:', e));
+        // Fire-and-forget: contact save is important but shouldn't block order
+        saveCheckoutContact(name, phone, M.guestCount, note).catch(e => console.warn('[PlaceOrder] saveCheckoutContact failed:', e?.message || e));
 
         const { orderId } = await placeOrder({ taxPercent: M.taxPercent, taxEnabled: M.taxEnabled, taxRates: M.taxRates, serviceChargeEnabled: M.serviceChargeEnabled, serviceChargeRate: M.serviceChargeRate, customerName: name, customerPhone: phone, discount: M.appliedDiscount });
         M.appliedDiscount = null;
@@ -786,25 +825,20 @@ document.getElementById('btnOrderMore')?.addEventListener('click', () => UI.show
 document.getElementById('btnGotoCallWaiter')?.addEventListener('click', () => UI.showScreen('screenWaiter'));
 document.getElementById('btnStartOrdering')?.addEventListener('click', () => UI.showScreen('screenMenu'));
 document.getElementById('btnRequestBillFromTracking')?.addEventListener('click', async () => {
-    const btn = document.getElementById('btnRequestBillFromTracking');
-    if (btn?.disabled) return; // single-flight through the silent served-check wait
-    if (btn) btn.disabled = true;
     haptic(20);
-    try {
-        if (Session.session?.status === 'expired') { UI.showScreen('screenSessionExpired'); return; }
-        if (!(await _allOrdersServed())) {
-            UI.showToast('Please wait until all orders are served before requesting the bill.', 'error');
-            return;
+    if (Session.session?.status === 'expired') { UI.showScreen('screenSessionExpired'); return; }
+    if (await _allOrdersServed()) {
+        try {
+            await set(push(outletRef('tableRequests')), {
+                tableId: Session.tableId, tableNumber: Session.table.number,
+                type: 'bill', status: 'pending', createdAt: Date.now()
+            });
+            UI.showToast('Bill requested — our team will process it shortly', 'success');
+        } catch (e) {
+            UI.showToast('Could not request bill. Please try again.', 'error');
         }
-        // Optimistic — the request is a queued intent: confirm instantly, write in
-        // the background, roll back the confirmation if the write fails.
-        UI.showToast('Bill requested — our team will process it shortly', 'success');
-        set(push(outletRef('tableRequests')), {
-            tableId: Session.tableId, tableNumber: Session.table.number,
-            type: 'bill', status: 'pending', createdAt: Date.now()
-        }).catch(() => UI.showToast('Could not request bill. Please try again.', 'error'));
-    } finally {
-        if (btn) btn.disabled = false;
+    } else {
+        UI.showToast('Please wait until all orders are served before requesting the bill.', 'error');
     }
 });
 
@@ -823,27 +857,31 @@ document.querySelectorAll('[data-request]').forEach(btn => {
         touchSession();
         const type = btn.dataset.request;
         const labels = { waiter: 'Waiter called', water: 'Water requested', bill: 'Bill requested', clean: 'Table cleaning requested' };
-        if (type === 'bill') {
-            UI.setRequestSending(btn);
-            if (!(await _allOrdersServed())) {
-                UI.resetRequestCard(btn);
-                UI.showToast('Please wait until all orders are served before requesting the bill.', 'error');
+        UI.setRequestSending(btn);
+        try {
+            if (type === 'bill') {
+                if (!(await _allOrdersServed())) { UI.showToast('Please wait until all orders are served before requesting the bill.', 'error'); UI.resetRequestCard(btn); return; }
+                await set(push(outletRef('tableRequests')), {
+                    tableId: Session.tableId, tableNumber: Session.table.number,
+                    type: 'bill', status: 'pending', createdAt: Date.now()
+                });
+                UI.setRequestSent(btn);
+                haptic([10, 30, 10]);
+                UI.showToast('Bill requested — our team will process it shortly', 'success');
                 return;
+            } else {
+                await set(push(outletRef('tableRequests')), {
+                    tableId: Session.tableId, tableNumber: Session.table.number,
+                    type, status: 'pending', createdAt: Date.now()
+                });
             }
-        }
-        // Optimistic — setRequestSent disables the card and starts the cooldown,
-        // so a re-tap can't queue a duplicate; the write settles in the background
-        // and a failure rolls the confirmation back.
-        UI.setRequestSent(btn);
-        haptic([10, 30, 10]);
-        UI.showToast(labels[type] || 'Request sent', 'success');
-        set(push(outletRef('tableRequests')), {
-            tableId: Session.tableId, tableNumber: Session.table.number,
-            type, status: 'pending', createdAt: Date.now()
-        }).catch(() => {
+            UI.setRequestSent(btn);
+            haptic([10, 30, 10]);
+            UI.showToast(labels[type] || 'Request sent', 'success');
+        } catch (e) {
             UI.resetRequestCard(btn);
             UI.showToast('Could not send request. Please try again.', 'error');
-        });
+        }
     });
 });
 
@@ -904,6 +942,77 @@ async function renderPromotionsScreen() {
         _storeSettingsCache = snap.val() || {};
     }
     UI.renderPromotionsLinks(_storeSettingsCache);
+
+    // ── PWA Install / iOS / Notify Cards ────────────────────────────
+    const installCard = document.getElementById('pwaInstallCard');
+    const iosCard = document.getElementById('pwaIosCard');
+    const notifyCard = document.getElementById('pwaNotifyCard');
+    const installBtn = document.getElementById('btnPwaInstall');
+    const notifyBtn = document.getElementById('btnPwaNotify');
+
+    // Reset all
+    installCard?.classList.add('hidden');
+    iosCard?.classList.add('hidden');
+    notifyCard?.classList.add('hidden');
+
+    // Install card (Chromium only, when beforeinstallprompt is available)
+    if (!isIOS() && canShowNativeInstallPrompt() && installCard && installBtn) {
+        installCard.classList.remove('hidden');
+        installBtn.onclick = async () => {
+            haptic(15);
+            const outcome = await promptInstall();
+            if (outcome === 'accepted') {
+                UI.showToast('App installed!', 'success');
+                installCard.classList.add('hidden');
+            }
+        };
+    }
+
+    // iOS instructions card (iOS only, not yet standalone)
+    if (isIOS() && !isStandalone() && iosCard) {
+        iosCard.classList.remove('hidden');
+    }
+
+    // Notify card (all platforms)
+    // On iOS, only show if already standalone (push requires install-first)
+    // On Chromium, show regardless of install state
+    const showNotify = isIOS() ? isStandalone() : true;
+    if (showNotify && notifyCard && notifyBtn) {
+        notifyCard.classList.remove('hidden');
+        const phone = getStoredPhone();
+        const alreadySubscribed = phone !== ''; // if phone exists, assume subscribed
+        if (alreadySubscribed) {
+            notifyCard.classList.add('sent');
+            notifyBtn.style.display = 'none';
+        }
+        notifyBtn.onclick = async () => {
+            haptic(15);
+            let phone = getStoredPhone();
+            if (!phone) {
+                // First time: ask for phone via native prompt
+                const input = prompt('Enter your mobile number for order updates:');
+                if (!input) return;
+                const saved = savePhone(input);
+                if (!saved.ok) {
+                    UI.showToast(saved.error, 'error');
+                    return;
+                }
+                phone = saved.phone;
+            }
+            notifyBtn.disabled = true;
+            notifyBtn.textContent = 'Enabling…';
+            const result = await subscribeToNotifications();
+            if (result.ok) {
+                UI.showToast('Notifications enabled!', 'success');
+                notifyCard.classList.add('sent');
+                notifyBtn.style.display = 'none';
+            } else {
+                UI.showToast(result.error || 'Could not enable notifications', 'error');
+                notifyBtn.disabled = false;
+                notifyBtn.textContent = 'Enable';
+            }
+        };
+    }
 }
 
 // Cleanup Firebase listeners on page unload

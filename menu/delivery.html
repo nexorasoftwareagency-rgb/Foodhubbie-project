@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Open Graph / WhatsApp Link Preview -->
-<meta property="og:title" content="FoodHubbie — Order for Delivery">
+<meta property="og:title" content="FoodHubbie ï¿½ Order for Delivery">
 <meta property="og:description" content="Browse our menu, customize your order, and get it delivered hot! Fresh food delivered to your door.">
 <meta property="og:image" content="https://foodhubbie-qrmenu.web.app/assets/og-banner.jpg">
 <meta property="og:image:width" content="1200">
@@ -15,15 +15,16 @@
 <meta property="og:site_name" content="FoodHubbie">
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="FoodHubbie — Order for Delivery">
+<meta name="twitter:title" content="FoodHubbie ï¿½ Order for Delivery">
 <meta name="twitter:description" content="Browse our menu, customize your order, and get it delivered hot!">
 <meta name="twitter:image" content="https://foodhubbie-qrmenu.web.app/assets/og-banner.jpg">
-<title>FoodHubbie — Order for Delivery</title>
+<title>FoodHubbie ï¿½ Order for Delivery</title>
 <meta name="theme-color" content="#E84908">
 <link rel="manifest" href="manifest.json">
+<script src="js/dynamic-manifest.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<!-- SAME stylesheet as the dine-in QR app (menu/index.html) — every dish
+<!-- SAME stylesheet as the dine-in QR app (menu/index.html) ï¿½ every dish
      card, button, color, and font below comes from this file, unmodified,
      so this page looks identical to the existing menu app. -->
 <link rel="stylesheet" href="css/app.css">
@@ -47,25 +48,23 @@
   .loc-dialog-desc{font-size:13px;color:#666;margin:0 0 20px;line-height:1.5;}
   .loc-dialog-btn{display:block;width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;}
   .loc-dialog-btn-grant{background:var(--accent,#E84908);color:#fff;}
-  .loc-dialog-btn-dismiss{background:#f1f1f1;color:#555;}
   .loc-dialog-btn:active{opacity:.85;}
-  .loc-dialog-btn:disabled{opacity:.55;cursor:not-allowed;}
   .loc-dialog-status{font-size:12px;color:#999;margin-top:8px;min-height:18px;}
 </style>
 </head>
 <body>
 
 <a href="#screenMenu" class="skip-link">Skip to main content</a>
-<h1 class="sr-only">FoodHubbie — Delivery Menu</h1>
+<h1 class="sr-only">FoodHubbie ï¿½ Delivery Menu</h1>
 
 <div id="app">
 
     <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner"></div>
-        <p style="font-size:13px;color:var(--text-sub);">Loading menu…</p>
+        <p style="font-size:13px;color:var(--text-sub);">Loading menuï¿½</p>
     </div>
     <div id="offlineBanner" class="offline-banner">
-        Connection trouble —
+        Connection trouble ï¿½
         <button id="btnRetryConnection" type="button" style="background:none;border:none;color:#fff;text-decoration:underline;font:inherit;font-weight:800;cursor:pointer;padding:0;margin-left:4px;">Tap to retry</button>
     </div>
 
@@ -90,11 +89,17 @@
         <div class="search-row">
             <div class="search-input-wrap">
                 <svg class="icon" style="width:16px;height:16px;color:var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="text" id="dishSearchInput" placeholder="Search for dishes…">
+                <input type="text" id="dishSearchInput" placeholder="Search for dishesï¿½">
             </div>
         </div>
 
         <div class="category-pills" id="categoryPillsRow"></div>
+
+        <!-- Combo Offers (top of menu, above dishes) -->
+        <div id="comboOffersSection" class="combo-offers-section hidden">
+            <div class="menu-section-title">Combo Offers</div>
+            <div id="comboOffersGrid" class="combo-offers-grid"></div>
+        </div>
 
         <div class="menu-section-title" id="menuSectionTitle">Popular Items</div>
         <div class="dish-list" id="dishListContainer"></div>
@@ -103,7 +108,7 @@
             <button id="btnViewCartBar">
                 <span id="menuCartBarCount">0 items</span>
                 <span id="menuCartBarTotal">?0</span>
-                <span>View Cart ›</span>
+                <span>View Cart ï¿½</span>
             </button>
         </div>
     </div>
@@ -141,7 +146,7 @@
                 </div>
 
                 <div class="custom-section-label">Special Instructions (Optional)</div>
-                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicy…"></textarea>
+                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicyï¿½"></textarea>
             </div>
         </div>
         <div class="custom-footer">
@@ -157,7 +162,7 @@
         </div>
     </div>
 
-    <!-- ============== SCREEN: CART — same as QR app's cart, minus the
+    <!-- ============== SCREEN: CART ï¿½ same as QR app's cart, minus the
          table-only "Guests" stepper, plus Address + Location. Discount
          code entry point is IDENTICAL (menu/js/discount.js, unmodified). ============== -->
     <div id="screenCart" class="screen">
@@ -186,7 +191,7 @@
             </div>
             <div class="form-group-mini">
                 <label>Special Note (Optional)</label>
-                <textarea id="checkoutNote" placeholder="e.g. Ring the bell, extra spicy…" rows="2" maxlength="200"></textarea>
+                <textarea id="checkoutNote" placeholder="e.g. Ring the bell, extra spicyï¿½" rows="2" maxlength="200"></textarea>
             </div>
             <div class="form-group-mini discount-input-wrap" id="discountInputWrap">
                 <label>Discount Code (Optional)</label>
@@ -216,12 +221,48 @@
         </div>
         <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Stay Connected</div>
         <div style="padding:2px 16px 12px; font-size:12px; color:var(--text-sub);">Loved the food? Let others know, and stay in touch with us.</div>
+
+        <!-- PWA Install Card (Chromium only, shown when prompt available) -->
+        <div id="pwaInstallCard" class="pwa-install-card hidden">
+            <div class="pwa-card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <div class="pwa-card-body">
+                <div class="pwa-card-title">Install the FoodHubbie App</div>
+                <div class="pwa-card-sub">One-tap ordering, instant status updates, and offline access to your orders.</div>
+            </div>
+            <button class="btn-pwa-install" id="btnPwaInstall">Install</button>
+        </div>
+
+        <!-- iOS Instructions Card (iOS only, shown when not standalone) -->
+        <div id="pwaIosCard" class="pwa-ios-card hidden">
+            <div class="pwa-card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </div>
+            <div class="pwa-card-body">
+                <div class="pwa-card-title">Add to Home Screen</div>
+                <div class="pwa-card-sub">Tap the Share icon <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="21" y2="3"/></svg> then <strong>Add to Home Screen</strong> to install.</div>
+            </div>
+        </div>
+
+        <!-- Push Notifications Card (all platforms) -->
+        <div id="pwaNotifyCard" class="pwa-notify-card hidden">
+            <div class="pwa-card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            </div>
+            <div class="pwa-card-body">
+                <div class="pwa-card-title">Get Offers & Updates</div>
+                <div class="pwa-card-sub">Receive exclusive deals, order status alerts, and new menu notifications.</div>
+            </div>
+            <button class="btn-pwa-notify" id="btnPwaNotify">Enable</button>
+        </div>
+
         <div id="promotionsLinksContainer" class="promotions-links"></div>
     </div>
 
-    <!-- ============== BOTTOM NAVIGATION — Menu / Cart / Promos only.
+    <!-- ============== BOTTOM NAVIGATION ï¿½ Menu / Cart / Promos only.
          Tracking, History, and table-only actions (Call Waiter / Other
-         Request) are intentionally NOT included — there's no table
+         Request) are intentionally NOT included ï¿½ there's no table
          session and no order-tracking screen for delivery. ============== -->
     <nav id="bottomNav" class="bottom-nav hidden">
         <button class="bottom-nav-item active" data-bottom-tab="screenMenu">
@@ -252,7 +293,7 @@
             We need your location to calculate delivery fees and ensure your order reaches you accurately.
         </div>
         <button id="btnLocGrant" class="loc-dialog-btn loc-dialog-btn-grant">Allow Location Access</button>
-        <button id="btnLocDismiss" class="loc-dialog-btn loc-dialog-btn-dismiss" type="button">Not now</button>
+        <button id="btnLocDismiss" class="loc-dialog-btn" style="background:#f1f5f9;color:#64748b;">Not Now</button>
         <div id="locDialogStatus" class="loc-dialog-status"></div>
     </div>
 </div>
@@ -264,6 +305,9 @@
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(function(err) {
     console.warn('[PWA] SW registration failed:', err);
+  });
+  navigator.serviceWorker.register('firebase-messaging-sw.js').catch(function(err) {
+    console.warn('[PWA] FCM SW registration failed:', err);
   });
 }
 </script>

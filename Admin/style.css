@@ -10649,7 +10649,114 @@ body.pos-selection-mode .walkin-picker {
 .rt-chip.on { border-color: var(--primary, #E84908); background: rgba(232, 73, 8, 0.06); color: var(--primary, #E84908); font-weight: 600; }
 .rt-chip.on i, .rt-chip.on svg { opacity: 1; }
 
-/* Operator identity chip — topbar role + name (desktop) and mobile header line */
+/* Operator identity chip ï¿½ topbar role + name (desktop) and mobile header line */
 .user-role-chip { background: var(--bg-subtle, #f1f5f9); border: 1px solid var(--border-light, #e2e8f0); border-radius: 20px; padding: 3px 10px; font-size: 12px; color: var(--text-muted, #64748b); white-space: nowrap; }
 .user-role-chip b { color: var(--primary, #E84908); font-weight: 700; }
 .mobile-role-chip { display: block; font-size: 10px; font-weight: 600; color: var(--text-muted, #64748b); text-align: center; }
+
+/* ================================================================
+   App Notifications (Push) — Promotions tab sub-panel
+   ================================================================ */
+.promo-notifications-header {
+    margin-bottom: 16px;
+}
+.promo-notifications-header h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+.promo-notifications-header p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.promo-notifications-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.stat-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+}
+.stat-value {
+    display: block;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--primary);
+    line-height: 1.2;
+}
+.stat-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+}
+
+.promo-notifications-pane .form-group {
+    margin-bottom: 16px;
+}
+.promo-notifications-pane .form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+.promo-notifications-pane .form-group input,
+.promo-notifications-pane .form-group textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--white);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+.promo-notifications-pane .form-group input:focus,
+.promo-notifications-pane .form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-lighter);
+}
+.promo-notifications-pane .form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.promo-notifications-pane .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.promo-notifications-pane .checkbox-label input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+}
+
+.promo-notifications-pane .flex-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.promo-notifications-pane .btn-primary,
+.promo-notifications-pane .btn-secondary {
+    flex: 1;
+    min-width: 140px;
+}
+

@@ -12,9 +12,11 @@ import { haptic } from './ui.js';
 import { validateCoupon } from './discount.js';
 import { placeDeliveryOrder } from './delivery-order.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
+import { isIOS, isStandalone, canShowNativeInstallPrompt, promptInstall, getStoredPhone, savePhone, subscribeToNotifications } from './pwa-install.js';
+import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
 
 const M = {
-    categories: [], dishes: [],
+    categories: [], dishes: [], combos: [],
     activeCategory: 'all',
     draftDish: null, draftSize: null, draftAddons: [], draftQty: 1,
     appliedDiscount: null,
@@ -45,15 +47,10 @@ async function boot() {
         // Restore cart scoped to this webview token (isolated from QR and other webview links)
         const webviewKey = getWebviewStorageKey(M.token);
         restoreCart(webviewKey);
-        // Brand + token check run alongside the menu load so first paint isn't blocked.
-        // safeGet: outletRef throws SYNCHRONOUSLY on a bad outlet string — a bare
-        // get().catch() would not catch that.
-        const safeGet = (path) => {
-            try { return get(outletRef(path)).catch(e => { console.warn('[Delivery] get failed', path, e); return null; }); }
-            catch (e) { console.warn('[Delivery] ref failed', path, e); return Promise.resolve(null); }
-        };
-        safeGet('settings/Store/storeName').then(s => { if (s && s.exists()) UI.applyBrand(s.val()); });
-        const tokenP = M.token ? safeGet(`webviewTokens/${M.token}`) : Promise.resolve(null);
+        try {
+            const nameSnap = await get(outletRef('settings/Store/storeName'));
+            if (nameSnap.exists()) UI.applyBrand(nameSnap.val());
+        } catch (_) { /* non-critical — keep static brand on failure */ }
         await loadMenu();
         UI.showScreen('screenMenu');
         document.getElementById('bottomNav')?.classList.remove('hidden');
@@ -61,28 +58,24 @@ async function boot() {
         refreshCartUi();
 
         // Validate one-time token
-        const tokenSnap = await tokenP;
         if (M.token) {
-            if (tokenSnap) {
-                const tokenData = tokenSnap.val();
-                if (!tokenData) {
-                    _showTokenError('This link is invalid or expired. Please ask for a new link from the bot.');
-                    return;
-                }
-                if (tokenData.used) {
-                    _showTokenError('This link has already been used. Please ask for a new link from the bot.');
-                    return;
-                }
-                const ageMs = Date.now() - new Date(tokenData.createdAt).getTime();
-                // Match bot's WEBVIEW_TOKEN_REUSE_MS (30 min) — token not reused after this,
-                // and client should enforce same window for consistency.
-                if (ageMs > 30 * 60 * 1000) {
-                    _showTokenError('This link has expired. Please ask for a new link from the bot.');
-                    return;
-                }
+            const tokenSnap = await get(outletRef(`webviewTokens/${M.token}`));
+            const tokenData = tokenSnap.val();
+            if (!tokenData) {
+                _showTokenError('This link is invalid or expired. Please ask for a new link from the bot.');
+                return;
             }
-            // tokenSnap === null means one failed get (network blip, caught above):
-            // boot check is UX only — don't brick a valid link over a transient error
+            if (tokenData.used) {
+                _showTokenError('This link has already been used. Please ask for a new link from the bot.');
+                return;
+            }
+            const ageMs = Date.now() - new Date(tokenData.createdAt).getTime();
+            // Match bot's WEBVIEW_TOKEN_REUSE_MS (30 min) — token not reused after this,
+            // and client should enforce same window for consistency.
+            if (ageMs > 30 * 60 * 1000) {
+                _showTokenError('This link has expired. Please ask for a new link from the bot.');
+                return;
+            }
             M._tokenValid = true;
         }
 
@@ -130,9 +123,15 @@ function wireBottomNav() {
 }
 
 async function loadMenu() {
-    const [catSnap, dishSnap] = await Promise.all([get(outletRef('categories')), get(outletRef('dishes'))]);
+    const [catSnap, dishSnap, comboSnap] = await Promise.all([
+        get(outletRef('categories')), get(outletRef('dishes')), get(outletRef('combos'))
+    ]);
     M.categories = Object.entries(catSnap.val() || {}).map(([id, c]) => ({ id, ...c }));
     M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.stock !== false).map(([id, d]) => ({ id, ...d }));
+    const now = Date.now();
+    M.combos = Object.entries(comboSnap.val() || {})
+        .filter(([, c]) => (c.startAt || 0) <= now && now <= (c.endAt || 0))
+        .map(([id, c]) => ({ id, ...c }));
     renderMenuScreen();
 }
 
@@ -144,35 +143,7 @@ function renderMenuScreen(searchTerm) {
         renderMenuScreen();
     });
 
-    // --- Render Combo Offers from M.combos ---
-    const activeCombos = M.combos || [];
-    let comboHTML = '';
-    if (activeCombos.length > 0) {
-        comboHTML = `
-            <div class="combo-carousel">
-                ${activeCombos.map(c => `
-                    <div class="combo-card">
-                        <div class="combo-card-img" style="background: var(--bg); aspect-ratio: 16/9; object-fit: cover;">
-                            ${c.image ? `<img src="${c.image}" alt="${c.name}" class="combo-img">` : `<div class="combo-placeholder">Combo</div>`}
-                        </div>
-                        <div class="combo-card-body">
-                            <h5 class="combo-card-title">${c.name}</h5>
-                            <div class="combo-card-discount">
-                                ${c.discountType === 'percentage' ? `${c.discountValue}% off` : `₹${c.discountValue} off`}
-                            </div>
-                            <button class="combo-add-btn" data-combo-id="${c.id}" style="width:100%;">
-                                <span>Add Combo</span>
-                                <svg class="icon" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h4v-6h6z"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
-                <div class="combo-load-more" style="text-align:center;margin-top:12px;font-size:12px;color:var(--muted);">Show more combos</div>
-            </div>
-        `;
-    } else {
-        comboHTML = '<p class="text-secondary-small text-center">No active combos right now.</p>';
-    }
+    _renderComboOffers();
 
     let dishes = M.dishes;
     if (M.activeCategory !== 'all') {
@@ -183,20 +154,82 @@ function renderMenuScreen(searchTerm) {
 
     const activeCategoryName = M.activeCategory === 'all' ? 'Popular Items' : (M.categories.find(c => c.id === M.activeCategory)?.name || 'Items');
     UI.renderDishList(dishes, { searchTerm, activeCategoryName }, openCustomize);
+}
 
-    // Attach "Add combo" handlers
-    document.querySelectorAll('.combo-add-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const comboId = btn.getAttribute('data-combo-id');
-            const combo = M.combos.find(c => c.id === comboId);
-            if (!combo) return showToast("Combo not found", "error");
-            // Add combo items to cart
-            const items = combo.items || [];
-            items.forEach(item => {
-                showToast(`Added ${combo.name} items to cart`, "success");
-            });
-        });
+function _renderComboOffers() {
+    const section = document.getElementById('comboOffersSection');
+    const grid = document.getElementById('comboOffersGrid');
+    if (!section || !grid) return;
+    if (!M.combos.length) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    grid.innerHTML = M.combos.map(c => {
+        const dishNames = (c.items || []).map(it => {
+            const d = M.dishes.find(x => x.id === it.dishId);
+            return `${d ? d.name : it.dishId} x${it.qty || 1}`;
+        }).join(', ');
+        const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
+        const originalTotal = (c.items || []).reduce((s, it) => {
+            const d = M.dishes.find(x => x.id === it.dishId);
+            return s + ((d ? (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0) * (it.qty || 1));
+        }, 0);
+        const comboPrice = c.discountType === 'percentage'
+            ? Math.round(originalTotal * (1 - (Number(c.discountValue) || 0) / 100))
+            : Math.max(0, originalTotal - (Number(c.discountValue) || 0));
+        return `
+        <div class="combo-card" data-combo-id="${c.id}">
+            <div class="combo-card-img">${c.image ? `<img src="${c.image}" alt="${c.name}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+            <div class="combo-card-body">
+                <div class="combo-card-title">${c.name}</div>
+                <div class="combo-card-items">${dishNames}</div>
+                <div class="combo-card-price-row">
+                    <span class="combo-card-orig">₹${originalTotal}</span>
+                    <span class="combo-card-price">₹${comboPrice}</span>
+                    <span class="combo-card-disc">${disc}</span>
+                </div>
+                <button class="combo-card-btn" data-action="addCombo" data-id="${c.id}">Add Combo</button>
+            </div>
+        </div>`;
+    }).join('');
+    grid.querySelectorAll('[data-action="addCombo"]').forEach(btn => {
+        btn.addEventListener('click', () => _addComboToCart(btn.getAttribute('data-id')));
     });
+}
+
+function _addComboToCart(comboId) {
+    const combo = M.combos.find(c => c.id === comboId);
+    if (!combo) return;
+    const now = Date.now();
+    if (!((combo.startAt || 0) <= now && now <= (combo.endAt || 0))) {
+        UI.showToast('This combo is no longer active');
+        return;
+    }
+    const items = combo.items || [];
+    const totalUnits = items.reduce((s, it) => s + (it.qty || 1), 0) || 1;
+    let added = 0;
+    items.forEach(it => {
+        const dish = M.dishes.find(d => d.id === it.dishId);
+        if (!dish) return;
+        const base = Number(dish.price ?? (dish.sizes ? Object.values(dish.sizes)[0] : 0)) || 0;
+        let unit = base;
+        if (combo.discountType === 'percentage') {
+            unit = Math.round(base * (1 - (Number(combo.discountValue) || 0) / 100));
+        } else {
+            unit = Math.max(0, base - (Number(combo.discountValue) || 0) / totalUnits);
+        }
+        unit = Math.round(unit);
+        addLine({
+            dishId: dish.id, name: dish.name, img: dish.image,
+            size: 'Regular', addons: [], instructions: '',
+            qty: it.qty || 1, unitPrice: unit
+        });
+        added += (it.qty || 1);
+    });
+    if (added > 0) {
+        clearDiscountIfCartChanged();
+        UI.showToast(`${combo.name} added — ${added} item${added > 1 ? 's' : ''}`);
+    } else {
+        UI.showToast('Combo dishes unavailable');
+    }
 }
 
 let _searchTimer;
@@ -290,13 +323,12 @@ function refreshCartUi() {
 // bot/index.js, so the cart row always matches the final placed order.
 let _deliveryFeeCache = null;
 let _deliveryFee = 0;
-let _deliveryFeeOk = false;   // true only after a successful calc — place-order gates on it
 async function ensureDeliveryFee() {
-    try {
-        if (M.location) {
-            if (_deliveryFeeCache) {
-                _deliveryFee = _deliveryFeeCache;
-            } else {
+    if (M.location) {
+        if (_deliveryFeeCache) {
+            _deliveryFee = _deliveryFeeCache;
+        } else {
+            try {
                 const [delSnap, storeSnap] = await Promise.all([
                     get(outletRef('settings/Delivery/slabs')),
                     get(outletRef('settings/Store')),
@@ -310,14 +342,13 @@ async function ensureDeliveryFee() {
                 const dist = calculateDistance(M.location.lat, M.location.lng, outletCoords.lat, outletCoords.lng);
                 _deliveryFee = getFeeFromSlabs(dist, delSettings);
                 _deliveryFeeCache = _deliveryFee;
+            } catch (e) {
+                console.error('[Delivery] fee calc failed', e);
+                _deliveryFeeCache = null;
+                _deliveryFee = 0;
+                UI.showToast('Could not calculate delivery fee — check outlet settings', 'error');
             }
-            _deliveryFeeOk = true;
         }
-    } catch (e) {
-        // Never let a failed fee calc hide the cart (or reject unhandled) —
-        // place-order blocks until a later openCart() succeeds.
-        console.warn('[Delivery] fee calc failed', e);
-        UI.showToast('Could not calculate delivery fee — check your connection and reopen the cart.', 'error');
     }
     renderCartScreen();
 }
@@ -384,62 +415,27 @@ document.getElementById('btnApplyDiscount')?.addEventListener('click', async () 
 // Location — requested on page load (real-app pattern), re-offered if
 // denied, and the ONLY thing gating "PLACE ORDER".
 // ---------------------------------------------------------------
-let _locWatchdog = null;
-
-function _locFail(msg) {
-    const statusEl = document.getElementById('locDialogStatus');
-    if (statusEl) statusEl.textContent = msg;
-    const grantBtn = document.getElementById('btnLocGrant');
-    if (grantBtn) grantBtn.disabled = false;
-}
-
-function _locErrorMessage(err) {
-    if (err && err.code === 1) return 'Permission was blocked. Tap Allow — if it stays blocked, enable Location for this browser in your phone settings.';
-    if (err && err.code === 3) return 'Timed out finding your location. Move to an open area and tap Allow again.';
-    return "Couldn't get your location. Tap Allow to try again.";
-}
-
 function requestLocationPermission() {
-    const grantBtn = document.getElementById('btnLocGrant');
     if (!navigator.geolocation) {
-        _locFail("Location isn't supported in this browser — allow Location for this app in your phone's settings and try again.");
+        showLocationBanner("Location isn't supported on this device — the delivery fee can't be calculated automatically.");
         return;
     }
-    if (grantBtn) grantBtn.disabled = true;
-    // WhatsApp/in-app webviews can swallow getCurrentPosition without ever
-    // firing a callback — the watchdog guarantees the dialog always recovers
-    // to a retry state instead of sitting on "Requesting location..." forever.
-    clearTimeout(_locWatchdog);
-    _locWatchdog = setTimeout(() => {
-        _locFail('No location received. Check that Location is on for this app, then tap Allow again.');
-    }, 7000);
-    try {
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                clearTimeout(_locWatchdog);
-                if (grantBtn) grantBtn.disabled = false;
-                M.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                // New coordinates → stale fee cache would show an old fee
-                _deliveryFeeCache = null;
-                _deliveryFeeOk = false;
-                hideLocationBanner();
-                closeLocDialog();
-                updatePlaceOrderAvailability();
-                ensureDeliveryFee();
-            },
-            (err) => {
-                clearTimeout(_locWatchdog);
-                console.warn('[Location] error:', err.code, err.message);
-                _locFail(_locErrorMessage(err));
-            },
-            // ponytail: network fix (fast) over GPS (slow) — was enableHighAccuracy:true, timeout:10000
-            { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
-        );
-    } catch (e) {
-        // Some webviews throw synchronously (SecurityError on non-HTTPS etc.)
-        clearTimeout(_locWatchdog);
-        _locFail('Location could not be requested here — enable Location for this app in your phone settings, then tap Allow again.');
-    }
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            M.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            hideLocationBanner();
+            closeLocDialog();
+            updatePlaceOrderAvailability();
+            ensureDeliveryFee();
+        },
+        (err) => {
+            console.warn('[Location] Permission denied or error:', err.message);
+            const statusEl = document.getElementById('locDialogStatus');
+            if (statusEl) statusEl.textContent = 'Location access is required to place an order. Please allow and try again.';
+        },
+        // ponytail: network fix (fast) over GPS (slow) — was enableHighAccuracy:true, timeout:10000
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
+    );
 }
 
 function showLocationBanner(text) {
@@ -468,8 +464,6 @@ function openLocDialog() {
         overlay.classList.add('open');
         const statusEl = document.getElementById('locDialogStatus');
         if (statusEl) statusEl.textContent = '';
-        const grantBtn = document.getElementById('btnLocGrant');
-        if (grantBtn) grantBtn.disabled = false;
     }
 }
 
@@ -484,7 +478,14 @@ document.getElementById('btnLocGrant')?.addEventListener('click', () => {
     if (statusEl) statusEl.textContent = 'Requesting location...';
     requestLocationPermission();
 });
-document.getElementById('btnLocDismiss')?.addEventListener('click', closeLocDialog);
+
+document.getElementById('btnLocDismiss')?.addEventListener('click', () => {
+    closeLocDialog();
+    // Optionally show banner again if no location
+    if (!M.location) {
+        showLocationBanner('Location access is needed to deliver to you and calculate the delivery fee.');
+    }
+});
 
 // Close dialog on overlay click
 document.getElementById('locDialogOverlay')?.addEventListener('click', (e) => {
@@ -515,6 +516,77 @@ async function renderPromotionsScreen() {
         _storeSettingsCache = snap.val() || {};
     }
     UI.renderPromotionsLinks(_storeSettingsCache);
+
+    // ── PWA Install / iOS / Notify Cards ────────────────────────────
+    const installCard = document.getElementById('pwaInstallCard');
+    const iosCard = document.getElementById('pwaIosCard');
+    const notifyCard = document.getElementById('pwaNotifyCard');
+    const installBtn = document.getElementById('btnPwaInstall');
+    const notifyBtn = document.getElementById('btnPwaNotify');
+
+    // Reset all
+    installCard?.classList.add('hidden');
+    iosCard?.classList.add('hidden');
+    notifyCard?.classList.add('hidden');
+
+    // Install card (Chromium only, when beforeinstallprompt is available)
+    if (!isIOS() && canShowNativeInstallPrompt() && installCard && installBtn) {
+        installCard.classList.remove('hidden');
+        installBtn.onclick = async () => {
+            haptic(15);
+            const outcome = await promptInstall();
+            if (outcome === 'accepted') {
+                UI.showToast('App installed!', 'success');
+                installCard.classList.add('hidden');
+            }
+        };
+    }
+
+    // iOS instructions card (iOS only, not yet standalone)
+    if (isIOS() && !isStandalone() && iosCard) {
+        iosCard.classList.remove('hidden');
+    }
+
+    // Notify card (all platforms)
+    // On iOS, only show if already standalone (push requires install-first)
+    // On Chromium, show regardless of install state
+    const showNotify = isIOS() ? isStandalone() : true;
+    if (showNotify && notifyCard && notifyBtn) {
+        notifyCard.classList.remove('hidden');
+        const phone = getStoredPhone();
+        const alreadySubscribed = phone !== ''; // if phone exists, assume subscribed
+        if (alreadySubscribed) {
+            notifyCard.classList.add('sent');
+            notifyBtn.style.display = 'none';
+        }
+        notifyBtn.onclick = async () => {
+            haptic(15);
+            let phone = getStoredPhone();
+            if (!phone) {
+                // First time: ask for phone via native prompt
+                const input = prompt('Enter your mobile number for order updates:');
+                if (!input) return;
+                const saved = savePhone(input);
+                if (!saved.ok) {
+                    UI.showToast(saved.error, 'error');
+                    return;
+                }
+                phone = saved.phone;
+            }
+            notifyBtn.disabled = true;
+            notifyBtn.textContent = 'Enabling…';
+            const result = await subscribeToNotifications();
+            if (result.ok) {
+                UI.showToast('Notifications enabled!', 'success');
+                notifyCard.classList.add('sent');
+                notifyBtn.style.display = 'none';
+            } else {
+                UI.showToast(result.error || 'Could not enable notifications', 'error');
+                notifyBtn.disabled = false;
+                notifyBtn.textContent = 'Enable';
+            }
+        };
+    }
 }
 
 // ---------------------------------------------------------------
@@ -527,8 +599,14 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
     if (!M.location) return;
     // Block if token is invalid/used
     if (M.token && !M._tokenValid) { UI.showToast('This link is no longer valid. Ask the bot for a new one.', 'error'); return; }
-    // Never let the customer confirm a total whose fee was never computed
-    if (!_deliveryFeeOk) { UI.showToast('Delivery fee not ready — reopening the cart to retry.', 'error'); openCart(); return; }
+
+    // Ensure delivery fee is calculated before allowing order
+    await ensureDeliveryFee();
+    if (!_deliveryFeeCache) {
+        UI.showToast('Delivery fee not ready — please wait', 'error');
+        openCart();
+        return;
+    }
 
     const name = document.getElementById('checkoutName').value.trim();
     const phoneRaw = document.getElementById('checkoutPhone').value.trim();
@@ -542,10 +620,11 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
 
     M._placing = true;
     // ponytail: invalidate token IMMEDIATELY on click to prevent double-submit race
-    // (guard above checks _tokenValid; doing it here beats any race to the write)
+    // (guard at line 425 checks _tokenValid; doing it here beats any race to the write)
     if (M.token) M._tokenValid = false;
     const btn = document.getElementById('btnPlaceOrder');
     btn.disabled = true;
+    const originalLabel = btn.textContent;
     btn.textContent = 'Placing your order…';
 
     try {
@@ -585,12 +664,10 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
         }
     } catch (e) {
         console.error('[Delivery] checkout failed', e);
-        // Order was NOT written → token not consumed: restore it so one
-        // transient failure doesn't hard-lock the link until reload
-        if (M.token) M._tokenValid = true;
-        UI.showToast(e.userMessage || e.message || 'Something went wrong — please try again', 'error');
+        UI.showToast(e.message || 'Something went wrong — please try again', 'error');
     } finally {
-        updatePlaceOrderAvailability();
+        btn.disabled = !M.location;
+        btn.textContent = M.location ? 'PLACE ORDER' : 'ENABLE LOCATION TO ORDER';
         M._placing = false;
     }
 });

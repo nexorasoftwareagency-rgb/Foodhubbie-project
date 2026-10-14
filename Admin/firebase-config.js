@@ -6,5 +6,6 @@ window.firebaseConfig = {
   storageBucket: "foodhubbie-10.firebasestorage.app",
   messagingSenderId: "372428105696",
   appId: "1:372428105696:web:a3a979191a5cf94569ed85",
-  fcmServerKey: ""
+  fcmServerKey: "",
+  vapidKey: "BFHbCr_SScii8rW4StcVhhRvcN188KrtMS0UzKEOtoInLE6w_xzixmjX2rNaXnPcHIH-ged1CjjFjtpJbQeKJoA"
 };

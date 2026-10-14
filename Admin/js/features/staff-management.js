@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { BUSINESS_ID, db, Outlet, ref, get, set, update, push, remove, onValue, off, query, orderByChild, equalTo, runTransaction } from '../firebase.js';
+import { BUSINESS_ID, db, Outlet, ref, get, set, update, push, remove, onValue, query, orderByChild, equalTo, runTransaction } from '../firebase.js';
 import { auth, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail, getSecondaryAuth } from '../firebase.js';
 import { logAudit, showToast, showConfirm, hashPin, hashEmail, escapeHtml, showPinModal, capitalize, formatRelativeTime, logStaffChange, showPinPrompt } from '../utils.js';
 import { loadLucide, getRoles, roleLevel, TAB_DEFS, DEFAULT_ROLES } from '../ui.js';

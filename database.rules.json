@@ -91,9 +91,10 @@
           }
         },
         "dishes": {
-          "$slug": {
+          "$cid": {
+            ".read": "true",
             ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == newData.child('sourceOid').val())",
-            ".validate": "newData.hasChild('sourceOid') && newData.child('sourceOid').val() == root.child('admins').child(auth.uid).child('outlet').val()"
+            ".validate": "newData.hasChildren(['name', 'category', 'price']) && newData.child('name').isString() && newData.child('name').val().length >= 1 && newData.child('name').val().length <= 50 && newData.child('category').isString() && newData.child('category').val().length >= 1 && newData.child('category').val().length <= 50 && newData.child('price').isNumber() && newData.child('price').val() >= 0 && (!newData.hasChild('stock') || newData.child('stock').isBoolean()) && (!newData.hasChild('image') || newData.child('image').isString()) && (!newData.hasChild('sizes') || (newData.child('sizes').hasChildren(['Regular']) || newData.child('sizes').val().length > 0)) && (!newData.hasChild('addons') || newData.child('addons').hasChildren()) && (!newData.hasChild('sourceOid') || newData.child('sourceOid').isString()) && (!newData.hasChild('sourceBid') || newData.child('sourceBid').isString())"
           }
         }
       },
@@ -143,6 +144,10 @@
               }
             },
             "dishes": {
+              ".read": "true",
+              ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)"
+            },
+            "combos": {
               ".read": "true",
               ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)"
             },

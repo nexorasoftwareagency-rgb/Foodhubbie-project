@@ -55,6 +55,7 @@ export async function loadWalkinMenu() {
         grid.innerHTML = '<div class="pos-loader">Loading Menu...</div>';
         logger.info('POS', 'Fetching walkin menu from Firebase...');
         const snap = await get(Outlet.ref("dishes"));
+        await loadWalkinCombos();
         const count = Object.keys(snap.val() || {}).length;
         logger.firebase('POS', `Fetched ${count} dishes`);
         state.allWalkinDishes = [];
@@ -145,12 +146,13 @@ export function renderWalkinDishGrid(dishes) {
     const grid = document.getElementById("walkinDishGrid");
     if (!grid) return;
 
-    if (dishes.length === 0) {
+    const comboTiles = _comboTilesHtml();
+    if (dishes.length === 0 && !comboTiles) {
         grid.innerHTML = '<div class="empty-state">No items found matching filters.</div>';
         return;
     }
 
-    grid.innerHTML = dishes.map(d => {
+    grid.innerHTML = comboTiles + dishes.map(d => {
         const price = d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0);
         const isOos = d.stock === false;
         const oosClass = isOos ? ' oos-wrap is-out-of-stock' : ' oos-wrap';
@@ -1196,3 +1198,96 @@ export async function openCartAddonPicker(cartKey) {
 }
 
 // No window re-exposures here. All functions are exported or available via standard module imports.
+
+// --- POS combo tiles: load active combos + render above dish grid ---
+// state.combos is filled in loadWalkinMenu; renderWalkinDishGrid prefixes combo tiles.
+
+export function loadWalkinCombos() {
+    return get(Outlet.ref('combos')).then(snap => {
+        const now = Date.now();
+        state.combos = Object.entries(snap.val() || {})
+            .filter(([, c]) => (c.startAt || 0) <= now && now <= (c.endAt || 0))
+            .map(([id, c]) => ({ id, ...c }));
+    }).catch(() => { state.combos = []; });
+}
+
+function _comboTilesHtml() {
+    const combos = state.combos || [];
+    if (!combos.length) return '';
+    return combos.map(c => {
+        const dishNames = (c.items || []).map(it => {
+            const d = state.allWalkinDishes.find(x => x.id === it.dishId);
+            return `${d ? d.name : it.dishId} x${it.qty || 1}`;
+        }).join(', ');
+        const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
+        const originalTotal = (c.items || []).reduce((s, it) => {
+            const d = state.allWalkinDishes.find(x => x.id === it.dishId);
+            return s + ((d ? (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0) * (it.qty || 1));
+        }, 0);
+        const comboPrice = c.discountType === 'percentage'
+            ? Math.round(originalTotal * (1 - (Number(c.discountValue) || 0) / 100))
+            : Math.max(0, originalTotal - (Number(c.discountValue) || 0));
+        return `
+        <div class="pos-combo-tile" data-action="addComboToWalkinCart" data-id="${c.id}" style="grid-column:1/-1;display:flex;gap:12px;align-items:center;padding:12px;border:2px solid var(--accent);border-radius:12px;background:linear-gradient(135deg,#fff8f5,#fff);cursor:pointer;">
+            <div style="flex-shrink:0;width:52px;height:52px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;">🏷️</div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:800;font-size:14px;">${escapeHtml(c.name)}</div>
+                <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(dishNames)}</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:3px;">
+                    <span style="font-size:11px;color:var(--text-muted);text-decoration:line-through;">₹${originalTotal}</span>
+                    <span style="font-size:15px;font-weight:800;color:var(--accent);">₹${comboPrice}</span>
+                    <span style="font-size:10px;font-weight:700;background:#fff0e6;color:#e65100;border-radius:6px;padding:2px 6px;">${disc}</span>
+                </div>
+            </div>
+            <div style="flex-shrink:0;font-size:11px;font-weight:700;color:var(--accent);">+ ADD</div>
+        </div>`;
+    }).join('');
+}
+
+export function addComboToWalkinCart(comboId) {
+    const combo = (state.combos || []).find(c => c.id === comboId);
+    if (!combo) return;
+    const now = Date.now();
+    if (!((combo.startAt || 0) <= now && now <= (combo.endAt || 0))) {
+        ui.showToast('This combo is no longer active', 'warning');
+        return;
+    }
+    const items = combo.items || [];
+    const totalUnits = items.reduce((s, it) => s + (it.qty || 1), 0) || 1;
+    let added = 0;
+    items.forEach(it => {
+        const dish = state.allWalkinDishes.find(d => d.id === it.dishId);
+        if (!dish) return;
+        const base = Number(dish.price ?? (dish.sizes ? Object.values(dish.sizes)[0] : 0)) || 0;
+        let unit = base;
+        if (combo.discountType === 'percentage') {
+            unit = Math.round(base * (1 - (Number(combo.discountValue) || 0) / 100));
+        } else {
+            unit = Math.max(0, base - (Number(combo.discountValue) || 0) / totalUnits);
+        }
+        unit = Math.round(unit);
+        const qty = it.qty || 1;
+        const cartKey = `${dish.id}::Combo::${combo.id}`;
+        if (state.walkinCart[cartKey]) {
+            state.walkinCart[cartKey].qty += qty;
+        } else {
+            state.walkinCart[cartKey] = {
+                id: dish.id,
+                name: dish.name,
+                category: dish.category,
+                size: 'Combo',
+                price: unit,
+                qty: qty,
+                addons: []
+            };
+        }
+        added += qty;
+    });
+    if (added > 0) {
+        renderWalkinCart();
+        haptic(20);
+        ui.showToast(`${combo.name} added — ${added} item${added > 1 ? 's' : ''}`, 'success');
+    } else {
+        ui.showToast('Combo dishes unavailable', 'warning');
+    }
+}

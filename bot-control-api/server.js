@@ -98,7 +98,46 @@ function requireSuperOnly(req, res, next) {
   next();
 }
 
+// ---- tenant admin middleware (for restaurant-scoped endpoints) ----
+// Verifies Firebase ID token, loads admins/{uid}, verifies the businessId/outlet
+// pair exists and belongs to that admin, attaches businessId/outlet to req.
+async function requireTenantAdmin(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Missing bearer token' });
+
+  let decoded;
+  try {
+    decoded = await admin.auth().verifyIdToken(token);
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+
+  try {
+    const adminSnap = await admin.database().ref(`admins/${decoded.uid}`).get();
+    const claims = adminSnap.val() || {};
+    if (!claims.businessId || !claims.outlet) {
+      return res.status(403).json({ error: 'Admin not linked to any outlet' });
+    }
+
+    // Verify the outlet exists and belongs to the claimed business
+    const outletSnap = await admin.database().ref(`businesses/${claims.businessId}/outlets/${claims.outlet}`).get();
+    if (!outletSnap.exists()) {
+      return res.status(403).json({ error: 'Outlet not found for this business' });
+    }
+
+    req.adminUid = decoded.uid;
+    req.businessId = claims.businessId;
+    req.outlet = claims.outlet;
+    req.role = claims.role || 'owner'; // owner | manager | staff
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Could not verify admin status' });
+  }
+}
+
 app.use('/api', requireAuth);
+app.use('/tenant-api', requireTenantAdmin);
 
 // ---- pm2 helpers -----------------------------------------------------
 // pm2 connection itself now lives in pm2-client.js (connectOnce, shared
@@ -889,6 +928,64 @@ app.post('/api/whatsapp/templates/:bid/:oid', requireSuperOnly, async (req, res)
     }
     console.error('create template failed', err);
     res.status(500).json({ error: `Could not create message template — ${err.message}` });
+  }
+});
+
+// ================================================================
+// Tenant-scoped push notification endpoint (Phase 3)
+// POST /tenant-api/notify
+// Auth: requireTenantAdmin (verifies admin belongs to this outlet)
+// Body: { title, body, data? }
+// Sends FCM multicast to all pushSubscriptions for this outlet
+// ================================================================
+app.post('/tenant-api/notify', async (req, res) => {
+  try {
+    const { title, body, data = {} } = req.body || {};
+    if (!title || !body) {
+      return res.status(400).json({ error: 'title and body are required' });
+    }
+
+    // Get all push subscriptions for this outlet
+    const subsSnap = await admin.database()
+      .ref(`businesses/${req.businessId}/outlets/${req.outlet}/pushSubscriptions`)
+      .get();
+
+    const subs = subsSnap.val() || {};
+    const tokens = Object.values(subs)
+      .map(s => s.token)
+      .filter(Boolean);
+
+    if (tokens.length === 0) {
+      return res.json({ ok: true, sent: 0, message: 'No subscribers for this outlet' });
+    }
+
+    // Send multicast via FCM (same pattern as bot/index.js for rider push)
+    const message = {
+      tokens,
+      notification: { title, body },
+      data: { ...data, outlet: req.outlet, business: req.businessId },
+      android: { priority: 'high' },
+      apns: { payload: { aps: { 'content-available': 1 } } },
+      webpush: { fcmOptions: { link: `./index.html?o=${req.outlet}&b=${req.businessId}` } },
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(message);
+    const successCount = response.responses.filter(r => r.success).length;
+    const failureCount = response.responses.length - successCount;
+
+    // Log failures for debugging (invalid/expired tokens)
+    if (failureCount > 0) {
+      response.responses.forEach((r, i) => {
+        if (!r.success) {
+          console.warn(`FCM send failed for token ${tokens[i].slice(0, 12)}...: ${r.error?.message || r.error}`);
+        }
+      });
+    }
+
+    res.json({ ok: true, sent: successCount, failed: failureCount, total: tokens.length });
+  } catch (err) {
+    console.error('tenant-api/notify failed', err);
+    res.status(500).json({ error: `Notification send failed — ${err.message}` });
   }
 });
 

@@ -9,6 +9,7 @@ export const state = {
     categories: [],
     dishes: [],
     allWalkinDishes: [],
+    combos: [],
     activeWalkinCategory: 'All',
     walkinCart: {},
     walkinPayMethod: 'Cash',
