@@ -422,7 +422,7 @@ function initCommandListener(sock) {
                             // with 131047 outside the 24h service window — send via an
                             // approved template instead. No-variable templates reject
                             // the body component (code 100) → falls back to text below.
-                            await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'bot_live_update', language: process.env.PROACTIVE_LANGUAGE || 'en', body: cmd.message || '' });
+                            await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'proactive_promo', language: process.env.PROACTIVE_LANGUAGE || 'en', body: cmd.message || '' });
                             console.log(`[Bot] Generic message sent (template) to ${maskJid(jid)}`);
                         } catch (e) {
                             console.warn(`[Bot] Template send failed, text fallback for ${maskJid(jid)}: ${e.message || e}`);

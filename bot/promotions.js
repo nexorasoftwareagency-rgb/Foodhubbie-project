@@ -57,7 +57,7 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, ou
         const isMetaSock = isMetaTransport(sock);
         if (isMetaSock && typeof sock.sendTemplate === 'function') {
             try {
-                await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'bot_live_update', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
+                await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'proactive_promo', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
                 outboundTracker.trackSend(outlet || 'pizza', 'promo');
                 return;
             } catch (e) {
