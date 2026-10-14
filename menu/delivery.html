@@ -47,7 +47,9 @@
   .loc-dialog-desc{font-size:13px;color:#666;margin:0 0 20px;line-height:1.5;}
   .loc-dialog-btn{display:block;width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;}
   .loc-dialog-btn-grant{background:var(--accent,#E84908);color:#fff;}
+  .loc-dialog-btn-dismiss{background:#f1f1f1;color:#555;}
   .loc-dialog-btn:active{opacity:.85;}
+  .loc-dialog-btn:disabled{opacity:.55;cursor:not-allowed;}
   .loc-dialog-status{font-size:12px;color:#999;margin-top:8px;min-height:18px;}
 </style>
 </head>
@@ -250,6 +252,7 @@
             We need your location to calculate delivery fees and ensure your order reaches you accurately.
         </div>
         <button id="btnLocGrant" class="loc-dialog-btn loc-dialog-btn-grant">Allow Location Access</button>
+        <button id="btnLocDismiss" class="loc-dialog-btn loc-dialog-btn-dismiss" type="button">Not now</button>
         <div id="locDialogStatus" class="loc-dialog-status"></div>
     </div>
 </div>

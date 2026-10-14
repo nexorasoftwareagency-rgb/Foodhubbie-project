@@ -2131,6 +2131,13 @@ async function _cancelSessionForTable(tableId) {
 // ACTIONS — Order status advance (writes the SAME /orders node)
 // ---------------------------------------------------------------------
 async function _advanceOrder(orderId, nextStatus) {
+    // Single-flight: disable this order's action buttons for the whole
+    // round-trip so a second tap can't fire an aborted transaction (which
+    // only produced a spurious "Cannot change status" toast). Inline opacity
+    // because .kitchen-btn has no shared :disabled rule.
+    const btns = [...document.querySelectorAll(`[data-action="advanceTableOrder"][data-id="${orderId}"]`)];
+    if (btns.some(b => b.disabled)) return;
+    btns.forEach(b => { b.disabled = true; b.style.opacity = '0.55'; });
     try {
         const valid = {
             'Placed': ['Confirmed', 'Cancelled'],
@@ -2170,6 +2177,8 @@ async function _advanceOrder(orderId, nextStatus) {
         haptic(20);
     } catch (e) {
         showToast('Update failed: ' + (e?.message || e), 'error');
+    } finally {
+        btns.forEach(b => { b.disabled = false; b.style.opacity = ''; });
     }
 }
 

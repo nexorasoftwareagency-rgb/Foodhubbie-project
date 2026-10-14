@@ -23,6 +23,7 @@
  */
 import { outletRef, set, get, OUTLET } from './firebase.js';
 import { generateOrderId } from './order.js';
+import { assertOutletEnabled } from './session.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
 
 function round2(n) { return Math.round(n * 100) / 100; }
@@ -53,10 +54,16 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
     // --- Delivery fee: same distance → slabs calc as bot/index.js's
     //     handleCheckoutFinal(), using menu/js/geo.js (identical logic to
     //     shared/geo/geo.js). ---
-    const [delSnap, storeSnap] = await Promise.all([
+    // Fee settings fetch runs ∥ (outlet gate → id generation). The gate must
+    // pass BEFORE generateOrderId so a disabled outlet can't burn a daily
+    // sequence number (same rule as dine-in placeOrder); total round-trips
+    // on the critical path are unchanged (gate hides under the fee fetch).
+    const feeP = Promise.all([
         get(outletRef('settings/Delivery/slabs')),
         get(outletRef('settings/Store')),
     ]);
+    const orderIdP = (async () => { await assertOutletEnabled(); return generateOrderId(); })();
+    const [orderId, [delSnap, storeSnap]] = await Promise.all([orderIdP, feeP]);
     const delSettings = delSnap.val() || [];
     const storeSettings = storeSnap.val() || {};
     const outletCoords = {
@@ -83,7 +90,6 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
     const discountAmount = discount && discount.amount > 0 ? Math.min(round2(discount.amount), subtotal + deliveryFee) : 0;
     const total = round2(subtotal + deliveryFee - discountAmount);
 
-    const orderId = await generateOrderId();
     const orderPayload = {
         orderId,
         outlet: OUTLET,

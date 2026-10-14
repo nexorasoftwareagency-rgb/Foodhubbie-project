@@ -31,6 +31,7 @@ All 10 audit agents deployed. Key fixes:
 - `database.rules.json` — Firebase security rules (all fixes applied)
 - `shared/` — Shared Firebase config, formatters, DOM helpers
 - `tools/build.mjs` — Builds `Admin/dist` + `SupremeAdmin/dist` (`supreme.shared:true`); ALSO copies repo-root `shared/` → `dist/shared/` (Admin js imports `../../shared/*`, Supreme `/shared/*`; never delete `shared/` and don't add an `Admin/shared/` duplicate)
+- `menu/shared/format-order-id.js` — deliberate copy of repo-root `shared/format-order-id.js`: menu hosting serves only `menu/` and `/shared` 404s there (SPA rewrite returns index.html → module graph death). `menu/js/order.js` imports `../../shared/*` → lands at `/shared/*`. Keep both copies identical; hand-synced.
 
 ## Key Decisions
 - `_effectiveTotal(sess)` replaces `sess.grandTotal` everywhere (table card, drawer, CSV, KPI)

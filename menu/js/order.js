@@ -73,14 +73,16 @@ export async function generateOrderId() {
 export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, serviceChargeEnabled = false, serviceChargeRate = 0, customerName = '', customerPhone = '', discount = null } = {}) {
     // Restaurant-disabled gate — the rules also deny the write, but a clear
     // error beats a silent permission failure mid-checkout.
-    await assertOutletEnabled();
-    const sessResult = await ensureSession();
+    if (Object.keys(Cart.lines).length === 0) throw new Error('Cart is empty');
+    // Outlet gate and session warm-up are independent — run them together (one
+    // RTT instead of two). generateOrderId stays behind session validation so a
+    // failed checkout can't burn a daily sequence number and leave ID gaps.
+    const [, sessResult] = await Promise.all([assertOutletEnabled(), ensureSession()]);
     if (!sessResult.ok) throw new Error('Session not available');
     if (sessResult.isNewSession) {
         clearCart();
         throw new Error('Session expired — please review your cart and try again');
     }
-    if (Object.keys(Cart.lines).length === 0) throw new Error('Cart is empty');
 
     const items = {};
     Object.values(Cart.lines).forEach((l, i) => {

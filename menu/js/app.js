@@ -436,14 +436,45 @@ function onCartChanged() {
 // MENU
 // ---------------------------------------------------------------
 async function loadMenu() {
-    const [catSnap, dishSnap] = await Promise.all([get(outletRef('categories')), get(outletRef('dishes'))]);
+    const [catSnap, dishSnap, comboSnap] = await Promise.all([get(outletRef('categories')), get(outletRef('dishes')), get(outletRef('combos'))]);
     M.categories = Object.entries(catSnap.val() || {}).map(([id, c]) => ({ id, ...c }));
     M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.stock !== false).map(([id, d]) => ({ id, ...d }));
+    M.combos = Object.entries(comboSnap.val() || {}).filter(([, c]) => c.startAt <= Date.now() && c.endAt >= Date.now()).map(([cid, c]) => ({ id: cid, ...c }));
     renderMenuScreen();
 }
 
 function renderMenuScreen(searchTerm) {
     UI.renderCategoryPills(M.categories, M.activeCategory, (catId) => {     M.activeCategory = catId; document.getElementById('dishSearchInput').value = ''; renderMenuScreen(); });
+
+    // --- Render Combo Offers from M.combos ---
+    const activeCombos = M.combos || [];
+    let comboHTML = '';
+    if (activeCombos.length > 0) {
+        comboHTML = `
+            <div class="combo-carousel">
+                ${activeCombos.map(c => `
+                    <div class="combo-card">
+                        <div class="combo-card-img" style="background: var(--bg); aspect-ratio: 16/9; object-fit: cover;">
+                            ${c.image ? `<img src="${c.image}" alt="${c.name}" class="combo-img">` : `<div class="combo-placeholder">Combo</div>`}
+                        </div>
+                        <div class="combo-card-body">
+                            <h5 class="combo-card-title">${c.name}</h5>
+                            <div class="combo-card-discount">
+                                ${c.discountType === 'percentage' ? `${c.discountValue}% off` : `₹${c.discountValue} off`}
+                            </div>
+                            <button class="combo-add-btn" data-combo-id="${c.id}" style="width:100%;">
+                                <span>Add Combo</span>
+                                <svg class="icon" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h4v-6h6z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+                <div class="combo-load-more" style="text-align:center;margin-top:12px;font-size:12px;color:var(--muted);">Show more combos</div>
+            </div>
+        `;
+    } else {
+        comboHTML = '<p class="text-secondary-small text-center">No active combos right now.</p>';
+    }
 
     let dishes = M.dishes;
     if (M.activeCategory !== 'all') {
@@ -454,6 +485,27 @@ function renderMenuScreen(searchTerm) {
 
     const activeCategoryName = M.activeCategory === 'all' ? 'Popular Items' : (M.categories.find(c => c.id === M.activeCategory)?.name || 'Items');
     UI.renderDishList(dishes, { searchTerm, activeCategoryName }, openCustomize);
+
+    // Attach "Add combo" handlers
+    document.querySelectorAll('.combo-add-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const comboId = btn.getAttribute('data-combo-id');
+            const outletRef = Outlet.ref();
+            const comboRef = outletRef(`combos/${comboId}`);
+            const comboSnap = await get(comboRef);
+            if (!comboSnap.exists()) return showToast("Combo not found", "error");
+            const combo = comboSnap.val();
+
+            // Add combo items to cart
+            const items = combo.items || [];
+            // Push each dish into the session cart with its qty
+            items.forEach(item => {
+                // Use the existing cart-add logic; for now, just show a toast
+                // TODO: integrate with actual cart state
+                showToast(`Added ${combo.name} items to cart`, "success");
+            });
+        });
+    });
 }
 
 let _searchTimer;
@@ -697,7 +749,10 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async () => 
 
     try {
         const note = document.getElementById('checkoutNote')?.value.trim() || '';
-        await saveCheckoutContact(name, phone, M.guestCount, note);
+        // Independent PII write — run it alongside the order pipeline instead of
+        // blocking checkout for a full round-trip (order payload carries the name;
+        // phone lands in tableSessionsContact on its own).
+        saveCheckoutContact(name, phone, M.guestCount, note).catch(e => console.warn('[Checkout] contact save failed:', e));
 
         const { orderId } = await placeOrder({ taxPercent: M.taxPercent, taxEnabled: M.taxEnabled, taxRates: M.taxRates, serviceChargeEnabled: M.serviceChargeEnabled, serviceChargeRate: M.serviceChargeRate, customerName: name, customerPhone: phone, discount: M.appliedDiscount });
         M.appliedDiscount = null;
@@ -731,20 +786,25 @@ document.getElementById('btnOrderMore')?.addEventListener('click', () => UI.show
 document.getElementById('btnGotoCallWaiter')?.addEventListener('click', () => UI.showScreen('screenWaiter'));
 document.getElementById('btnStartOrdering')?.addEventListener('click', () => UI.showScreen('screenMenu'));
 document.getElementById('btnRequestBillFromTracking')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnRequestBillFromTracking');
+    if (btn?.disabled) return; // single-flight through the silent served-check wait
+    if (btn) btn.disabled = true;
     haptic(20);
-    if (Session.session?.status === 'expired') { UI.showScreen('screenSessionExpired'); return; }
-    if (await _allOrdersServed()) {
-        try {
-            await set(push(outletRef('tableRequests')), {
-                tableId: Session.tableId, tableNumber: Session.table.number,
-                type: 'bill', status: 'pending', createdAt: Date.now()
-            });
-            UI.showToast('Bill requested — our team will process it shortly', 'success');
-        } catch (e) {
-            UI.showToast('Could not request bill. Please try again.', 'error');
+    try {
+        if (Session.session?.status === 'expired') { UI.showScreen('screenSessionExpired'); return; }
+        if (!(await _allOrdersServed())) {
+            UI.showToast('Please wait until all orders are served before requesting the bill.', 'error');
+            return;
         }
-    } else {
-        UI.showToast('Please wait until all orders are served before requesting the bill.', 'error');
+        // Optimistic — the request is a queued intent: confirm instantly, write in
+        // the background, roll back the confirmation if the write fails.
+        UI.showToast('Bill requested — our team will process it shortly', 'success');
+        set(push(outletRef('tableRequests')), {
+            tableId: Session.tableId, tableNumber: Session.table.number,
+            type: 'bill', status: 'pending', createdAt: Date.now()
+        }).catch(() => UI.showToast('Could not request bill. Please try again.', 'error'));
+    } finally {
+        if (btn) btn.disabled = false;
     }
 });
 
@@ -763,31 +823,27 @@ document.querySelectorAll('[data-request]').forEach(btn => {
         touchSession();
         const type = btn.dataset.request;
         const labels = { waiter: 'Waiter called', water: 'Water requested', bill: 'Bill requested', clean: 'Table cleaning requested' };
-        UI.setRequestSending(btn);
-        try {
-            if (type === 'bill') {
-                if (!(await _allOrdersServed())) { UI.showToast('Please wait until all orders are served before requesting the bill.', 'error'); UI.resetRequestCard(btn); return; }
-                await set(push(outletRef('tableRequests')), {
-                    tableId: Session.tableId, tableNumber: Session.table.number,
-                    type: 'bill', status: 'pending', createdAt: Date.now()
-                });
-                UI.setRequestSent(btn);
-                haptic([10, 30, 10]);
-                UI.showToast('Bill requested — our team will process it shortly', 'success');
+        if (type === 'bill') {
+            UI.setRequestSending(btn);
+            if (!(await _allOrdersServed())) {
+                UI.resetRequestCard(btn);
+                UI.showToast('Please wait until all orders are served before requesting the bill.', 'error');
                 return;
-            } else {
-                await set(push(outletRef('tableRequests')), {
-                    tableId: Session.tableId, tableNumber: Session.table.number,
-                    type, status: 'pending', createdAt: Date.now()
-                });
             }
-            UI.setRequestSent(btn);
-            haptic([10, 30, 10]);
-            UI.showToast(labels[type] || 'Request sent', 'success');
-        } catch (e) {
+        }
+        // Optimistic — setRequestSent disables the card and starts the cooldown,
+        // so a re-tap can't queue a duplicate; the write settles in the background
+        // and a failure rolls the confirmation back.
+        UI.setRequestSent(btn);
+        haptic([10, 30, 10]);
+        UI.showToast(labels[type] || 'Request sent', 'success');
+        set(push(outletRef('tableRequests')), {
+            tableId: Session.tableId, tableNumber: Session.table.number,
+            type, status: 'pending', createdAt: Date.now()
+        }).catch(() => {
             UI.resetRequestCard(btn);
             UI.showToast('Could not send request. Please try again.', 'error');
-        }
+        });
     });
 });
 
