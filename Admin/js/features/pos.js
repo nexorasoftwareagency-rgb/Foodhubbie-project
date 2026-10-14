@@ -12,6 +12,7 @@ import { printOrderReceipt } from './printing.js';
 import { t } from '../l10n.js';
 import { evaluateDiscount, recordDiscountUsage, clearDiscountCache, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
 import { logger } from '../utils/logger.js';
+import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
 
 let _connUnsub = null;
 let _dineinSettings = {};
@@ -509,9 +510,11 @@ export async function renderWalkinCart() {
     } else if (state.walkinDiscount === 0 && state.walkinAutoDiscount === null) {
         try {
             const items = Object.values(state.walkinCart);
+            // Exclude combo lines from discount matching — they already have their discount baked into unitPrice
+            const nonCombo = items.filter(i => i.size !== 'Combo');
             const evalResult = await evaluateDiscount({
                 customer: null, subtotal, couponCode: null,
-                cart: items.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
+                cart: nonCombo.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
                 channel: 'pos'
             });
             if (evalResult && evalResult.amount > 0) {
@@ -693,11 +696,12 @@ export async function applyWalkinCoupon() {
         } catch (e) { console.warn('[POS] customer fetch failed', e); }
     }
     try {
+        const nonCombo = items.filter(i => i.size !== 'Combo');
         const evalResult = await evaluateDiscount({
             customer,
             subtotal,
             couponCode: code,
-            cart: items.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
+            cart: nonCombo.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
             channel: 'pos'
         });
         if (!evalResult) {
@@ -952,11 +956,12 @@ export async function submitWalkinSale() {
                     const custSnap = await get(Outlet.ref(`customers/${cleanPhone}`));
                     if (custSnap.exists()) customer = custSnap.val();
                 }
+                const nonCombo = items.filter(i => i.size !== 'Combo');
                 const evalResult = await evaluateDiscount({
                     customer,
                     subtotal,
                     couponCode: state.walkinCouponCode || null,
-                    cart: items.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
+                    cart: nonCombo.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
                     channel: 'pos'
                 });
                 if (evalResult && evalResult.amount > 0) {
@@ -1204,9 +1209,8 @@ export async function openCartAddonPicker(cartKey) {
 
 export function loadWalkinCombos() {
     return get(Outlet.ref('combos')).then(snap => {
-        const now = Date.now();
         state.combos = Object.entries(snap.val() || {})
-            .filter(([, c]) => (c.startAt || 0) <= now && now <= (c.endAt || 0))
+            .filter(([, c]) => isComboActive(c))
             .map(([id, c]) => ({ id, ...c }));
     }).catch(() => { state.combos = []; });
 }
@@ -1224,9 +1228,7 @@ function _comboTilesHtml() {
             const d = state.allWalkinDishes.find(x => x.id === it.dishId);
             return s + ((d ? (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0) * (it.qty || 1));
         }, 0);
-        const comboPrice = c.discountType === 'percentage'
-            ? Math.round(originalTotal * (1 - (Number(c.discountValue) || 0) / 100))
-            : Math.max(0, originalTotal - (Number(c.discountValue) || 0));
+        const comboPrice = comboPriceTotal(originalTotal, c.discountType, c.discountValue);
         return `
         <div class="pos-combo-tile" data-action="addComboToWalkinCart" data-id="${c.id}" style="grid-column:1/-1;display:flex;gap:12px;align-items:center;padding:12px;border:2px solid var(--accent);border-radius:12px;background:linear-gradient(135deg,#fff8f5,#fff);cursor:pointer;">
             <div style="flex-shrink:0;width:52px;height:52px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;">🏷️</div>
@@ -1248,25 +1250,24 @@ export function addComboToWalkinCart(comboId) {
     const combo = (state.combos || []).find(c => c.id === comboId);
     if (!combo) return;
     const now = Date.now();
-    if (!((combo.startAt || 0) <= now && now <= (combo.endAt || 0))) {
+    if (!isComboActive(combo, now)) {
         ui.showToast('This combo is no longer active', 'warning');
         return;
     }
     const items = combo.items || [];
-    const totalUnits = items.reduce((s, it) => s + (it.qty || 1), 0) || 1;
-    let added = 0;
+    const entries = [];
     items.forEach(it => {
         const dish = state.allWalkinDishes.find(d => d.id === it.dishId);
         if (!dish) return;
         const base = Number(dish.price ?? (dish.sizes ? Object.values(dish.sizes)[0] : 0)) || 0;
-        let unit = base;
-        if (combo.discountType === 'percentage') {
-            unit = Math.round(base * (1 - (Number(combo.discountValue) || 0) / 100));
-        } else {
-            unit = Math.max(0, base - (Number(combo.discountValue) || 0) / totalUnits);
-        }
-        unit = Math.round(unit);
-        const qty = it.qty || 1;
+        entries.push({ dish, base, qty: it.qty || 1 });
+    });
+    const prices = bakeComboUnitPrices(entries.map(e => ({ base: e.base, qty: e.qty })), combo.discountType, combo.discountValue);
+    let added = 0;
+    entries.forEach((e, i) => {
+        const dish = e.dish;
+        const unit = prices[i];
+        const qty = e.qty;
         const cartKey = `${dish.id}::Combo::${combo.id}`;
         if (state.walkinCart[cartKey]) {
             state.walkinCart[cartKey].qty += qty;
