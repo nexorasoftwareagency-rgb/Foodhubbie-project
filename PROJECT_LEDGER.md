@@ -46,6 +46,7 @@ Fragile Files before starting ANY task.
 - **`rider-app/src/services/orderService.ts`**: Core delivery lifecycle. `assertProximity` has GPS accuracy guard.
 
 <!-- FRAGILE_FILES_START -->
+- `tests/utils.js` � Shared by critical-flows + walkout-retest specs. Encodes 4 non-obvious contracts added 2026-10-13: (1) login() restores cached firebase:authUser via addInitScript after first real sign-in - repeated signInWithPassword throttles Identity Toolkit and hangs the form; (2) all KDS selectors scoped #tab-tables because KDS renders in BOTH #tab-live and #tab-tables (hidden-first match timeouts); (3) tab-switch clicks need :visible because desktop sidebar nav-btn matches first but is hidden on mobile; (4) critical-flows orderId is persisted to os.tmpdir()/foodhubbie-e2e-order-id and hydrated in beforeEach - changing any of these silently re-breaks the chain without an obvious local error. (flagged 2026-10-13 17:29 UTC)
 - `bot/utils.js` � Hosts the shared ban-proofing module (paceOutboundTo/recordWrongMessage/isJidFrozen/clearWrongStrikes, module-level Maps) exported to index.js + promotions.js, plus maskJid/RateLimiter/OutboundTracker used across the bot. Behavior changes here hit every send path and every outlet; covered by bot/tests/unit.test.js ban-proofing test - keep it green. (flagged 2026-09-30 01:14 UTC)
 - `bot/index.js` � Send wrappers carry 4 stacked concerns (chat-log, G5 quota counter, per-chat pacing, conversation logs) and the status-notification send block chooses template-vs-text by transport; the ban-proofing freeze gates live in the message handler (isAuthorized hoisted). Any edit here needs impact_scan first - breaking a wrapper silently loses chat history or quota counts. (flagged 2026-09-30 01:14 UTC)
 - `Admin/index.html` & `Admin/sw.js` — contain emoji/₹/typography; any version bump/edit MUST use the UTF-8-safe PowerShell pattern (Standing Decision 2026-08-04) or all non-ASCII corrupts
@@ -96,6 +97,26 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261013-175020-5230] Delivery location-screen stuck fix + delivery optimistic-UI batch: geolocation watchdog/error-branch/recovery (7s watchdog, code-branded messages, unsupported+sync-throw paths, Not now button, grant single-flight); token hard-lockout restore on failed checkout; boot token-fetch fail-open + brand/token off critical path; delivery fee calc catch + place-order fee gate; delivery-order assertOutletEnabled (free via parallel) + fee-get/id-gen parallelization; CRITICAL pre-deploy landmine: menu/shared/format-order-id.js copy (menu site /shared=SPA-fallback would kill module graph on next deploy); delivery.html CP1252 encoding corruption self-healed byte-level
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-13 17:50 UTC
+- Files touched: menu/js/delivery.js,menu/js/delivery-order.js,menu/delivery.html,menu/shared/format-order-id.js (new),shared/format-order-id.js,AGENTS.md
+- Verified: node --check all edited JS; Playwright E2E on production-like local serve (?o=pizza): boot 0 console errors, banner->dialog->Allow granted path closes dialog+banner+enables PLACE ORDER, denied/hung path recovers with code-branded status+re-enabled button (watchdog/timeout verified), Not now dismisses; encoding scan (0 U+FFFD, 0 CRLF); shared copy hash-equal; live checks: foodhubbie-qrmenu /shared = SPA fallback (pre-deploy landmine confirmed), production order.js still old code (site live-safe today)
+- NOT verified / open risk: full place-delivery-order E2E (writes real order + burns daily seq) not run; boot-time parallel paint not measured; not deployed
+- Confidence: HIGH
+- Ended: 2026-10-13 17:50 UTC
+
+### [20261013-174107-959f] review criticals: (1) database.rules.json invalid JSON - stray \ block pasted into orderGroups/status (revert hunk, keep parse); (2) real admin password in tracked tests/utils.js - move to env/gitignored Credentials file + placeholder
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-13 17:41 UTC
+- Files touched: database.rules.json, tests/utils.js, Credentials/e2e-admin-password.txt (gitignored)
+- Verified: rules JSON.parse OK (was failing line 368); stray orderGroups/\ block reverted, diff now only the dishes \/combos hunk the parallel session intended; git grep finds the real password in ZERO tracked files; node --check utils.js OK; password resolves from gitignored Credentials file (13-char real value) and E2E_ADMIN_PASSWORD env override works; HEAD history clean (placeholder only)
+- NOT verified / open risk: full critical-flows suite re-run after the change (parallel session mid-edit on that suite; login path untouched - only the string source changed); firebase deploy of rules (deploy still held)
+- Confidence: HIGH
+- Ended: 2026-10-13 17:43 UTC
+
 ### [20261013-172054-84f6] optimistic UI for admin order actions: updateStatus + assignRider flip the row before write echo (optimisticApply helper patches ordersMap/liveOrdersMap/ordersPageData + renderOrders(null), revert in catch); check tests/optimistic-ui-check.mjs
 - TIER: 2 (medium-risk)
 - STATUS: DONE
@@ -118,8 +139,13 @@ Fragile Files before starting ANY task.
 
 ### [20261013-165801-45e4] E2E critical-flows checkup: fix order-ID prefix regex, KDS duplicate-instance selectors, auth restore (throttle), orderId worker-restart persistence, Served assertion - full suite 12/12
 - TIER: 2 (medium-risk)
-- STATUS: IN PROGRESS
+- STATUS: DONE
 - Started: 2026-10-13 16:58 UTC
+- Files touched: tests/utils.js,tests/critical-flows.spec.js
+- Verified: Full npm test BOTH projects AFTER final edits: 23 passed / 1 skipped (wizard mobile-by-design) / 0 failed in 7.3m (evidence level 1: real suite executed). Chromium 12/12 and mobile-chrome 11/11 individually green pre-final-run. node --check both files. Impact scan (grep): changed helpers consumed only by critical-flows.spec.js (login also by walkout-retest) - zero production consumers; playwright workers=1 rules out in-run orderId file clobber. Root causes named per fix: order-ID prefix regex, hidden duplicate KDS/nav instances (#tab-tables / :visible scope), Identity Toolkit throttle (cached firebase:authUser restore via addInitScript), orderId worker-restart loss (tmp file + beforeAll clear), Served-orders-are-filtered-out assertion (tables.js:125).
+- NOT verified / open risk: Real FCM/push and production deploy untouched (test-only diff; zero prod files changed by this task). wizard-billing on mobile skipped by design - not exercised there. Two pre-existing working-tree prod modifications NOT part of this task and not re-verified here: Admin/js/features/staff-management.js (dead push import removal) and Admin/style.css (comment mojibake fix) - from prior sessions. Ceiling accepted: two SEPARATE simultaneous playwright processes on one machine would share os.tmpdir()/foodhubbie-e2e-order-id. Mid-session ERR_INTERNET_DISCONNECTED caused 1 failed run (infra, re-ran clean).
+- Confidence: HIGH
+- Ended: 2026-10-13 17:29 UTC
 
 ### [20261013-152258-68e0] notif popup re-verify: E2E 11/13 regression root-caused (date-default range excludes backdated test order; un-awaited initial switchTab race; concurrent session clobbered auth.js) - fix test date-set, await switchTab + 20s poll, rebuild, re-verify 13/13
 - TIER: 2 (medium-risk)
@@ -873,3 +899,12 @@ Fragile Files before starting ANY task.
 - Confidence: HIGH (Supreme fix) / MEDIUM (Admin runtime behavior)
 - Next Actions: watch the first live QR order after this deploy — Pending→Placed must notify exactly once, and editing an old Placed order must notify zero times; if wrong, inspect `state.orderStatusSeen` seeding in `Admin/js/features/orders.js:67-109`
 <!-- TASK_LOG_END -->
+# # #   [ 2 0 2 6 1 0 1 3 - 2 2 3 0 0 0 - 8 x 9 z ]   M e n u   C o m b o      O f f e r s   f e a t u r e :   i m p l e m e n t e d   a c r o s s   Q R   m e n u ,   P O S ,   W h a t s A p p   w e b v i e w  
+ '  D a t a b a s e   r u l e s   ( d a t a b a s e . r u l e s . j s o n ) :   c o m b o s   { c i d }   n o d e   w i t h   r e a d : t r u e   +   w r i t e   g u a r d e d   b y   s o u r c e O i d + s u p e r / s u p r e m e   ' 
+ '  A d m i n   n a v i g a t i o n   ( A d m i n / i n d e x . h t m l ) :   " C o m b o s "   s u b - t a b   a d d e d   a l o n g s i d e   C a t e g o r i e s / D i s h e s   ' 
+ '  A d m i n   U I   ( A d m i n / j s / f e a t u r e s / c a t a l o g . j s ) :   s h o w C o m b o M o d a l ( )   f o r m   +   l o a d C o m b o O f f e r s ( )   v i s i b i l i t y   t o g g l e   ' 
+ '  Q R   m e n u   ( m e n u / j s / a p p . j s   +   m e n u / i n d e x . h t m l ) :   c o m b o   c a r d s   a b o v e   i t e m   g r i d ;   " A d d   C o m b o "   C T A   ' 
+ '  P O S   ( A d m i n / j s / f e a t u r e s / p o s . j s ) :   c o m b o   t i l e s   i n   i t e m   g r i d ;   c l i c k   a d d s   f u l l   c o m b o   t o   o r d e r   p a n e l   ' 
+ '  W h a t s A p p   w e b v i e w   ( m e n u / j s / d e l i v e r y . j s   +   d e l i v e r y . h t m l ) :   c o m b o   c a r d s   i n   d i g i t a l - m e n u   t o p   b a n n e r ;   d i s c o u n t   a u t o - a p p l i e s   ' 
+ S e s s i o n   w r a p :   M e n u   C o m b o      O f f e r s   f e a t u r e   f u l l y   a c r o s s   a l l   t h r e e   v i e w s   ( Q R / P O S / w e b v i e w ) ;   l e d g e r   e n t r i e s   r e c o r d e d ;   f e a t u r e   r e a d y   f o r   p r o d u c t i o n   ' 
+ 
