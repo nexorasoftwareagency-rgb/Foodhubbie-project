@@ -480,13 +480,26 @@ export function initAuth() {
         // notificationclick) -> open Orders tab and highlight that row
         // once the realtime snapshot has rendered it. Initial switch is
         // awaited above so this one cannot interleave with it.
-        const deepLinkOrder = new URLSearchParams(window.location.search).get('order');
+        // ?action=confirm (notification action button) additionally clicks
+        // the row's "Confirm" status option — delegated pickStatus in
+        // main.js does the actual updateStatus call.
+        const dlParams = new URLSearchParams(window.location.search);
+        const deepLinkOrder = dlParams.get('order');
+        const deepLinkConfirm = dlParams.get('action') === 'confirm';
         if (deepLinkOrder) {
             ui.switchTab('orders', true);
             (async () => {
                 const { highlightOrder } = await import('./features/notifications.js');
                 for (let i = 0; i < 40; i++) {
-                    if (document.getElementById(`row-${deepLinkOrder}`)) { highlightOrder(deepLinkOrder); return; }
+                    if (document.getElementById(`row-${deepLinkOrder}`)) {
+                        highlightOrder(deepLinkOrder);
+                        if (deepLinkConfirm) {
+                            const opt = document.querySelector(`#row-${deepLinkOrder} [data-action="pickStatus"][data-val="Confirmed"]`)
+                                || document.querySelector(`#row-${deepLinkOrder} [data-action="pickStatus"].status-opt-next`);
+                            opt?.click();
+                        }
+                        return;
+                    }
                     await new Promise(r => setTimeout(r, 500));
                 }
             })();

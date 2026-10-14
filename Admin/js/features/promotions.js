@@ -1009,7 +1009,7 @@ async function _sendPushNotification() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ title, body, data: { testMode: testMode ? 'true' : 'false' } })
+            body: JSON.stringify({ title, body, data: { testMode: testMode ? 'true' : 'false', type: 'promo' } })
         });
 
         const result = await resp.json();

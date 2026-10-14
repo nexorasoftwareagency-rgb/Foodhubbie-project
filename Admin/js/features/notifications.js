@@ -78,7 +78,8 @@ export function addNotification(title, sub, type = 'info', outlet = null, orderK
 
     if (type === 'new' || type === 'delivered') {
         playNotificationSound();
-        showNativeNotification(title, sub, orderKey);
+        // Map in-app type vocabulary (new/delivered) to the SW's color keys
+        showNativeNotification(title, sub, orderKey, { type: type === 'new' ? 'new_order' : 'delivered' });
     }
 }
 
@@ -210,22 +211,33 @@ function renderNotifItem(n, isFull = false) {
 /**
  * NATIVE OS NOTIFICATIONS
  */
-export function showNativeNotification(title, body, orderKey = null) {
+export function showNativeNotification(title, body, orderKey = null, meta = {}) {
     if (Notification.permission !== "granted") return;
 
+    const NOTIF_COLORS = { new_order: '#d93025', delivered: '#188038', served: '#188038', ready: '#f9ab00', info: '#1a73e8', promo: '#7b1fa2' };
+    const type = meta.type || 'info';
     const options = {
         body,
         icon: 'icon-erp-logo.jpeg',
-        badge: 'icon-erp-logo.jpeg',
+        badge: 'badge.png',
+        color: NOTIF_COLORS[type],
         vibrate: [200, 100, 200],
         // Stable per-order tag shared with sw.js onBackgroundMessage
         // (order-<RTDB key>): Chrome REPLACES the FCM popup with the app's
         // Placed/Delivered update for the same order instead of stacking
         // two popups, and repeated statuses never pile up in Action Center.
-        tag: orderKey ? `order-${orderKey}` : `order-${Date.now()}`,
+        // Promos use a fixed tag so blasts replace instead of piling up.
+        tag: orderKey ? `order-${orderKey}` : (type === 'promo' ? 'promo-latest' : `alert-${Date.now()}`),
         requireInteraction: true,
-        data: { url: orderKey ? `./index.html?order=${encodeURIComponent(orderKey)}` : './index.html' }
+        data: { url: orderKey ? `./index.html?order=${encodeURIComponent(orderKey)}` : './index.html', orderId: orderKey || '' }
     };
+    if (meta.image) options.image = meta.image;
+    if (orderKey) {
+        options.actions = [
+            { action: 'view', title: 'View Order' },
+            { action: 'confirm', title: 'Mark Confirmed' }
+        ];
+    }
 
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
         navigator.serviceWorker.ready.then(reg => {

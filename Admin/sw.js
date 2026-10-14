@@ -18,21 +18,37 @@ firebase.initializeApp({
   messagingSenderId: "372428105696",
   appId: "1:372428105696:web:a3a979191a5cf94569ed85"
 });
+// Android accent color per event type (falls back to system grey)
+const NOTIF_COLORS = { new_order: '#d93025', delivered: '#188038', served: '#188038', ready: '#f9ab00', info: '#1a73e8', promo: '#7b1fa2' };
+
 firebase.messaging().onBackgroundMessage((payload) => {
   const data = payload.data || {};
+  const type = data.type || 'info';
+  // Same tag namespace as the in-page showNativeNotification
+  // (notifications.js): app popup for the same order REPLACES this one.
+  // Promos use a fixed tag so blasts replace instead of piling up.
+  const tag = data.orderId ? `order-${data.orderId}`
+    : (type === 'promo' ? 'promo-latest' : `alert-${Date.now()}`);
+  const options = {
+    body: data.body || payload.notification?.body || 'Open dashboard to view details.',
+    icon: './icon-erp-logo.jpeg',
+    badge: './badge.png',
+    color: NOTIF_COLORS[type],
+    vibrate: [200, 100, 200],
+    requireInteraction: true,
+    tag,
+    data: { url: data.orderId ? `./index.html?order=${encodeURIComponent(data.orderId)}` : './index.html', orderId: data.orderId || '' }
+  };
+  if (data.image) options.image = data.image;
+  if (data.orderId) {
+    options.actions = [
+      { action: 'view', title: 'View Order' },
+      { action: 'confirm', title: 'Mark Confirmed' }
+    ];
+  }
   self.registration.showNotification(
     data.title || payload.notification?.title || 'New Order Alert',
-    {
-      body: data.body || payload.notification?.body || 'Open dashboard to view details.',
-      icon: './icon-erp-logo.jpeg',
-      badge: './icon-erp-logo.jpeg',
-      vibrate: [200, 100, 200],
-      requireInteraction: true,
-      // Same tag namespace as the in-page showNativeNotification
-      // (notifications.js): app popup for the same order REPLACES this one.
-      tag: data.orderId ? `order-${data.orderId}` : `order-${Date.now()}`,
-      data: { url: data.orderId ? `./index.html?order=${encodeURIComponent(data.orderId)}` : './index.html' }
-    }
+    options
   );
 });
 
@@ -42,7 +58,7 @@ firebase.messaging().onBackgroundMessage((payload) => {
 // stale-while-revalidate, so mixed old/new module pairs can serve until the
 // name changes force a clean re-cache (settings subtab race fix + boot preload
 // removal so settings.js evaluates post-auth: js/ui.js).
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.5.15';
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.6.0';
 const ASSETS_TO_CACHE = [
   './index.html',
   './style.css?v=5.4.6',
@@ -52,6 +68,7 @@ const ASSETS_TO_CACHE = [
   './receipt-templates.js?v=5.4.5',
   './manifest.json',
   './icon-erp-logo.jpeg',
+  './badge.png',
   './sw.js',
   './firebase-messaging-sw.js',
   './js/main.js?v=5.4.5',
@@ -183,14 +200,20 @@ self.addEventListener('fetch', (event) => {
 // app boots straight into the Orders tab and highlights that order.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const nd = event.notification.data || {};
   let url;
-  try { url = new URL(event.notification.data?.url || './index.html', self.registration.scope).href; }
+  try { url = new URL(nd.url || './index.html', self.registration.scope).href; }
   catch { url = self.registration.scope + 'index.html'; }
+  // "Mark Confirmed" action button: carry ?action=confirm so the app
+  // (already authenticated) advances the order after highlighting it.
+  if (event.action === 'confirm' && nd.orderId) {
+    url += (url.includes('?') ? '&' : '?') + 'action=confirm';
+  }
   event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
     const existing = clientList.find(c => c.url.startsWith(self.registration.scope));
     if (existing) {
       if (existing.focus) existing.focus();
-      if (url.includes('?order=') && existing.url !== url && existing.navigate) {
+      if (existing.url !== url && existing.navigate) {
         return existing.navigate(url).catch(() => {});
       }
       return;

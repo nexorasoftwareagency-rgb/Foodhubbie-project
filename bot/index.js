@@ -824,14 +824,21 @@ async function sendFCMToAdmins(orderId, order) {
         entries.forEach(e => { if (!seen.has(e.token)) seen.set(e.token, e.uid); });
         const unique = [...seen.keys()];
         const title = `🆕 New Order #${formatOrderId(order.orderId || orderId)}`;
-        const body = `${order.customerName || 'Customer'} · ₹${order.total || 0} · ${outlet.toUpperCase()}`;
+        const itemCount = Array.isArray(order.items) ? order.items.length : (order.items ? Object.keys(order.items).length : 0);
+        const where = order.tableNo ? `Table ${order.tableNo}` : (order.type || outlet.toUpperCase());
+        const body = `${order.customerName || 'Customer'} · ${itemCount ? `${itemCount} items · ` : ''}₹${order.total || 0} · ${where} · ${outlet.toUpperCase()}`;
+        let image = '';
+        try {
+            const store = await getData("settings/Store", outlet);
+            image = store?.bannerImage || store?.greetingImage || '';
+        } catch { /* image optional */ }
         const results = await admin.messaging().sendEachForMulticast({
             tokens: unique,
             // Data-only on purpose: admin sw.js has onBackgroundMessage, and a
             // notification payload would make the Firebase SDK auto-display its
             // own untagged popup AND THEN call our handler -> two stacked popups
             // whenever the dashboard is hidden. data.title/body carry the text.
-            data: { orderId, outlet, type: 'new_order', title, body },
+            data: { orderId, outlet, type: 'new_order', title, body, image },
             android: { priority: "high" },
             webpush: { headers: { Urgency: "high" } }
         });
