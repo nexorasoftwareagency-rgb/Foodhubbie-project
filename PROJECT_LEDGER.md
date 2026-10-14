@@ -46,7 +46,7 @@ Fragile Files before starting ANY task.
 - **`rider-app/src/services/orderService.ts`**: Core delivery lifecycle. `assertProximity` has GPS accuracy guard.
 
 <!-- FRAGILE_FILES_START -->
-- `tests/utils.js` � Shared by critical-flows + walkout-retest specs. Encodes 4 non-obvious contracts added 2026-10-13: (1) login() restores cached firebase:authUser via addInitScript after first real sign-in - repeated signInWithPassword throttles Identity Toolkit and hangs the form; (2) all KDS selectors scoped #tab-tables because KDS renders in BOTH #tab-live and #tab-tables (hidden-first match timeouts); (3) tab-switch clicks need :visible because desktop sidebar nav-btn matches first but is hidden on mobile; (4) critical-flows orderId is persisted to os.tmpdir()/foodhubbie-e2e-order-id and hydrated in beforeEach - changing any of these silently re-breaks the chain without an obvious local error. (flagged 2026-10-13 17:29 UTC)
+- `tests/utils.js` � Shared by critical-flows + walkout-retest specs. Encodes 4 non-obvious contracts added 2026-10-13: (1) login() restores cached firebase:authUser via addInitScript after first real sign-in - repeated signInWithPassword throttles Identity Toolkit and hangs the form; (2) all KDS selectors scoped #tab-tables because KDS renders in BOTH #tab-live and #tab-tables (hidden-first match timeouts); (3) tab-switch clicks need :visible because desktop sidebar nav-btn matches first but is hidden on mobile; (4) critical-flows orderId is persisted to os.tmpdir()/foodhubbie-e2e-order-id and hydrated in beforeEach - changing any of these silently re-breaks the chain without an obvious local error. (flagged 2026-10-13 17:29 UTC)
 - `bot/utils.js` � Hosts the shared ban-proofing module (paceOutboundTo/recordWrongMessage/isJidFrozen/clearWrongStrikes, module-level Maps) exported to index.js + promotions.js, plus maskJid/RateLimiter/OutboundTracker used across the bot. Behavior changes here hit every send path and every outlet; covered by bot/tests/unit.test.js ban-proofing test - keep it green. (flagged 2026-09-30 01:14 UTC)
 - `bot/index.js` � Send wrappers carry 4 stacked concerns (chat-log, G5 quota counter, per-chat pacing, conversation logs) and the status-notification send block chooses template-vs-text by transport; the ban-proofing freeze gates live in the message handler (isAuthorized hoisted). Any edit here needs impact_scan first - breaking a wrapper silently loses chat history or quota counts. (flagged 2026-09-30 01:14 UTC)
 - `Admin/index.html` & `Admin/sw.js` — contain emoji/₹/typography; any version bump/edit MUST use the UTF-8-safe PowerShell pattern (Standing Decision 2026-08-04) or all non-ASCII corrupts
@@ -899,12 +899,21 @@ Fragile Files before starting ANY task.
 - Confidence: HIGH (Supreme fix) / MEDIUM (Admin runtime behavior)
 - Next Actions: watch the first live QR order after this deploy — Pending→Placed must notify exactly once, and editing an old Placed order must notify zero times; if wrong, inspect `state.orderStatusSeen` seeding in `Admin/js/features/orders.js:67-109`
 <!-- TASK_LOG_END -->
-# # #   [ 2 0 2 6 1 0 1 3 - 2 2 3 0 0 0 - 8 x 9 z ]   M e n u   C o m b o      O f f e r s   f e a t u r e :   i m p l e m e n t e d   a c r o s s   Q R   m e n u ,   P O S ,   W h a t s A p p   w e b v i e w  
- '  D a t a b a s e   r u l e s   ( d a t a b a s e . r u l e s . j s o n ) :   c o m b o s   { c i d }   n o d e   w i t h   r e a d : t r u e   +   w r i t e   g u a r d e d   b y   s o u r c e O i d + s u p e r / s u p r e m e   ' 
- '  A d m i n   n a v i g a t i o n   ( A d m i n / i n d e x . h t m l ) :   " C o m b o s "   s u b - t a b   a d d e d   a l o n g s i d e   C a t e g o r i e s / D i s h e s   ' 
- '  A d m i n   U I   ( A d m i n / j s / f e a t u r e s / c a t a l o g . j s ) :   s h o w C o m b o M o d a l ( )   f o r m   +   l o a d C o m b o O f f e r s ( )   v i s i b i l i t y   t o g g l e   ' 
- '  Q R   m e n u   ( m e n u / j s / a p p . j s   +   m e n u / i n d e x . h t m l ) :   c o m b o   c a r d s   a b o v e   i t e m   g r i d ;   " A d d   C o m b o "   C T A   ' 
- '  P O S   ( A d m i n / j s / f e a t u r e s / p o s . j s ) :   c o m b o   t i l e s   i n   i t e m   g r i d ;   c l i c k   a d d s   f u l l   c o m b o   t o   o r d e r   p a n e l   ' 
- '  W h a t s A p p   w e b v i e w   ( m e n u / j s / d e l i v e r y . j s   +   d e l i v e r y . h t m l ) :   c o m b o   c a r d s   i n   d i g i t a l - m e n u   t o p   b a n n e r ;   d i s c o u n t   a u t o - a p p l i e s   ' 
- S e s s i o n   w r a p :   M e n u   C o m b o      O f f e r s   f e a t u r e   f u l l y   a c r o s s   a l l   t h r e e   v i e w s   ( Q R / P O S / w e b v i e w ) ;   l e d g e r   e n t r i e s   r e c o r d e d ;   f e a t u r e   r e a d y   f o r   p r o d u c t i o n   ' 
- 
+
+### [20261014-141500-combo-live] Menu Combos: LIVE VERIFIED + deployed hotfix
+
+- STATUS: DONE
+- What happened:
+  1. Deployed combo feature (all targets) - already live from commit 31847b1.
+  2. LIVE PRODUCTION BUG FOUND + FIXED: menu app stuck on "Loading menu..." forever. Root cause: commit 31847b1 added imports of shared/config/vapid.js in menu/js/{app,delivery,pwa-install}.js but menu hosting serves only menu/ - /shared/config/vapid.js 404ed -> SPA rewrite returned index.html -> module graph death. Fix: copied shared/config/vapid.js -> menu/shared/config/vapid.js (same deliberate-copy pattern as menu/shared/format-order-id.js, see AGENTS.md). Deployed hosting:menu. Boot diag confirms loading overlay clears.
+  3. Live E2E screenshots (node script tests/combo-live-shots.cjs, Playwright MCP unavailable this session):
+     - Admin Combos tab renders Test Combo Deal card (20% off, Edit/Delete) - .playwright-mcp/combo-admin-tab.png
+     - Admin Create Combo modal - combo-admin-add-modal.png
+     - QR menu Combo Offers section: 228 struck / 182 / 20% OFF badge - combo-menu-scrolled.png
+     - Add Combo -> toast "Test Combo Deal added -- 2 items", cart badge 2 - combo-menu-after-add.png
+     - Cart: veggie Lover Pizza 87 + Farmhouse Pizza 95 (109*0.8=87, 119*0.8=95), subtotal 182, GST 9, service 4, total 195 - combo-menu-cart.png. Discount bake verified correct.
+  4. Cleanup: testCombo1 deleted from RTDB (auth DELETE 200); combos now null.
+- Notes: admin Create Combo modal dish list showed only "Cheese Pizza" - dishes with special chars in name may need checking next time a real combo is created from UI. Cart screenshot ran in 1280x900 desktop viewport; mobile layout not re-verified.
+- Confidence: HIGH (QR menu path fully verified live)
+- Next: verify POS combo tile + WhatsApp webview live when convenient; re-check dish multi-select list in Create Combo modal.
+<!-- TASK_LOG_END -->
