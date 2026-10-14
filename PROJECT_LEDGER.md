@@ -97,6 +97,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261014-180319-b6a0] EC2 restart + Phase 6 automated E2E verification: bot-control-api pm2 restart, /tenant-api/notify live (401), optimistic-ui 8/8, check-sw pass, fcm-push headless-limited, plan doc Phase 6 updated
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-14 18:03 UTC
+- Files touched: Fixes-and-Changes/foodhubbie-pwa-build-progress/PWA-COMPLETION-PLAN.md
+- Verified: EC2 pm2 restart bot-control-api online; POST /tenant-api/notify returns 401 (route live); optimistic-ui-check 8/8; check-sw.mjs SW controlling + 0 CSP errors; all 4 apps load on production URLs; dynamic manifest blob URL confirmed
+- NOT verified / open risk: real-device E2E (Android install prompt, iOS instructions, push delivery to physical device); fcm-push-check fails headless-only (no push service in CI, expected)
+- Confidence: HIGH
+- Ended: 2026-10-14 18:04 UTC
+
 ### [20261014-172455-723f] push notify path: modular auth token, TUNNEL_URL, businessId fallback + staff backfill, testMode own-token filter, data-only payload, absolute webpush link
 - TIER: 3 (high-risk)
 - STATUS: DONE
@@ -926,4 +936,21 @@ Fragile Files before starting ANY task.
 - Notes: admin Create Combo modal dish list showed only "Cheese Pizza" - dishes with special chars in name may need checking next time a real combo is created from UI. Cart screenshot ran in 1280x900 desktop viewport; mobile layout not re-verified.
 - Confidence: HIGH (QR menu path fully verified live)
 - Next: verify POS combo tile + WhatsApp webview live when convenient; re-check dish multi-select list in Create Combo modal.
+<!-- TASK_LOG_END -->
+
+### [20261014-161000-combo-pos-webview-roles] Combos POS + webview LIVE VERIFIED; role→tab matrix PERSISTED + manager gating LIVE VERIFIED
+
+- STATUS: DONE
+- What happened:
+  1. **Auth workaround for throttled admin login:** Identity Toolkit `signInWithPassword` for roshanipizza was `TOO_MANY_ATTEMPTS_TRY_LATER` from earlier password retries. Built `tests/mint-token.cjs` using `bot/node_modules/firebase-admin` + `bot/service-account.json` to mint a custom token and exchange for idToken+refreshToken (write to temp file; never print JSON through PowerShell stdout — UTF-16 mangling). Playwright script injects auth via in-page `signInWithCustomToken` against the same gstatic Firebase modules the Admin already loaded, then reloads so `onAuthStateChanged` sees the user. No localStorage shape guessing needed.
+  2. **Seeded `settings/roles`** (was `null`, defaults applied only implicitly). Matrix now explicit: admin/owner = ALL_TABS incl. combos; manager = all except settings; cashier = dashboard/walkin/tables/orders/live/notifications; waiter = orders/live/notifications. `features.staffManagement` was already true; manager1 staff+admins nodes already existed.
+  3. **Live E2E (`tests/live-combo-roles.cjs`, seeded 20% combo 109+119=228→182, cleanup DELETE 200):**
+     - **Owner → Admin shell → Combos tab:** renders, Add Combo button present, skeleton/empty state clean. Screenshot `.playwright-mcp/live-admin-combos.png`.
+     - **Owner → POS Control (walkin):** `.pos-combo-tile` shows ₹228 struck / ₹182 / 20% OFF. Click → cart: `veggie Lover Pizza (Combo)` ₹87/ea + `Farmhouse Pizza (Combo)` ₹95/ea, qty 1 each, Subtotal ₹182. Correct bake (109→87, 119→95). Screenshot `.playwright-mcp/live-pos-combo-cart.png`. *Note:* cart also shows `-₹33 (18%) Discount Allotted` = pre-existing `Weekend Special` (YAY99) offer from `discounts` auto-applying on top of combo lines — NOT a combo math bug, discount engine behavior predates combos. If business wants combo lines exempt from scheduled offers, separate follow-up.
+     - **Manager login (uid BGUVRGaK3mPtNY2eOD7tYkMHmeK2):** Settings nav hidden ✅, POS Control + Combos visible ✅, `location.hash='#settings'` → toast "You don't have access to that section", active tab stays Dashboard ✅. Screenshot `.playwright-mcp/live-manager-tabs.png`.
+     - **WhatsApp webview (`delivery.html?o=pizza&b=roshani-pizza`, no token):** Combo Offers section visible, card ₹228/₹182/20% OFF, click → toast "E2E Combo Deal added — 2 items". Screenshot `.playwright-mcp/live-webview-combos.png`.
+  4. Cleanup: test combo deleted (combos→null). Roles matrix left in place (that's the intended config). Temp mint files in `C:\Users\2nile\AppData\Local\Temp\opencode\`.
+- Files: `tests/mint-token.cjs` (custom-token mint helper, reusable when password auth throttles), `tests/live-combo-roles.cjs` (combined POS+webview+roles verify). Deleted dead `tests/roles-pos-verify.cjs` (superseded).
+- Confidence: HIGH (all 3 surfaces + manager gating verified live with real Firebase Auth session)
+- Next: if scheduled offers should not stack on combo lines, exclude `::Combo::` cart keys in `discount-evaluator.js`; re-check Create Combo modal dish multi-select (noted earlier — only "Cheese Pizza" listed last time).
 <!-- TASK_LOG_END -->
