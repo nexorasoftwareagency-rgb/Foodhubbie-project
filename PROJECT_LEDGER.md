@@ -954,3 +954,16 @@ Fragile Files before starting ANY task.
 - Confidence: HIGH (all 3 surfaces + manager gating verified live with real Firebase Auth session)
 - Next: if scheduled offers should not stack on combo lines, exclude `::Combo::` cart keys in `discount-evaluator.js`; re-check Create Combo modal dish multi-select (noted earlier — only "Cheese Pizza" listed last time).
 <!-- TASK_LOG_END -->
+
+### [20261014-164500-combo-discount-stacking] Fix: category discounts no longer double-apply on combo lines (POS)
+
+- STATUS: DONE
+- What happened: live POS verify (live-pos-combo-cart.png) showed combo-only cart auto-getting `-₹33 (18%) Discount Allotted`. Root cause identified via RTDB read: `Navratri Special` (`disc_muhleg6f`, type=category, 18% on PIZZA category `-Ors3pgOKewABtPi8laC`) auto-applying via `evaluateDiscount` on top of combo lines that already have their discount baked into `unitPrice`. `Weekend Special` (`disc_mq3rtbt7`) is coupon-type, NOT the culprit (screenshot's 18% matched Navratri, not YAY99's 23%).
+- Fix: `Admin/js/features/pos.js` — all 3 `evaluateDiscount` call sites (cart render ~:512, coupon apply ~:701, checkout ~:959) now filter `items.filter(i => i.size !== 'Combo')` before building the `cart` array. Combo lines (`size==='Combo'`, set by `addComboToWalkinCart`) no longer participate in category matching (`_cartHasCategory`). Combo subtotal still feeds the `subtotal` param (so min-subtotal gates and global/coupon % still see the full amount — intentional, documented in code).
+- Also confirmed NOT a bug: Create Combo modal "only Cheese Pizza" earlier observation — `showComboModal` awaits `get(Outlet.ref('dishes'))` then renders ALL dishes as options; the partial list was a screenshot-timing artifact (async fetch mid-flight), not a code defect. Live admin-combos.png now shows correct empty state; multi-select path is exercised by the seeded 2-dish combo (E2E Stack Test) which rendered both items on the tile.
+- Verify: built (`tools/build.mjs`), deployed `hosting:admin` (release complete). Live E2E (`tests/verify-combo-no-stack.cjs`, re-minted tokens after custom-token expiry): seeded 20% combo → POS tile click → cart = combo lines only, Subtotal ₹266, **NO Discount Allotted row**, Total ₹284.62 (GST 5% + service 2%). Screenshot `.playwright-mcp/live-pos-no-stack.png`.
+- Cleanup: 2 leftover `Family Pizza Combo` test records from earlier session deleted (DELETE 200 each; `combos` → null). Temp mint files stay in `%TEMP%/opencode/`.
+- Files: `Admin/js/features/pos.js` (3-site filter), `tests/verify-combo-no-stack.cjs` (new, reuses mint+injectAuth pattern), `tests/mint-token.cjs` (already committed).
+- Confidence: HIGH (root cause proven via RTDB discount reads + live before/after screenshots)
+- Next: if business wants combo lines exempt from global/coupon discounts too, that requires excluding combo subtotal from the `subtotal` param — larger change, not done (YAGNI until asked).
+<!-- TASK_LOG_END -->
