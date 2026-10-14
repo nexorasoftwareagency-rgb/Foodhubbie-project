@@ -106,6 +106,7 @@ export async function createStaffAccount({ email, displayName, role, initialPass
     await set(ref(db, `admins/${uid}`), {
         email: normalizedEmail,
         outlet: Outlet.current,
+        businessId: BUSINESS_ID(),
         name: displayName.trim(),
         role,
         fcmToken: ''

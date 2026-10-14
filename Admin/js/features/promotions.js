@@ -6,7 +6,7 @@
  */
 
 import {
-    db, Outlet, tenantRef, ref, get, onValue, set, update, remove, push, runTransaction,
+    db, auth, Outlet, tenantRef, ref, get, onValue, set, update, remove, push, runTransaction,
     query, orderByChild, equalTo, limitToLast, serverTimestamp,
     isConnected, onConnectionChange
 } from '../firebase.js';
@@ -1002,7 +1002,7 @@ async function _sendPushNotification() {
         const token = await _getAdminAuthToken();
         if (!token) throw new Error('Not authenticated');
 
-        const url = `/tenant-api/notify`;
+        const url = `${await _notifyBase()}/tenant-api/notify`;
         const resp = await fetch(url, {
             method: 'POST',
             headers: {
@@ -1031,13 +1031,18 @@ async function _sendPushNotification() {
 }
 
 function _getAdminAuthToken() {
-    return new Promise((resolve) => {
-        const user = window.currentAdmin || { uid: sessionStorage.getItem('adminUid') || localStorage.getItem('adminUid') };
-        if (!user?.uid) return resolve(null);
-        // The Firebase Auth token is already available in the auth state
-        // We can get it via the current user's ID token
-        firebase.auth().currentUser?.getIdToken().then(resolve).catch(() => resolve(null));
-    });
+    return auth.currentUser ? auth.currentUser.getIdToken() : Promise.resolve(null);
+}
+
+// ponytail: single consumer — cache on window; promote to shared config when a second caller appears
+async function _notifyBase() {
+    if (window.TUNNEL_URL) return window.TUNNEL_URL;
+    try {
+        const snap = await get(ref(db, 'config/tunnelUrl'));
+        const url = snap.val();
+        if (url) window.TUNNEL_URL = url;
+    } catch { /* fall through → hosting origin 404 with honest error */ }
+    return window.TUNNEL_URL || '';
 }
 
 function _wireActions() {

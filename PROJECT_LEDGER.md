@@ -97,6 +97,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261014-172455-723f] push notify path: modular auth token, TUNNEL_URL, businessId fallback + staff backfill, testMode own-token filter, data-only payload, absolute webpush link
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-14 17:24 UTC
+- Files touched: Admin/js/features/promotions.js, bot-control-api/server.js, Admin/js/features/staff-management.js
+- Verified: node --check server.js OK; tools/build.mjs all targets OK; no firebase.auth() global remains in Admin; no notification payload remains in tenant-api/notify; contracts traced: auth export (firebase.js:210), BUSINESS_ID() (firebase.js:65), Admin sw.js:21-26 data-only handler; optimistic-ui-check 8/8 on rebuilt dist (runtime boot proof)
+- NOT verified / open risk: live end-to-end notify send (needs EC2 tunnel + real browser FCM subscription); middleware businessId fallback against an actual legacy staff row (no emulator); TUNNEL_URL read against live config/tunnelUrl
+- Confidence: HIGH
+- Ended: 2026-10-14 17:35 UTC
+
 ### [20261013-175020-5230] Delivery location-screen stuck fix + delivery optimistic-UI batch: geolocation watchdog/error-branch/recovery (7s watchdog, code-branded messages, unsupported+sync-throw paths, Not now button, grant single-flight); token hard-lockout restore on failed checkout; boot token-fetch fail-open + brand/token off critical path; delivery fee calc catch + place-order fee gate; delivery-order assertOutletEnabled (free via parallel) + fee-get/id-gen parallelization; CRITICAL pre-deploy landmine: menu/shared/format-order-id.js copy (menu site /shared=SPA-fallback would kill module graph on next deploy); delivery.html CP1252 encoding corruption self-healed byte-level
 - TIER: 2 (medium-risk)
 - STATUS: DONE

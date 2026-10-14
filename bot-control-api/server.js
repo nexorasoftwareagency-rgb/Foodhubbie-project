@@ -115,21 +115,31 @@ async function requireTenantAdmin(req, res, next) {
 
   try {
     const adminSnap = await admin.database().ref(`admins/${decoded.uid}`).get();
-    const claims = adminSnap.val() || {};
-    if (!claims.businessId || !claims.outlet) {
+    const row = adminSnap.val() || {};
+    if (!row.outlet) {
+      return res.status(403).json({ error: 'Admin not linked to any outlet' });
+    }
+    // Legacy staff rows lack businessId — resolve by locating the outlet
+    // ponytail: scan all businesses for legacy rows; drop once staff rows all carry businessId
+    let businessId = row.businessId;
+    if (!businessId) {
+      const bizs = (await admin.database().ref('businesses').get()).val() || {};
+      businessId = Object.keys(bizs).find(bid => bizs[bid]?.outlets?.[row.outlet]);
+    }
+    if (!businessId) {
       return res.status(403).json({ error: 'Admin not linked to any outlet' });
     }
 
-    // Verify the outlet exists and belongs to the claimed business
-    const outletSnap = await admin.database().ref(`businesses/${claims.businessId}/outlets/${claims.outlet}`).get();
+    // Verify the outlet exists and belongs to the resolved business
+    const outletSnap = await admin.database().ref(`businesses/${businessId}/outlets/${row.outlet}`).get();
     if (!outletSnap.exists()) {
       return res.status(403).json({ error: 'Outlet not found for this business' });
     }
 
     req.adminUid = decoded.uid;
-    req.businessId = claims.businessId;
-    req.outlet = claims.outlet;
-    req.role = claims.role || 'owner'; // owner | manager | staff
+    req.businessId = businessId;
+    req.outlet = row.outlet;
+    req.role = row.role || 'owner'; // owner | manager | staff
     next();
   } catch (err) {
     res.status(500).json({ error: 'Could not verify admin status' });
@@ -935,12 +945,14 @@ app.post('/api/whatsapp/templates/:bid/:oid', requireSuperOnly, async (req, res)
 // Tenant-scoped push notification endpoint (Phase 3)
 // POST /tenant-api/notify
 // Auth: requireTenantAdmin (verifies admin belongs to this outlet)
-// Body: { title, body, data? }
-// Sends FCM multicast to all pushSubscriptions for this outlet
+// Body: { title, body, data?, testMode? }
+// Sends data-only FCM multicast to this outlet's pushSubscriptions
+// (Admin sw.js onBackgroundMessage owns the popup — a notification
+// payload would double-popup). testMode → only the sender's device.
 // ================================================================
 app.post('/tenant-api/notify', async (req, res) => {
   try {
-    const { title, body, data = {} } = req.body || {};
+    const { title, body, data = {}, testMode } = req.body || {};
     if (!title || !body) {
       return res.status(400).json({ error: 'title and body are required' });
     }
@@ -951,22 +963,32 @@ app.post('/tenant-api/notify', async (req, res) => {
       .get();
 
     const subs = subsSnap.val() || {};
-    const tokens = Object.values(subs)
+    let tokens = Object.values(subs)
       .map(s => s.token)
       .filter(Boolean);
+
+    // Test mode: only the requesting admin's own device — never the whole outlet
+    if (testMode === true || testMode === 'true' || data.testMode === 'true') {
+      const own = (await admin.database().ref(`admins/${req.adminUid}/fcmToken`).get()).val();
+      tokens = own ? [own] : [];
+    }
 
     if (tokens.length === 0) {
       return res.json({ ok: true, sent: 0, message: 'No subscribers for this outlet' });
     }
 
-    // Send multicast via FCM (same pattern as bot/index.js for rider push)
+    // FCM data values must be flat strings
+    const flat = Object.fromEntries(
+      Object.entries({ title, body, ...data, outlet: req.outlet, business: req.businessId })
+        .map(([k, v]) => [k, String(v)])
+    );
+
     const message = {
       tokens,
-      notification: { title, body },
-      data: { ...data, outlet: req.outlet, business: req.businessId },
+      data: flat,
       android: { priority: 'high' },
       apns: { payload: { aps: { 'content-available': 1 } } },
-      webpush: { fcmOptions: { link: `./index.html?o=${req.outlet}&b=${req.businessId}` } },
+      webpush: { fcmOptions: { link: `${process.env.ADMIN_WEB_ORIGIN || 'https://foodhubbie-admins.web.app'}/index.html?o=${req.outlet}&b=${req.businessId}` } },
     };
 
     const response = await admin.messaging().sendEachForMulticast(message);
