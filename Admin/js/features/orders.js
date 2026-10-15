@@ -408,6 +408,10 @@ export async function renderOrders(snap) {
             const existing = new Set(state.ordersPageData.map(o => o.id));
             state.ordersMap.forEach((o, key) => { if (!existing.has(key)) state.ordersPageData.unshift({ id: key, ...o }); });
         }
+
+        // Boot seed: ordersMap now reflects the server snapshot — refresh the
+        // app-icon badge so Placed orders surviving a reload count too.
+        syncAppBadge();
     }
 
     // Decide which data source to use

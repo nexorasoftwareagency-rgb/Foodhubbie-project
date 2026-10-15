@@ -99,15 +99,18 @@ export function stopContinuousSound() {
 }
 
 // App-icon badge (Badging API: taskbar/dock on desktop, home-screen icon on
-// installed Android PWA). Mirrors the unacknowledged-Placed set — same truth
-// as the looping alarm.
-// ponytail: only counts orders placed while the page is open (same set as the
-// alarm); Placed orders surviving a reload don't badge — seed the set from
-// ordersMap at boot if that ever matters.
+// installed Android PWA). Count = every order still "Placed" in ordersMap
+// (survives reload — the boot seed) ∪ session-unacknowledged orders (newest,
+// may not have reached the debounced snapshot yet).
+// ponytail: ordersMap holds the latest 500 orders and honors the History tab's
+// date query — a Placed order outside that window won't badge; live orders are
+// always recent, so this holds in practice.
 export function syncAppBadge() {
     try {
         if (!navigator.setAppBadge) return;
-        const n = state.unacknowledgedOrders.size;
+        const placed = new Set(state.unacknowledgedOrders);
+        state.ordersMap.forEach((o, key) => { if ((o && o.status) === 'Placed') placed.add(key); });
+        const n = placed.size;
         if (n > 0) navigator.setAppBadge(n);
         else navigator.clearAppBadge();
     } catch { /* badge unsupported */ }
