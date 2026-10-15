@@ -97,6 +97,26 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261015-011628-b57e] EC2 cloudflared tunnel keep-alive: cron watchdog restarts dead tunnels (:4000 bot-control-api + :5000 webhook), syncs dynamic trycloudflare URL to RTDB config/tunnelUrl
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-15 01:16 UTC
+- Files touched: tools/tunnel-keepalive.sh, tools/sync-tunnel-url-ec2.cjs
+- Verified: cron watchdog fired unattended (killed both tunnels 01:21, cron restarted :4000 at 01:22, new trycloudflare URL synced to RTDB); live RTDB config/tunnelUrl == algorithm-charlie-california-default.trycloudflare.com; tunnel serves HTTP 401 on /tenant-api/notify (middleware alive); crontab installed */2
+- NOT verified / open risk: full EC2 reboot (would drop pm2 bots + need manual cloudflared � out of scope; watchdog covers process-death, not reboot-without-cron). Note: reboot now brings tunnels back via cron within 2min, but pm2 bots still need pm2 resurrect
+- Confidence: HIGH
+- Ended: 2026-10-15 01:27 UTC
+
+### [20261015-003106-e4c4] Deploy combo redesign + hardened onboarding rules
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-15 00:31 UTC
+- Files touched: database.rules.json,menu/js/app.js,menu/js/delivery.js,Admin/dist,menu/
+- Verified: rules deploy OK; hosting:admin+menu release complete; menu /shared/combo-math.js 200; admin catalog has comboPriceStrip; public combos read OK; unauth onboardingSecrets create+delete 401
+- NOT verified / open risk: new website signup flow end-to-end (website NOT deployed - old flow kept live via transition-compat adminPassword validate); bot-control-api restart
+- Confidence: HIGH
+- Ended: 2026-10-15 00:31 UTC
+
 ### [20261015-001756-8352] PWA app-icon badge (Badging API) mirroring unacknowledged Placed orders; looping alarm confirmed already implemented
 - TIER: 3 (high-risk)
 - STATUS: DONE
@@ -123,7 +143,7 @@ Fragile Files before starting ANY task.
 - Started: 2026-10-14 23:32 UTC
 - Files touched: bot/index.js, Admin/sw.js, Admin/badge.png, Admin/js/features/notifications.js, Admin/js/features/promotions.js, Admin/js/auth.js
 - Verified: bot 15/15; optimistic-ui-check 8/8 on rebuilt dist; node --check bot+sw; live send via tunnel with new payload shape sent:1; bot deployed to EC2 (pm2 4+12 restarted, Baileys reconnected)
-- NOT verified / open risk: device rendering of color/image/actions (needs new SW to activate on a real device after hosting deploy � cache v5.6.0); Mark Confirmed action click-through on live order
+- NOT verified / open risk: device rendering of color/image/actions (needs new SW to activate on a real device after hosting deploy � cache v5.6.0); Mark Confirmed action click-through on live order
 - Confidence: HIGH
 - Ended: 2026-10-14 23:47 UTC
 
@@ -1014,4 +1034,14 @@ Fragile Files before starting ANY task.
 - Files: `menu/js/ui.js`, `menu/js/app.js`, `menu/js/delivery.js`, `tests/verify-combos-pill.cjs` (new).
 - Confidence: HIGH (both surfaces live-verified end-to-end with real seeded combo, screenshots captured)
 - Next: none — Combos pill shipped. If business wants the pill to also appear when only some categories have combos (not just when any combo exists), revisit the `hasCombos` condition.
+<!-- TASK_LOG_END -->
+
+### [20261014-183000-combo-modal-dishes-recheck] Create Combo modal dish multi-select RE-VERIFIED live — no bug (timing artifact confirmed)
+
+- STATUS: DONE
+- What happened: followed up on the standing note "only Cheese Pizza listed in Create Combo modal". Live E2E (`tests/verify-combo-modal-dishes.cjs`, fresh owner custom token via `tests/mint-token.cjs`, injectAuth pattern): open Combos tab → Add Combo → `#comboDishList` rendered **22 `.cmb-row`s = 22 RTDB dishes** ✅; search "pizza" → 11 rows ✅; search "zzzz" → `.cmb-empty` shown ✅. Screenshot `.playwright-mcp/combo-modal-dishes.png`. Prior observation was a screenshot taken while the async `get(dishes)` was mid-flight — code at `catalog.js:945-947,1060-1077` is correct, no fix needed.
+- Design decision logged: combo lines stay exempt from **category** discounts only (pos.js nonCombo filter); global/coupon discounts still apply on top — intentional, will NOT be changed.
+- Files: `tests/verify-combo-modal-dishes.cjs` (new).
+- Confidence: HIGH (live UI + RTDB count match)
+- Next: none.
 <!-- TASK_LOG_END -->
