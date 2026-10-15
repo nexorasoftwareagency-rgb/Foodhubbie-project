@@ -98,6 +98,21 @@ export function stopContinuousSound() {
     }
 }
 
+// App-icon badge (Badging API: taskbar/dock on desktop, home-screen icon on
+// installed Android PWA). Mirrors the unacknowledged-Placed set — same truth
+// as the looping alarm.
+// ponytail: only counts orders placed while the page is open (same set as the
+// alarm); Placed orders surviving a reload don't badge — seed the set from
+// ordersMap at boot if that ever matters.
+export function syncAppBadge() {
+    try {
+        if (!navigator.setAppBadge) return;
+        const n = state.unacknowledgedOrders.size;
+        if (n > 0) navigator.setAppBadge(n);
+        else navigator.clearAppBadge();
+    } catch { /* badge unsupported */ }
+}
+
 // bfcache: cleanup handled via visibilitychange/pagehide
 window.addEventListener('pagehide', () => {
     stopContinuousSound();

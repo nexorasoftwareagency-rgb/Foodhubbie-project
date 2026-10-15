@@ -97,6 +97,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261015-001756-8352] PWA app-icon badge (Badging API) mirroring unacknowledged Placed orders; looping alarm confirmed already implemented
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-15 00:17 UTC
+- Files touched: Admin/js/utils.js, Admin/js/features/orders.js, Admin/js/features/notifications.js, Admin/js/branding.js
+- Verified: node --check all 4 files; full build; optimistic-ui-check 8/8; item-2 alarm already present (startContinuousSound utils.js:73 loops every 2s until unacknowledgedOrders empty; stop on status!=Placed orders.js:98-102, pagehide utils.js:102)
+- NOT verified / open risk: live badge render on real device/installed PWA (needs hosting:admin deploy + install); Safari setAppBadge behavior (iOS 16.4+ home-screen only)
+- Confidence: HIGH
+- Ended: 2026-10-15 00:18 UTC
+
 ### [20261014-233503-a5ee] Combo Add-flow UI redesign + dish-style image upload + shared combo math
 - TIER: 2 (medium-risk)
 - STATUS: DONE
@@ -109,8 +119,13 @@ Fragile Files before starting ANY task.
 
 ### [20261014-233242-18be] notification UX: richer admin FCM body, popup actions (View/Confirm), per-type color, promo tag dedup, badge.png, rich image
 - TIER: 2 (medium-risk)
-- STATUS: IN PROGRESS
+- STATUS: DONE
 - Started: 2026-10-14 23:32 UTC
+- Files touched: bot/index.js, Admin/sw.js, Admin/badge.png, Admin/js/features/notifications.js, Admin/js/features/promotions.js, Admin/js/auth.js
+- Verified: bot 15/15; optimistic-ui-check 8/8 on rebuilt dist; node --check bot+sw; live send via tunnel with new payload shape sent:1; bot deployed to EC2 (pm2 4+12 restarted, Baileys reconnected)
+- NOT verified / open risk: device rendering of color/image/actions (needs new SW to activate on a real device after hosting deploy — cache v5.6.0); Mark Confirmed action click-through on live order
+- Confidence: HIGH
+- Ended: 2026-10-14 23:47 UTC
 
 ### [20261014-180319-b6a0] EC2 restart + Phase 6 automated E2E verification: bot-control-api pm2 restart, /tenant-api/notify live (401), optimistic-ui 8/8, check-sw pass, fcm-push headless-limited, plan doc Phase 6 updated
 - TIER: 1 (low-risk)

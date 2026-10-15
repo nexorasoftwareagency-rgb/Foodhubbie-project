@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { escapeHtml, playNotificationSound, formatOrderId, stopContinuousSound } from '../utils.js';
+import { escapeHtml, playNotificationSound, formatOrderId, stopContinuousSound, syncAppBadge } from '../utils.js';
 
 /**
  * SHOW ALERT
@@ -156,6 +156,7 @@ export function clearAllNotifications() {
     state.notifications = [];
     state.isNotificationPending = false;
     state.unacknowledgedOrders.clear();
+    syncAppBadge();
     stopContinuousSound();
     updateNotificationUI();
 }

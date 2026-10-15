@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { syncAppBadge } from './utils.js';
 import { initRealtimeListeners, cleanupOrders } from './features/orders.js';
 import { cleanupCatalog } from './features/catalog.js';
 import { cleanupRiders } from './features/riders.js';
@@ -29,6 +30,7 @@ export function clearStateForOutletSwitch() {
     state.riderStatsData = {};
     state.notifications = [];
     state.unacknowledgedOrders.clear();
+    syncAppBadge();
     state.orderStatusSeen.clear();
     updateNotificationUI();
 

@@ -5,7 +5,7 @@
 
 import { db, Outlet, tenantRef, serverTimestamp, ref, get, set, update, query, orderByChild, orderByKey, equalTo, limitToLast, startAt, endAt, endBefore, onValue, onChildAdded, onChildChanged } from '../firebase.js';
 import { state } from '../state.js';
-import { escapeHtml, showToast, playNotificationSound, startContinuousSound, stopContinuousSound, logAudit, calculateDistance, getFeeFromSlabs, addRiderNotification, getISTDateString, getSkeletonRows, formatOrderId } from '../utils.js';
+import { escapeHtml, showToast, playNotificationSound, startContinuousSound, stopContinuousSound, syncAppBadge, logAudit, calculateDistance, getFeeFromSlabs, addRiderNotification, getISTDateString, getSkeletonRows, formatOrderId } from '../utils.js';
 import { showAlert, addNotification, highlightOrder } from './notifications.js';
 import { showPaymentPicker } from '../ui-utils.js';
 import { autoDeductStock } from './inventory.js';
@@ -76,6 +76,7 @@ export function initRealtimeListeners() {
             showAlert(order);
             addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet, snap.key);
             state.unacknowledgedOrders.add(snap.key);
+            syncAppBadge();
             startContinuousSound();
             setTimeout(() => { highlightOrder(snap.key); }, 1000);
         }
@@ -91,12 +92,14 @@ export function initRealtimeListeners() {
                 showAlert(order);
                 addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet, snap.key);
                 state.unacknowledgedOrders.add(snap.key);
+                syncAppBadge();
                 startContinuousSound();
                 setTimeout(() => { highlightOrder(snap.key); }, 1000);
             }
             // Stop continuous sound when order is no longer "Placed"
             if (order.status !== "Placed") {
                 state.unacknowledgedOrders.delete(snap.key);
+                syncAppBadge();
                 if (state.unacknowledgedOrders.size === 0) {
                     stopContinuousSound();
                 }
