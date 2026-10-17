@@ -89,8 +89,8 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       // `body` (promo/SEND_GENERIC) need it mapped to the template's single
       // {{1}} BODY parameter; otherwise it was silently dropped and the
       // template's static text went out instead of the intended content.
-      // A no-variable template (e.g. proactive_promo) rejects the extra
-      // parameter with code 100 → caller's existing text fallback kicks in.
+      // A template with no variables rejects the extra parameter with code
+      // 100 → caller's existing text fallback kicks in.
       let components = opts.components;
       if ((!components || !components.length) && opts.body) {
         components = [{ type: 'BODY', parameters: [{ type: 'text', text: String(opts.body) }] }];

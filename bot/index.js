@@ -1033,6 +1033,37 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
             if (isRiderChanged) {
                 console.log(`[RIDER] 🔄 Rider Change Detected for #${formatOrderId(order.orderId || id)}: ${lastRider} -> ${currentRider}`);
                 await riderNotify.notifyRiderAssignment(sock, id, order, addInAppNotification);
+
+                // Customer-facing rider notice via the approved UTILITY template
+                // `rider_assigned` — unlike the OTP text at "out for delivery"
+                // (which must stay plain text: Meta rejects OTP-bearing
+                // templates), this one also delivers outside the 24h window.
+                // Meta transport only; on Baileys the customer learns the rider
+                // details from the OTP message later on.
+                if (!isDineIn && typeof sock.sendTemplate === 'function') {
+                    try {
+                        const isEmailRider = currentRider.includes('@') && !currentRider.includes('@s.whatsapp.net') && !currentRider.includes('@g.us') && currentRider.split('@')[1]?.includes('.');
+                        const rider = isEmailRider
+                            ? await getRiderByEmail(currentRider, order.outlet || OUTLET)
+                            : { name: order.riderName, phone: order.riderPhone };
+                        const riderPhone = rider?.phone || order.riderPhone || '';
+                        if (riderPhone) {
+                            await orderRateLimiter.wait();
+                            await sendTemplateMessage(sock, jid, 'rider_assigned', [{
+                                type: 'BODY',
+                                parameters: [
+                                    { type: 'text', text: formatOrderId(order.orderId || id) },
+                                    { type: 'text', text: rider?.name || order.riderName || 'Delivery Partner' },
+                                    { type: 'text', text: riderPhone }
+                                ]
+                            }], order.outlet || OUTLET, 'order_update');
+                        } else {
+                            console.log(`[RIDER] No rider phone on record for #${formatOrderId(order.orderId || id)} — customer rider notice skipped`);
+                        }
+                    } catch (e) {
+                        console.log(`[RIDER] Customer rider notice failed for #${formatOrderId(order.orderId || id)}: ${e.message}`);
+                    }
+                }
             }
 
             const botSettings = await getData("settings/Bot", order.outlet) || {};

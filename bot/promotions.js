@@ -34,7 +34,7 @@ let _killSwitchCache = { value: false, ts: 0 };
 let _promoEnabledCache = { value: true, ts: 0 };
 let _dailyLimitCache = { value: PROMO_WARMUP_DAILY_LIMITS[0], ts: 0 };
 
-async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet) {
+async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet, waTemplateName) {
     // BAN-RISK: promotional sends are official-API (meta) only — Baileys bulk
     // promos are the top account-ban trigger. Hard block (throw → counted failed).
     if (!isMetaTransport(sock)) {
@@ -57,7 +57,7 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, ou
         const isMetaSock = isMetaTransport(sock);
         if (isMetaSock && typeof sock.sendTemplate === 'function') {
             try {
-                await sock.sendTemplate(jid, { name: process.env.PROACTIVE_TEMPLATE || 'proactive_promo', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
+                await sock.sendTemplate(jid, { name: waTemplateName || process.env.PROACTIVE_TEMPLATE || 'proactive_promo', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
                 outboundTracker.trackSend(outlet || 'pizza', 'promo');
                 return;
             } catch (e) {
@@ -200,11 +200,11 @@ async function sleepThroughQuietHours(quietHours, isKillSwitchOnFn) {
     }
 }
 
-async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, sendStopMsg, outlet) {
+async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, sendStopMsg, outlet, waTemplateName) {
     let lastErr = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            await sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet);
+            await sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet, waTemplateName);
             return { ok: true, attempts: attempt };
         } catch (err) {
             lastErr = err;
@@ -253,7 +253,7 @@ async function logPromoSkip(campaignId, phone, reason, OUTLET, db) {
 
 async function runPromotionCampaign(sock, cmd, ctx) {
     const { OUTLET, db, getData, cryptoErrorCount } = ctx;
-    const { campaignId, template, mediaUrl, recipients = [], quietHours, requestedBy, greeting = false, menuText = null, menuImageUrl = null, sendStopMsg = true, isTest = false } = cmd;
+    const { campaignId, template, mediaUrl, recipients = [], quietHours, requestedBy, greeting = false, menuText = null, menuImageUrl = null, sendStopMsg = true, isTest = false, waTemplateName = null } = cmd;
     if (!campaignId || !Array.isArray(recipients) || recipients.length === 0) {
         console.warn(`[Promo] Invalid campaign command: ${campaignId}`);
         return;
@@ -396,7 +396,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
             }
 
             await paceBurstSend();
-            const result = await sendWithRetry(sock, jid, finalText, mainImage, 2, sendStopMsg, OUTLET);
+            const result = await sendWithRetry(sock, jid, finalText, mainImage, 2, sendStopMsg, OUTLET, waTemplateName);
             await logPromoResult(campaignId, phone, jid, result, null, OUTLET, db);
 
             recentResults.push(result.ok);
@@ -497,6 +497,7 @@ async function resumeStuckPromotions(sock, ctx) {
                 campaignId: id,
                 template: c.template,
                 mediaUrl: c.mediaUrl || null,
+                waTemplateName: c.waTemplateName || null,
                 greeting: c.greeting === true,
                 menuText: c.menuText || null,
                 menuImageUrl: c.menuImageUrl || null,
@@ -539,6 +540,7 @@ async function pickupScheduledPromotions(sock, ctx) {
                 campaignId: id,
                 template: c.template,
                 mediaUrl: c.mediaUrl || null,
+                waTemplateName: c.waTemplateName || null,
                 greeting: c.greeting === true,
                 menuText: c.menuText || null,
                 menuImageUrl: c.menuImageUrl || null,

@@ -97,6 +97,46 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261017-032723-b334] Wire rider_assigned template (customer notice on rider change, meta transport) + seed 4 Hinglish shells into platform starter library + fix seed-templates firebase-admin resolution
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-17 03:27 UTC
+- Files touched: bot/index.js, tools/seed-templates.cjs, AGENTS.md
+- Verified: node --check bot/index.js + tools/seed-templates.cjs OK; bot unit tests 15/15; RTDB appTemplates keys unchanged (cake,kitchen,pizza,whatsappTemplates) no clobber; whatsappTemplates now 9 entries incl 4 Hinglish; EC2: index.js backed up (index.js.bak-20261017-rider), scp'd, node --check SYNTAX_OK, pm2 restart 4 12 + save, all 4 online, id4 bot online processing live traffic
+- NOT verified / open risk: rider_assigned live end-to-end send not exercised - needs meta transport (both live outlets run Baileys) + a real rider assignment; greeting_welcome deliberately unwired; no unit test added for promotion template-name fallback chain (trackSend writes production RTDB)
+- Confidence: HIGH
+- Ended: 2026-10-17 03:27 UTC
+
+### [20261017-031434-83d8] Production deploy: promo shell picker + Hinglish shells (admin hosting + EC2 bot)
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-17 03:14 UTC
+- Files touched: Admin/index.html, Admin/js/features/promotions.js, Admin/sw.js, bot/promotions.js, bot/transport.js, AGENTS.md
+- Verified: hosting:admin deployed - live index.html has promoWaTemplate, live sw.js v5.7.0, live promotions.js has transport-blocked feedback; EC2 bot/promotions.js (8 hooks) + transport.js synced with node --check OK; pm2 4+12 restarted online with Baileys reconnected + pm2 save; build clean; bot tests 15/15; templates ground-truth read from Graph (proactive_promo confirmed {{1}})
+- NOT verified / open risk: Actual template send via selected shell - impossible until meta transport + WABA business verification (both outlets Baileys, promos transport-blocked by design); 4 Hinglish shells await Meta approval
+- Confidence: HIGH
+- Ended: 2026-10-17 03:14 UTC
+
+### [20261017-030601-ce46] Per-campaign WhatsApp template shell picker (Admin + bot)
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-17 03:06 UTC
+- Files touched: Admin/index.html, Admin/js/features/promotions.js, bot/promotions.js
+- Verified: node --check bot OK; tools/build.mjs clean; bot tests 15/15; dist contains promoWaTemplate select + 4 Hinglish options; all 13 wiring points grepped
+- NOT verified / open risk: Live E2E send via selected shell (requires deploy + meta transport; promos transport-blocked on Baileys by design)
+- Confidence: HIGH
+- Ended: 2026-10-17 03:06 UTC
+
+### [20261017-025114-6395] Create Hinglish promo templates on WABA
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-17 02:51 UTC
+- Files touched: N/A (no repo changes - Meta API creates only)
+- Verified: Graph API POST accepted all 4 templates (IDs returned, status PENDING)
+- NOT verified / open risk: Meta marketing approval (24-48h review window, wait only)
+- Confidence: HIGH
+- Ended: 2026-10-17 02:53 UTC
+
 ### [20261015-144558-3627] Badge boot-seed: syncAppBadge counts Placed orders from ordersMap (survives reload) + pm2 systemd auto-resurrect on EC2
 - TIER: 2 (medium-risk)
 - STATUS: DONE

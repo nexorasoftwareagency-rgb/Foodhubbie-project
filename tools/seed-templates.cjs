@@ -2,7 +2,7 @@
 // Templates are what "Start from a template" on the Add Restaurant form
 // applies: settings/categories/delivery/tax/bot defaults for a new outlet.
 // The dashboard only reads this node; it never creates templates itself.
-const admin = require('firebase-admin');
+const admin = require('../bot/node_modules/firebase-admin');
 const serviceAccount = require('../bot/service-account.json');
 
 admin.initializeApp({
@@ -153,7 +153,50 @@ const whatsappTemplates = {
     useCase: 'Send after a delivered order to gather a 1–5 rating for quality tracking and follow-up on low scores.',
     variables: { '{{1}}': 'Customer name', '{{2}}': 'Restaurant name' },
   },
+  // Hinglish promo shells (created live on the Foodhubbie WABA 2026-10-17).
+  // Romanized Hinglish is submitted as language 'en'; 'hi' is Devanagari.
+  // Each carries a single {{1}} slot — the restaurant's actual offer text.
+  promo_hinglish_offer: {
+    name: 'promo_hinglish_offer',
+    category: 'MARKETING',
+    language: 'en',
+    body: '🍕 *Khaas Offer!* 🍕\n\n{{1}}\n\n_Order ke liye yahin reply karein ya QR scan karein! 🍕_',
+    explanation: 'Hinglish offer shell — the campaign message goes into the {{1}} slot.',
+    useCase: 'Promote any offer outside the 24h window; write the actual offer text into {{1}}.',
+    variables: { '{{1}}': 'Promo message' },
+  },
+  promo_hinglish_discount: {
+    name: 'promo_hinglish_discount',
+    category: 'MARKETING',
+    language: 'en',
+    body: '🎉 *Sirf Aapke Liye!* 🎉\n\n{{1}}\n\n_Yeh offer limited time ke liye hai — jaldi order karein! 🍕_',
+    explanation: 'Hinglish discount shell with urgency framing.',
+    useCase: 'Time-limited discounts or coupon drops; the code/details go into {{1}}.',
+    variables: { '{{1}}': 'Promo message' },
+  },
+  promo_hinglish_festive: {
+    name: 'promo_hinglish_festive',
+    category: 'MARKETING',
+    language: 'en',
+    body: '✨ *Tyohaar Special!* ✨\n\n{{1}}\n\n_Is tyohaar ko tasty banayein — order abhi karein! 🍕_',
+    explanation: 'Hinglish festive/seasonal shell for holiday campaigns.',
+    useCase: 'Diwali/Holi/festival combos and seasonal offers; the offer text goes into {{1}}.',
+    variables: { '{{1}}': 'Promo message' },
+  },
+  promo_hinglish_winback: {
+    name: 'promo_hinglish_winback',
+    category: 'MARKETING',
+    language: 'en',
+    body: '💚 *Aapko Miss Kar Rahe Hain!* 💚\n\n{{1}}\n\n_Wapas aa jao — aapke liye ek special surprise ready hai! 🍕_',
+    explanation: 'Hinglish win-back shell for lapsed customers.',
+    useCase: 'Re-engage customers who have not ordered in a while; the comeback offer goes into {{1}}.',
+    variables: { '{{1}}': 'Promo message' },
+  },
 };
+
+module.exports = { templates, whatsappTemplates };
+
+if (require.main !== module) return;
 
 (async () => {
   const updates = {};

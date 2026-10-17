@@ -4608,6 +4608,18 @@
                         </div>
 
                         <div class="form-group">
+                            <label for="promoWaTemplate" class="text-muted-small">WhatsApp delivery template</label>
+                            <select id="promoWaTemplate" class="search-input-group" aria-label="WhatsApp delivery template">
+                                <option value="proactive_promo">Special Offer — English</option>
+                                <option value="promo_hinglish_offer">Khaas Offer — Hinglish</option>
+                                <option value="promo_hinglish_discount">Sirf Aapke Liye — Hinglish</option>
+                                <option value="promo_hinglish_festive">Tyohaar Special — Hinglish</option>
+                                <option value="promo_hinglish_winback">Miss You — Hinglish</option>
+                            </select>
+                            <div class="text-muted-small mt-4">Meta shell for official-API delivery. A shell still awaiting Meta approval falls back to plain text, which only delivers inside the 24h customer window.</div>
+                        </div>
+
+                        <div class="form-group">
                             <div class="flex-between mb-4">
                                 <label for="promoTemplate" class="text-muted-small" data-i18n="promo.compose.template">Message template</label>
                                 <button type="button" class="btn-secondary btn-sm" data-action="pickPromoTemplate"><i data-lucide="layout-template"></i> Templates</button>

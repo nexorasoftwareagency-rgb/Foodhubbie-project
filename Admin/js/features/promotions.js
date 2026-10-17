@@ -348,6 +348,7 @@ async function _renderActivePane() {
                     ${c.status === 'paused' && c.pauseReason ? `<span class="text-muted-small" title="${escapeHtml(c.pauseReason)}">${escapeHtml(c.pauseReason)}</span>` : ''}
                     ${c.runAt ? `<span class="text-muted-small">scheduled ${escapeHtml(formatDate(c.runAt))}</span>` : ''}
                     ${c.menuText ? `<span class="text-muted-small" title="Has menu footer">• 🍴 menu</span>` : ''}
+                    ${c.waTemplateName && c.waTemplateName !== 'proactive_promo' ? `<span class="text-muted-small" title="WhatsApp shell">• ${escapeHtml(c.waTemplateName)}</span>` : ''}
                 </div>
                 <div class="flex-row flex-gap-6">
                     <button class="btn-text" data-action="clonePromoCampaign" data-id="${escapeHtml(c.id)}" title="Clone">
@@ -525,10 +526,12 @@ async function _launchCampaign() {
         ? { start: quietStart, end: quietEnd } : null;
 
     const campaignId = 'c_' + Date.now().toString(36);
+    const waTemplateName = document.getElementById('promoWaTemplate')?.value || 'proactive_promo';
     const campaignDoc = {
         id: campaignId,
         status: mode === 'schedule' ? 'scheduled' : 'running',
         template, mediaUrl: _mediaDataUrl || null,
+        waTemplateName,
         greeting, menuText: menuText || null,
         menuImageUrl: _menuImageDataUrl || null,
         sendStopMsg: sendStop,
@@ -557,6 +560,7 @@ async function _launchCampaign() {
             action: 'SEND_PROMOTION',
             campaignId,
             template, mediaUrl: _mediaDataUrl || null,
+            waTemplateName,
             greeting, menuText: menuText || null,
             menuImageUrl: _menuImageDataUrl || null,
             sendStopMsg: sendStop,
@@ -587,6 +591,7 @@ export async function _sendTest() {
         action: 'SEND_PROMOTION',
         campaignId,
         template, mediaUrl: _mediaDataUrl || null,
+        waTemplateName: document.getElementById('promoWaTemplate')?.value || 'proactive_promo',
         greeting, menuText: menuText || null,
         menuImageUrl: (attachMenuImg && _menuImageDataUrl) ? _menuImageDataUrl : null,
         sendStopMsg: sendStop,
@@ -597,15 +602,20 @@ export async function _sendTest() {
     });
     const toastId = Date.now() + Math.random();
     showToast(`⏳ Test message queued — waiting for bot reply...`, 'info', 10000, toastId);
-    // Watch the log entry for this test campaign + phone for up to 10 seconds
+    // Watch the log entry for this test campaign + phone for up to 10 seconds.
+    // Also watch the campaign doc: on Baileys the bot pauses the campaign with
+    // a reason and writes NO log — without this the toast just times out with
+    // a misleading "no response" instead of the real cause.
     const logRef = tenantRef(_outlet(), `bot/promotions/logs/${campaignId}/${phone}`);
-    let listener = null;
+    const campRef = tenantRef(_outlet(), `bot/promotions/campaigns/${campaignId}`);
+    const subs = [];
     let settled = false;
     const cleanup = () => {
-        if (listener) { listener(); listener = null; }
+        subs.forEach((u) => u());
+        subs.length = 0;
         settled = true;
     };
-    listener = onValue(logRef, (snap) => {
+    subs.push(onValue(logRef, (snap) => {
         if (settled) return;
         const log = snap.val();
         if (!log) return;
@@ -623,7 +633,17 @@ export async function _sendTest() {
         if (settled) return;
         cleanup();
         window.__updateToast?.(toastId, `⚠️ Could not watch test result: ${err.message}`, 'warning');
-    });
+    }));
+    subs.push(onValue(campRef, (snap) => {
+        if (settled) return;
+        const c = snap.val();
+        if (!c || !c.pauseReason) return;
+        cleanup();
+        const reason = c.pauseReason === 'transport-blocked'
+            ? 'Promos need the official WhatsApp API — this outlet is on the legacy transport.'
+            : `Paused: ${c.pauseReason}`;
+        window.__updateToast?.(toastId, `⏸️ Test not sent — ${reason}`, 'warning');
+    }));
     // Timeout after 10 seconds
     setTimeout(() => {
         if (settled) return;
@@ -665,6 +685,7 @@ async function _cloneCampaign(id) {
     if (!snap.exists()) return;
     const c = snap.val();
     if (document.getElementById('promoTemplate')) document.getElementById('promoTemplate').value = c.template || '';
+    if (document.getElementById('promoWaTemplate')) document.getElementById('promoWaTemplate').value = c.waTemplateName || 'proactive_promo';
     if (document.getElementById('promoGreeting')) document.getElementById('promoGreeting').checked = c.greeting !== false;
     if (document.getElementById('promoAttachMenu')) {
         document.getElementById('promoAttachMenu').checked = !!c.menuText;
