@@ -97,6 +97,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261015-144558-3627] Badge boot-seed: syncAppBadge counts Placed orders from ordersMap (survives reload) + pm2 systemd auto-resurrect on EC2
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-15 14:45 UTC
+- Files touched: Admin/js/utils.js, Admin/js/features/orders.js
+- Verified: node --check both; full build; optimistic-ui-check 8/8; hosting:admin deployed � live orders.js contains syncAppBadge boot-seed call; EC2 pm2-ubuntu.service is-enabled=true + pm2 save dump written (bots resurrect on reboot); tunnel keep-alive cron covers cloudflared (ledger b57e)
+- NOT verified / open risk: actual badge count on a real installed device after reload (requires install + manual Placed order); full EC2 reboot cycle end-to-end (unit enabled + dump saved is the standard contract, not reboot-tested live)
+- Confidence: HIGH
+- Ended: 2026-10-15 14:46 UTC
+
 ### [20261015-011628-b57e] EC2 cloudflared tunnel keep-alive: cron watchdog restarts dead tunnels (:4000 bot-control-api + :5000 webhook), syncs dynamic trycloudflare URL to RTDB config/tunnelUrl
 - TIER: 3 (high-risk)
 - STATUS: DONE
@@ -1044,4 +1054,16 @@ Fragile Files before starting ANY task.
 - Files: `tests/verify-combo-modal-dishes.cjs` (new).
 - Confidence: HIGH (live UI + RTDB count match)
 - Next: none.
+<!-- TASK_LOG_END -->
+
+### [20261017-074500-qr-combo-coupon-checkout] Full QR flow live: combo → cart → YAY99 → checkout → receipt; fixed discount label bug
+
+- STATUS: DONE
+- What happened: full QR table-menu flow E2E verified live (`tests/verify-qr-combo-coupon-checkout.cjs`): seeded 20% combo (109+119→87+95=182) → Add Combo (badge 2) → cart ₹182 → applied **YAY99** (Weekend Special, 23% coupon) → discount **₹42** = round(182×0.23), green applied chip "Weekend Special applied — ₹42 off (23% off)", GST ₹9 + Service ₹4 → Total **₹153** (screenshots `flow-1..3`). Checkout: name+10-digit phone → PLACE ORDER → group-choice screen appeared (session already had "Group A" from run 1) → picked group → tracking screen rendered receipt card: `#06-171026-1`, Table 01, items `veggie Lover Pizza ×1 ₹87` + `Farmhouse Pizza ×1 ₹95`, total ₹153, status "Order Received" (`flow-4-tracking-receipt.png`). RTDB order record: Placed, subtotal 182, discount 42, discountSource `coupon:YAY99`, tax 9.1, serviceCharge 3.64, **total 152.74** (exact math), baked combo prices 87/95. All ck PASS.
+- **Bug found + fixed**: cart summary row + order record showed generic "Discount"/empty `discountLabel` because `validateCoupon` (menu/js/discount.js) returned `name` but `updateCartTotals` (ui.js:351) and `placeOrder` (order.js:131) read `.label`. Fix: one line — added `label: d.name || d.couponCode` to the validateCoupon return (delivery-order.js already fell back to name; now both surfaces + RTDB get "Weekend Special"). Deployed `hosting:menu`.
+- **Anomaly (logged, unproven root cause)**: run 1 (pre-fix) placed order `06-171026-1` (seq=1); run 2 (post-fix) appears to have REUSED key -1 instead of -2 (run-2 payload overwrote; sequence node stayed 1). Session totals counted once (runningTotal 182 / grandTotal 152.74 / discount 42 — single, correct). Post-hoc client experiment: `runTransaction` on the seq node increments correctly (1→2→3, committed) — seq now at 3 (gaps at -2/-3, harmless). Suspect one-off SDK/tx glitch under parallel testing. **Hardening option (not done)**: `generateOrderId`'s `|| 1` fallback (order.js:50) could theoretically overwrite an existing order if a committed tx ever returns a falsy snapshot — replace with a throw.
+- **Production residue (flagged for user)**: live test order `06-171026-1` (E2E Tester, ₹152.74, YAY99) is Placed on Table 01, session `-P46c7WJA3OWSIo5osdB` Group A active bill ₹152.74 — cancel/void from admin if not wanted. Combo seed + test guest (9000011122) cleaned.
+- Files: `menu/js/discount.js` (label fix, deployed), `tests/verify-qr-combo-coupon-checkout.cjs` (new).
+- Confidence: HIGH (flow + math + RTDB record verified; label fix proven live in run 2)
+- Next: optionally harden generateOrderId fallback (throw instead of `|| 1`); consider cart UX — applied coupon leaves code text in input with "Apply" acting as remove.
 <!-- TASK_LOG_END -->

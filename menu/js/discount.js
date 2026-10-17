@@ -62,6 +62,7 @@ export async function validateCoupon(code, subtotal) {
         return {
             discountId: d.id,
             name: d.name || d.couponCode,
+            label: d.name || d.couponCode, // cart summary + orderPayload.discountLabel read `.label`
             couponCode: d.couponCode,
             mode: d.mode,
             value: d.value,
