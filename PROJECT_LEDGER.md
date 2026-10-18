@@ -1147,3 +1147,12 @@ Fragile Files before starting ANY task.
 - Files: `menu/js/app.js`, `menu/js/delivery.js`, `menu/css/app.css`.
 - Confidence: HIGH
 - Next: none.- [2026-10-18 ~10:00 UTC] **SEO PHASE 1 DONE (docs/SEO-PLAN.md)**: canonical tags on all 5 website pages (live-verified), GA4 wired via website/shared/ga4.js (Firebase Analytics, graceful no-op) + site CSP opened for gstatic/googletagmanager/google-analytics in firebase.json website target, index title trimmed to 58-char keyword-first ("Restaurant Management Software for Pizzerias | FoodHubbie", og:title mirrored), 7 gbp-*.png debris moved from website/ to tools/gbp-shots/. Audits passed unchanged: unique meta descriptions on all 5, single-H1 heading structure, full image alt coverage on index. Pending user 1-click: enable Google Analytics in Firebase console (beacons currently id=undefined). Next queued: Lighthouse CWV (tools/ga4-check.cjs reusable for network checks), clean URLs, 404 page, BreadcrumbList, Bing (user OTP).
+### [2026-10-18 rider-template-dedupe] -3 lines: one rider-contact resolver in bot/index.js
+
+- STATUS: DONE
+- What happened: the `rider_assigned` block (added 2026-10-17) had copied the email-vs-JID predicate + `getRiderByEmail` fallback from the OTP block ~110 lines below, and the two copies had already drifted (the newer one dropped the `@broadcast` term). Extracted one `resolveRider(order)` (bot/index.js:805) and called it from both sites (1069, 1173); dropped the unreachable `order.riderName ||` middle term, folded the `rider?.phone || order.riderPhone || ''` chain into the helper, hoisted the 4x `formatOrderId(order.orderId || id)` into one `const oid`.
+- Behavior nuance: an email rider that maps to nothing now falls back to the order's copied name/phone ('Delivery Partner' / '') instead of emitting no rider line at all. All other output identical.
+- Verify: `node --check bot/index.js` OK; `node --test bot/tests/unit.test.js` 15/15; deployed to EC2 (backup `index.js.bak-20261018-riderdedupe`), md5 local==remote `983bb77ec7e22d46eab75184f690848f`, bot online, blocklist loaded.
+- Files: `bot/index.js`.
+- Confidence: HIGH
+- Next: live confirm of the image-greeting path still pending (user 'Hi' from 9724649971).

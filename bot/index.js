@@ -799,6 +799,21 @@ async function getRiderByEmail(email, outlet = 'outlet') {
     return null;
 }
 
+// Resolve a rider's contact for order notifications — order.riderId is either
+// an email (dashboard rider) or a WhatsApp JID; name/phone ride along on the order.
+async function resolveRider(order) {
+    const riderId = order.riderId || order.assignedRider;
+    if (!riderId) return null;
+    const isEmail = riderId.includes('@') && !riderId.includes('@s.whatsapp.net') &&
+        !riderId.includes('@g.us') && !riderId.includes('@broadcast') &&
+        riderId.split('@')[1]?.includes('.');
+    const r = isEmail ? await getRiderByEmail(riderId, order.outlet || OUTLET) : null;
+    return {
+        name: r?.name || order.riderName || "Delivery Partner",
+        phone: r?.phone || order.riderPhone || ""
+    };
+}
+
 async function addInAppNotification(uid, title, body, type = 'info', icon = 'bell', outlet = 'outlet') {
     if (!uid) return;
     try {
@@ -1048,27 +1063,24 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 // Meta transport only; on Baileys the customer learns the rider
                 // details from the OTP message later on.
                 if (!isDineIn && typeof sock.sendTemplate === 'function') {
+                    const oid = formatOrderId(order.orderId || id);
                     try {
-                        const isEmailRider = currentRider.includes('@') && !currentRider.includes('@s.whatsapp.net') && !currentRider.includes('@g.us') && currentRider.split('@')[1]?.includes('.');
-                        const rider = isEmailRider
-                            ? await getRiderByEmail(currentRider, order.outlet || OUTLET)
-                            : { name: order.riderName, phone: order.riderPhone };
-                        const riderPhone = rider?.phone || order.riderPhone || '';
-                        if (riderPhone) {
+                        const rider = await resolveRider(order);
+                        if (rider?.phone) {
                             await orderRateLimiter.wait();
                             await sendTemplateMessage(sock, jid, 'rider_assigned', [{
                                 type: 'BODY',
                                 parameters: [
-                                    { type: 'text', text: formatOrderId(order.orderId || id) },
-                                    { type: 'text', text: rider?.name || order.riderName || 'Delivery Partner' },
-                                    { type: 'text', text: riderPhone }
+                                    { type: 'text', text: oid },
+                                    { type: 'text', text: rider.name },
+                                    { type: 'text', text: rider.phone }
                                 ]
                             }], order.outlet || OUTLET, 'order_update');
                         } else {
-                            console.log(`[RIDER] No rider phone on record for #${formatOrderId(order.orderId || id)} — customer rider notice skipped`);
+                            console.log(`[RIDER] No rider phone on record for #${oid} — customer rider notice skipped`);
                         }
                     } catch (e) {
-                        console.log(`[RIDER] Customer rider notice failed for #${formatOrderId(order.orderId || id)}: ${e.message}`);
+                        console.log(`[RIDER] Customer rider notice failed for #${oid}: ${e.message}`);
                     }
                 }
             }
@@ -1156,23 +1168,8 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     await updateData(`orders/${id}`, { otp: otp, deliveryOTP: otp }, order.outlet);
                 }
 
-                let riderInfoText = "";
-                const riderId = order.riderId || order.assignedRider;
-                if (riderId) {
-                    // Distinguish email (user@domain.com) from JID (phone@s.whatsapp.net)
-                    // Email has a domain part with dot, JID has known WhatsApp domains
-                    const isEmail = riderId.includes('@') && 
-                        !riderId.includes('@s.whatsapp.net') && 
-                        !riderId.includes('@g.us') && 
-                        !riderId.includes('@broadcast') &&
-                        riderId.split('@')[1]?.includes('.');
-                    const rider = isEmail 
-                        ? await getRiderByEmail(riderId, order.outlet || 'outlet') 
-                        : { name: order.riderName, phone: order.riderPhone };
-                    if (rider) {
-                        riderInfoText = `\n📞 *Rider:* ${rider.name || "Delivery Partner"} (${rider.phone || ""})`;
-                    }
-                }
+                const rider = await resolveRider(order);
+                const riderInfoText = rider ? `\n📞 *Rider:* ${rider.name} (${rider.phone})` : "";
 
                 // OTP messages MUST be plain text (24h window) — Meta rejects OTP templates
                 if (isOtpChanged) {
