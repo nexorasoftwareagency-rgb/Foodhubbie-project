@@ -132,3 +132,9 @@ tools/ssm-*.ps1
 
 playwright-report/
 .agent/
+
+# Promo/video working assets - frames are regenerable from the footage, renders from comp.html
+Promo-Campaign/footage/
+film/*/*.mp4
+film/*/*.webm
+film/*/sfx.wav
