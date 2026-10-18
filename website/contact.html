@@ -5,34 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Contact Us — FoodHubbie ERP</title>
 <meta name="description" content="Get in touch with FoodHubbie ERP — WhatsApp, email, or phone. We're here to help.">
+<link rel="canonical" href="https://foodhubbie-web.web.app/contact.html">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍕</text></svg>">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Contact Us — FoodHubbie ERP">
+<meta property="og:description" content="Get in touch with FoodHubbie ERP — WhatsApp, email, or phone. We're here to help.">
+<meta property="og:image" content="https://foodhubbie-web.web.app/assets/shots/admin-dashboard.webp">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="shared.css">
 <style>
-  :root{--brand:#E84908;--brand-dark:#c23a05;--brand-light:#fff3e2;--ink:#111827;--muted:#6b7280;--bg:#fff;--soft:#faf8f6;--line:#e5e7eb;--radius:16px;--shadow:0 1px 3px rgba(0,0,0,.06);--shadow-lg:0 10px 40px rgba(0,0,0,.08)}
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--ink);line-height:1.65;-webkit-font-smoothing:antialiased;padding-bottom:64px}
-  .wrap{max-width:1120px;margin:0 auto;padding:0 28px}
-  .btn{display:inline-flex;align-items:center;gap:10px;padding:16px 32px;border-radius:14px;text-decoration:none;font-weight:600;font-size:16px;transition:all .2s;border:2px solid transparent}
+  /* shared.css: vars, reset, nav, buttons, bottom-nav, footer base */
+  .btn{border-radius:14px;padding:16px 32px;font-size:16px;gap:10px}
   .btn:hover{transform:translateY(-2px)}
-  .btn.whatsapp{background:#25D366;color:#fff}
-  .btn.whatsapp:hover{background:#1da851;box-shadow:0 8px 24px rgba(37,211,102,.3)}
-  .btn.gmail{background:#fff;color:#111;border:2px solid var(--line)}
-  .btn.gmail:hover{border-color:var(--brand);color:var(--brand)}
-  .btn.phone{background:var(--brand);color:#fff}
-  .btn.phone:hover{background:var(--brand-dark);box-shadow:0 8px 24px rgba(232,73,8,.3)}
 
-  header{position:sticky;top:0;background:rgba(255,255,255,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:100}
-  nav{display:flex;align-items:center;justify-content:space-between;height:60px}
-  .logo{font-weight:800;font-size:18px;text-decoration:none;color:var(--ink)}
-  .logo span{color:var(--brand)}
-  nav .links{display:flex;align-items:center;gap:24px}
-  nav a.link{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500}
-  nav a.link:hover{color:var(--ink)}
-
-  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%);text-align:center}
-  .kicker{color:var(--brand);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
-  h1{font-size:clamp(28px,5vw,42px);letter-spacing:-.025em;font-weight:800;margin-bottom:12px}
-  .sub{color:var(--muted);font-size:17px;max-width:600px;margin:0 auto}
+  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%)}
+  h1{font-size:clamp(28px,5vw,42px)}
 
   .contact-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding:64px 0}
   @media(max-width:768px){.contact-grid{grid-template-columns:1fr;max-width:400px;margin-left:auto;margin-right:auto}}
@@ -54,19 +44,10 @@
   .info-box ul li:last-child{border-bottom:0}
   .info-box ul li b{color:var(--ink);font-weight:600}
 
-  .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:100}
-  .bottom-nav .wrap{display:flex;justify-content:center;gap:0}
-  .bottom-nav a{flex:1;max-width:200px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px 10px;text-decoration:none;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-top:2px solid transparent}
-  .bottom-nav a:hover{color:var(--brand)}
-  .nav-icon{font-size:20px}
-
-  footer{background:#0a0a0a;color:rgba(255,255,255,.5);padding:40px 0 24px;margin-top:64px}
+  footer{margin-top:64px}
   footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
-  footer .logo{color:#fff;font-weight:800;font-size:16px}
-  footer .logo span{color:var(--brand)}
-  footer a{color:rgba(255,255,255,.5);text-decoration:none;font-size:13px}
-  footer a:hover{color:#fff}
 </style>
+<script type="module" src="shared/ga4.js"></script>
 </head>
 <body>
 
@@ -87,7 +68,7 @@
   <div class="wrap">
     <a href="index.html" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;margin-bottom:32px">← Back to Home</a>
     <div class="kicker">Contact Us</div>
-    <h1>Let's get your pizza business online</h1>
+    <h1>Let's get your restaurant online</h1>
     <p class="sub">Reach out on WhatsApp, email, or phone — we'll help you set up FoodHubbie for your restaurant.</p>
   </div>
 </section>

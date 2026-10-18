@@ -439,8 +439,36 @@
       ],
       "rewrites": [
         {
-          "source": "**",
-          "destination": "/index.html"
+          "source": "/riders",
+          "destination": "/riders.html"
+        },
+        {
+          "source": "/kds",
+          "destination": "/kds.html"
+        },
+        {
+          "source": "/pos-billing",
+          "destination": "/pos-billing.html"
+        },
+        {
+          "source": "/qr-ordering",
+          "destination": "/qr-ordering.html"
+        },
+        {
+          "source": "/signup",
+          "destination": "/signup.html"
+        },
+        {
+          "source": "/architecture",
+          "destination": "/architecture.html"
+        },
+        {
+          "source": "/book",
+          "destination": "/book.html"
+        },
+        {
+          "source": "/contact",
+          "destination": "/contact.html"
         }
       ],
       "headers": [
@@ -461,7 +489,7 @@
             },
             {
               "key": "Content-Security-Policy",
-              "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://foodhubbie-assets.web.app; connect-src 'self' https://*.firebaseio.com https://*.firebasedatabase.app; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+              "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://foodhubbie-assets.web.app https://*.google-analytics.com https://www.googletagmanager.com; connect-src 'self' https://*.firebaseio.com https://*.firebasedatabase.app https://*.google-analytics.com https://www.google-analytics.com https://www.googletagmanager.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
             }
           ]
         }

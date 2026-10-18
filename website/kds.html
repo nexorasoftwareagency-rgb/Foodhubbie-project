@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kitchen Display System for Restaurants | FoodHubbie</title>
+<meta name="description" content="A kitchen display system (KDS) that shows every order the moment it's placed — dine-in, QR table and delivery — on one live screen. No printed KOTs, no shouting. Free trial.">
+<link rel="canonical" href="https://foodhubbie-web.web.app/kds.html">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍕</text></svg>">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Kitchen Display System for Restaurants | FoodHubbie">
+<meta property="og:description" content="Every order — dine-in, QR table and delivery — lands on one live kitchen screen the moment it's placed. Tap to update status. No printed KOTs.">
+<meta property="og:image" content="https://foodhubbie-web.web.app/assets/shots/live-orders.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"></noscript>
+<link rel="preload" as="image" href="assets/shots/live-orders.webp" fetchpriority="high">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%)}
+  h1{font-size:clamp(28px,5vw,42px)}
+  section{padding:64px 0 0}
+  h2{font-size:clamp(24px,4vw,36px);letter-spacing:-.02em;font-weight:800;margin-bottom:14px}
+  .lead{color:var(--muted);max-width:680px;margin-bottom:36px;font-size:16px;line-height:1.7}
+  .img-hero{width:100%;border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+  @media(max-width:860px){.duo{grid-template-columns:1fr}}
+  .duo figure{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+  .duo img{width:100%;display:block;object-fit:cover;height:300px}
+  .duo figcaption{padding:14px 18px;font-size:13px;color:var(--muted)}
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px}
+  @media(max-width:860px){.benefits{grid-template-columns:1fr}}
+  .benefit{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+  .benefit .ico{font-size:30px;margin-bottom:10px}
+  .benefit b{font-size:15px;display:block;margin-bottom:6px}
+  .benefit p{font-size:13.5px;color:var(--muted);line-height:1.65}
+  .faq{max-width:760px;margin-top:28px}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .faq summary{font-weight:700;font-size:15px;cursor:pointer}
+  .faq p{color:var(--muted);font-size:14px;line-height:1.7;margin-top:10px}
+  .cta-strip{background:linear-gradient(135deg,#fff0e6,#ffe3d2);border:1px solid #ffd9c2;border-radius:var(--radius);padding:36px;text-align:center;margin-top:64px}
+  .cta-strip h2{margin-bottom:8px}
+  .cta-strip p{color:var(--muted);margin-bottom:20px}
+  .cta-strip a{margin:4px}
+  footer{margin-top:72px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+</style>
+<script type="module" src="shared/ga4.js"></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"Kitchen Display System","item":"https://foodhubbie-web.web.app/kds.html"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is a kitchen display system (KDS)?","acceptedAnswer":{"@type":"Answer","text":"A kitchen display system is a screen in the kitchen that replaces paper order tickets. Every order — dine-in, QR table and delivery — appears on it the moment it's placed, with the table number and exact customizations the customer chose. Kitchen staff mark each order cooking / ready / served, and everyone downstream sees the update instantly."}},{"@type":"Question","name":"How much does a kitchen display system cost?","acceptedAnswer":{"@type":"Answer","text":"FoodHubbie's KDS is included in the standard plan: a flat ₹1–5 per order plus a one-time ₹500 setup. No separate KDS licence, no extra screen subscription — and the free trial covers it."}},{"@type":"Question","name":"Does the owner need to be at the restaurant to see orders?","acceptedAnswer":{"@type":"Answer","text":"No. The admin dashboard mirrors the kitchen screen from anywhere. Ordering, cooking and delivery statuses are live in your pocket — that's what the same live-orders feed powers."}},{"@type":"Question","name":"What happens when a customer customizes an order from the QR menu?","acceptedAnswer":{"@type":"Answer","text":"The customization travels with the order to the kitchen screen exactly as chosen — variant, toppings, quantity, notes. Nothing is retyped or summarized, so the cook makes what the customer actually picked."}},{"@type":"Question","name":"Do I need special hardware for KDS?","acceptedAnswer":{"@type":"Answer","text":"No. Any phone, tablet or old laptop the kitchen already owns runs it in the browser. No dedicated touchscreen terminals or installation visits."}}]}
+</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="index.html">Food<span>Hubbie</span> ERP</a>
+      <div class="links">
+        <a class="link" href="index.html">Home</a>
+        <a class="link" href="architecture.html">How It Works</a>
+        <a class="link" href="kds.html" style="color:var(--brand)">Kitchen Display</a>
+        <a class="link" href="contact.html">Contact</a>
+        <a class="btn" href="signup.html" style="padding:10px 22px;font-size:14px">Start free trial</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--muted);margin-bottom:14px"><a href="/" style="color:var(--muted);text-decoration:none">Home</a>&nbsp;/&nbsp;<span style="color:var(--brand);font-weight:600">Kitchen Display</span></nav>
+    <div class="kicker">Feature</div>
+    <h1>The kitchen sees the order before the waiter finishes saying it</h1>
+    <p class="sub">A kitchen display system wired straight into your ordering: QR table orders, dine-in and delivery tickets appear live the second they're placed — with every customization intact. One tap to move it across the line.</p>
+    <div class="ctas" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px">
+      <a class="btn" href="signup.html">Start free trial →</a>
+      <a class="btn ghost" href="book.html">Book a 15-min demo →</a>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+
+  <section>
+    <h2>Paper KOTs, gone. One live screen instead.</h2>
+    <p class="lead">The kitchen display system is where ordering software earns its keep. In FoodHubbie the cook's screen is the same live feed the cashier and owner run on: a QR customer adds extra cheese and the ticket on the screen shows it before the plate's even needed. Staff tap through statuses — cooking, ready, served — and the customer's own phone shows the progress.</p>
+    <figure>
+      <img class="img-hero" src="assets/shots/live-orders.webp" alt="FoodHubbie kitchen display system showing live incoming orders" fetchpriority="high" decoding="async">
+      <figcaption style="color:var(--muted);font-size:13px;margin-top:10px">Live orders feed — the same screen the kitchen, cashier and owner all run.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Order statuses everyone can see</h2>
+    <div class="duo">
+      <figure>
+        <img src="assets/shots/orders.webp" alt="Order list in FoodHubbie kitchen display with statuses" loading="lazy" decoding="async">
+        <figcaption>Every ticket carries its channel (dine-in / QR / delivery) and table or rider info.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/shots/orders-update.webp" alt="Updating order status on the FoodHubbie kitchen screen" loading="lazy" decoding="async">
+        <figcaption>One tap updates status — instantly on the kitchen screen, the cashier's POS and the customer's phone.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>What changes on a busy shift</h2>
+    <div class="benefits">
+      <div class="benefit"><div class="ico">👀</div><b>Zero misreads</b><p>The ticket shows exactly what the customer picked — variant, toppings, notes. No waiter shorthand, no "was this chicken or paneer?".</p></div>
+      <div class="benefit"><div class="ico">⏱️</div><b>One-tap status flow</b><p>Cooking → ready → served. Each tap pushes the update everywhere at once — POS, owner dashboard, customer's phone.</p></div>
+      <div class="benefit"><div class="ico">📡</div><b>Owner sees it from anywhere</b><p>The admin dashboard mirrors the kitchen live, so you know what's happening without standing behind the pass.</p></div>
+      <div class="benefit"><div class="ico">📴</div><b>Any device works</b><p>An old tablet or laptop on the prep counter is enough — it's a browser screen, not special KDS hardware.</p></div>
+      <div class="benefit"><div class="ico">🧾</div><b>Bills stay in sync</b><p>Billing reads from the same session data the kitchen cooks from. What's on the screen is what gets billed — no end-of-night surprises.</p></div>
+      <div class="benefit"><div class="ico">💸</div><b>No separate KDS cost</b><p>Included in the flat ₹1–5-per-order plan. Most vendors sell the KDS as an add-on module; here it's the standard.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>KDS questions, answered plainly</h2>
+    <div class="faq">
+      <details open><summary>What is a kitchen display system (KDS)?</summary><p>A kitchen display system is a screen in the kitchen that replaces paper order tickets. Every order — dine-in, QR table and delivery — appears on it the moment it's placed, with the table number and exact customizations the customer chose. Kitchen staff mark each order cooking / ready / served, and everyone downstream sees the update instantly.</p></details>
+      <details><summary>How much does a kitchen display system cost?</summary><p>FoodHubbie's KDS is included in the standard plan: a flat ₹1–5 per order plus a one-time ₹500 setup. No separate KDS licence, no extra screen subscription — and the free trial covers it.</p></details>
+      <details><summary>Does the owner need to be at the restaurant to see orders?</summary><p>No. The admin dashboard mirrors the kitchen screen from anywhere. Ordering, cooking and delivery statuses are live in your pocket — that's what the same live-orders feed powers.</p></details>
+      <details><summary>What happens when a customer customizes an order from the QR menu?</summary><p>The customization travels with the order to the kitchen screen exactly as chosen — variant, toppings, quantity, notes. Nothing is retyped or summarized, so the cook makes what the customer actually picked.</p></details>
+      <details><summary>Do I need special hardware for KDS?</summary><p>No. Any phone, tablet or old laptop the kitchen already owns runs it in the browser. No dedicated touchscreen terminals or installation visits.</p></details>
+    </div>
+  </section>
+
+  <section class="cta-strip">
+    <h2>Try it on tomorrow's rush</h2>
+    <p>The free trial runs the full loop — QR order in, kitchen ticket up, bill closed. WhatsApp us and it's live the same day.</p>
+    <a class="btn" href="signup.html">Start free trial →</a>
+    <a class="btn ghost" href="https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%27d%20like%20to%20try%20the%20kitchen%20display%20system.%20(From%3A%20foodhubbie-web.web.app)" target="_blank" rel="noopener">WhatsApp us</a>
+  </section>
+
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="index.html">Home</a> · <a href="architecture.html">How It Works</a> · <a href="riders.html">Riders</a> · <a href="qr-ordering.html">QR Ordering</a> · <a href="pos-billing.html">POS Billing</a> · <a href="kds.html">Kitchen Display</a> · <a href="contact.html">Contact</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

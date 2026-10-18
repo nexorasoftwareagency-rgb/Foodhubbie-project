@@ -12,6 +12,7 @@ import {
   markReachedDrop,
   verifyOtp as verifyOtpService,
   resendOtp as resendOtpService,
+  getOrderOTP,
   completeDelivery,
   ProximityError,
 } from "@/services/orderService";
@@ -162,17 +163,17 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
           outlet: order.outlet,
           orderId: order.id,
           enteredOtp: code,
-          actualOtp: order.deliveryOTP || order.otp || "",
           backupCode: order.backupCode,
         });
         toast.warning("You're offline", { description: "OTP verification queued for sync." });
         return { success: true };
       }
+      const actualOtp = await getOrderOTP({ outlet: order.outlet, orderId: order.id });
       const result = await verifyOtpService({
         outlet: order.outlet,
         orderId: order.id,
         enteredOtp: code,
-        actualOtp: order.deliveryOTP || order.otp || "",
+        actualOtp: actualOtp ?? "",
         backupCode: order.backupCode,
       });
       if (result.success) {
@@ -183,7 +184,7 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
       return result;
     } catch (err) {
       toast.error("OTP verification failed. Please try again.");
-      if (user?.uid) logRiderError(user.uid, "ActiveTripView.verifyOtp", err);
+      if (user?.uid) logRiderError(user.uid, "useOrderActions.verifyOtp", err);
       return { success: false };
     }
   }
@@ -192,28 +193,30 @@ export function useOrderActions(order: ActiveOrder): UseOrderActionsResult {
     await resendOtpService({ outlet: order.outlet, orderId: order.id });
   }
 
-  function handleEmergencyOverride() {
+  async function handleEmergencyOverride() {
     if (!order.backupCode) {
       toast.error("No backup code configured for this outlet.");
       return;
     }
-    verifyOtpService({
-      outlet: order.outlet,
-      orderId: order.id,
-      enteredOtp: order.backupCode,
-      actualOtp: order.deliveryOTP || order.otp || "",
-      backupCode: order.backupCode,
-    }).then((result) => {
+    try {
+      const actualOtp = await getOrderOTP({ outlet: order.outlet, orderId: order.id });
+      const result = await verifyOtpService({
+        outlet: order.outlet,
+        orderId: order.id,
+        enteredOtp: order.backupCode,
+        actualOtp: actualOtp ?? "",
+        backupCode: order.backupCode,
+      });
       if (result.success) {
         setVerifiedBy("ADMIN_FALLBACK");
         setOtpOpen(false);
         setPayOpen(true);
         toast.warning("Emergency override used", { description: "This is logged for audit." });
       }
-    }).catch((err) => {
+    } catch (err) {
       toast.error("Emergency override failed");
-      if (user?.uid) logRiderError(user.uid, "ActiveTripView.emergencyOverride", err);
-    });
+      if (user?.uid) logRiderError(user.uid, "useOrderActions.emergencyOverride", err);
+    }
   }
 
   async function handleConfirmPayment(method: "CASH" | "UPI") {

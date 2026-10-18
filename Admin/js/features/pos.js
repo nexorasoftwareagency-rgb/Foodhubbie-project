@@ -1254,7 +1254,7 @@ export function addComboToWalkinCart(comboId) {
         ui.showToast('This combo is no longer active', 'warning');
         return;
     }
-    const items = combo.items || [];
+    const items = Object.values(combo.items || {});
     const entries = [];
     items.forEach(it => {
         const dish = state.allWalkinDishes.find(d => d.id === it.dishId);

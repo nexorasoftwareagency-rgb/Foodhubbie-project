@@ -182,7 +182,6 @@ async function approveRequest(key) {
         contactPhone: r.contactPhone,
         contactEmail: r.contactEmail,
         adminEmail: r.adminEmail,
-        adminPassword: r.adminPassword,
         plan: r.plan,
         template: r.template,
         whatsappConnect: r.whatsappConnect,
@@ -242,7 +241,10 @@ async function rejectRequest(key) {
       rejectReason: reasonText,
       reviewedAt: Date.now(),
       reviewedBy: firebase.auth().currentUser.uid,
+      adminPassword: null, // burn any legacy inline password on reject
     });
+    // Burn the write-only secret too (create-or-delete rule allows key-holder delete).
+    await firebase.database().ref(`onboardingSecrets/${key}`).set(null).catch(() => {});
     showToast('Application rejected.', 'success');
   } catch (err) {
     console.error('reject failed', err);

@@ -1,10 +1,11 @@
 ﻿import { Outlet, BUSINESS_ID, db, uploadImage, deleteImage, ref, get, set, update, remove, push, onValue, child } from '../firebase.js';
-import { showToast, escapeHtml, logAudit, getSkeletonRows } from '../utils.js';
+import { showToast, escapeHtml, logAudit, getSkeletonRows, previewImage } from '../utils.js';
 import { state } from '../state.js';
 import { requireAdminReauth } from '../auth.js';
 import { showConfirm, showDeleteConfirm } from '../ui-utils.js';
 import { loadLucide } from '../ui.js';
 import { mirrorToMenuBank } from '../../shared/menu-bank.js';
+import { comboPriceTotal, isComboActive } from '../../shared/combo-math.js';
 
 const _bankSource = () => ({ bid: BUSINESS_ID(), oid: Outlet.current });
 
@@ -628,6 +629,7 @@ export function cleanupCatalog() {
     console.log("[Catalog] Detaching listeners...");
     if (_categoriesUnsub) { _categoriesUnsub(); _categoriesUnsub = null; }
     if (_dishesUnsub) { _dishesUnsub(); _dishesUnsub = null; }
+    if (_combosUnsub) { _combosUnsub(); _combosUnsub = null; }
 }
 
 export const toggleDishAvailable = (id, available) => update(Outlet.ref(`dishes/${id}`), { stock: available });
@@ -871,16 +873,20 @@ export function loadCombos() {
             return;
         }
         if (empty) empty.style.display = 'none';
-        let dishNames = {};
+        let dishInfo = {};
         try {
             const dishesSnap = await get(Outlet.ref('dishes'));
-            dishesSnap.forEach(ch => { dishNames[ch.key] = ch.val()?.name || ch.key; });
+            dishesSnap.forEach(ch => {
+                const d = ch.val();
+                dishInfo[ch.key] = { name: d?.name || ch.key, price: Number(d?.price ?? (d?.sizes ? Object.values(d.sizes)[0] : 0)) || 0 };
+            });
         } catch (_) {}
-        const now = Date.now();
         list.innerHTML = combos.map(c => {
-            const active = (c.startAt || 0) <= now && now <= (c.endAt || 0);
-            const itemsTxt = (c.items || []).map(it => `${dishNames[it.dishId] || it.dishId} x${it.qty}`).join(', ');
+            const active = isComboActive(c);
+            const itemsTxt = (c.items || []).map(it => `${dishInfo[it.dishId]?.name || it.dishId} x${it.qty}`).join(', ');
             const disc = c.discountType === 'percentage' ? `${c.discountValue}% off` : `₹${c.discountValue} off`;
+            const orig = (c.items || []).reduce((s, it) => s + ((dishInfo[it.dishId]?.price ?? Number(it.price)) || 0) * (it.qty || 1), 0);
+            const price = comboPriceTotal(orig, c.discountType, c.discountValue);
             const fmt = ms => ms ? new Date(ms).toLocaleDateString() : '—';
             return `
             <div class="glass-card p-20">
@@ -888,7 +894,8 @@ export function loadCombos() {
                     <h4>${escapeHtml(c.name || 'Unnamed Combo')}</h4>
                     <span class="stock-badge ${active ? 'available' : 'out'}">${active ? 'Active' : 'Inactive'}</span>
                 </div>
-                <p class="text-secondary-small mb-8"><strong>${escapeHtml(disc)}</strong> · ${escapeHtml(itemsTxt)}</p>
+                <p class="text-secondary-small mb-4"><strong>${escapeHtml(disc)}</strong> · ${escapeHtml(itemsTxt)}</p>
+                <p class="mb-12" style="font-weight:700;">₹${orig} → ₹${price} <span style="color:#2e7d32;font-weight:600;">(save ₹${orig - price})</span></p>
                 <p class="text-secondary-small mb-12">Valid: ${fmt(c.startAt)} → ${fmt(c.endAt)}</p>
                 <div class="flex-row flex-gap-10">
                     <button class="btn-secondary btn-small" data-action="editCombo" data-id="${c.id}"><i data-lucide="edit-3" class="icon-14"></i> Edit</button>
@@ -904,10 +911,13 @@ export const editCombo = (id) => showComboModal(id);
 
 export async function deleteCombo(id) {
     const comboSnap = await get(Outlet.ref(`combos/${id}`));
-    const name = comboSnap.val()?.name || 'this combo';
+    const val = comboSnap.val();
+    const name = val?.name || 'this combo';
     if (!(await showDeleteConfirm(name, "Delete this combo? This cannot be undone."))) return;
     try {
         await remove(Outlet.ref(`combos/${id}`));
+        if (val?.image) deleteImage(val.image).catch(err => console.warn("[Combos] Image deletion failed:", err));
+        logAudit("Catalog", `Deleted Combo: ${name}`, id);
         showToast("Combo deleted", "success");
     } catch (err) {
         console.error("[Combos] Delete failed:", err);
@@ -915,14 +925,26 @@ export async function deleteCombo(id) {
     }
 }
 
+const _dishPrice = d => Number(d?.price ?? (d?.sizes ? Object.values(d.sizes)[0] : 0)) || 0;
+const _parseLocalDate = (v, endOfDay) => {
+    const [y, m, d] = String(v || '').split('-').map(Number);
+    if (!y || !m || !d) return NaN;
+    return new Date(y, m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0).getTime();
+};
+const _toInputDate = ms => {
+    const d = ms ? new Date(ms) : new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export async function showComboModal(comboId = null) {
     if (!window.currentOutlet || window.currentOutlet === 'null' || window.currentOutlet === 'undefined') {
         return showToast("Error: Current outlet context is missing. Please refresh or select an outlet first.", "error");
     }
+    document.getElementById('comboModal')?.remove();
 
     const dishesSnap = await get(Outlet.ref('dishes'));
     const dishes = [];
-    dishesSnap.forEach(ch => dishes.push({ id: ch.key, ...ch.val() }));
+    dishesSnap.forEach(ch => { const v = ch.val(); if (v) dishes.push({ id: ch.key, ...v }); });
 
     let combo = null;
     if (comboId) {
@@ -930,112 +952,341 @@ export async function showComboModal(comboId = null) {
         combo = snap.exists() ? snap.val() : null;
     }
 
-    const selectedIds = combo?.items?.map(i => i.dishId) || [];
-    const dishOptions = dishes.map(d => {
-        const price = d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0);
-        return `<option value="${d.id}" ${selectedIds.includes(d.id) ? 'selected' : ''}>${escapeHtml(d.name)} — ₹${price}</option>`;
-    }).join('');
+    const sel = new Map();
+    Object.values(combo?.items || {}).forEach(it => sel.set(it.dishId, Math.min(Math.max(parseInt(it.qty, 10) || 1, 1), 20)));
 
-    const toInputDate = ms => ms ? new Date(ms).toISOString().split('T')[0] : '';
-    const today = new Date().toISOString().split('T')[0];
-    const in30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    const today = _toInputDate(Date.now());
+    const in30 = _toInputDate(Date.now() + 30 * 86400000);
+
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     document.body.insertAdjacentHTML('beforeend', `
     <div class="modal active" id="comboModal" role="dialog" aria-modal="true" aria-label="${comboId ? 'Edit Combo' : 'Create Combo'}">
-        <div class="modal-content glass-card">
+        <div class="modal-content glass-card" style="max-width:640px;">
             <div class="modal-header">
                 <h2 class="modal-title">${comboId ? 'Edit Combo' : 'Create Combo'}</h2>
                 <button class="close-btn" id="comboModalClose" aria-label="Close" title="Close"><i data-lucide="x" class="icon-18"></i></button>
             </div>
-            <form id="comboForm">
-                <div class="form-row">
-                    <label>Combo Name</label>
-                    <input type="text" id="comboName" class="form-input" maxlength="50" placeholder="e.g. Family Pizza Deal" value="${escapeHtml(combo?.name || '')}" required>
+            <form id="comboForm" novalidate>
+                <style>
+                    #comboDishList { max-height: 280px; overflow: auto; border: 1px solid var(--card-border, #e5e7eb); border-radius: 12px; }
+                    .cmb-sec { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-sub, #888); margin: 20px 0 10px; }
+                    .cmb-media { display: flex; gap: 16px; align-items: flex-start; }
+                    .cmb-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+                    .cmb-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--card-border, #f0f0f0); transition: background 150ms ease; }
+                    .cmb-row:last-child { border-bottom: none; }
+                    .cmb-row.on { background: rgba(34, 197, 94, 0.08); }
+                    .cmb-row label { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; }
+                    .cmb-row .cmb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                    .cmb-row .cmb-price { color: var(--text-sub, #666); font-size: 13px; font-weight: 600; flex-shrink: 0; }
+                    .cmb-qty { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+                    .cmb-qty button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--card-border, #ddd); background: var(--surface, #fff); font-weight: 700; cursor: pointer; line-height: 1; font-size: 16px; transition: all 150ms ease; }
+                    .cmb-qty button:hover { background: var(--primary-light, #fef0e8); border-color: var(--primary, #E84908); }
+                    .cmb-qty button:focus-visible { outline: 2px solid var(--primary, #E84908); outline-offset: 2px; }
+                    .cmb-qty span { min-width: 24px; text-align: center; font-size: 14px; font-weight: 700; }
+                    .cmb-qty.off { opacity: 0.4; pointer-events: none; }
+                    #comboPriceStrip { margin-top: 12px; padding: 12px 16px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-light, #fef0e8) 0%, var(--primary-lighter, rgba(232,73,8,0.08)) 100%); border: 1px solid var(--primary-light, #ffe0c2); font-size: 14px; font-weight: 600; color: var(--primary-dark, #c43d00); }
+                    .cmb-err { color: var(--error, #d32f2f); font-size: 12px; margin-top: 6px; display: none; animation: errFade 200ms ease; }
+                    .cmb-err.show { display: block; }
+                    .cmb-empty { padding: 24px; text-align: center; color: var(--text-sub, #888); font-size: 14px; }
+                    @keyframes errFade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+                    .form-row label { display: block; font-size: 12px; font-weight: 600; color: var(--text-main, #333); margin-bottom: 6px; }
+                </style>
+                <div class="cmb-media">
+                    <div class="modal-media-upload img-placeholder" id="comboPreviewWrap" style="width:128px;height:128px;flex-shrink:0;border-radius:16px;overflow:hidden;">
+                        <div class="cmb-img-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:100%;background:linear-gradient(135deg,var(--neutral-50,#f8fafc) 0%,var(--neutral-100,#f1f5f9) 100%);">
+                            <i data-lucide="image" class="icon-36" style="color:var(--neutral-400,#94a3b8);"></i>
+                            <span style="font-size:12px;color:var(--neutral-500,#64748b);">No image</span>
+                        </div>
+                        <img id="comboPreview" class="modal-img-preview hidden" alt="Combo preview" style="width:100%;height:100%;object-fit:cover;">
+                        <div class="modal-img-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 200ms ease;">
+                            <input type="file" id="comboFile" accept="image/*" class="hidden" title="Upload combo photo">
+                            <button type="button" id="btnUpdateComboPhoto" class="btn-secondary update-photo-btn" style="color:#fff;border-color:rgba(255,255,255,0.5);">Update Photo</button>
+                        </div>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div class="cmb-sec" style="margin-top:0;">Details</div>
+                        <label for="comboName" class="visually-hidden">Combo Name</label>
+                        <input type="text" id="comboName" class="form-input" maxlength="50" placeholder="e.g. Family Pizza Deal" value="${escapeHtml(combo?.name || '')}" aria-describedby="errName comboNameHint">
+                        <small id="comboNameHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Descriptive name customers will see</small>
+                        <div class="cmb-err" id="errName" role="alert" aria-live="polite">Enter a combo name</div>
+                        <small id="comboUploadStatus" class="hidden upload-status-text" style="display:block;margin-top:6px;text-align:left;color:var(--primary);font-size:12px;">Uploading...</small>
+                    </div>
                 </div>
-                <div class="form-row">
-                    <label>Select Dishes (Ctrl/Cmd+click for multiple)</label>
-                    <select id="comboDishes" multiple class="form-input" style="min-height:120px;" required>${dishOptions}</select>
+                <div class="cmb-sec">Dishes</div>
+                <label for="comboDishSearch" class="visually-hidden">Search dishes</label>
+                <input type="text" id="comboDishSearch" class="form-input" placeholder="Search dishes..." autocomplete="off" style="margin-bottom:10px;" aria-describedby="dishSearchHint">
+                <small id="dishSearchHint" class="form-hint" style="display:block;margin-bottom:8px;color:var(--text-sub);font-size:12px;">Type to filter, click checkbox or +/- to add</small>
+                <div id="comboDishList" role="listbox" aria-multiselectable="true" aria-label="Available dishes"></div>
+                <div class="cmb-err" id="errDishes" role="alert" aria-live="polite">Select at least one dish</div>
+                <div id="comboPriceStrip" aria-live="polite" aria-atomic="true"></div>
+                <div class="cmb-sec">Discount & Schedule</div>
+                <div class="cmb-grid2">
+                    <div class="form-row" style="margin:0;">
+                        <label for="comboDiscountType">Discount Type</label>
+                        <select id="comboDiscountType" class="form-input" aria-describedby="discountTypeHint">
+                            <option value="percentage" ${combo?.discountType !== 'fixed' ? 'selected' : ''}>Percentage (%) off</option>
+                            <option value="fixed" ${combo?.discountType === 'fixed' ? 'selected' : ''}>Fixed Amount (₹) off</option>
+                        </select>
+                        <small id="discountTypeHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Percentage applies to each dish total</small>
+                    </div>
+                    <div class="form-row" style="margin:0;">
+                        <label for="comboDiscountValue">Discount Value</label>
+                        <input type="number" id="comboDiscountValue" class="form-input" min="0" step="1" value="${combo?.discountValue ?? 20}" aria-describedby="errDiscount discountValueHint">
+                        <small id="discountValueHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0-100 for percentage, up to total for fixed</small>
+                        <div class="cmb-err" id="errDiscount" role="alert" aria-live="polite">Enter a valid discount</div>
+                    </div>
                 </div>
-                <div class="form-row">
-                    <label>Quantity per dish</label>
-                    <input type="number" id="comboQty" class="form-input" value="1" min="1" max="20" required>
-                </div>
-                <div class="form-row">
-                    <label>Discount Type</label>
-                    <select id="comboDiscountType" class="form-input">
-                        <option value="percentage" ${combo?.discountType === 'percentage' ? 'selected' : ''}>Percentage (%)</option>
-                        <option value="fixed" ${combo?.discountType === 'fixed' ? 'selected' : ''}>Fixed Amount (₹)</option>
-                    </select>
-                </div>
-                <div class="form-row">
-                    <label>Discount Value</label>
-                    <input type="number" id="comboDiscountValue" class="form-input" min="0" value="${combo?.discountValue ?? ''}" required>
-                </div>
-                <div class="form-row">
-                    <label>Active From</label>
-                    <input type="date" id="comboStartAt" class="form-input" value="${combo ? toInputDate(combo.startAt) : today}" required>
-                </div>
-                <div class="form-row">
-                    <label>Active Until</label>
-                    <input type="date" id="comboEndAt" class="form-input" value="${combo ? toInputDate(combo.endAt) : in30}" required>
-                </div>
-                <div class="form-row">
-                    <label>Thumbnail URL (optional)</label>
-                    <input type="text" id="comboImage" class="form-input" placeholder="https://example.com/image.png" value="${escapeHtml(combo?.image || '')}">
+                <div class="cmb-grid2">
+                    <div class="form-row" style="margin:0;">
+                        <label for="comboStartAt">Active From</label>
+                        <input type="date" id="comboStartAt" class="form-input" value="${combo ? _toInputDate(combo.startAt) : today}" aria-describedby="errDates">
+                        <div class="cmb-err" id="errDates" role="alert" aria-live="polite">End date must be after start date</div>
+                    </div>
+                    <div class="form-row" style="margin:0;">
+                        <label for="comboEndAt">Active Until</label>
+                        <input type="date" id="comboEndAt" class="form-input" value="${combo ? _toInputDate(combo.endAt) : in30}" aria-describedby="errDates">
+                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="submit" class="btn-primary">${comboId ? 'Update' : 'Create'} Combo</button>
                     <button type="button" class="btn-secondary" id="comboCancel">Cancel</button>
+                    <button type="submit" class="btn-primary">${comboId ? 'Update' : 'Create'} Combo</button>
                 </div>
             </form>
         </div>
     </div>`);
     loadLucide().then(() => window.lucide?.createIcons({ root: document.getElementById('comboModal') }));
 
-    const close = () => document.getElementById('comboModal')?.remove();
+    const modal = document.getElementById('comboModal');
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    let focusableElements = [];
+    let firstFocusable = null;
+    let lastFocusable = null;
+
+    const updateFocusables = () => {
+        focusableElements = Array.from(modal.querySelectorAll(focusableSelector)).filter(el => !el.disabled && el.offsetParent !== null);
+        firstFocusable = focusableElements[0];
+        lastFocusable = focusableElements[focusableElements.length - 1];
+    };
+
+    const trapFocus = (e) => {
+        if (e.key !== 'Tab') return;
+        updateFocusables();
+        if (e.shiftKey) {
+            if (document.activeElement === firstFocusable) {
+                e.preventDefault();
+                lastFocusable?.focus();
+            }
+        } else {
+            if (document.activeElement === lastFocusable) {
+                e.preventDefault();
+                firstFocusable?.focus();
+            }
+        }
+    };
+
+    const onEsc = e => { if (e.key === 'Escape') close(); };
+    const close = () => {
+        document.removeEventListener('keydown', onEsc);
+        document.removeEventListener('keydown', trapFocus);
+        modal.classList.remove('active');
+        modal.classList.add('closing');
+        setTimeout(() => modal.remove(), prefersReduced ? 0 : 200);
+    };
+    document.addEventListener('keydown', onEsc);
+    document.addEventListener('keydown', trapFocus);
     document.getElementById('comboModalClose').addEventListener('click', close);
     document.getElementById('comboCancel').addEventListener('click', close);
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
 
+    if (!prefersReduced) {
+        modal.querySelector('.modal-content').style.animation = 'modalSlideIn .3s cubic-bezier(.4,0,.2,1)';
+    }
+
+    updateFocusables();
+    firstFocusable?.focus();
+
+    const listEl = document.getElementById('comboDishList');
+    const valInput = document.getElementById('comboDiscountValue');
+    const typeSel = document.getElementById('comboDiscountType');
+
+    function renderDishRows(filter = '') {
+        const q = filter.trim().toLowerCase();
+        const rows = dishes.filter(d => !q || (d.name || '').toLowerCase().includes(q));
+        if (!rows.length) { listEl.innerHTML = `<div class="cmb-empty">No dishes found</div>`; return; }
+        listEl.innerHTML = rows.map(d => {
+            const on = sel.has(d.id);
+            const qty = sel.get(d.id) || 1;
+            return `
+            <div class="cmb-row ${on ? 'on' : ''}" data-id="${d.id}" role="option" aria-selected="${on}" tabindex="0">
+                <label><input type="checkbox" data-act="toggle" ${on ? 'checked' : ''} aria-label="Include ${escapeHtml(d.name)}"> <span class="cmb-name">${escapeHtml(d.name)}</span></label>
+                <span class="cmb-price">₹${_dishPrice(d)}</span>
+                <div class="cmb-qty ${on ? '' : 'off'}" role="group" aria-label="${on ? 'Quantity' : 'Add to combo'}">
+                    <button type="button" data-act="dec" aria-label="Decrease quantity of ${escapeHtml(d.name)}" ${on ? '' : 'disabled'}>−</button>
+                    <span aria-live="polite">${qty}</span>
+                    <button type="button" data-act="inc" aria-label="Increase quantity of ${escapeHtml(d.name)}" ${on ? '' : 'disabled'}>+</button>
+                </div>
+            </div>`;
+        }).join('');
+        updatePreview();
+    }
+
+    function selectedEntries() {
+        return dishes.filter(d => sel.has(d.id)).map(d => ({ base: _dishPrice(d), qty: sel.get(d.id) }));
+    }
+
+    function updatePreview() {
+        const el = document.getElementById('comboPriceStrip');
+        const entries = selectedEntries();
+        if (!entries.length) { el.textContent = ''; return; }
+        const type = typeSel.value;
+        const value = parseFloat(valInput.value) || 0;
+        const original = entries.reduce((s, e) => s + e.base * e.qty, 0);
+        const price = comboPriceTotal(original, type, value);
+        const disc = type === 'percentage' ? `${Math.min(value, 100)}% off` : `₹${value} off`;
+        el.textContent = `Original ₹${original} → Combo ₹${price}  ·  You save ₹${original - price} (${disc})`;
+    }
+
+    listEl.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        e.preventDefault();
+        const id = btn.closest('.cmb-row').dataset.id;
+        if (!sel.has(id)) sel.set(id, 1);
+        const next = (sel.get(id) || 1) + (btn.dataset.act === 'inc' ? 1 : -1);
+        if (next < 1) sel.delete(id);
+        else if (next > 20) showToast("Max 20 per dish", "warning");
+        else sel.set(id, next);
+        renderDishRows(document.getElementById('comboDishSearch').value);
+    });
+    listEl.addEventListener('keydown', e => {
+        if (!['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) return;
+        const rows = Array.from(listEl.querySelectorAll('.cmb-row'));
+        const currentIndex = rows.findIndex(r => r === document.activeElement || r.contains(document.activeElement));
+        if (currentIndex === -1) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const next = rows[(currentIndex + 1) % rows.length];
+            next.focus();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const prev = rows[(currentIndex - 1 + rows.length) % rows.length];
+            prev.focus();
+        } else if (e.key === 'Enter' || e.key === ' ') {
+            const row = rows[currentIndex];
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            if (checkbox) {
+                e.preventDefault();
+                checkbox.click();
+            }
+        }
+    });
+    listEl.addEventListener('change', e => {
+        if (e.target.dataset.act !== 'toggle') return;
+        const id = e.target.closest('.cmb-row').dataset.id;
+        if (e.target.checked) sel.set(id, 1); else sel.delete(id);
+        renderDishRows(document.getElementById('comboDishSearch').value);
+    });
+    document.getElementById('comboDishSearch').addEventListener('input', e => renderDishRows(e.target.value));
+    valInput.addEventListener('input', updatePreview);
+    typeSel.addEventListener('change', () => {
+        valInput.max = typeSel.value === 'percentage' ? '100' : '';
+        updatePreview();
+    });
+    valInput.max = combo?.discountType === 'fixed' ? '' : '100';
+    renderDishRows();
+
+    const fileInput = document.getElementById('comboFile');
+    document.getElementById('btnUpdateComboPhoto').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+        if (!fileInput.files[0]) return;
+        previewImage(fileInput, 'comboPreview');
+        document.getElementById('comboPreviewWrap').classList.remove('img-placeholder');
+        document.getElementById('comboPreview').classList.remove('hidden');
+        document.querySelector('#comboPreviewWrap .cmb-img-empty')?.style.setProperty('display', 'none');
+    });
+    if (combo?.image) {
+        document.getElementById('comboPreviewWrap').classList.remove('img-placeholder');
+        const img = document.getElementById('comboPreview');
+        img.src = combo.image;
+        img.classList.remove('hidden');
+        document.querySelector('#comboPreviewWrap .cmb-img-empty')?.style.setProperty('display', 'none');
+    }
+
+    const showErr = (id, msg) => { const el = document.getElementById(id); if (msg) el.textContent = msg; el.classList.add('show'); };
+    const clearErrs = () => modal.querySelectorAll('.cmb-err').forEach(el => el.classList.remove('show'));
+
+    let comboSaving = false;
     document.getElementById('comboForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (comboSaving) return;
+        clearErrs();
         const name = document.getElementById('comboName').value.trim();
-        const sel = Array.from(document.getElementById('comboDishes').selectedOptions);
-        if (!name) return showToast("Please enter a combo name", "warning");
-        if (sel.length === 0) return showToast("Select at least one dish", "warning");
+        const type = typeSel.value;
+        const value = parseFloat(valInput.value);
+        const startAt = _parseLocalDate(document.getElementById('comboStartAt').value, false);
+        const endAt = _parseLocalDate(document.getElementById('comboEndAt').value, true);
+        const entries = selectedEntries();
+        const original = entries.reduce((s, x) => s + x.base * x.qty, 0);
 
-        const qty = parseInt(document.getElementById('comboQty').value, 10) || 1;
-        const items = sel.map(o => {
-            const d = dishes.find(x => x.id === o.value);
-            const price = d?.price ?? (d?.sizes ? Object.values(d.sizes)[0] : 0);
-            return { dishId: o.value, qty, price: typeof price === 'number' ? price : Number(price) || 0 };
-        });
+        let ok = true;
+        if (!name) { showErr('errName', 'Enter a combo name'); document.getElementById('comboName').focus(); ok = false; }
+        if (!entries.length) { showErr('errDishes', 'Select at least one dish'); document.getElementById('comboDishSearch').focus(); ok = false; }
+        if (!(value >= 0) || (type === 'percentage' && value > 100) || (type === 'fixed' && entries.length && value > original)) {
+            showErr('errDiscount', type === 'percentage' ? 'Percentage must be 0–100' : `Fixed amount can't exceed ₹${original}`);
+            valInput.focus(); ok = false;
+        }
+        if (!startAt || !endAt || !(endAt > startAt)) { showErr('errDates', 'End date must be after start date'); document.getElementById('comboStartAt').focus(); ok = false; }
+        if (!ok) return;
 
-        const discountType = document.getElementById('comboDiscountType').value;
-        const discountValue = parseFloat(document.getElementById('comboDiscountValue').value);
-        const startAt = new Date(document.getElementById('comboStartAt').value).getTime();
-        const endAt = new Date(document.getElementById('comboEndAt').value).getTime() + 86399999;
-        if (!(discountValue >= 0)) return showToast("Invalid discount value", "warning");
-        if (!(endAt > startAt)) return showToast("End date must be after start date", "warning");
+        const items = dishes.filter(d => sel.has(d.id)).map(d => ({
+            dishId: d.id, qty: sel.get(d.id), price: _dishPrice(d)
+        }));
 
-        const payload = {
-            name, items, discountType, discountValue, startAt, endAt,
-            image: document.getElementById('comboImage').value.trim() || null,
-            sourceOid: Outlet.current,
-            updatedAt: Date.now()
-        };
+        const file = fileInput.files[0];
+        const statusEl = document.getElementById('comboUploadStatus');
+        const saveBtn = document.querySelector('#comboForm .btn-primary');
 
         try {
+            comboSaving = true;
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="spinner-sm"></span> Saving...';
+            }
+            let image = combo?.image || null;
+            if (file) {
+                statusEl.classList.remove('hidden');
+                image = await uploadImage(file, `combos/${Date.now()}_${file.name}`);
+                if (combo?.image && image !== combo.image) {
+                    deleteImage(combo.image).catch(err => console.warn("[Combos] Old image deletion failed:", err));
+                }
+                statusEl.classList.add('hidden');
+            }
+
+            const payload = {
+                name, items, discountType: type, discountValue: value, startAt, endAt,
+                image,
+                sourceOid: Outlet.current,
+                updatedAt: Date.now()
+            };
+
             if (comboId) {
                 await update(Outlet.ref(`combos/${comboId}`), payload);
+                logAudit("Catalog", `Updated Combo: ${name}`, comboId);
                 showToast("Combo updated!", "success");
             } else {
                 await set(push(Outlet.ref('combos')), { ...payload, createdAt: Date.now() });
+                logAudit("Catalog", `Added Combo: ${name}`, Outlet.current);
                 showToast("Combo created!", "success");
             }
             close();
         } catch (err) {
             console.error("[Combos] Save failed:", err);
             showToast("Failed to save combo: " + err.message, "error");
+            if (statusEl) statusEl.classList.add('hidden');
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = `${comboId ? 'Update' : 'Create'} Combo`; }
+        } finally {
+            comboSaving = false;
         }
     });
 }
