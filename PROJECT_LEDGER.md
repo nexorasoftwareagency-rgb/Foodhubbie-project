@@ -1116,6 +1116,13 @@ Fragile Files before starting ANY task.
 - Files: `menu/js/discount.js` (label fix, deployed), `tests/verify-qr-combo-coupon-checkout.cjs` (new).
 - Confidence: HIGH (flow + math + RTDB record verified; label fix proven live in run 2)
 - Next: optionally harden generateOrderId fallback (throw instead of `|| 1`); consider cart UX — applied coupon leaves code text in input with "Apply" acting as remove.
+### [2026-10-18 combo-ux-veg-marks] Customer #5: veg/non-veg marks from dish `veg` flag
+
+- STATUS: DONE
+- What happened: added `veg: true` to all 22 RTDB dishes (`dishes/{id}.json` PATCH); switched `_comboVegMark` (menu/js/app.js + menu/js/delivery.js) from name-heuristic (keyword matching) to `d.veg === false` check — dishes with `veg: true` or missing field show green veg mark; dishes with `veg: false` show red non-veg mark. CSS (`combo-veg` green dot, `combo-nonveg` red triangle) already existed from earlier redesign. Live-verified PASS on QR + delivery (`tests/verify-combo-ux.cjs`).
+- Files: `menu/js/app.js`, `menu/js/delivery.js`, RTDB `dishes/{id}.veg`.
+- Confidence: HIGH
+- Next: Admin #9 + #10 (offer listing table + Enable/Disable status toggle).
 <!-- TASK_LOG_END -->
 - [2026-10-17 ~14:30 UTC] **GBP (Google Business Profile) RESULT**: profile CREATED + awaiting user video verification. Keeper profile = FoodHubbie ERP, India, "Software company" category, Service areas: India, Phone 097246 49971, Website foodhubbie-web.web.app, ulid 2510051953782582326 (verify entry: business.google.com/locations -> Get verified). Mailing address committed (hidden from public): Vill - Anjani, P.O - Anjani, P/S Parsa, Pincode 841219, Bihar. Hours not set yet (needs 24x7). Repeated OME create-flow replays spawned 7 duplicate unverified drafts - ALL removed via locations list -> row checkbox -> Actions -> Remove business (user should double-check list shows only 1 business). Verification state is session-bounded: each new session replays from 7% and requires re-filling address before reaching the method-choice page (progress 20%). Video verification MUST be done manually by user (proof of management + business name/website on screen). Google flow auto-blocks via "Sorry, we are having some issues" after too many create-flow restarts; throttling self-resolves. Automation drivers: tools/gbp-*.cjs (Playwright persistent profile C:\Users\2nile\AppData\Local\Temp\opencode\pw-gbp-profile, account nileshshah84870@gmail.com; gbp-auto.cjs = full flow driver, gbp-cleanup.cjs = draft cleanup, gbp-final.cjs = address+park).
 <!-- TASK_LOG_END -->
