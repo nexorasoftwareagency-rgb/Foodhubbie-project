@@ -721,8 +721,6 @@ img{max-width:100%; display:block;}
 .combo-offers-section{margin:14px 0 4px;}
 .combo-offers-section.hidden{display:none;}
 .combo-offers-grid{display:grid;grid-template-columns:1fr;gap:12px;}
-.combo-offers-grid.combo-scroll{display:flex;grid-template-columns:none;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:10px;padding:2px 16px 6px;margin:0 -16px;}
-.combo-offers-grid.combo-scroll .combo-card{min-width:80vw;max-width:300px;scroll-snap-align:start;flex-shrink:0;}
 .combo-card{display:flex;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s;}
 .combo-card:active{transform:scale(.985);}
 .combo-card-img{position:relative;width:92px;height:92px;flex-shrink:0;border-radius:10px;overflow:visible;background:var(--bg);}

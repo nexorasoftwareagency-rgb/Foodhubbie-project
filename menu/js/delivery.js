@@ -200,7 +200,7 @@ function _renderComboOffers() {
     const combos = (M.combos || []).filter(c => isComboActive(c, Date.now()));
     if (!combos.length) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
-    grid.className = 'combo-offers-grid' + (combos.length >= 3 ? ' combo-scroll' : '');
+    grid.className = 'combo-offers-grid';
     grid.innerHTML = combos.map(c => {
         const d = _comboData(c);
         const dishNames = d.entries.map(e => `${e.dish.name} x${e.qty}`).join(', ');

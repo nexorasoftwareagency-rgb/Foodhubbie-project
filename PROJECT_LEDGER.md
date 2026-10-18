@@ -1129,3 +1129,11 @@ Fragile Files before starting ANY task.
 - Files: `menu/js/app.js`, `menu/js/delivery.js`, `menu/js/ui.js`, `menu/css/app.css`, `tests/verify-combo-ux.cjs` (new), `Admin/js/features/pos.js`, `Admin/js/features/catalog.js`.
 - Confidence: HIGH (live E2E on both surfaces; badge math + RTDB order math consistent)
 - Next: optionally harden generateOrderId `|| 1` fallback; consider cart UX tweak for applied-coupon input.
+### [2026-10-18 combo-ux-scroll-remove] Removed horizontal scroll carousel from combo section
+
+- STATUS: DONE
+- What happened: reverted the `combo-scroll` grid change — combo offers now render in a single vertical grid (`grid-template-columns:1fr`) on both QR menu (`menu/js/app.js`) and delivery webview (`menu/js/delivery.js`); removed `.combo-scroll` CSS block (`menu/css/app.css`). All other combo card redesign elements remain (veg mark, image scrim, % OFF badge, floating ADD button, bottom sheet on card tap, category-aware visibility, optimistic cart bump).
+- Verify: `tests/verify-combo-ux.cjs` re-run PASS on QR + delivery.
+- Files: `menu/js/app.js`, `menu/js/delivery.js`, `menu/css/app.css`.
+- Confidence: HIGH
+- Next: none.- [2026-10-18 ~10:00 UTC] **SEO PHASE 1 DONE (docs/SEO-PLAN.md)**: canonical tags on all 5 website pages (live-verified), GA4 wired via website/shared/ga4.js (Firebase Analytics, graceful no-op) + site CSP opened for gstatic/googletagmanager/google-analytics in firebase.json website target, index title trimmed to 58-char keyword-first ("Restaurant Management Software for Pizzerias | FoodHubbie", og:title mirrored), 7 gbp-*.png debris moved from website/ to tools/gbp-shots/. Audits passed unchanged: unique meta descriptions on all 5, single-H1 heading structure, full image alt coverage on index. Pending user 1-click: enable Google Analytics in Firebase console (beacons currently id=undefined). Next queued: Lighthouse CWV (tools/ga4-check.cjs reusable for network checks), clean URLs, 404 page, BreadcrumbList, Bing (user OTP).
