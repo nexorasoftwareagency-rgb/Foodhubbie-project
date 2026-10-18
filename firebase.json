@@ -439,6 +439,10 @@
       ],
       "rewrites": [
         {
+          "source": "/use-cases",
+          "destination": "/use-cases.html"
+        },
+        {
           "source": "/riders",
           "destination": "/riders.html"
         },
