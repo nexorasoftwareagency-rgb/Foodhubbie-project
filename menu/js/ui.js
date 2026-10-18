@@ -178,6 +178,8 @@ export function updateCartBadges(count) {
         if (!el) return;
         el.textContent = String(count);
         el.classList.toggle('hidden', count === 0);
+        if (count > 0 && el.__lastCount !== count) { el.classList.remove('cart-bump'); void el.offsetWidth; el.classList.add('cart-bump'); }
+        el.__lastCount = count;
     });
     const bottomBadge = document.getElementById('bottomNavCartCount');
     if (bottomBadge) {
@@ -756,4 +758,34 @@ export function resetDiscountInput() {
     if (btn) { btn.textContent = 'Apply'; btn.classList.remove('discount-applied'); btn.disabled = false; }
     if (input) { input.disabled = false; input.value = ''; }
     hideDiscountMsg();
+}
+
+/* ---- Combo detail bottom sheet (Zomato-style) ---- */
+export function showComboSheet({ name, discLabel, saving, price, rows }, onAdd) {
+    hideComboSheet();
+    document.querySelectorAll('#comboSheetBackdrop, #comboSheet').forEach(el => el.remove());
+    const back = document.createElement('div');
+    back.className = 'combo-sheet-backdrop'; back.id = 'comboSheetBackdrop';
+    const sheet = document.createElement('div');
+    sheet.className = 'combo-sheet'; sheet.id = 'comboSheet'; sheet.setAttribute('role','dialog');
+    sheet.innerHTML = `
+        <div class="combo-sheet-grab"></div>
+        <div class="combo-sheet-head">
+            <div class="combo-sheet-title">${esc(name)}</div>
+            <button class="combo-sheet-close" id="comboSheetClose" aria-label="Close">✕</button>
+        </div>
+        ${rows.map(r => `<div class="combo-sheet-row"><span>${esc(r.name)} <span class="qty">×${r.qty}</span></span><span>${fmtMoney(r.unitPrice * r.qty)}</span></div>`).join('')}
+        <div class="combo-sheet-save">${esc(discLabel)} · You save ${fmtMoney(saving)}</div>
+        <button class="combo-sheet-cta" id="comboSheetAdd">ADD TO CART · ${fmtMoney(price)}</button>`;
+    document.body.append(back, sheet);
+    requestAnimationFrame(() => { back.classList.add('show'); sheet.classList.add('show'); });
+    const close = () => hideComboSheet();
+    back.addEventListener('click', close);
+    sheet.querySelector('#comboSheetClose').addEventListener('click', close);
+    sheet.querySelector('#comboSheetAdd').addEventListener('click', () => { hideComboSheet(); onAdd(); });
+    document.addEventListener('keydown', function escClose(e){ if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escClose); }});
+}
+
+export function hideComboSheet() {
+    document.querySelectorAll('#comboSheetBackdrop, #comboSheet').forEach(el => el.remove());
 }

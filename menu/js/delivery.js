@@ -146,7 +146,7 @@ function renderMenuScreen(searchTerm) {
     }, M.combos.length > 0);
 
     const combosOnly = M.activeCategory === '__combos';
-    _renderComboOffers(combosOnly);
+    _renderComboOffers();
 
     let dishes = M.dishes;
     if (M.activeCategory !== 'all' && !combosOnly) {
@@ -169,41 +169,86 @@ function renderMenuScreen(searchTerm) {
     UI.renderDishList(dishes, { searchTerm, activeCategoryName }, openCustomize);
 }
 
+function _comboVegMark(c) {
+    const items = c.items || [];
+    for (const it of items) {
+        const d = M.dishes.find(x => x.id === it.dishId);
+        const name = (d ? d.name : '').toLowerCase();
+        if (/\b(chicken|mutton|egg|fish|prawn|keema|meat|beef|pork|lamb|crab|squid|ham|salami|pepperoni|bacon)\b/.test(name)) return 'combo-nonveg';
+    }
+    return 'combo-veg';
+}
+function _comboData(c) {
+    const entries = Object.values(c.items || {}).map(it => {
+        const d = M.dishes.find(x => x.id === it.dishId);
+        return { dish: d, base: d ? Number(d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0, qty: it.qty || 1 };
+    }).filter(e => e.dish);
+    const prices = bakeComboUnitPrices(entries.map(e => ({ base: e.base, qty: e.qty })), c.discountType, c.discountValue);
+    const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
+    const originalTotal = entries.reduce((s, e, i) => s + prices[i], 0);
+    const comboPrice = comboPriceTotal(originalTotal, c.discountType, c.discountValue);
+    return { entries, prices, disc, originalTotal, comboPrice, saving: originalTotal - comboPrice };
+}
+
 function _renderComboOffers() {
     const section = document.getElementById('comboOffersSection');
     const grid = document.getElementById('comboOffersGrid');
     if (!section || !grid) return;
-    if (!M.combos.length) { section.classList.add('hidden'); return; }
+    if (M.activeCategory !== 'all' && M.activeCategory !== '__combos') {
+        section.classList.add('hidden'); return;
+    }
+    const combos = (M.combos || []).filter(c => isComboActive(c, Date.now()));
+    if (!combos.length) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
-    grid.innerHTML = M.combos.map(c => {
-        const dishNames = (c.items || []).map(it => {
-            const d = M.dishes.find(x => x.id === it.dishId);
-            return `${d ? d.name : it.dishId} x${it.qty || 1}`;
-        }).join(', ');
-        const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
-        const originalTotal = (c.items || []).reduce((s, it) => {
-            const d = M.dishes.find(x => x.id === it.dishId);
-            return s + ((d ? (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0) * (it.qty || 1));
-        }, 0);
-        const comboPrice = comboPriceTotal(originalTotal, c.discountType, c.discountValue);
+    grid.className = 'combo-offers-grid' + (combos.length >= 3 ? ' combo-scroll' : '');
+    grid.innerHTML = combos.map(c => {
+        const d = _comboData(c);
+        const dishNames = d.entries.map(e => `${e.dish.name} x${e.qty}`).join(', ');
         return `
         <div class="combo-card" data-combo-id="${c.id}">
-            <div class="combo-card-img">${c.image ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+            <div class="combo-card-img">
+                <div class="combo-img-frame">${c.image ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+                <div class="combo-img-scrim"></div>
+                <span class="combo-img-off">${d.disc}</span>
+                <span class="${_comboVegMark(c)}" aria-label="${_comboVegMark(c) === 'combo-veg' ? 'Veg' : 'Non-Veg'}"></span>
+                <button class="combo-fab" data-action="addCombo" data-id="${c.id}">ADD</button>
+            </div>
             <div class="combo-card-body">
                 <div class="combo-card-title">${esc(c.name)}</div>
                 <div class="combo-card-items">${esc(dishNames)}</div>
                 <div class="combo-card-price-row">
-                    <span class="combo-card-orig">₹${originalTotal}</span>
-                    <span class="combo-card-price">₹${comboPrice}</span>
-                    <span class="combo-card-disc">${disc}</span>
+                    <span class="combo-card-orig">₹${UI.fmtMoney(d.originalTotal)}</span>
+                    <span class="combo-card-price">₹${UI.fmtMoney(d.comboPrice)}</span>
+                    <span class="combo-card-disc">${d.disc}</span>
+                    <span class="combo-card-hint">Tap for details ›</span>
                 </div>
-                <button class="combo-card-btn" data-action="addCombo" data-id="${c.id}">Add Combo</button>
             </div>
         </div>`;
     }).join('');
-    grid.querySelectorAll('[data-action="addCombo"]').forEach(btn => {
-        btn.addEventListener('click', () => _addComboToCart(btn.getAttribute('data-id')));
-    });
+    if (!grid._cbListener) {
+        grid._cbListener = true;
+        grid.addEventListener('click', e => {
+        const fab = e.target.closest('.combo-fab');
+        if (fab) {
+            fab.classList.add('combo-fab-added'); fab.textContent = '✓';
+            setTimeout(() => { fab.classList.remove('combo-fab-added'); fab.textContent = 'ADD'; }, 700);
+            _addComboToCart(fab.getAttribute('data-id'));
+            return;
+        }
+        const card = e.target.closest('.combo-card');
+        if (!card) return;
+        const combo = combos.find(c => c.id === card.getAttribute('data-combo-id'));
+        if (!combo) return;
+        const cd = _comboData(combo);
+        UI.showComboSheet({
+            name: combo.name,
+            discLabel: cd.disc,
+            saving: cd.saving,
+            price: cd.comboPrice,
+            rows: cd.entries.map((e, i) => ({ name: e.dish.name, qty: e.qty, unitPrice: cd.prices[i] }))
+        }, () => _addComboToCart(combo.id));
+        });
+    }
 }
 
 function _addComboToCart(comboId) {
@@ -214,12 +259,12 @@ function _addComboToCart(comboId) {
         UI.showToast('This combo is no longer active');
         return;
     }
-    const items = combo.items || [];
+    const items = Object.values(combo.items || {});
     const entries = [];
     items.forEach(it => {
         const dish = M.dishes.find(d => d.id === it.dishId);
         if (!dish) return;
-        const base = Number(dish.price ?? (dish.sizes ? Object.values(d.sizes)[0] : 0)) || 0;
+        const base = Number(dish.price ?? (dish.sizes ? Object.values(dish.sizes)[0] : 0)) || 0;
         entries.push({ dish, base, qty: it.qty || 1 });
     });
     const prices = bakeComboUnitPrices(entries.map(e => ({ base: e.base, qty: e.qty })), combo.discountType, combo.discountValue);
@@ -235,6 +280,7 @@ function _addComboToCart(comboId) {
     if (added > 0) {
         clearDiscountIfCartChanged();
         UI.showToast(`${combo.name} added — ${added} item${added > 1 ? 's' : ''}`);
+        refreshCartUi();
     } else {
         UI.showToast('Combo dishes unavailable');
     }
@@ -280,7 +326,7 @@ function openCustomize(dishId) {
 
 function renderCustomizeScreen() {
     const sizes = _normalizeSizes(M.draftDish.sizes, M.draftDish.price);
-    document.getElementById('customBasePrice').textContent = UI.fmtMoney(M.draftSize.price);
+    document.getElementById('customBasePrice').textContent = UI.UI.fmtMoney(M.draftSize.price);
     UI.renderSizeOptions(sizes, M.draftSize.label, (idx) => { M.draftSize = sizes[idx]; renderCustomizeScreen(); });
     UI.renderAddonRows(M.draftDish.addons || [], M.draftAddons, (idx) => {
         const pos = M.draftAddons.indexOf(idx);
