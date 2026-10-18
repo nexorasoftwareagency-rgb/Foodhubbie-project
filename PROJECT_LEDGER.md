@@ -97,6 +97,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261018-071340-2ca3] Inbound guard: drop @newsletter/@broadcast/@g.us before any handling (ban-risk + log flood) ; greetings now send greeting image + full welcome instead of text-only
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-18 07:13 UTC
+- Files touched: bot/index.js, AGENTS.md
+- Verified: node --check bot/index.js OK; bot unit tests 15/15; EC2: backup index.js.bak-20261018-channguard + index.js.bak-20261018-greeting, scp'd, node --check SYNTAX_OK, md5 local==remote (5c97d951), pm2 restart 4 12 + save, all 4 online, health {whatsapp:connected,cryptoErrorCount:0}, grep plainWelcome on server = 0, no @newsletter lines after restart
+- NOT verified / open risk: live inbound greeting image not yet exercised (awaiting user 'Hi' test); guard effect on channel traffic not directly observed since channel volume went quiet post-restart; no unit test for sendOrderFlow withMenu (index.js not importable)
+- Confidence: HIGH
+- Ended: 2026-10-18 07:14 UTC
+
 ### [20261017-032723-b334] Wire rider_assigned template (customer notice on rider change, meta transport) + seed 4 Hinglish shells into platform starter library + fix seed-templates firebase-admin resolution
 - TIER: 2 (medium-risk)
 - STATUS: DONE

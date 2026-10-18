@@ -503,7 +503,9 @@ async function sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl) {
 }
 
 // Full greeting flow: greeting image + menu + order button. Token reused within 30 min.
-async function sendOrderFlow(sock, sender, pushName, user) {
+// withMenu=false sends the greeting image + full welcome only (no menu-image/order
+// link) — used for plain greetings, where blasting the order CTA on spec is avoided.
+async function sendOrderFlow(sock, sender, pushName, user, withMenu = true) {
     const [store, bot] = await Promise.all([
         getData("settings/Store", OUTLET),
         getData("settings/Bot", OUTLET)
@@ -516,8 +518,13 @@ async function sendOrderFlow(sock, sender, pushName, user) {
     welcome += `\n✨ *${OUTLET_NAME} mein aapka swagat hai!* ${OUTLET_EMOJI}`;
     welcome += `\n════════════════════════`;
     welcome += `\nMazedar khana, fatafat aapke darwaze tak! 🚀`;
+    if (!withMenu) {
+        welcome += `\n\n🍽️ *Khana order karne ke liye:* **Menu** ya **Order** type karein — menu + link turant milega.`;
+    }
     const greetingImg = bot?.greetingImage || store?.bannerImage;
     await sendImage(sock, sender, greetingImg, welcome, undefined, false, 'greeting');
+
+    if (!withMenu) return;
 
     // Wait 2 seconds for WhatsApp to prepare preview rendering
     await new Promise(r => setTimeout(r, 2000));
@@ -1968,6 +1975,15 @@ async function sendDailyReportSafely(dateOverride = null) {
             if (msg.key.fromMe) return;
 
             let sender = msg.key.remoteJid;
+
+            // Non-conversational JIDs: WhatsApp Channels (@newsletter),
+            // status/broadcast (@broadcast) and groups (@g.us). The bot never
+            // handled these, and replying into a channel just returns an ack
+            // 401 — it floods the log, burns sends and is a ban-risk surface.
+            // One guard here covers every downstream path (state machine,
+            // opt-out, strikes, Redis dedup).
+            if (/@newsletter|@broadcast|@g\.us/.test(sender || '')) return;
+
             // Blocklist check — silently ignore messages from blocked numbers
             if (isBlockedJid(sender, blockedNumbers)) {
                 console.log(`[BLOCKED] Ignoring message from ${(sender || '').replace(/[^0-9]/g, '').slice(-4)}`);
@@ -2172,19 +2188,15 @@ async function sendDailyReportSafely(dateOverride = null) {
 
                     // SAFEST-FIRST: never blast the order-link/menu-image CTA at a
                     // first-time contact on spec. Only explicit order-intent words
-                    // (menu/order) trigger the full flow. Greetings like
-                    // hi/hello/hey get a plain welcome with Hinglish instructions.
+                    // (menu/order) trigger the full flow. Greetings get the same
+                    // greeting image + full welcome, just without the order CTA.
                     if (/^(menu|order)$/i.test(text.trim())) {
                         await sendOrderFlow(sock, sender, pushName, user);
                         user.step = "WEBVIEW";
                         return;
                     }
 
-                    let plainWelcome = (user?.hasProfile && user?.name)
-                        ? `Namaste *${user.name}* ji! 👋 *${OUTLET_NAME}* mein wapas aane ke liye shukriya.`
-                        : `Namaste *${pushName}*! 👋 Yeh *${OUTLET_NAME}* ka WhatsApp ordering bot hai.`;
-                    plainWelcome += `\n\n🍽️ *Khana order karne ke liye:* **Menu** ya **Order** type karein — menu + link turant milega.`;
-                    await sock.sendMessage(sender, { text: plainWelcome });
+                    await sendOrderFlow(sock, sender, pushName, user, false);
                     user.step = "AWAITING_ORDER_INTENT";
                     return;
                 }
