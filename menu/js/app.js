@@ -505,9 +505,6 @@ function _renderComboOffers() {
     const section = document.getElementById('comboOffersSection');
     const grid = document.getElementById('comboOffersGrid');
     if (!section || !grid) return;
-    if (M.activeCategory !== 'all' && M.activeCategory !== '__combos') {
-        section.classList.add('hidden'); return;
-    }
     const combos = (M.combos || []).filter(c => isComboActive(c, Date.now()));
     if (!combos.length) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');

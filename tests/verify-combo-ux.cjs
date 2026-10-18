@@ -61,10 +61,20 @@ async function rest(method, path_, token, body) {
     ck('QR 20% OFF scrim badge present', hasOff);
     await page.screenshot({ path: path.join(SHOTS, 'ux-qr-all.png') });
 
+    // Position check: combo section comes BEFORE category pills in DOM
+    const orderOk = await page.evaluate(() => {
+        const sec = document.getElementById('comboOffersSection');
+        const pills = document.getElementById('categoryPillsRow');
+        return sec && pills && (pills.compareDocumentPosition(sec) & Node.DOCUMENT_POSITION_PRECEDING);
+    });
+    ck('QR combo section ABOVE pills (promoted position)', orderOk !== 0, orderOk);
+
+    // --- Pizza category: combo section STILL visible (promoted, not hidden) ---
     await page.locator('#categoryPillsRow .category-pill', { hasText: 'Pizza' }).click();
     await page.waitForTimeout(500);
-    ck('QR combo section hidden under Pizza', (await page.locator('#comboOffersSection.hidden').count()) === 1);
+    ck('QR combo section VISIBLE under Pizza (promoted)', (await page.locator('#comboOffersSection:not(.hidden)').count()) === 1);
 
+    // --- Back to All ---
     await page.locator('#categoryPillsRow .category-pill', { hasText: 'All' }).first().click();
     await page.waitForTimeout(500);
     ck('QR combo section visible again on All', (await page.locator('#comboOffersSection:not(.hidden)').count()) === 1);
@@ -99,7 +109,7 @@ async function rest(method, path_, token, body) {
     ck('Delivery combo section visible', dCards > 0, `${dCards} cards`);
     await page.locator('#categoryPillsRow .category-pill', { hasText: 'Pizza' }).click();
     await page.waitForTimeout(500);
-    ck('Delivery combo section hidden under Pizza', (await page.locator('#comboOffersSection.hidden').count()) === 1);
+    ck('Delivery combo section VISIBLE under Pizza (promoted)', (await page.locator('#comboOffersSection:not(.hidden)').count()) === 1);
     await page.screenshot({ path: path.join(SHOTS, 'ux-delivery.png') });
 
     console.log(pass ? 'PASS: combo UX redesign verified on QR + delivery' : 'FAIL');
