@@ -1108,3 +1108,24 @@ Fragile Files before starting ANY task.
 - Next: optionally harden generateOrderId fallback (throw instead of `|| 1`); consider cart UX — applied coupon leaves code text in input with "Apply" acting as remove.
 <!-- TASK_LOG_END -->
 - [2026-10-17 ~14:30 UTC] **GBP (Google Business Profile) RESULT**: profile CREATED + awaiting user video verification. Keeper profile = FoodHubbie ERP, India, "Software company" category, Service areas: India, Phone 097246 49971, Website foodhubbie-web.web.app, ulid 2510051953782582326 (verify entry: business.google.com/locations -> Get verified). Mailing address committed (hidden from public): Vill - Anjani, P.O - Anjani, P/S Parsa, Pincode 841219, Bihar. Hours not set yet (needs 24x7). Repeated OME create-flow replays spawned 7 duplicate unverified drafts - ALL removed via locations list -> row checkbox -> Actions -> Remove business (user should double-check list shows only 1 business). Verification state is session-bounded: each new session replays from 7% and requires re-filling address before reaching the method-choice page (progress 20%). Video verification MUST be done manually by user (proof of management + business name/website on screen). Google flow auto-blocks via "Sorry, we are having some issues" after too many create-flow restarts; throttling self-resolves. Automation drivers: tools/gbp-*.cjs (Playwright persistent profile C:\Users\2nile\AppData\Local\Temp\opencode\pw-gbp-profile, account nileshshah84870@gmail.com; gbp-auto.cjs = full flow driver, gbp-cleanup.cjs = draft cleanup, gbp-final.cjs = address+park).
+<!-- TASK_LOG_END -->
+
+### [2026-10-17 combo-ux-redesign] Zomato/Swiggy-grade combo card redesign (QR menu + delivery webview)
+
+- STATUS: DONE
+- What happened: rebuilt the combo offer card to match food-delivery app UX (Zomato/Swiggy research), applied identically to QR menu and WhatsApp webview, deployed `hosting:menu`, live-verified E2E.
+- Changes (all 9 points, one by one):
+  1. Category-aware visibility — `#comboOffersSection` hidden when a food category (Pizza/Burger/…) is selected; shows only on All / Combos filter. (choosing Pizza no longer shows combos on top)
+  2. Full-card clickable → bottom sheet with full item breakdown + ADD TO CART; floating ADD button = quick-add with ✓ flash. (whole combo offer now tappable)
+  3. Veg/non-veg FSSAI mark on every combo card (name-heuristic since dishes lack a veg field).
+  4. Image bottom scrim with bold % OFF badge chip + struck-through original price.
+  5. Floating ADD button overlapping the image bottom-right (Swiggy-style).
+  6. Optimistic cart bump (badge animates on add).
+  7. Horizontal snap-scroll carousel when 3+ combos (`combo-scroll` grid).
+  8. Bottom sheet (Zomato-style): itemized rows, saving strip, big ADD TO CART CTA, swipe/backdrop/ESC close.
+  9. Delivery webview parity — identical changes in `menu/js/delivery.js`.
+- Critical data fix found while testing: RTDB stores `combo.items` as a JSON array, but all code iterated it assuming an array; made storage-shape safe with `Object.values(combo.items || {})`, applied to menu JS (`app.js`, `delivery.js`) and Admin (`pos.js` combo add, `catalog.js` edit-modal). Also fixed `fmtMoney` import (`UI.fmtMoney`) in both menu files.
+- Verify: `tests/verify-combo-ux.cjs` (new) — fresh 20% combo seeded with far-future endAt; QR: pills contain Combos, cards render with veg mark + scrim badge + floating ADD, section hidden under Pizza / visible on All, sheet opens with 2 rows, badge 0→2 (sheet ADD) → 4 (FAB re-add); Delivery: identical parity. Screenshots `.playwright-mcp/ux-qr-all.png`, `ux-qr-sheet.png`, `ux-qr-after-add.png`, `ux-delivery.png`. Combo seed cleaned after.
+- Files: `menu/js/app.js`, `menu/js/delivery.js`, `menu/js/ui.js`, `menu/css/app.css`, `tests/verify-combo-ux.cjs` (new), `Admin/js/features/pos.js`, `Admin/js/features/catalog.js`.
+- Confidence: HIGH (live E2E on both surfaces; badge math + RTDB order math consistent)
+- Next: optionally harden generateOrderId `|| 1` fallback; consider cart UX tweak for applied-coupon input.
