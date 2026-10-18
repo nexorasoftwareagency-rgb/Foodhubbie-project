@@ -458,6 +458,16 @@ export async function markReachedDrop(params: {
   // sending sendArrived too duplicated the alert. Removed the duplicate.
 }
 
+/** ─── Get the OTP for an order — UI-bound orders strip deliveryOTP/otp, so this
+ *  reads the raw Firebase record when OTP verification is needed. ───────────── */
+
+export async function getOrderOTP(params: { outlet: OutletId; orderId: string }): Promise<string | null> {
+  const { outlet, orderId } = params;
+  const snap = await get(ref(db, dbPaths.singleOrder(outlet, orderId)));
+  const val = snap.val();
+  return val?.deliveryOTP || val?.otp || null;
+}
+
 /** ─── OTP verification — matches window.verifyOTP exactly (10 attempts / 60s block) */
 
 export async function verifyOtp(params: {

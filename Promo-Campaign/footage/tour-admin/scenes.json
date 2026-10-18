@@ -1,0 +1,110 @@
+[
+ {
+  "scene": "login-done",
+  "at": "31.8"
+ },
+ {
+  "scene": "tab:dashboard",
+  "at": "31.8"
+ },
+ {
+  "scene": "tab:orders",
+  "at": "36.6"
+ },
+ {
+  "scene": "action:orders:drawer-open",
+  "at": "36.8"
+ },
+ {
+  "scene": "orders-close:closed",
+  "at": "42.3"
+ },
+ {
+  "scene": "tab:live",
+  "at": "44.0"
+ },
+ {
+  "scene": "tab:tables",
+  "at": "48.5"
+ },
+ {
+  "scene": "tab:walkin",
+  "at": "53.4"
+ },
+ {
+  "scene": "tab:promotions",
+  "at": "58.4"
+ },
+ {
+  "scene": "tab:discounts",
+  "at": "62.9"
+ },
+ {
+  "scene": "tab:menu",
+  "at": "67.3"
+ },
+ {
+  "scene": "tab:categories",
+  "at": "71.9"
+ },
+ {
+  "scene": "tab:combos",
+  "at": "76.0"
+ },
+ {
+  "scene": "tab:menu-browser",
+  "at": "79.8"
+ },
+ {
+  "scene": "tab:inventory",
+  "at": "83.4"
+ },
+ {
+  "scene": "tab:riders",
+  "at": "87.4"
+ },
+ {
+  "scene": "tab:customers",
+  "at": "91.5"
+ },
+ {
+  "scene": "tab:chat",
+  "at": "95.6"
+ },
+ {
+  "scene": "tab:reports",
+  "at": "99.6"
+ },
+ {
+  "scene": "tab:riderAnalytics",
+  "at": "104.2"
+ },
+ {
+  "scene": "tab:feedback",
+  "at": "107.9"
+ },
+ {
+  "scene": "tab:liveTracker",
+  "at": "111.3"
+ },
+ {
+  "scene": "tab:notifications",
+  "at": "115.4"
+ },
+ {
+  "scene": "tab:payments",
+  "at": "119.0"
+ },
+ {
+  "scene": "tab:expenses",
+  "at": "123.1"
+ },
+ {
+  "scene": "tab:costs",
+  "at": "127.2"
+ },
+ {
+  "scene": "tab:settings",
+  "at": "131.0"
+ }
+]

@@ -327,12 +327,9 @@ app.post('/api/admin/update-password', requireSuperOnly, async (req, res) => {
 // Approve a website onboarding request — creates the full outlet + Auth user
 // atomically. Called from the Supreme Admin onboarding-requests page.
 app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => {
-  const { reqKey, businessName, outletName, contactPhone, contactEmail, adminEmail, adminPassword, plan, template, whatsappConnect } = req.body || {};
-  if (!reqKey || !businessName || !outletName || !adminEmail || !adminPassword) {
-    return res.status(400).json({ error: 'reqKey, businessName, outletName, adminEmail, adminPassword are required' });
-  }
-  if (adminPassword.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const { reqKey, businessName, outletName, contactPhone, contactEmail, adminEmail, plan, template, whatsappConnect } = req.body || {};
+  if (!reqKey || !businessName || !outletName || !adminEmail) {
+    return res.status(400).json({ error: 'reqKey, businessName, outletName, adminEmail are required' });
   }
   try {
     // Verify the request is still pending
@@ -340,6 +337,20 @@ app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => 
     const reqData = reqSnap.val();
     if (!reqData) return res.status(404).json({ error: 'Onboarding request not found' });
     if (reqData.status !== 'pending') return res.status(409).json({ error: `Request already ${reqData.status}` });
+
+    // Password: prefer the write-only secrets node (new flow — never client-readable);
+    // fall back to the legacy inline field for requests submitted before the cutover.
+    let adminPassword = null;
+    try {
+      const secSnap = await admin.database().ref(`onboardingSecrets/${reqKey}`).get();
+      adminPassword = secSnap.val()?.password || null;
+    } catch (e) {
+      console.warn('[approve-onboarding] secret read failed (non-fatal, trying legacy):', e.message);
+    }
+    if (!adminPassword) adminPassword = reqData.adminPassword || null;
+    if (!adminPassword || adminPassword.length < 6) {
+      return res.status(422).json({ error: 'Password secret missing or too short — ask the applicant to re-submit.' });
+    }
 
     // Check for duplicate admin email
     try {
@@ -435,6 +446,12 @@ billing: getBillingDefaults(),
         },
       },
       ...bankUpdates,
+    });
+
+    // Burn the secret + clear any legacy inline password now that Auth holds it.
+    // Deletion happens AFTER user creation so a mid-flow failure stays retryable.
+    await admin.database().ref(`onboardingSecrets/${reqKey}`).set(null).catch((e) => {
+      console.warn('[approve-onboarding] secret delete failed (non-fatal):', e.message);
     });
 
     // Update onboarding request
@@ -1010,6 +1027,75 @@ app.post('/tenant-api/notify', async (req, res) => {
     res.status(500).json({ error: `Notification send failed — ${err.message}` });
   }
 });
+
+// ================================================================
+// Daily auto-settlement cron (Phase 2)
+// Runs once per day at the configured hour (default: 23:00 server time).
+// For every rider with pending cash (totalEarnings − settled > 0), creates
+// a settlement record so the admin can review/pay and the rider can confirm
+// receipt. No money moves — this is a record-keeping step that matches the
+// rider app's "Confirm Received" flow.
+// ================================================================
+
+const SETTLEMENT_LAST_RUN_PATH = 'meta/dailySettlementLastRun';
+
+async function runDailySettlement(admin) {
+  const today = new Date().toISOString().slice(0, 10);
+  const lastRunSnap = await admin.database().ref(SETTLEMENT_LAST_RUN_PATH).get();
+  if (lastRunSnap.val() === today) return; // already ran today
+  await admin.database().ref(SETTLEMENT_LAST_RUN_PATH).set(today);
+
+  try {
+    // Enumerate all riders
+    const ridersSnap = await admin.database().ref('riders').get();
+    const riders = ridersSnap.val() || {};
+
+    for (const [uid, rider] of Object.entries(riders)) {
+      const r = rider || {};
+      const statsSnap = await admin.database().ref(`riderStats/${uid}`).get();
+      const stats = statsSnap.val() || { totalEarnings: 0, totalOrders: 0 };
+      const totalEarnings = stats.totalEarnings || 0;
+
+      // Sum already-settled amounts
+      const settleSnap = await admin.database().ref(`settlements/${uid}`).get();
+      const settlements = settleSnap.val() || {};
+      const settledTotal = Object.values(settlements).reduce(
+        (sum, s) => sum + (s?.amountCollected || 0),
+        0
+      );
+
+      const pendingCash = Math.max(0, totalEarnings - settledTotal);
+      if (pendingCash <= 0) continue;
+
+      // Create settlement record
+      const settlementRef = admin.database().ref(`settlements/${uid}`).push();
+      await settlementRef.set({
+        amountCollected: pendingCash,
+        ordersClearedCount: stats.totalOrders || 0,
+        settledByAdmin: 'Auto-Settlement (Daily Cron)',
+        timestamp: Date.now(),
+        source: 'daily-auto-settlement',
+        riderAck: null,
+      });
+
+      console.log(`[Auto-Settlement] Created settlement for rider ${uid}: ₹${pendingCash}`);
+    }
+  } catch (err) {
+    console.error('[Auto-Settlement] Failed:', err);
+  }
+}
+
+// Check every hour whether it's time to run the daily settlement (default 23:00)
+const SETTLEMENT_HOUR = parseInt(process.env.DAILY_SETTLEMENT_HOUR || '23', 10);
+setInterval(() => {
+  if (new Date().getHours() === SETTLEMENT_HOUR) {
+    runDailySettlement(admin).catch((err) => console.error('[Auto-Settlement] Interval error:', err));
+  }
+}, 60 * 60 * 1000).unref();
+
+console.log(`[Auto-Settlement] Daily scheduler armed for ${SETTLEMENT_HOUR}:00 server time`);
+
+// ================================================================
 
 app.listen(PORT, () => console.log(`Bot Control API listening on :${PORT}`));
 

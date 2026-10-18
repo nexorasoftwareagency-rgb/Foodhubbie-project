@@ -22,8 +22,12 @@ export type Rider = {
   isAdmin: boolean;
   /** Outlet this rider is assigned to — used for order filtering and isolation. */
   outlet: OutletId;
-  /** No rating pipeline exists in the real schema — renders as "New" until one exists. */
+  /** Average customer rating (1-5), computed from RiderRating records. */
   rating?: number;
+  /** Rider's preferred shift schedule (auto-suggest online/offline times). */
+  shiftSchedule?: ShiftSchedule;
+  /** Emergency contact for SOS situations. */
+  emergencyContact?: EmergencyContact;
   notifications?: Record<string, RiderNotification>;
   location?: RiderLocation;
 };
@@ -35,6 +39,26 @@ export type RiderNotification = {
   read: boolean;
   type: "info" | "success" | "warning";
   icon: string;
+};
+
+export type RiderRating = {
+  orderId: string;
+  riderId: string;
+  customerId?: string;
+  rating: number; // 1-5
+  comment?: string;
+  createdAt: number;
+};
+
+export type ShiftSchedule = {
+  enabled: boolean;
+  days: Record<string, { start: string; end: string; active: boolean }>; // e.g. { "monday": { start: "09:00", end: "17:00", active: true } }
+};
+
+export type EmergencyContact = {
+  name: string;
+  phone: string;
+  relationship: string;
 };
 
 export type RiderLocation = {
@@ -91,6 +115,8 @@ export type RiderOrder = {
   reachedDropAt?: number;
   deliveredAt?: number;
 
+  /** OTP for customer verification — NEVER exposed in rider UI. Used only by
+   *  orderService.verifyOtp() for server-side comparison. */
   deliveryOTP?: string;
   otp?: string;
   otpVerifiedAt?: number;

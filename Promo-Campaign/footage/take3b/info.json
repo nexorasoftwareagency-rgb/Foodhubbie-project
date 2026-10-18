@@ -1,0 +1,22 @@
+{
+ "admin-dash": {
+  "n": 704,
+  "mark": 439
+ },
+ "admin-orders": {
+  "n": 1330,
+  "mark": null
+ },
+ "admin-kitchen": {
+  "n": 674,
+  "mark": null
+ },
+ "admin-tables": {
+  "n": 637,
+  "mark": null
+ },
+ "admin-pos": {
+  "n": 683,
+  "mark": null
+ }
+}

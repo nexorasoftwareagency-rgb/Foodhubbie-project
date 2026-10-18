@@ -1,0 +1,51 @@
+# FoodHubbie ERP
+
+> Restaurant & cafe ERP: QR ordering, kitchen display, rider dispatch, WhatsApp ordering,
+> promotions, POS, analytics — three apps (Admin, Customer Menu, Rider) on one realtime system.
+
+## What it is
+- Admin Dashboard (command center): live orders, kitchen display (KDS), tables/dine-in QR,
+  POS counter billing, menu/catalog/categories/combos/menu-browser, inventory, promotions
+  (WhatsApp campaigns), discounts/coupons, customers, riders, live delivery tracking,
+  analytics, feedback/reviews, push notifications, payments, expenses, costs. No app download
+  for customers — browser QR menu.
+- Customer Menu: scan table QR → browse → customize → cart → place → live status →
+  request water/bill → pay. Delivery via WhatsApp webview link (single-use token, GPS fee).
+- Rider App: online/offline, assigned orders, pickup, OTP handoff, cash collection,
+  wallet/settlements, delivery history.
+- WhatsApp: Baileys transport for chat/ordering; Meta Cloud API for promotional campaigns
+  (promos hard-blocked on Baileys). STOP opt-out honored; paced sends; emergency stop.
+
+## Marketing engine (verified capabilities)
+- Campaigns: ≤1500 chars, tokens {name} {phone} {lastOrderDate} {storeName} {couponCode},
+  image + menu footer, STOP footer; audience = consenting / active-30d / CSV (300 cap);
+  preview + send-test-to-self; ₹1 token/message money gate; launch now or schedule + quiet
+  hours; live progress; per-campaign stop + EMERGENCY STOP ALL. 25 templates, 7 categories.
+- Discounts: Global / Category / New-Customer / Coupon; % or ₹; channels WhatsApp/POS/Both/
+  Web/All; schedule, min-subtotal, exclusive groups, per-customer/global caps, stackable;
+  same engine scores POS, tables, QR; per-code reports + CSV.
+- Combos: dishes + qty + %/fixed + dates + image → one-tap POS tiles.
+- Safety: 300 recipients/campaign, 300/day, 8–15s pacing + batch pauses, 7-day warmup ramp,
+  >35% failure circuit-breaker, kill-switch, Meta-only promos.
+
+## Pricing (per-order, flat)
+- QR Table ₹2/order + POS counter ₹1/order.
+- WhatsApp Official (Meta Cloud API) ₹5/order or 1% of sales. Official Promo msgs ₹1 each.
+- One-time setup ₹500 (non-refundable, adjusted in first bill).
+
+## Pages
+- https://foodhubbie-web.web.app/ — product, features, pricing
+- https://foodhubbie-web.web.app/architecture.html — customer/dine-in/rider/admin flows
+- https://foodhubbie-web.web.app/signup.html — restaurant registration (writes onboardingRequests)
+- https://foodhubbie-web.web.app/book.html — demo/inquiry via WhatsApp
+- https://foodhubbie-web.web.app/contact.html — WhatsApp +91 97246 49971
+
+- https://foodhubbie-web.web.app/qr-ordering.html — QR code ordering system
+- https://foodhubbie-web.web.app/pos-billing.html — POS billing software
+- https://foodhubbie-web.web.app/kds.html — kitchen display system
+- https://foodhubbie-web.web.app/riders.html — rider delivery management
+
+## Live apps
+- Admin: https://foodhubbie-admins.web.app
+- Customer menu: https://foodhubbie-qrmenu.web.app
+- Rider: https://foodhubbie-riderapp.web.app

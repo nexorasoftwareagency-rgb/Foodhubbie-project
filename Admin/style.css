@@ -122,6 +122,17 @@
 .color-error { color: var(--error); }
 .color-warning { color: var(--warning-text); }
 
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
 
 * {
     box-sizing: border-box;
@@ -1057,6 +1068,25 @@ tr.premium-row-v4:focus-visible {
     to {
         opacity: 0;
         transform: translateY(20px) scale(.97);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .modal.active .modal-content,
+    .modal.closing .modal-content,
+    .cmb-err,
+    .cmb-qty button,
+    .form-input,
+    .btn-primary,
+    .btn-secondary,
+    [data-action],
+    [data-tab],
+    [data-sort] {
+        animation: none !important;
+        transition: none !important;
+    }
+    .modal {
+        transition: none !important;
     }
 }
 
@@ -10655,7 +10685,7 @@ body.pos-selection-mode .walkin-picker {
 .mobile-role-chip { display: block; font-size: 10px; font-weight: 600; color: var(--text-muted, #64748b); text-align: center; }
 
 /* ================================================================
-   App Notifications (Push) — Promotions tab sub-panel
+   App Notifications (Push) ï¿½ Promotions tab sub-panel
    ================================================================ */
 .promo-notifications-header {
     margin-bottom: 16px;

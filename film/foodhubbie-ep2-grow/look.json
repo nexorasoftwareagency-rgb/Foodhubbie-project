@@ -1,0 +1,32 @@
+{
+  "name": "look-foodhubbie",
+  "from": "shots\\admin-tables.png, shots\\menu-dinein.png, shots\\admin-costs.png",
+  "mood": "the product's own colours, measured from its screenshots",
+  "color": {
+    "ground": "#fcfcfc",
+    "deep": "#ededed",
+    "card": "#f4f4fc",
+    "line": "#fcece4",
+    "mute": "#817c78",
+    "ink": "#1c140c",
+    "accent": "#ec4c0c",
+    "accent2": "#24c45c"
+  },
+  "type": {
+    "display": {
+      "face": "Geist",
+      "weight": 700,
+      "tracking": -0.02
+    },
+    "text": {
+      "face": "Inter",
+      "weight": 500,
+      "tracking": -0.02
+    },
+    "mono": {
+      "face": "Geist Mono",
+      "weight": 400,
+      "tracking": 0
+    }
+  }
+}

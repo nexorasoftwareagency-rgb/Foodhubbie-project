@@ -1,0 +1,3 @@
+file 'seg-welcome.mp4'
+file 'seg-order.mp4'
+file 'seg-promos.mp4'

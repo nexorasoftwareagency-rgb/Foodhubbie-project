@@ -1,19 +1,26 @@
 // === src/components/layout/Header.tsx ===
 import { useState } from "react";
-import { Menu, Bell, RefreshCw } from "lucide-react";
+import { Menu, Bell, RefreshCw, AlertTriangle } from "lucide-react";
 import { useRiderContext } from "@/contexts/RiderContext";
 import { useLocationContext } from "@/contexts/LocationContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useRefreshAction } from "@/hooks/useRefreshAction";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { CountBadge } from "@/components/shared/CountBadge";
+import { triggerSOS } from "@/services/sosService";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
 
 export function Header({ onMenuClick, onNotifClick }: { onMenuClick: () => void; onNotifClick: () => void }) {
   const { isOnline, toggleOnline, rider, outlets } = useRiderContext();
+  const { location } = useLocationContext();
   const { locationError } = useLocationContext();
   const { unreadCount } = useNotifications();
   const refresh = useRefreshAction();
   const [spinning, setSpinning] = useState(false);
+  const [sosOpen, setSosOpen] = useState(false);
+  const [sosLoading, setSosLoading] = useState(false);
 
   const outletName = outlets[0]?.name || rider?.outlet ? outlets[0]?.name || rider?.outlet : "Rider";
 
@@ -21,6 +28,31 @@ export function Header({ onMenuClick, onNotifClick }: { onMenuClick: () => void;
     setSpinning(true);
     await refresh();
     setSpinning(false);
+  }
+
+  async function handleSOS() {
+    if (!rider?.uid) return;
+    setSosLoading(true);
+    try {
+      if (!location) {
+        toast.error("Location unavailable — enable GPS to send SOS with your position.");
+        return;
+      }
+      await triggerSOS({
+        riderId: rider.uid,
+        riderName: rider.name,
+        riderPhone: rider.phone,
+        lat: location.lat,
+        lng: location.lng,
+        accuracy: location.accuracy,
+      });
+      toast.success("SOS alert sent", { description: "Your emergency contact has been notified with your location." });
+      setSosOpen(false);
+    } catch {
+      toast.error("Could not send SOS alert. Please try again.");
+    } finally {
+      setSosLoading(false);
+    }
   }
 
   return (
@@ -33,7 +65,7 @@ export function Header({ onMenuClick, onNotifClick }: { onMenuClick: () => void;
           <Menu size={18} />
         </button>
 
-<div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0">
           <b className="block text-[13px] font-extrabold tracking-tight truncate">ROSHANI</b>
           <span className="block text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
             {outletName} Rider
@@ -55,6 +87,13 @@ export function Header({ onMenuClick, onNotifClick }: { onMenuClick: () => void;
           {unreadCount > 0 && <CountBadge count={unreadCount} className="absolute -top-1 -right-1" />}
         </button>
 
+        <button
+          onClick={() => setSosOpen(true)}
+          className="flex size-9 items-center justify-center rounded-[10px] bg-[#FEF0F0] text-[#B91C1C] active:bg-[#FEE2E2]"
+        >
+          <AlertTriangle size={16} />
+        </button>
+
         <StatusPill status={isOnline ? "Online" : "Offline"} onClick={toggleOnline} />
       </div>
 
@@ -63,6 +102,22 @@ export function Header({ onMenuClick, onNotifClick }: { onMenuClick: () => void;
           📍 Location permission denied — enable it in your browser to accept orders.
         </div>
       )}
+
+      <Dialog open={sosOpen} onOpenChange={setSosOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Emergency SOS</DialogTitle>
+            <DialogDescription>
+              This will send your live location to your emergency contact and log the alert for audit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-4">
+            <Button onClick={handleSOS} disabled={sosLoading} className="w-full bg-[#B91C1C] hover:bg-[#B91C1C]/90">
+              {sosLoading ? "Sending..." : "Send SOS Alert"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

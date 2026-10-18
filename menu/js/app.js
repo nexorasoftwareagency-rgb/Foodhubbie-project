@@ -484,8 +484,7 @@ function _comboVegMark(c) {
     const items = c.items || [];
     for (const it of items) {
         const d = M.dishes.find(x => x.id === it.dishId);
-        const name = (d ? d.name : '').toLowerCase();
-        if (/\b(chicken|mutton|egg|fish|prawn|keema|meat|beef|pork|lamb|crab|squid|ham|salami|pepperoni|bacon)\b/.test(name)) return 'combo-nonveg';
+        if (d && d.veg === false) return 'combo-nonveg';
     }
     return 'combo-veg';
 }

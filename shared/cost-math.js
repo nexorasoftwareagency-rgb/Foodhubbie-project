@@ -1,8 +1,8 @@
 /**
  * FoodHubbie ERP | COST MATH (pure — no imports, runnable in node or browser)
  * Rates mirror the public pricing page (website/index.html):
- *   QR Table ₹2/order · POS counter ₹1/order · WhatsApp Baileys ₹3/order · Official ₹5/order
- *   commission_1pct mode = the 1% option on total revenue (WhatsApp Official pack only)
+ *   QR Table ₹2/order · POS counter ₹1/order · WhatsApp/webview ₹3/order
+ *   Official pack: per-outlet rates override (₹5/order) or commission_1pct mode (1% of revenue)
  *   Promo (marketing) message = ₹1 · cancelled/refunded orders never bill
  */
 

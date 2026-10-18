@@ -8,12 +8,16 @@ import { useSettlements } from "@/hooks/useSettlements";
 import { TodayHero } from "@/components/earnings/TodayHero";
 import { SummaryGrid } from "@/components/earnings/SummaryGrid";
 import { WeeklyChart } from "@/components/earnings/WeeklyChart";
+import { OrderEarningsList } from "@/components/earnings/OrderEarningsList";
+import { GamificationBadge } from "@/components/earnings/GamificationBadge";
 import { OutletBreakdownCards } from "@/components/wallet/OutletBreakdownCards";
 import { SettlementButton } from "@/components/earnings/SettlementButton";
 import { SettlementModal } from "@/components/modals/SettlementModal";
+import { useOrderHistory } from "@/hooks/useOrderHistory";
 
 export function EarningsDetail() {
   const { todayTotal, todayOrderCount, weekly, weeklyTotal, onlineHoursSession } = useEarnings();
+  const { history: historyOrders } = useOrderHistory();
   const { stats, statsByOutlet } = useRiderContext();
   const { settlements } = useSettlements();
   const [, navigate] = useLocation();
@@ -23,6 +27,8 @@ export function EarningsDetail() {
     const settledTotal = settlements.reduce((s, x) => s + (x.amountCollected || 0), 0);
     return Math.max(0, stats.totalEarnings - settledTotal);
   }, [settlements, stats.totalEarnings]);
+
+  const deliveredOrders = useMemo(() => historyOrders.filter((o) => o.status === "Delivered"), [historyOrders]);
 
   return (
     <div>
@@ -42,6 +48,11 @@ export function EarningsDetail() {
 
         <h3 className="text-[13px] font-extrabold mb-2.5 mt-4">Earnings by Outlet</h3>
         <OutletBreakdownCards statsByOutlet={statsByOutlet} />
+
+        <h3 className="text-[13px] font-extrabold mb-2.5 mt-4">Order Breakdown</h3>
+        <OrderEarningsList orders={deliveredOrders} unsettled={unsettled} />
+
+        <GamificationBadge orders={deliveredOrders} />
 
         <SettlementButton onClick={() => setSettleOpen(true)} />
       </div>

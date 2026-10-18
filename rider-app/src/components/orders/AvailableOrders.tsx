@@ -3,6 +3,7 @@ import { PackageSearch } from "lucide-react";
 import { useAvailableOrders } from "@/hooks/useAvailableOrders";
 import { useRiderContext } from "@/contexts/RiderContext";
 import { OrderCard } from "@/components/orders/OrderCard";
+import { DemandIndicator } from "@/components/orders/DemandIndicator";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -51,6 +52,7 @@ export function AvailableOrders() {
           {orders.length}
         </span>
       </div>
+      <DemandIndicator orders={orders} />
       {orders.map((o) => (
         <OrderCard key={o.id} order={o} />
       ))}

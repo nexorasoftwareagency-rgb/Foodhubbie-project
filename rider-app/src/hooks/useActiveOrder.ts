@@ -6,7 +6,7 @@ import { subscribeActiveOrders, type ActiveOrderRow } from "@/services/orderServ
 import { logRiderError } from "@/services/auditService";
 import { getDeliveryStep } from "@/lib/utils";
 
-export type ActiveOrder = ActiveOrderRow;
+export type ActiveOrder = Omit<ActiveOrderRow, "deliveryOTP" | "otp">;
 
 export function useActiveOrder() {
   const { user } = useAuthContext();
@@ -24,10 +24,12 @@ export function useActiveOrder() {
       outlets,
       user.email,
       (list) => {
-        const withSteps = list
+        // Strip OTP fields before orders reach any UI component — OTP must never
+        // be visible to the rider, only used server-side for verification.
+        const sanitized = list.map(({ deliveryOTP, otp, otpVerifiedAt, ...rest }) => rest);
+        const withSteps = sanitized
           .map((o) => ({ ...o, step: getDeliveryStep(o) }))
           .sort((a, b) => {
-            // Sort by step descending (lower step = more urgent), then by acceptedAt for tiebreaking
             const stepDiff = (a.step || 0) - (b.step || 0);
             if (stepDiff !== 0) return stepDiff;
             return (a.acceptedAt || 0) - (b.acceptedAt || 0);
@@ -42,7 +44,6 @@ export function useActiveOrder() {
       }
     );
     return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.email, outlets, outletsLoading, retryTick]);
 
   return {

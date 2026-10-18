@@ -16,6 +16,7 @@ import {
   markReachedDrop,
   verifyOtp as verifyOtpService,
   resendOtp as resendOtpService,
+  getOrderOTP,
   completeDelivery,
   ProximityError,
 } from "@/services/orderService";
@@ -172,11 +173,14 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
 
   async function handleVerifyOtp(code: string) {
     try {
+      // OTP is stripped from UI-bound orders — fetch it from Firebase for
+      // server-side comparison only. Rider never sees the raw OTP value.
+      const actualOtp = await getOrderOTP({ outlet: order.outlet, orderId: order.id });
       const result = await verifyOtpService({
         outlet: order.outlet,
         orderId: order.id,
         enteredOtp: code,
-        actualOtp: order.deliveryOTP || order.otp || "",
+        actualOtp: actualOtp ?? "",
         backupCode: order.backupCode,
       });
       if (result.success) {
@@ -202,18 +206,20 @@ export function OrderTaskPanel({ order }: { order: ActiveOrder }) {
     await resendOtpService({ outlet: order.outlet, orderId: order.id });
   }
 
-function handleEmergencyOverride() {
+async function handleEmergencyOverride() {
     if (!order.backupCode) {
       toast.error("No backup code configured for this outlet.");
       return;
     }
-    verifyOtpService({
-      outlet: order.outlet,
-      orderId: order.id,
-      enteredOtp: order.backupCode,
-      actualOtp: order.deliveryOTP || order.otp || "",
-      backupCode: order.backupCode,
-      }).then((result) => {
+    try {
+      const actualOtp = await getOrderOTP({ outlet: order.outlet, orderId: order.id });
+      const result = await verifyOtpService({
+        outlet: order.outlet,
+        orderId: order.id,
+        enteredOtp: order.backupCode,
+        actualOtp: actualOtp ?? "",
+        backupCode: order.backupCode,
+      });
       if (result.success) {
         setVerifiedBy("ADMIN_FALLBACK");
         setOtpOpen(false);
@@ -224,10 +230,10 @@ function handleEmergencyOverride() {
         }
         toast.warning("Emergency override used", { description: "This is logged for audit." });
       }
-    }).catch((err) => {
+    } catch (err) {
       toast.error("Emergency override failed");
       if (user?.uid) logRiderError(user.uid, "ActiveTripView.emergencyOverride", err);
-    });
+    }
   }
 
   async function finishPayment(method: "CASH" | "UPI" | "CARD", via?: "OTP" | "ADMIN_FALLBACK") {

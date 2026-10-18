@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Code Ordering System for Restaurants | FoodHubbie</title>
+<meta name="description" content="A QR code ordering system for restaurants: customers scan a table QR, order and customize from their own phone, and the order lands live in your kitchen. Free trial available.">
+<link rel="canonical" href="https://foodhubbie-web.web.app/qr-ordering.html">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍕</text></svg>">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="QR Code Ordering System for Restaurants | FoodHubbie">
+<meta property="og:description" content="Customers scan a table QR and order from their own phone. You get the order live in the kitchen — no misheard calls, no extra staff.">
+<meta property="og:image" content="https://foodhubbie-web.web.app/assets/shots/qr-table.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"></noscript>
+<link rel="preload" as="image" href="assets/shots/menu-landing.webp" fetchpriority="high">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%)}
+  h1{font-size:clamp(28px,5vw,42px)}
+  section{padding:64px 0 0}
+  h2{font-size:clamp(24px,4vw,36px);letter-spacing:-.02em;font-weight:800;margin-bottom:14px}
+  .lead{color:var(--muted);max-width:680px;margin-bottom:36px;font-size:16px;line-height:1.7}
+  .img-hero{width:100%;border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+  @media(max-width:860px){.duo{grid-template-columns:1fr}}
+  .duo figure{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+  .duo img{width:100%;display:block;object-fit:cover;height:300px}
+  .duo figcaption{padding:14px 18px;font-size:13px;color:var(--muted)}
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px}
+  @media(max-width:860px){.benefits{grid-template-columns:1fr}}
+  .benefit{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+  .benefit .ico{font-size:30px;margin-bottom:10px}
+  .benefit b{font-size:15px;display:block;margin-bottom:6px}
+  .benefit p{font-size:13.5px;color:var(--muted);line-height:1.65}
+  .faq{max-width:760px;margin-top:28px}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .faq summary{font-weight:700;font-size:15px;cursor:pointer}
+  .faq p{color:var(--muted);font-size:14px;line-height:1.7;margin-top:10px}
+  .cta-strip{background:linear-gradient(135deg,#fff0e6,#ffe3d2);border:1px solid #ffd9c2;border-radius:var(--radius);padding:36px;text-align:center;margin-top:64px}
+  .cta-strip h2{margin-bottom:8px}
+  .cta-strip p{color:var(--muted);margin-bottom:20px}
+  .cta-strip a{margin:4px}
+  footer{margin-top:72px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+</style>
+<script type="module" src="shared/ga4.js"></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"QR Code Ordering System","item":"https://foodhubbie-web.web.app/qr-ordering.html"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is a QR code ordering system?","acceptedAnswer":{"@type":"Answer","text":"A QR code ordering system lets customers scan a QR code on the table with their phone, open the restaurant's menu instantly — no app download — customize and place their order directly, and have it appear live in the kitchen and billing dashboard. FoodHubbie runs exactly this for restaurants, cafes and cloud kitchens."}},{"@type":"Question","name":"How much does a QR ordering system cost?","acceptedAnswer":{"@type":"Answer","text":"FoodHubbie charges a flat ₹1–5 per order depending on plan, plus a one-time ₹500 setup. There is no monthly fee and the free trial covers the full feature set."}},{"@type":"Question","name":"Do customers need to install an app?","acceptedAnswer":{"@type":"Answer","text":"No. The menu opens in the customer's phone browser the moment they scan the QR code. Nothing to download, nothing to sign up for."}},{"@type":"Question","name":"Does the QR table order go directly to the kitchen?","acceptedAnswer":{"@type":"Answer","text":"Yes. Orders appear on the kitchen display and admin dashboard in real time with the table number so staff can serve without taking notes or confirming twice."}},{"@type":"Question","name":"Can the table bill be split or closed at the table?","acceptedAnswer":{"@type":"Answer","text":"Yes. FoodHubbie supports multi-bill groups — a table session can hold separate bill requests that the cashier accepts or rejects, and the customer can request the bill right from the same screen."}}]}
+</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="index.html">Food<span>Hubbie</span> ERP</a>
+      <div class="links">
+        <a class="link" href="index.html">Home</a>
+        <a class="link" href="architecture.html">How It Works</a>
+        <a class="link" href="qr-ordering.html" style="color:var(--brand)">QR Ordering</a>
+        <a class="link" href="contact.html">Contact</a>
+        <a class="btn" href="signup.html" style="padding:10px 22px;font-size:14px">Start free trial</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--muted);margin-bottom:14px"><a href="/" style="color:var(--muted);text-decoration:none">Home</a>&nbsp;/&nbsp;<span style="color:var(--brand);font-weight:600">QR Ordering</span></nav>
+    <div class="kicker">Feature</div>
+    <h1>Zero-waiter vibes: the QR code ordering system built for restaurants</h1>
+    <p class="sub">Customer scans the QR on the table → menu opens instantly in their own phone → they order, customize, and pay their table bill. You watch it land live in the kitchen — no misheard calls, no running back and forth.</p>
+    <div class="ctas" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px">
+      <a class="btn" href="https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%27d%20like%20to%20see%20the%20QR%20ordering%20system%20in%20action.%20(From%3A%20foodhubbie-web.web.app)" target="_blank" rel="noopener">Start free trial →</a>
+      <a class="btn ghost" href="book.html">Book a 15-min demo →</a>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+
+  <section>
+    <h2>What it is</h2>
+    <p class="lead">A QR code ordering system is exactly what it sounds like: a QR code sticker on every table, each linked to that table (and its session). Scanning it opens <strong>your</strong> menu in the customer's browser — no app download, no waiters, no "sir what do you want to order". The order travels straight into your kitchen screen with the table number attached, and the customer keeps everything — menu, order status, bill request — on the same page.</p>
+    <figure>
+      <img class="img-hero" src="assets/shots/menu-landing.webp" alt="FoodHubbie QR code ordering system — customer menu opening after scanning the table QR" fetchpriority="high" decoding="async">
+      <figcaption style="color:var(--muted);font-size:13px;margin-top:10px">The first thing your customer sees after scanning — your live menu, not a PDF.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>How the QR table flow works</h2>
+    <p class="lead">One scan session = one table. Order anything, multiple times, ask for the bill — it's all tied to that table until the cashier closes it.</p>
+    <div class="duo">
+      <figure>
+        <img src="assets/shots/qr-table.webp" alt="QR table ordering code assigned to restaurant tables in FoodHubbie" loading="lazy" decoding="async">
+        <figcaption>Each table gets its own QR — sessions are tracked per table with multi-bill groups.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/shots/table-management.webp" alt="FoodHubbie table management with QR ordering sessions and live status" loading="lazy" decoding="async">
+        <figcaption>Your staff sees every live table session, order and bill request at a glance.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>What you get out of it</h2>
+    <div class="benefits">
+      <div class="benefit"><div class="ico">🍳</div><b>Fewer wrong orders</b><p>The customer picks the variant, toppings and quantity themselves — kitchen sees exactly what was chosen, not what a waiter remembered.</p></div>
+      <div class="benefit"><div class="ico">⚡</div><b>Faster table turns</b><p>No waiting for a free waiter. Order and bill-request happen from the seat; staff get a live queue instead of interruptions.</p></div>
+      <div class="benefit"><div class="ico">🧾</div><b>Clean billing</b><p>Table sessions track every item ordered; multi-bill groups prove the cashier's math before the bill closes.</p></div>
+      <div class="benefit"><div class="ico">💸</div><b>Pay for orders, not months</b><p>Flat ₹1–5 per order and a ₹500 setup. No monthly rent for the ordering channel your customers already know how to use.</p></div>
+      <div class="benefit"><div class="ico">🛡️</div><b>Works even if the waiter's busy</b><p>Rush-hour spikes don't break the flow — five phones scanning at once don't need five waiters.</p></div>
+      <div class="benefit"><div class="ico">🔗</div><b>Connected to everything</b><p>Sold out? The menu shows it live the second you toggle availability in the admin. Price change? Updates instantly on every table.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Questions people actually ask</h2>
+    <div class="faq">
+      <details open><summary>What is a QR code ordering system?</summary><p>A QR code ordering system lets customers scan a QR code on the table with their phone, open the restaurant's menu instantly — no app download — customize and place their order directly, and have it appear live in the kitchen and billing dashboard. FoodHubbie runs exactly this for restaurants, cafes and cloud kitchens.</p></details>
+      <details><summary>How much does a QR ordering system cost?</summary><p>FoodHubbie charges a flat ₹1–5 per order depending on plan, plus a one-time ₹500 setup. No monthly fee, and the free trial covers the full feature set.</p></details>
+      <details><summary>Do customers need to install an app?</summary><p>No. The menu opens in the customer's phone browser the moment they scan the QR code. Nothing to download, nothing to sign up for.</p></details>
+      <details><summary>Does the QR table order go directly to the kitchen?</summary><p>Yes. Orders appear on the kitchen display and admin dashboard in real time with the table number attached, so staff can serve without taking notes or double-confirming.</p></details>
+      <details><summary>Can the table bill be split or closed at the table?</summary><p>Yes — FoodHubbie supports multi-bill groups: a table session can hold separate bill requests that the cashier accepts or rejects, and the customer can request the bill right from the same screen.</p></details>
+    </div>
+  </section>
+
+  <section class="cta-strip">
+    <h2>See it running on a real table</h2>
+    <p>The free trial covers QR ordering, kitchen display and billing. WhatsApp us and we'll set it up on your printed QRs the same day.</p>
+    <a class="btn" href="https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%27d%20like%20to%20start%20a%20FREE%20TRIAL%20of%20the%20FoodHubbie%20ERP.%20(From%3A%20foodhubbie-web.web.app)" target="_blank" rel="noopener">Start free trial →</a>
+    <a class="btn ghost" href="signup.html">Register your restaurant</a>
+  </section>
+
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="index.html">Home</a> · <a href="architecture.html">How It Works</a> · <a href="use-cases.html">Restaurants & Cafes</a> · <a href="qr-ordering.html">QR Ordering</a> · <a href="pos-billing.html">POS Billing</a> · <a href="kds.html">Kitchen Display</a> · <a href="contact.html">Co

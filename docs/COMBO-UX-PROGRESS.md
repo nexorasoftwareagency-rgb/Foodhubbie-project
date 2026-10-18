@@ -18,7 +18,7 @@ Based on comparison of our system vs Domino's & Swiggy (customer menu + admin ma
 | 2 | Make every offer tappable → bottom sheet with item breakdown + ADD TO CART (done in prior redesign) | Domino's read-only offer fix | `[x]` | Implemented + verified |
 | 3 | Sticky Add during scroll — price + ADD fixed at bottom of card detail | Swiggy / Turumburum | `[ ]` | |
 | 4 | Cross-sell on combo detail — "Add a drink for ₹49" / side upsell chips in bottom sheet | Domino's cross-sell blocks | `[ ]` | |
-| 5 | Explicit veg/non-veg marks — store `veg` flag on dish, render green-dot / red-triangle square | Swiggy mandatory mark | `[ ]` | Currently name-heuristic |
+| 5 | Explicit veg/non-veg marks — store `veg` flag on dish, render green-dot / red-triangle square | Swiggy mandatory mark | `[x]` | Done — added `veg: true` to all 22 RTDB dishes; switched `_comboVegMark` (app.js + delivery.js) from name-heuristic to `d.veg === false` check. Live-verified PASS. |
 | 6 | Compact cards + fixed/sticky category pills at top during scroll | Turumburum fixed filters | `[ ]` | |
 | 7 | Sort by popularity / price dropdown | Domino's case study | `[ ]` | |
 | 8 | Recent searches / favorites / repeat order blocks | Domino's repeat order | `[ ]` | |
