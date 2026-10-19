@@ -1251,4 +1251,16 @@ Fragile Files before starting ANY task.
 - Live-verified: QR + delivery both PASS (tests/verify-combo-ux.cjs re-run with coupon test)
 - Confidence: HIGH
 - Next: Admin #12 (customer segment targeting) + Admin #14 (clone combo) + Admin #15 (preview) + Admin #16 (bulk actions).
+- [2026-10-19 combo-ux-preview] Admin #15: Combo preview ("View as customer")
+
+- STATUS: DONE
+- What happened: added Preview button to each combo row in admin Combos table listing:
+  1. New "Preview" button (`data-action="previewCombo"`) with outlet id (`data-oid`) in each table row
+  2. `main.js` click handler: new `previewCombo` case opens `https://foodhubbie-qrmenu.web.app/?o=<outlet>&b=roshani-pizza` in a new tab
+  3. Clicking Preview opens the QR menu in a new browser tab where admins can see exactly how the combo appears to customers
+- Files: `Admin/js/features/catalog.js` (preview button HTML), `Admin/js/main.js` (previewCombo click handler case)
+- Built: `tools/build.mjs --admin` + deployed `hosting:admin`
+- Live-verified: QR menu loads correctly in new tab from preview button
+- Confidence: HIGH
+- Next: Admin #12 (customer segment targeting) + Admin #14 (clone combo) + Admin #16 (bulk actions).
 <!-- TASK_LOG_END -->

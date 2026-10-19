@@ -923,6 +923,7 @@ export function loadCombos() {
                     </label>
                     <button class="btn-secondary btn-small" data-action="editCombo" data-id="${c.id}"><i data-lucide="edit-3" class="icon-14"></i></button>
                     <button class="btn-secondary btn-small" data-action="deleteCombo" data-id="${c.id}"><i data-lucide="trash-2" class="icon-14"></i></button>
+                    <button class="btn-secondary btn-small" data-action="previewCombo" data-id="${c.id}" data-oid="${Outlet.current}"><i data-lucide="external-link" class="icon-14"></i> Preview</button>
                 </td>
             </tr>`;
         }).join('');
@@ -973,17 +974,28 @@ const _toInputDate = ms => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+// "Add Combo" 5-step full-page wizard (docs/PLAN-ADMIN-COMBO-WIZARD.md).
+// Same export name as before so main.js addCombo + editCombo callers stay untouched.
+// Same RTDB payload as the old single modal — no rules/menu changes.
+const _CBW_STEPS = ['Basics', 'Choose Items', 'Set Price', 'Schedule & Limits', 'Review'];
+
 export async function showComboModal(comboId = null) {
     if (!window.currentOutlet || window.currentOutlet === 'null' || window.currentOutlet === 'undefined') {
         return showToast("Error: Current outlet context is missing. Please refresh or select an outlet first.", "error");
     }
-    document.getElementById('comboModal')?.remove();
+    document.getElementById('comboWizard')?.remove();
 
     const dishesSnap = await get(Outlet.ref('dishes'));
     const dishes = [];
     dishesSnap.forEach(ch => { const v = ch.val(); if (v) dishes.push({ id: ch.key, ...v }); });
+    dishes.sort((a, b) => (parseInt(a.order) || 9999) - (parseInt(b.order) || 9999) || String(a.name).localeCompare(b.name));
 
-    // Fetch existing coupon codes for the association dropdown
+    let combo = null;
+    if (comboId) {
+        const snap = await get(Outlet.ref(`combos/${comboId}`));
+        combo = snap.exists() ? snap.val() : null;
+    }
+
     const couponDiscountsSnap = await get(Outlet.ref('discounts'));
     const couponOptions = [];
     couponDiscountsSnap.forEach(ch => {
@@ -993,385 +1005,542 @@ export async function showComboModal(comboId = null) {
         }
     });
 
-    let combo = null;
-    if (comboId) {
-        const snap = await get(Outlet.ref(`combos/${comboId}`));
-        combo = snap.exists() ? snap.val() : null;
-    }
-
-    const sel = new Map();
-    Object.values(combo?.items || {}).forEach(it => sel.set(it.dishId, Math.min(Math.max(parseInt(it.qty, 10) || 1, 1), 20)));
-
-    const today = _toInputDate(Date.now());
-    const in30 = _toInputDate(Date.now() + 30 * 86400000);
+    // draft lives as a plain object + selected-items map; back-nav keeps everything
+    const draft = {
+        name: combo?.name || '',
+        discountType: combo?.discountType !== 'fixed' ? 'percentage' : 'fixed',
+        discountValue: combo?.discountValue ?? 20,
+        startAt: combo ? _toInputDate(combo.startAt) : _toInputDate(Date.now()),
+        endAt: combo ? _toInputDate(combo.endAt) : _toInputDate(Date.now() + 30 * 86400000),
+        maxRedemptions: combo?.maxRedemptions ?? 0,
+        perCustomerLimit: combo?.perCustomerLimit ?? 0,
+        perDayLimit: combo?.perDayLimit ?? 0,
+        couponCode: combo?.couponCode || '',
+        image: combo?.image || null,
+        file: null
+    };
+    const sel = new Map(Object.values(combo?.items || {}).map(it => [
+        it.dishId, Math.min(Math.max(parseInt(it.qty, 10) || 1, 1), 20)
+    ]));
 
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     document.body.insertAdjacentHTML('beforeend', `
-    <div class="modal active" id="comboModal" role="dialog" aria-modal="true" aria-label="${comboId ? 'Edit Combo' : 'Create Combo'}">
-        <div class="modal-content glass-card" style="max-width:640px;">
-            <div class="modal-header">
-                <h2 class="modal-title">${comboId ? 'Edit Combo' : 'Create Combo'}</h2>
-                <button class="close-btn" id="comboModalClose" aria-label="Close" title="Close"><i data-lucide="x" class="icon-18"></i></button>
+    <style>
+        #comboWizard { position: fixed; inset: 0; z-index: 8600; background: var(--neutral-50, #f5f7fb); display: flex; flex-direction: column; overflow: auto; }
+        .cbw-head { display: flex; align-items: center; gap: 14px; padding: 14px 26px; background: var(--surface, #fff); border-bottom: 1px solid var(--card-border, #e5e7eb); position: sticky; top: 0; z-index: 5; }
+        .cbw-head h2 { margin: 0; font-size: 17px; font-weight: 800; color: var(--text-main, #1e293b); }
+        .cbw-head small { color: var(--text-sub, #64748b); font-size: 12px; font-weight: 600; }
+        .cbw-stepper { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+        .cbw-step { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--text-sub, #64748b); background: var(--neutral-100, #f1f5f9); border: 1px solid transparent; cursor: default; }
+        .cbw-step.on { background: var(--primary, #E84908); color: #fff; }
+        .cbw-step.done { background: rgba(34, 197, 94, 0.12); color: var(--success, #16a34a); cursor: pointer; }
+        .cbw-step.locked::before { content: '·'; font-weight: 900; margin-right: 2px; }
+        .cbw-step.done::before { content: '✓'; font-weight: 900; margin-right: 2px; }
+        .cbw-body { flex: 1; width: 100%; max-width: 880px; margin: 0 auto; padding: 22px 26px 90px; }
+        .cbw-section { display: none; }
+        .cbw-section.on { display: block; }
+        .cbw-sec-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-sub, #888); margin: 6px 0 12px; }
+        .cbw-foot { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 14px 26px; background: var(--surface, #fff); border-top: 1px solid var(--card-border, #e5e7eb); }
+        .cbw-foot .cbw-spacer { flex: 1; }
+        .cbw-draft-hint { font-size: 12px; color: var(--text-sub, #888); font-weight: 600; }
+        /* step 1: full-menu image grid */
+        .cbw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+        .cbw-card { border: 2px solid var(--card-border, #e5e7eb); border-radius: 14px; background: var(--surface, #fff); overflow: hidden; cursor: pointer; transition: border-color 120ms ease, box-shadow 120ms ease; position: relative; }
+        .cbw-card.on { border-color: var(--primary, #E84908); box-shadow: 0 0 0 3px rgba(232, 73, 8, 0.14); }
+        .cbw-card .cbw-thumb { position: relative; aspect-ratio: 4 / 3; background: var(--neutral-100, #f1f5f9); }
+        .cbw-card .cbw-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .cbw-card .cbw-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px; color: var(--neutral-400, #94a3b8); }
+        .cbw-card .cbw-qty-badge { position: absolute; top: 8px; right: 8px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--primary, #E84908); color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+        .cbw-card-body { padding: 10px 12px 12px; }
+        .cbw-card-name { font-size: 13px; font-weight: 700; color: var(--text-main, #1e293b); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cbw-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; }
+        .cbw-cat { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-sub, #94a3b8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cbw-price { font-size: 13px; font-weight: 800; color: var(--primary-dark, #c43d00); flex-shrink: 0; }
+        .cbw-stepperbar { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+        .cbw-stepperbar button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--card-border, #ddd); background: var(--surface, #fff); font-weight: 700; cursor: pointer; line-height: 1; font-size: 15px; }
+        .cbw-stepperbar button:hover:not(:disabled) { background: var(--primary-light, #fef0e8); border-color: var(--primary, #E84908); }
+        .cbw-stepperbar button:disabled { opacity: 0.35; cursor: not-allowed; }
+        .cbw-stepperbar span { min-width: 26px; text-align: center; font-size: 14px; font-weight: 800; }
+        .cbw-norm { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--primary-light, #fef0e8); color: var(--primary-dark, #c43d00); font-size: 12px; font-weight: 700; }
+        .cbw-norm.off { background: var(--neutral-100, #f1f5f9); color: var(--text-sub, #64748b); }
+        .cbw-totalbar { position: sticky; bottom: 64px; display: flex; gap: 10px; align-items: center; padding: 10px 16px; border-radius: 12px; background: rgba(20, 22, 25, 0.92); color: #fff; font-size: 14px; font-weight: 700; z-index: 3; }
+        .cbw-totalbar .cbw-save-chip { color: #4ade80; }
+        /* step 2: price card */
+        .cbw-pricecard { border-radius: 18px; padding: 26px; background: linear-gradient(135deg, var(--primary-light, #fef0e8) 0%, var(--primary-lighter, rgba(232,73,8,0.08)) 100%); border: 1px solid var(--primary-light, #ffe0c2); text-align: center; margin-bottom: 18px; }
+        .cbw-pricecard .cbw-orig { font-size: 14px; color: var(--text-sub, #64748b); text-decoration: line-through; font-weight: 600; }
+        .cbw-pricecard .cbw-combo { font-size: 40px; font-weight: 900; color: var(--primary-dark, #c43d00); line-height: 1.1; margin: 4px 0; }
+        .cbw-pricecard .cbw-save { display: inline-block; padding: 6px 16px; border-radius: 999px; background: rgba(34, 197, 94, 0.15); color: var(--success, #16a34a); font-size: 14px; font-weight: 800; }
+        .cbw-review { border: 1px solid var(--card-border, #e5e7eb); border-radius: 16px; background: var(--surface, #fff); overflow: hidden; max-width: 460px; }
+        .cbw-review-img { aspect-ratio: 16 / 7; background: var(--neutral-100, #f1f5f9); position: relative; }
+        .cbw-review-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .cbw-review-img .cbw-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 42px; color: var(--neutral-400, #94a3b8); }
+        .cbw-review-body { padding: 16px 18px 18px; }
+        .cbw-review-name { font-size: 17px; font-weight: 800; color: var(--text-main, #1e293b); }
+        .cbw-review-items { margin: 10px 0 0; padding: 0; list-style: none; }
+        .cbw-review-items li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: 13px; color: var(--text-main, #333); border-bottom: 1px dashed var(--neutral-200, #eee); }
+        .cbw-review-items li:last-child { border-bottom: none; }
+        .cbw-review-price-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-weight: 800; }
+        .cbw-review-price-row .cbw-orig { color: var(--text-sub, #64748b); text-decoration: line-through; font-size: 13px; font-weight: 600; }
+        .cbw-review-price-row .cbw-combo { color: var(--primary-dark, #c43d00); font-size: 20px; }
+        .cbw-review-facts { margin-top: 12px; font-size: 12px; color: var(--text-sub, #64748b); line-height: 1.7; }
+        .cbw-err { color: var(--error, #d32f2f); font-size: 12px; margin-top: 6px; display: none; }
+        .cbw-err.show { display: block; }
+        @media (max-width: 640px) {
+            .cbw-head { padding: 10px 14px; flex-wrap: wrap; }
+            .cbw-stepper { width: 100%; margin-left: 0; }
+            .cbw-body { padding: 16px 14px 110px; }
+            .cbw-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        }
+    </style>
+    <div id="comboWizard" role="dialog" aria-modal="true" aria-label="${comboId ? 'Edit Combo' : 'Create Combo'}">
+        <div class="cbw-head">
+            <button type="button" class="btn-secondary btn-small" id="cbwClose" aria-label="Close"><i data-lucide="arrow-left" class="icon-16"></i> Back to Combos</button>
+            <h2>${comboId ? 'Edit Combo' : 'Create Combo'}</h2>
+            <div class="cbw-stepper">${_CBW_STEPS.map((label, i) => `
+                <span class="cbw-step ${i === 0 ? 'on' : 'locked'}" data-step="${i}" ${i === 0 ? '' : 'tabindex="-1"'}>${i + 1}. ${label}</span>`).join('')}
             </div>
-            <form id="comboForm" novalidate>
-                <style>
-                    #comboDishList { max-height: 280px; overflow: auto; border: 1px solid var(--card-border, #e5e7eb); border-radius: 12px; }
-                    .cmb-sec { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-sub, #888); margin: 20px 0 10px; }
-                    .cmb-media { display: flex; gap: 16px; align-items: flex-start; }
-                    .cmb-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-                    .cmb-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--card-border, #f0f0f0); transition: background 150ms ease; }
-                    .cmb-row:last-child { border-bottom: none; }
-                    .cmb-row.on { background: rgba(34, 197, 94, 0.08); }
-                    .cmb-row label { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; }
-                    .cmb-row .cmb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-                    .cmb-row .cmb-price { color: var(--text-sub, #666); font-size: 13px; font-weight: 600; flex-shrink: 0; }
-                    .cmb-qty { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-                    .cmb-qty button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--card-border, #ddd); background: var(--surface, #fff); font-weight: 700; cursor: pointer; line-height: 1; font-size: 16px; transition: all 150ms ease; }
-                    .cmb-qty button:hover { background: var(--primary-light, #fef0e8); border-color: var(--primary, #E84908); }
-                    .cmb-qty button:focus-visible { outline: 2px solid var(--primary, #E84908); outline-offset: 2px; }
-                    .cmb-qty span { min-width: 24px; text-align: center; font-size: 14px; font-weight: 700; }
-                    .cmb-qty.off { opacity: 0.4; pointer-events: none; }
-                    #comboPriceStrip { margin-top: 12px; padding: 12px 16px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-light, #fef0e8) 0%, var(--primary-lighter, rgba(232,73,8,0.08)) 100%); border: 1px solid var(--primary-light, #ffe0c2); font-size: 14px; font-weight: 600; color: var(--primary-dark, #c43d00); }
-                    .cmb-err { color: var(--error, #d32f2f); font-size: 12px; margin-top: 6px; display: none; animation: errFade 200ms ease; }
-                    .cmb-err.show { display: block; }
-                    .cmb-empty { padding: 24px; text-align: center; color: var(--text-sub, #888); font-size: 14px; }
-                    @keyframes errFade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
-                    .form-row label { display: block; font-size: 12px; font-weight: 600; color: var(--text-main, #333); margin-bottom: 6px; }
-                </style>
-                <div class="cmb-media">
-                    <div class="modal-media-upload img-placeholder" id="comboPreviewWrap" style="width:128px;height:128px;flex-shrink:0;border-radius:16px;overflow:hidden;">
-                        <div class="cmb-img-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:100%;background:linear-gradient(135deg,var(--neutral-50,#f8fafc) 0%,var(--neutral-100,#f1f5f9) 100%);">
+        </div>
+        <div class="cbw-body">
+
+            <section class="cbw-section on" data-step="0" aria-label="Step 1: Basics">
+                <div class="cbw-sec-title">Basics</div>
+                <div class="cmb-media" style="display:flex;gap:16px;align-items:flex-start;">
+                    <div class="modal-media-upload img-placeholder" id="cbwPreviewWrap" style="width:128px;height:128px;flex-shrink:0;border-radius:16px;overflow:hidden;position:relative;">
+                        <div class="cbw-img-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:100%;background:linear-gradient(135deg,var(--neutral-50,#f8fafc) 0%,var(--neutral-100,#f1f5f9) 100%);">
                             <i data-lucide="image" class="icon-36" style="color:var(--neutral-400,#94a3b8);"></i>
                             <span style="font-size:12px;color:var(--neutral-500,#64748b);">No image</span>
                         </div>
-                        <img id="comboPreview" class="modal-img-preview hidden" alt="Combo preview" style="width:100%;height:100%;object-fit:cover;">
+                        <img id="cbwPreview" class="modal-img-preview hidden" alt="Combo preview" style="width:100%;height:100%;object-fit:cover;">
                         <div class="modal-img-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 200ms ease;">
-                            <input type="file" id="comboFile" accept="image/*" class="hidden" title="Upload combo photo">
-                            <button type="button" id="btnUpdateComboPhoto" class="btn-secondary update-photo-btn" style="color:#fff;border-color:rgba(255,255,255,0.5);">Update Photo</button>
+                            <input type="file" id="cbwFile" accept="image/*" class="hidden" title="Upload combo photo">
+                            <button type="button" id="cbwPickPhoto" class="btn-secondary update-photo-btn" style="color:#fff;border-color:rgba(255,255,255,0.5);">Update Photo</button>
                         </div>
                     </div>
                     <div style="flex:1;min-width:0;">
-                        <div class="cmb-sec" style="margin-top:0;">Details</div>
-                        <label for="comboName" class="visually-hidden">Combo Name</label>
-                        <input type="text" id="comboName" class="form-input" maxlength="50" placeholder="e.g. Family Pizza Deal" value="${escapeHtml(combo?.name || '')}" aria-describedby="errName comboNameHint">
-                        <small id="comboNameHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Descriptive name customers will see</small>
-                        <div class="cmb-err" id="errName" role="alert" aria-live="polite">Enter a combo name</div>
-                        <small id="comboUploadStatus" class="hidden upload-status-text" style="display:block;margin-top:6px;text-align:left;color:var(--primary);font-size:12px;">Uploading...</small>
+                        <label class="form-label" for="cbwName">Combo Name</label>
+                        <input type="text" id="cbwName" class="form-input" maxlength="50" placeholder="e.g. Family Pizza Deal" value="${escapeHtml(draft.name)}">
+                        <small class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Descriptive name customers will see</small>
                     </div>
                 </div>
-                <div class="cmb-sec">Dishes</div>
-                <label for="comboDishSearch" class="visually-hidden">Search dishes</label>
-                <input type="text" id="comboDishSearch" class="form-input" placeholder="Search dishes..." autocomplete="off" style="margin-bottom:10px;" aria-describedby="dishSearchHint">
-                <small id="dishSearchHint" class="form-hint" style="display:block;margin-bottom:8px;color:var(--text-sub);font-size:12px;">Type to filter, click checkbox or +/- to add</small>
-                <div id="comboDishList" role="listbox" aria-multiselectable="true" aria-label="Available dishes"></div>
-                <div class="cmb-err" id="errDishes" role="alert" aria-live="polite">Select at least one dish</div>
-                <div id="comboPriceStrip" aria-live="polite" aria-atomic="true"></div>
-                <div class="cmb-sec">Discount & Schedule</div>
-                <div class="cmb-grid2">
+            </section>
+
+            <section class="cbw-section" data-step="1" aria-label="Step 2: Choose Items">
+                <div class="cbw-sec-title">Choose Items — full menu</div>
+                <input type="text" id="cbwDishSearch" class="form-input" placeholder="Search dishes..." autocomplete="off" style="margin-bottom:12px;">
+                <div class="cbw-grid" id="cbwDishGrid" role="listbox" aria-multiselectable="true" aria-label="All menu items"></div>
+                <div class="cbw-err" id="cbwErrDishes" role="alert">Select at least one dish</div>
+                <div class="cbw-totalbar" id="cbwItemsBar" aria-live="polite"></div>
+            </section>
+
+            <section class="cbw-section" data-step="2" aria-label="Step 3: Set Price">
+                <div class="cbw-sec-title">Set Price</div>
+                <div class="cbw-pricecard">
+                    <div class="cbw-orig" id="cbwOriginal">—</div>
+                    <div class="cbw-combo" id="cbwComboPrice">—</div>
+                    <div class="cbw-save" id="cbwSaveChip">—</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
                     <div class="form-row" style="margin:0;">
-                        <label for="comboDiscountType">Discount Type</label>
-                        <select id="comboDiscountType" class="form-input" aria-describedby="discountTypeHint">
-                            <option value="percentage" ${combo?.discountType !== 'fixed' ? 'selected' : ''}>Percentage (%) off</option>
-                            <option value="fixed" ${combo?.discountType === 'fixed' ? 'selected' : ''}>Fixed Amount (₹) off</option>
+                        <label class="form-label" for="cbwDiscountType">Discount Type</label>
+                        <select id="cbwDiscountType" class="form-input">
+                            <option value="percentage">Percentage (%) off</option>
+                            <option value="fixed">Fixed Amount (₹) off</option>
                         </select>
-                        <small id="discountTypeHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Percentage applies to each dish total</small>
                     </div>
                     <div class="form-row" style="margin:0;">
-                        <label for="comboDiscountValue">Discount Value</label>
-                        <input type="number" id="comboDiscountValue" class="form-input" min="0" step="1" value="${combo?.discountValue ?? 20}" aria-describedby="errDiscount discountValueHint">
-                        <small id="discountValueHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0-100 for percentage, up to total for fixed</small>
-                        <div class="cmb-err" id="errDiscount" role="alert" aria-live="polite">Enter a valid discount</div>
+                        <label class="form-label" for="cbwDiscountValue">Discount Value</label>
+                        <input type="number" id="cbwDiscountValue" class="form-input" min="0" step="1">
+                        <div class="cbw-err" id="cbwErrDiscount" role="alert">Enter a valid discount</div>
                     </div>
                 </div>
-                <div class="cmb-grid2">
+            </section>
+
+            <section class="cbw-section" data-step="3" aria-label="Step 4: Schedule and Limits">
+                <div class="cbw-sec-title">Schedule & Limits</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
                     <div class="form-row" style="margin:0;">
-                        <label for="comboStartAt">Active From</label>
-                        <input type="date" id="comboStartAt" class="form-input" value="${combo ? _toInputDate(combo.startAt) : today}" aria-describedby="errDates">
-                        <div class="cmb-err" id="errDates" role="alert" aria-live="polite">End date must be after start date</div>
+                        <label class="form-label" for="cbwStartAt">Active From</label>
+                        <input type="date" id="cbwStartAt" class="form-input">
+                        <div class="cbw-err" id="cbwErrDates" role="alert">End date must be after start date</div>
                     </div>
                     <div class="form-row" style="margin:0;">
-                        <label for="comboEndAt">Active Until</label>
-                        <input type="date" id="comboEndAt" class="form-input" value="${combo ? _toInputDate(combo.endAt) : in30}" aria-describedby="errDates">
-                    </div>
-                </div>
-                <div class="cmb-sec">Redemption Caps</div>
-                <div class="cmb-grid2">
-                    <div class="form-row" style="margin:0;">
-                        <label for="comboMaxRedemptions">Max Total Redemptions</label>
-                        <input type="number" id="comboMaxRedemptions" class="form-input" min="0" step="1" value="${combo?.maxRedemptions ?? 0}" aria-describedby="maxRedemptionsHint">
-                        <small id="maxRedemptionsHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
-                    </div>
-                    <div class="form-row" style="margin:0;">
-                        <label for="comboPerCustomerLimit">Max Per Customer</label>
-                        <input type="number" id="comboPerCustomerLimit" class="form-input" min="0" step="1" value="${combo?.perCustomerLimit ?? 0}" aria-describedby="perCustomerHint">
-                        <small id="perCustomerHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
-                    </div>
-                    <div class="form-row" style="margin:0;">
-                        <label for="comboPerDayLimit">Max Per Day</label>
-                        <input type="number" id="comboPerDayLimit" class="form-input" min="0" step="1" value="${combo?.perDayLimit ?? 0}" aria-describedby="perDayHint">
-                        <small id="perDayHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
+                        <label class="form-label" for="cbwEndAt">Active Until</label>
+                        <input type="date" id="cbwEndAt" class="form-input">
                     </div>
                 </div>
-                <div class="cmb-sec">Coupon Code (Optional)</div>
-                <div class="cmb-grid2">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
                     <div class="form-row" style="margin:0;">
-                        <label for="comboCouponCode">Require Coupon Code</label>
-                        <select id="comboCouponCode" class="form-input" aria-describedby="couponHint">
-                            <option value="">None (open to all)</option>
-                            ${couponOptions || ''}
-                        </select>
-                        <small id="couponHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Customers must enter this code at checkout to redeem the combo</small>
+                        <label class="form-label" for="cbwMaxRedemptions">Max Total Redemptions</label>
+                        <input type="number" id="cbwMaxRedemptions" class="form-input" min="0" step="1">
+                        <small class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
+                    </div>
+                    <div class="form-row" style="margin:0;">
+                        <label class="form-label" for="cbwPerCustomerLimit">Max Per Customer</label>
+                        <input type="number" id="cbwPerCustomerLimit" class="form-input" min="0" step="1">
+                        <small class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
+                    </div>
+                    <div class="form-row" style="margin:0;">
+                        <label class="form-label" for="cbwPerDayLimit">Max Per Day</label>
+                        <input type="number" id="cbwPerDayLimit" class="form-input" min="0" step="1">
+                        <small class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="cbw-sec-title" style="margin-top:18px;">Coupon Code (Optional)</div>
+                <div class="form-row" style="margin:0;max-width:420px;">
+                    <select id="cbwCouponCode" class="form-input">
+                        <option value="">None (open to all)</option>
+                        ${couponOptions || ''}
+                    </select>
+                    <small class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Customers must enter this code at checkout to redeem the combo</small>
                 </div>
-            </form>
+            </section>
+
+            <section class="cbw-section" data-step="4" aria-label="Step 5: Review and Publish">
+                <div class="cbw-sec-title">Review — this is what customers see</div>
+                <div class="cbw-review" id="cbwReviewCard"></div>
+            </section>
+
+        </div>
+        <div class="cbw-foot">
+            <span class="cbw-draft-hint" id="cbwDraftHint"></span>
+            <span class="cbw-spacer"></span>
+            <button type="button" class="btn-secondary" id="cbwBack">← Back</button>
+            <button type="button" class="btn-primary" id="cbwNext">Next →</button>
         </div>
     </div>`);
-    loadLucide().then(() => window.lucide?.createIcons({ root: document.getElementById('comboModal') }));
 
-    const modal = document.getElementById('comboModal');
-    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-    let focusableElements = [];
-    let firstFocusable = null;
-    let lastFocusable = null;
+    const root = document.getElementById('comboWizard');
 
-    const updateFocusables = () => {
-        focusableElements = Array.from(modal.querySelectorAll(focusableSelector)).filter(el => !el.disabled && el.offsetParent !== null);
-        firstFocusable = focusableElements[0];
-        lastFocusable = focusableElements[focusableElements.length - 1];
+    // ---- state sync (two-way between DOM and draft on step transitions) ----
+    const $ = id => document.getElementById(id);
+    const syncDraft = () => {
+        draft.name = $('cbwName').value.trim();
+        draft.discountType = $('cbwDiscountType').value;
+        draft.discountValue = parseFloat($('cbwDiscountValue').value);
+        draft.startAt = $('cbwStartAt').value;
+        draft.endAt = $('cbwEndAt').value;
+        draft.maxRedemptions = parseInt($('cbwMaxRedemptions').value) || 0;
+        draft.perCustomerLimit = parseInt($('cbwPerCustomerLimit').value) || 0;
+        draft.perDayLimit = parseInt($('cbwPerDayLimit').value) || 0;
+        draft.couponCode = $('cbwCouponCode')?.value.trim() || null;
     };
 
-    const trapFocus = (e) => {
-        if (e.key !== 'Tab') return;
-        updateFocusables();
-        if (e.shiftKey) {
-            if (document.activeElement === firstFocusable) {
-                e.preventDefault();
-                lastFocusable?.focus();
-            }
-        } else {
-            if (document.activeElement === lastFocusable) {
-                e.preventDefault();
-                firstFocusable?.focus();
-            }
-        }
-    };
-
-    const onEsc = e => { if (e.key === 'Escape') close(); };
-    const close = () => {
-        document.removeEventListener('keydown', onEsc);
-        document.removeEventListener('keydown', trapFocus);
-        modal.classList.remove('active');
-        modal.classList.add('closing');
-        setTimeout(() => modal.remove(), prefersReduced ? 0 : 200);
-    };
-    document.addEventListener('keydown', onEsc);
-    document.addEventListener('keydown', trapFocus);
-    document.getElementById('comboModalClose').addEventListener('click', close);
-    document.getElementById('comboCancel').addEventListener('click', close);
-    modal.addEventListener('click', e => { if (e.target === modal) close(); });
-
-    if (!prefersReduced) {
-        modal.querySelector('.modal-content').style.animation = 'modalSlideIn .3s cubic-bezier(.4,0,.2,1)';
+    // hydrate edited combo / current draft into the controls
+    $('cbwName').value = draft.name;
+    $('cbwDiscountType').value = draft.discountType;
+    $('cbwDiscountValue').value = draft.discountValue;
+    $('cbwDiscountValue').max = draft.discountType === 'percentage' ? '100' : '';
+    $('cbwStartAt').value = draft.startAt;
+    $('cbwEndAt').value = draft.endAt;
+    $('cbwMaxRedemptions').value = draft.maxRedemptions;
+    $('cbwPerCustomerLimit').value = draft.perCustomerLimit;
+    $('cbwPerDayLimit').value = draft.perDayLimit;
+    $('cbwCouponCode').value = draft.couponCode || '';
+    if (draft.image) {
+        $('cbwPreview').src = draft.image;
+        $('cbwPreview').classList.remove('hidden');
+        $('cbwPreviewWrap').classList.remove('img-placeholder');
+        root.querySelector('.cbw-img-empty')?.style.setProperty('display', 'none');
     }
 
-    updateFocusables();
-    firstFocusable?.focus();
+    // ---- step navigation ----
+    let step = 0;
+    let maxVisited = 0;
+    const originalTotal = () => [...sel.keys()].reduce((sum, id) => {
+        const d = dishes.find(x => x.id === id);
+        return sum + (_dishPrice(d) * sel.get(id));
+    }, 0);
 
-    const listEl = document.getElementById('comboDishList');
-    const valInput = document.getElementById('comboDiscountValue');
-    const typeSel = document.getElementById('comboDiscountType');
+    const VALIDATORS = [
+        () => draft.name.trim() ? '' : 'Enter a combo name',
+        () => sel.size ? '' : 'Select at least one dish',
+        () => {
+            const v = parseFloat($('cbwDiscountValue').value);
+            const orig = originalTotal();
+            if (!(v >= 0)) return 'Enter a valid discount';
+            if (draft.discountType === 'percentage' && v > 100) return 'Percentage must be 0–100';
+            if (draft.discountType === 'fixed' && orig > 0 && v > orig) return `Fixed amount can't exceed ₹${orig}`;
+            return '';
+        },
+        () => {
+            const s = _parseLocalDate($('cbwStartAt').value, false);
+            const e = _parseLocalDate($('cbwEndAt').value, true);
+            if (!s || !e || !(e > s)) return 'End date must be after start date';
+            if ($('cbwMaxRedemptions').value.startsWith('-') || $('cbwPerCustomerLimit').value.startsWith('-') || $('cbwPerDayLimit').value.startsWith('-')) return 'Redemption caps cannot be negative';
+            return '';
+        },
+        () => ''
+    ];
 
-    function renderDishRows(filter = '') {
-        const q = filter.trim().toLowerCase();
-        const rows = dishes.filter(d => !q || (d.name || '').toLowerCase().includes(q));
-        if (!rows.length) { listEl.innerHTML = `<div class="cmb-empty">No dishes found</div>`; return; }
-        listEl.innerHTML = rows.map(d => {
+    const focusFor = [ 'cbwName', 'cbwDishSearch', 'cbwDiscountValue', 'cbwStartAt', null ];
+
+    const fmt = n => `₹${Number(n).toLocaleString('en-IN')}`;
+
+    const renderItemsStep = () => {
+        const q = ($('cbwDishSearch').value || '').trim().toLowerCase();
+        const rows = dishes.filter(d => !q || String(d.name).toLowerCase().includes(q) || String(d.category || '').toLowerCase().includes(q));
+        const grid = $('cbwDishGrid');
+        if (!rows.length) { grid.innerHTML = `<div class="cbw-empty" style="padding:24px;text-align:center;color:var(--text-sub,#888);grid-column:1/-1;">No dishes match your search</div>`; }
+        else grid.innerHTML = rows.map(d => {
             const on = sel.has(d.id);
             const qty = sel.get(d.id) || 1;
+            const img = d.image ? `<img src="${escapeHtml(d.image)}" alt="${escapeHtml(d.name)}" loading="lazy" onerror="this.remove()">` : `<div class="cbw-ph">🍽️</div>`;
             return `
-            <div class="cmb-row ${on ? 'on' : ''}" data-id="${d.id}" role="option" aria-selected="${on}" tabindex="0">
-                <label><input type="checkbox" data-act="toggle" ${on ? 'checked' : ''} aria-label="Include ${escapeHtml(d.name)}"> <span class="cmb-name">${escapeHtml(d.name)}</span></label>
-                <span class="cmb-price">₹${_dishPrice(d)}</span>
-                <div class="cmb-qty ${on ? '' : 'off'}" role="group" aria-label="${on ? 'Quantity' : 'Add to combo'}">
-                    <button type="button" data-act="dec" aria-label="Decrease quantity of ${escapeHtml(d.name)}" ${on ? '' : 'disabled'}>−</button>
-                    <span aria-live="polite">${qty}</span>
-                    <button type="button" data-act="inc" aria-label="Increase quantity of ${escapeHtml(d.name)}" ${on ? '' : 'disabled'}>+</button>
+            <div class="cbw-card ${on ? 'on' : ''}" data-id="${d.id}" role="option" aria-selected="${on}" tabindex="0">
+                <div class="cbw-thumb">${img}${on ? `<span class="cbw-qty-badge">${qty}</span>` : ''}</div>
+                <div class="cbw-card-body">
+                    <div class="cbw-card-name">${escapeHtml(d.name)}</div>
+                    <div class="cbw-card-meta"><span class="cbw-cat">${escapeHtml(d.category || 'Untagged')}</span><span class="cbw-price">${fmt(_dishPrice(d))}</span></div>
+                    <div class="cbw-stepperbar">
+                        <button type="button" data-act="dec" aria-label="Decrease quantity of ${escapeHtml(d.name)}" ${on ? '' : 'disabled'}>−</button>
+                        <span aria-live="polite">${on ? qty : 0}</span>
+                        <button type="button" data-act="inc" aria-label="Increase quantity of ${escapeHtml(d.name)}">+</button>
+                        <span class="cbw-norm ${on ? '' : 'off'}" style="font-size:10px;padding:3px 9px;">${on ? 'Added' : 'Add'}</span>
+                    </div>
                 </div>
             </div>`;
         }).join('');
-        updatePreview();
-    }
+        const n = sel.size;
+        const orig = originalTotal();
+        const comboPrice = comboPriceTotal(orig, draft.discountType, draft.discountValue);
+        $('cbwItemsBar').innerHTML = n
+            ? `<span>${n} item${n > 1 ? 's' : ''} selected</span><span>·</span><span>Original ${fmt(orig)}</span><span class="cbw-save-chip">Combo ${fmt(comboPrice)}</span>`
+            : `<span style="opacity:0.75;">Nothing selected yet — tap menu items to include them</span>`;
+    };
 
-    function selectedEntries() {
-        return dishes.filter(d => sel.has(d.id)).map(d => ({ base: _dishPrice(d), qty: sel.get(d.id) }));
-    }
+    const renderPriceStep = () => {
+        syncDraft();
+        const orig = originalTotal();
+        const v = parseFloat($('cbwDiscountValue').value) || 0;
+        const price = comboPriceTotal(orig, draft.discountType, v);
+        $('cbwOriginal').textContent = `Original ${fmt(orig)}`;
+        $('cbwComboPrice').textContent = `Combo ${fmt(price)}`;
+        const disc = draft.discountType === 'percentage' ? `${Math.min(v, 100)}% off` : `${fmt(v)} off`;
+        $('cbwSaveChip').textContent = orig ? `Customer saves ${fmt(orig - price)} (${disc})` : 'Select dishes first';
+        $('cbwDiscountValue').max = draft.discountType === 'percentage' ? '100' : '';
+    };
 
-    function updatePreview() {
-        const el = document.getElementById('comboPriceStrip');
-        const entries = selectedEntries();
-        if (!entries.length) { el.textContent = ''; return; }
-        const type = typeSel.value;
-        const value = parseFloat(valInput.value) || 0;
-        const original = entries.reduce((s, e) => s + e.base * e.qty, 0);
-        const price = comboPriceTotal(original, type, value);
-        const disc = type === 'percentage' ? `${Math.min(value, 100)}% off` : `₹${value} off`;
-        el.textContent = `Original ₹${original} → Combo ₹${price}  ·  You save ₹${original - price} (${disc})`;
-    }
+    const renderReviewStep = () => {
+        syncDraft();
+        const orig = originalTotal();
+        const price = comboPriceTotal(orig, draft.discountType, draft.discountValue);
+        const card = $('cbwReviewCard');
+        card.innerHTML = `
+            <div class="cbw-review-img">${draft.image ? `<img src="${escapeHtml(draft.image)}" alt="" onerror="this.remove();this.closest('.cbw-review-img').insertAdjacentHTML('beforeend','<div class=&quot;cbw-ph&quot;>🏷️</div>');">` : `<div class="cbw-ph">🏷️</div>`}</div>
+            <div class="cbw-review-body">
+                <div class="cbw-review-name">${escapeHtml(draft.name || 'Unnamed combo')}</div>
+                <ul class="cbw-review-items">${[...sel.keys()].map(id => {
+                    const d = dishes.find(x => x.id === id);
+                    if (!d) return '';
+                    return `<li><span>${escapeHtml(d.name)} × ${sel.get(id)}</span><span>${fmt(_dishPrice(d) * sel.get(id))}</span></li>`;
+                }).join('')}</ul>
+                <div class="cbw-review-price-row">
+                    <span class="cbw-orig">${fmt(orig)}</span>
+                    <span class="cbw-combo">${fmt(price)}</span>
+                    <span class="cbw-save">${draft.discountType === 'percentage' ? `${Math.min(draft.discountValue, 100)}% off` : `${fmt(draft.discountValue)} off`}</span>
+                </div>
+                <div class="cbw-review-facts">
+                    📅 ${draft.startAt || 'today'} → ${draft.endAt || 'plus 30 days'}<br>
+                    🎟️ Caps: ${draft.maxRedemptions ? `${draft.maxRedemptions} total` : 'unlimited total'} · ${draft.perCustomerLimit ? `${draft.perCustomerLimit}/customer` : 'unlimited/customer'} · ${draft.perDayLimit ? `${draft.perDayLimit}/day` : 'unlimited/day'}<br>
+                    ${draft.couponCode ? `🔒 Requires coupon <b>${escapeHtml(draft.couponCode)}</b>` : '🔓 No coupon required'}
+                </div>
+            </div>`;
+    };
 
-    listEl.addEventListener('click', e => {
-        const btn = e.target.closest('button[data-act]');
-        if (!btn) return;
-        e.preventDefault();
-        const id = btn.closest('.cmb-row').dataset.id;
-        if (!sel.has(id)) sel.set(id, 1);
-        const next = (sel.get(id) || 1) + (btn.dataset.act === 'inc' ? 1 : -1);
-        if (next < 1) sel.delete(id);
-        else if (next > 20) showToast("Max 20 per dish", "warning");
-        else sel.set(id, next);
-        renderDishRows(document.getElementById('comboDishSearch').value);
+    const renderers = [null, renderItemsStep, renderPriceStep, null, renderReviewStep];
+
+    const goStep = (n) => {
+        syncDraft();
+        step = n;
+        maxVisited = Math.max(maxVisited, n);
+        root.querySelectorAll('.cbw-section').forEach(sec => sec.classList.toggle('on', Number(sec.dataset.step) === n));
+        root.querySelectorAll('.cbw-step').forEach(s => {
+            const i = Number(s.dataset.step);
+            s.classList.toggle('on', i === n);
+            s.classList.toggle('done', i < n);
+            s.classList.toggle('locked', i > n && i > maxVisited);
+            s.tabindex = i <= maxVisited ? 0 : -1;
+        });
+        if (renderers[n]) renderers[n]();
+        $('cbwBack').style.visibility = n === 0 ? 'hidden' : 'visible';
+        $('cbwNext').textContent = n === 4 ? (comboId ? 'Save Changes' : 'Publish Combo') : 'Next →';
+        $('cbwDraftHint').textContent = `Step ${n + 1} of 5 — ${_CBW_STEPS[n]}`;
+        root.querySelectorAll('.cbw-err').forEach(el => el.classList.remove('show'));
+        const first = root.querySelector(`.cbw-section[data-step="${n}"] input, .cbw-section[data-step="${n}"] select`);
+        first?.focus({ preventScroll: true });
+        root.scrollTo({ top: 0 });
+    };
+
+    root.querySelector('.cbw-stepper').addEventListener('click', e => {
+        const chip = e.target.closest('.cbw-step');
+        if (!chip) return;
+        const i = Number(chip.dataset.step);
+        if (i <= maxVisited && i !== step) goStep(i);
     });
-    listEl.addEventListener('keydown', e => {
-        if (!['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) return;
-        const rows = Array.from(listEl.querySelectorAll('.cmb-row'));
-        const currentIndex = rows.findIndex(r => r === document.activeElement || r.contains(document.activeElement));
-        if (currentIndex === -1) return;
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            const next = rows[(currentIndex + 1) % rows.length];
-            next.focus();
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            const prev = rows[(currentIndex - 1 + rows.length) % rows.length];
-            prev.focus();
-        } else if (e.key === 'Enter' || e.key === ' ') {
-            const row = rows[currentIndex];
-            const checkbox = row.querySelector('input[type="checkbox"]');
-            if (checkbox) {
-                e.preventDefault();
-                checkbox.click();
-            }
+
+    const validateStep = (n) => {
+        syncDraft();
+        const err = VALIDATORS[n]();
+        if (!err) return true;
+        showToast(err, 'warning');
+        const id = focusFor[n];
+        if (id) $(id)?.focus({ preventScroll: true });
+        return false;
+    };
+
+    $('cbwBack').addEventListener('click', () => { if (step > 0) goStep(step - 1); });
+    $('cbwNext').addEventListener('click', () => {
+        if (step < 4) {
+            const currentErr = VALIDATORS[step]();
+            if (currentErr) return validateStep(step);
+            goStep(step + 1);
+        } else {
+            publish();
         }
     });
-    listEl.addEventListener('change', e => {
-        if (e.target.dataset.act !== 'toggle') return;
-        const id = e.target.closest('.cmb-row').dataset.id;
-        if (e.target.checked) sel.set(id, 1); else sel.delete(id);
-        renderDishRows(document.getElementById('comboDishSearch').value);
-    });
-    document.getElementById('comboDishSearch').addEventListener('input', e => renderDishRows(e.target.value));
-    valInput.addEventListener('input', updatePreview);
-    typeSel.addEventListener('change', () => {
-        valInput.max = typeSel.value === 'percentage' ? '100' : '';
-        updatePreview();
-    });
-    valInput.max = combo?.discountType === 'fixed' ? '' : '100';
-    renderDishRows();
 
-    const fileInput = document.getElementById('comboFile');
-    document.getElementById('btnUpdateComboPhoto').addEventListener('click', () => fileInput.click());
+    // ---- step 0: image ----
+    const fileInput = $('cbwFile');
+    $('cbwPickPhoto').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => {
         if (!fileInput.files[0]) return;
-        previewImage(fileInput, 'comboPreview');
-        document.getElementById('comboPreviewWrap').classList.remove('img-placeholder');
-        document.getElementById('comboPreview').classList.remove('hidden');
-        document.querySelector('#comboPreviewWrap .cmb-img-empty')?.style.setProperty('display', 'none');
+        draft.file = fileInput.files[0];
+        previewImage(fileInput, 'cbwPreview');
+        $('cbwPreviewWrap').classList.remove('img-placeholder');
+        $('cbwPreview').classList.remove('hidden');
+        root.querySelector('.cbw-img-empty')?.style.setProperty('display', 'none');
     });
-    if (combo?.image) {
-        document.getElementById('comboPreviewWrap').classList.remove('img-placeholder');
-        const img = document.getElementById('comboPreview');
-        img.src = combo.image;
-        img.classList.remove('hidden');
-        document.querySelector('#comboPreviewWrap .cmb-img-empty')?.style.setProperty('display', 'none');
-    }
 
-    const showErr = (id, msg) => { const el = document.getElementById(id); if (msg) el.textContent = msg; el.classList.add('show'); };
-    const clearErrs = () => modal.querySelectorAll('.cmb-err').forEach(el => el.classList.remove('show'));
+    // ---- step 1: dish picker ----
+    $('cbwDishSearch').addEventListener('input', renderItemsStep);
+    $('cbwDishGrid').addEventListener('click', e => {
+        const btn = e.target.closest('button[data-act]');
+        const card = e.target.closest('.cbw-card');
+        if (!card) return;
+        const id = card.dataset.id;
+        if (btn) {
+            e.preventDefault();
+            if (!sel.has(id)) sel.set(id, 1);
+            const next = (sel.get(id) || 1) + (btn.dataset.act === 'inc' ? 1 : -1);
+            if (next < 1) sel.delete(id);
+            else if (next > 20) { showToast('Max 20 per dish', 'warning'); return; }
+            else sel.set(id, next);
+        } else {
+            e.preventDefault();
+            if (sel.has(id)) sel.delete(id); else sel.set(id, 1);
+        }
+        renderItemsStep();
+    });
+    $('cbwDishGrid').addEventListener('keydown', e => {
+        if (!['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) return;
+        const cards = Array.from($('cbwDishGrid').querySelectorAll('.cbw-card'));
+        const i = cards.findIndex(r => r === document.activeElement || r.contains(document.activeElement));
+        if (i === -1) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); cards[(i + 1) % cards.length].focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); cards[(i - 1 + cards.length) % cards.length].focus(); }
+        else if (e.key === 'Enter') { e.preventDefault(); cards[i].click(); }
+    });
 
+    // ---- step 2/3: live recompute + draft sync ----
+    $('cbwDiscountValue').addEventListener('input', () => {
+        const type = $('cbwDiscountType').value;
+        if (type === 'percentage' && parseFloat($('cbwDiscountValue').value) > 100) $('cbwDiscountValue').value = 100;
+        renderPriceStep();
+    });
+    $('cbwDiscountType').addEventListener('change', () => {
+        if ($('cbwDiscountType').value === 'percentage' && parseFloat($('cbwDiscountValue').value) > 100) $('cbwDiscountValue').value = 100;
+        renderPriceStep();
+    });
+
+    // ---- publish (same payload + save path as the old modal) ----
     let comboSaving = false;
-    document.getElementById('comboForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
+    async function publish() {
+        syncDraft();
+        // re-validate everything; land on the first failing step
+        for (let n = 0; n < 4; n++) {
+            const err = VALIDATORS[n]();
+            if (err) {
+                goStep(n);
+                showToast(err, 'warning');
+                $(focusFor[n])?.focus({ preventScroll: true });
+                return;
+            }
+        }
         if (comboSaving) return;
-        clearErrs();
-        const name = document.getElementById('comboName').value.trim();
-        const type = typeSel.value;
-        const value = parseFloat(valInput.value);
-        const startAt = _parseLocalDate(document.getElementById('comboStartAt').value, false);
-        const endAt = _parseLocalDate(document.getElementById('comboEndAt').value, true);
-        const entries = selectedEntries();
-        const original = entries.reduce((s, x) => s + x.base * x.qty, 0);
-        const maxRedemptions = parseInt(document.getElementById('comboMaxRedemptions').value) || 0;
-        const perCustomerLimit = parseInt(document.getElementById('comboPerCustomerLimit').value) || 0;
-        const perDayLimit = parseInt(document.getElementById('comboPerDayLimit').value) || 0;
-        const couponCode = document.getElementById('comboCouponCode')?.value.trim() || null;
-
-        let ok = true;
-        if (!name) { showErr('errName', 'Enter a combo name'); document.getElementById('comboName').focus(); ok = false; }
-        if (!entries.length) { showErr('errDishes', 'Select at least one dish'); document.getElementById('comboDishSearch').focus(); ok = false; }
-        if (!(value >= 0) || (type === 'percentage' && value > 100) || (type === 'fixed' && entries.length && value > original)) {
-            showErr('errDiscount', type === 'percentage' ? 'Percentage must be 0–100' : `Fixed amount can't exceed ₹${original}`);
-            valInput.focus(); ok = false;
-        }
-        if (!startAt || !endAt || !(endAt > startAt)) { showErr('errDates', 'End date must be after start date'); document.getElementById('comboStartAt').focus(); ok = false; }
-        if (maxRedemptions < 0 || perCustomerLimit < 0 || perDayLimit < 0) {
-            showErr('errDiscount', 'Redemption caps cannot be negative'); ok = false;
-        }
-        if (!ok) return;
-
-        const items = dishes.filter(d => sel.has(d.id)).map(d => ({
-            dishId: d.id, qty: sel.get(d.id), price: _dishPrice(d)
-        }));
-
-        const file = fileInput.files[0];
-        const statusEl = document.getElementById('comboUploadStatus');
-        const saveBtn = document.querySelector('#comboForm .btn-primary');
-
+        const items = dishes.filter(d => sel.has(d.id)).map(d => ({ dishId: d.id, qty: sel.get(d.id), price: _dishPrice(d) }));
+        const saveBtn = $('cbwNext');
         try {
             comboSaving = true;
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.innerHTML = '<span class="spinner-sm"></span> Saving...';
-            }
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-sm"></span> Saving...';
             let image = combo?.image || null;
-            if (file) {
-                statusEl.classList.remove('hidden');
-                image = await uploadImage(file, `combos/${Date.now()}_${file.name}`);
-                if (combo?.image && image !== combo.image) {
-                    deleteImage(combo.image).catch(err => console.warn("[Combos] Old image deletion failed:", err));
-                }
-                statusEl.classList.add('hidden');
+            if (draft.file) {
+                image = await uploadImage(draft.file, `combos/${Date.now()}_${draft.file.name}`);
+                if (combo?.image && image !== combo.image) deleteImage(combo.image).catch(err => console.warn('[Combos] Old image deletion failed:', err));
             }
-
             const payload = {
-                name, items, discountType: type, discountValue: value, startAt, endAt,
+                name: draft.name,
+                items,
+                discountType: draft.discountType,
+                discountValue: parseFloat($('cbwDiscountValue').value) || 0,
+                startAt: _parseLocalDate(draft.startAt, false),
+                endAt: _parseLocalDate(draft.endAt, true),
                 image,
-                maxRedemptions: maxRedemptions > 0 ? maxRedemptions : null,
-                perCustomerLimit: perCustomerLimit > 0 ? perCustomerLimit : null,
-                perDayLimit: perDayLimit > 0 ? perDayLimit : null,
-                couponCode,
+                maxRedemptions: draft.maxRedemptions > 0 ? draft.maxRedemptions : null,
+                perCustomerLimit: draft.perCustomerLimit > 0 ? draft.perCustomerLimit : null,
+                perDayLimit: draft.perDayLimit > 0 ? draft.perDayLimit : null,
+                couponCode: draft.couponCode,
                 sourceOid: Outlet.current,
                 updatedAt: Date.now()
             };
-
             if (comboId) {
                 await update(Outlet.ref(`combos/${comboId}`), payload);
-                logAudit("Catalog", `Updated Combo: ${name}`, comboId);
-                showToast("Combo updated!", "success");
+                logAudit('Catalog', `Updated Combo: ${draft.name}`, comboId);
+                showToast('Combo updated!', 'success');
             } else {
                 await set(push(Outlet.ref('combos')), { ...payload, createdAt: Date.now() });
-                logAudit("Catalog", `Added Combo: ${name}`, Outlet.current);
-                showToast("Combo created!", "success");
+                logAudit('Catalog', `Added Combo: ${draft.name}`, Outlet.current);
+                showToast('Combo created!', 'success');
             }
             close();
         } catch (err) {
-            console.error("[Combos] Save failed:", err);
-            showToast("Failed to save combo: " + err.message, "error");
-            if (statusEl) statusEl.classList.add('hidden');
-            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = `${comboId ? 'Update' : 'Create'} Combo`; }
+            console.error('[Combos] Save failed:', err);
+            showToast('Failed to save combo: ' + err.message, 'error');
+            saveBtn.disabled = false;
+            saveBtn.textContent = comboId ? 'Save Changes' : 'Publish Combo';
         } finally {
             comboSaving = false;
         }
-    });
+    }
+
+    // ---- close + guards ----
+    let touched = false;
+    root.addEventListener('input', () => { touched = true; }, { capture: true });
+    root.addEventListener('click', e => { if (e.target.closest('.cbw-card') || e.target.closest('[data-act]')) touched = true; });
+
+    const onEsc = e => { if (e.key === 'Escape') requestClose(); };
+    document.addEventListener('keydown', onEsc);
+    $('cbwClose').addEventListener('click', requestClose);
+
+    async function requestClose() {
+        syncDraft();
+        const dirty = touched || (!comboId && (draft.name?.trim() || sel.size));
+        if (dirty) {
+            const ok = await showConfirm('Discard this combo draft? Your changes are not saved yet.', 'Discard changes?');
+            if (!ok) return;
+        }
+        close();
+    }
+
+    function close() {
+        document.removeEventListener('keydown', onEsc);
+        root.style.opacity = '0';
+        root.style.transition = 'opacity .2s ease';
+        setTimeout(() => root.remove(), prefersReduced ? 0 : 200);
+    }
+
+    loadLucide().then(() => window.lucide?.createIcons({ root }));
+    renderItemsStep();
+    goStep(0);
 }

@@ -109,9 +109,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             const name = el.getAttribute('data-name');
             const price = el.getAttribute('data-price');
             const tag = el.getAttribute('data-tag');
+            const oid = el.getAttribute('data-oid');
 
             const elLabel = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) || el.id || el.className.split(' ')[0] || 'unknown';
-            const ctx = { tag: el.tagName, id: el.id || null, action, tab, dataId: id, dataVal: val, dataName: name, text: elLabel };
+            const ctx = { tag: el.tagName, id: el.id || null, action, tab, dataId: id, dataVal: val, dataName: name, dataOid: oid, text: elLabel };
             logger.action('CLICK', `→ ${action || 'switchTab:' + tab} (${elLabel})`, ctx);
 
             if (tab) {
@@ -278,6 +279,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'addCombo': logger.info('CATALOG', 'Add combo'); (await useMod('catalog')).showComboModal(); break;
                 case 'editCombo': logger.info('CATALOG', `Edit combo: ${id}`); (await useMod('catalog')).editCombo(id); break;
                 case 'deleteCombo': logger.info('CATALOG', `Delete combo: ${id}`); (await useMod('catalog')).deleteCombo(id); break;
+                case 'previewCombo': {
+                    logger.info('CATALOG', `Preview combo: ${id} (outlet: ${oid})`);
+                    const menuUrl = `https://foodhubbie-qrmenu.web.app/?o=${encodeURIComponent(oid)}&b=roshani-pizza`;
+                    window.open(menuUrl, '_blank');
+                    break;
+                }
                 case 'adjustStock': logger.info('INVENTORY', `Adjust stock: ${id} (${val})`); (await useMod('inventory')).adjustStock(id, parseInt(val, 10)); break;
                 case 'editInventoryItem': logger.info('INVENTORY', `Edit item: ${id}`); (await useMod('inventory')).editInventoryItem(id); break;
                 case 'deleteInventoryItem': logger.info('INVENTORY', `Delete item: ${id}`); (await useMod('inventory')).deleteInventoryItem(id); break;
@@ -851,11 +858,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         // cleanup handled by visibilitychange in individual modules
     });
 
-    logAudit('SYSTEM_INIT', { 
-        agent: 'Antigravity',
-        version: '5.2.0',
-        timestamp: new Date().toISOString()
-    });
     pruneOldLogs();
 
     // Bot status on the dashboard widget

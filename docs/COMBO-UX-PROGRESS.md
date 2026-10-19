@@ -35,7 +35,7 @@ Based on comparison of our system vs Domino's & Swiggy (customer menu + admin ma
 | 12 | Customer segment targeting — new customers / all / specific outlets | Industry standard | `[ ]` | |
 | 13 | Coupon code association — link combo to coupon code (YAY99-style) redeemable at checkout | Industry standard | `[x]` | Done — added coupon code dropdown to combo modal (fetches existing coupon-type discounts from /discounts/); stores `couponCode` on combo record; menu QR + delivery enforce coupon at add-to-cart time (shows toast + focuses discount input if code not applied). |
 | 14 | Clone combo — duplicate existing combo with new dates | Industry standard | `[ ]` | |
-| 15 | Preview — "View as customer" link opening QR menu filtered to combo | Industry standard | `[ ]` | |
+| 15 | Preview — "View as customer" link opening QR menu filtered to combo | Industry standard | `[x]` | Done — added "Preview" button to each combo row in admin table; opens QR menu in new tab at `https://foodhubbie-qrmenu.web.app/?o=<outlet>&b=roshani-pizza`. Added `previewCombo` case in main.js click handler. |
 | 16 | Bulk actions — select multiple → enable/disable/delete | Industry standard | `[ ]` | |
 
 ---
