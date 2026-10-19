@@ -94,7 +94,10 @@ img{max-width:100%; display:block;}
 /* ---------- Category pills — ported from the real Admin POS's
    .category-tab design (flat pill, gradient-orange when active) so the
    customer menu and the staff POS feel like the same product. ---------- */
-.category-pills{ display:flex; gap:8px; padding:0 16px 12px; overflow-x:auto; scrollbar-width:none; }
+.category-pills{
+    display:flex; gap:8px; padding:10px 16px 10px; overflow-x:auto; scrollbar-width:none;
+    position:sticky; top:64px; z-index:10; background:var(--card); z-index:20;
+}
 .category-pills::-webkit-scrollbar{display:none;}
 .category-pill{
     flex-shrink:0; display:flex; align-items:center; gap:5px;

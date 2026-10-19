@@ -650,7 +650,8 @@ async function _addComboToCart(comboId) {
         addLine({
             dishId: e.dish.id, name: e.dish.name, img: e.dish.image,
             size: 'Regular', addons: [], instructions: '',
-            qty: e.qty, unitPrice: prices[i]
+            qty: e.qty, unitPrice: prices[i],
+            comboId: combo.id, comboName: combo.name, comboLineOriginal: Math.round(e.base * e.qty * 100) / 100
         });
         added += e.qty;
     });
