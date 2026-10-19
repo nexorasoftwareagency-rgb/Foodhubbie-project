@@ -256,6 +256,17 @@ async function _addComboToCart(comboId) {
         return;
     }
 
+    // --- Coupon code enforcement ---
+    if (combo.couponCode) {
+        const applied = M.appliedDiscount;
+        if (!applied || applied.couponCode !== combo.couponCode) {
+            UI.showToast(`This combo requires coupon code: ${combo.couponCode}. Enter it at checkout first.`);
+            const input = document.getElementById('discountCodeInput');
+            if (input) { input.focus(); input.select(); }
+            return;
+        }
+    }
+
     // --- Redemption cap enforcement ---
     const maxRedemptions = combo.maxRedemptions || 0;
     if (maxRedemptions > 0) {

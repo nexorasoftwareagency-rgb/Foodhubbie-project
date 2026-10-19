@@ -983,6 +983,16 @@ export async function showComboModal(comboId = null) {
     const dishes = [];
     dishesSnap.forEach(ch => { const v = ch.val(); if (v) dishes.push({ id: ch.key, ...v }); });
 
+    // Fetch existing coupon codes for the association dropdown
+    const couponDiscountsSnap = await get(Outlet.ref('discounts'));
+    const couponOptions = [];
+    couponDiscountsSnap.forEach(ch => {
+        const d = ch.val();
+        if (d && d.type === 'coupon' && d.enabled !== false && d.couponCode) {
+            couponOptions.push(`<option value="${escapeHtml(d.couponCode)}"${combo?.couponCode === d.couponCode ? ' selected' : ''}>${escapeHtml(d.couponCode)} — ${escapeHtml(d.name || d.couponCode)}</option>`);
+        }
+    });
+
     let combo = null;
     if (comboId) {
         const snap = await get(Outlet.ref(`combos/${comboId}`));
@@ -1103,9 +1113,18 @@ export async function showComboModal(comboId = null) {
                         <small id="perDayHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
                     </div>
                 </div>
+                <div class="cmb-sec">Coupon Code (Optional)</div>
+                <div class="cmb-grid2">
+                    <div class="form-row" style="margin:0;">
+                        <label for="comboCouponCode">Require Coupon Code</label>
+                        <select id="comboCouponCode" class="form-input" aria-describedby="couponHint">
+                            <option value="">None (open to all)</option>
+                            ${couponOptions || ''}
+                        </select>
+                        <small id="couponHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Customers must enter this code at checkout to redeem the combo</small>
+                    </div>
+                </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn-secondary" id="comboCancel">Cancel</button>
-                    <button type="submit" class="btn-primary">${comboId ? 'Update' : 'Create'} Combo</button>
                 </div>
             </form>
         </div>
@@ -1286,6 +1305,7 @@ export async function showComboModal(comboId = null) {
         const maxRedemptions = parseInt(document.getElementById('comboMaxRedemptions').value) || 0;
         const perCustomerLimit = parseInt(document.getElementById('comboPerCustomerLimit').value) || 0;
         const perDayLimit = parseInt(document.getElementById('comboPerDayLimit').value) || 0;
+        const couponCode = document.getElementById('comboCouponCode')?.value.trim() || null;
 
         let ok = true;
         if (!name) { showErr('errName', 'Enter a combo name'); document.getElementById('comboName').focus(); ok = false; }
@@ -1330,6 +1350,7 @@ export async function showComboModal(comboId = null) {
                 maxRedemptions: maxRedemptions > 0 ? maxRedemptions : null,
                 perCustomerLimit: perCustomerLimit > 0 ? perCustomerLimit : null,
                 perDayLimit: perDayLimit > 0 ? perDayLimit : null,
+                couponCode,
                 sourceOid: Outlet.current,
                 updatedAt: Date.now()
             };
