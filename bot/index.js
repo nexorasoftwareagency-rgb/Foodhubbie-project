@@ -1394,14 +1394,19 @@ async function verifyQrOrderDiscount(orderId, order, OUTLET) {
 // =============================
 
 // =============================
-// GLOBAL ERROR HANDLERS (prevent silent crashes)
+// GLOBAL ERROR HANDLERS
 // =============================
-process.on('uncaughtException', (err) => {
-    console.error('[FATAL] Uncaught Exception:', err?.message || err);
-});
-process.on('unhandledRejection', (err) => {
-    console.error('[FATAL] Unhandled Rejection:', err?.message || err);
-});
+// Log the full stack, then exit so pm2 restarts into a clean state. Swallowing a
+// fatal error leaves the process alive but broken (half-initialized socket, stuck
+// state) with nothing to recover it - the worse failure mode for an uptime-critical
+// bot. Restart backoff is set in ecosystem.config.js so a persistent startup
+// failure cannot hot-loop.
+const _fatalExit = (label, err) => {
+    console.error(`[FATAL] ${label}:`, err?.stack || err?.message || err);
+    setTimeout(() => process.exit(1), 1500);
+};
+process.on('uncaughtException', (err) => _fatalExit('Uncaught Exception', err));
+process.on('unhandledRejection', (err) => _fatalExit('Unhandled Rejection', err));
 
 async function startBot() {
     // Initialize outlet -> businessId reverse index for O(1) tenant path resolution
