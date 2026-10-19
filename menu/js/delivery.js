@@ -80,13 +80,6 @@ async function boot() {
             }
             M._tokenValid = true;
         }
-
-        // Show location banner on boot — don't call requestLocationPermission()
-        // directly here because mobile browsers block geolocation requests
-        // not triggered by a user gesture.
-        if (!M.location) {
-            showLocationBanner('Location access is needed to deliver to you and calculate the delivery fee.');
-        }
     } catch (e) {
         console.error('[Delivery] boot failed', e);
         UI.showToast('Could not load the menu — please retry.', 'error');
@@ -331,7 +324,8 @@ async function _addComboToCart(comboId) {
         addLine({
             dishId: e.dish.id, name: e.dish.name, img: e.dish.image,
             size: 'Regular', addons: [], instructions: '',
-            qty: e.qty, unitPrice: prices[i]
+            qty: e.qty, unitPrice: prices[i],
+            comboId: combo.id, comboName: combo.name, comboLineOriginal: Math.round(e.base * e.qty * 100) / 100
         });
         added += e.qty;
     });
