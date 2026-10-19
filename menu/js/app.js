@@ -3,7 +3,7 @@
  * Wires together firebase.js, session.js, cart.js, order.js, ui.js.
  * This is the only file with top-level event listener registration.
  */
-import { outletRef, get, onValue, push, set, OUTLET, isConnected } from './firebase.js';
+import { outletRef, get, onValue, push, set, OUTLET, isConnected, update, runTransaction } from './firebase.js';
 import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getQRStorageKey } from './cart.js';
 import { placeOrder } from './order.js';
@@ -558,7 +558,7 @@ function _renderComboOffers() {
     }
 }
 
-function _addComboToCart(comboId) {
+async function _addComboToCart(comboId) {
     const combo = M.combos.find(c => c.id === comboId);
     if (!combo) return;
     if (Session.session?.status === 'expired') { UI.showScreen('screenSessionExpired'); return; }
@@ -572,6 +572,57 @@ function _addComboToCart(comboId) {
         UI.showToast('This combo is no longer active');
         return;
     }
+
+    // --- Redemption cap enforcement ---
+    const maxRedemptions = combo.maxRedemptions || 0;
+    if (maxRedemptions > 0) {
+        const current = combo.currentRedemptions || 0;
+        if (current >= maxRedemptions) {
+            UI.showToast('Combo limit reached — no more available');
+            return;
+        }
+        const ref = Outlet.ref(`combos/${combo.id}/currentRedemptions`);
+        const result = await runTransaction(ref, (val) => {
+            const next = (val || 0) + 1;
+            if (next > maxRedemptions) return null;
+            return next;
+        });
+        if (!result.committed) {
+            UI.showToast('Combo limit reached — no more available');
+            return;
+        }
+    }
+
+    const perCustomerLimit = combo.perCustomerLimit || 0;
+    if (perCustomerLimit > 0) {
+        const customerId = Session.sessionId || Session.tableId || 'default';
+        const ref = Outlet.ref(`combos/${combo.id}/redemptionsByCustomer/${customerId}`);
+        const result = await runTransaction(ref, (val) => {
+            const next = (val || 0) + 1;
+            if (next > perCustomerLimit) return null;
+            return next;
+        });
+        if (!result.committed) {
+            UI.showToast('You have reached your limit for this combo');
+            return;
+        }
+    }
+
+    const perDayLimit = combo.perDayLimit || 0;
+    if (perDayLimit > 0) {
+        const today = new Date().toISOString().slice(0, 10);
+        const ref = Outlet.ref(`combos/${combo.id}/redemptionsByDay/${today}`);
+        const result = await runTransaction(ref, (val) => {
+            const next = (val || 0) + 1;
+            if (next > perDayLimit) return null;
+            return next;
+        });
+        if (!result.committed) {
+            UI.showToast('Daily limit reached for this combo');
+            return;
+        }
+    }
+
     touchSession();
     const items = Object.values(combo.items || {});
     const entries = [];

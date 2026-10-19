@@ -382,7 +382,8 @@ export async function saveDish() {
             stock: true,
             order: order,
             sizes: Object.keys(sizes).length > 0 ? sizes : null,
-            addons: Object.keys(addons).length > 0 ? addons : null
+            addons: Object.keys(addons).length > 0 ? addons : null,
+            veg: document.getElementById('dishVeg').value !== 'nonveg'
         };
 
         const dishesRef = Outlet.ref('dishes');
@@ -458,6 +459,7 @@ export async function showDishModal(dishId = null) {
         document.getElementById('dishImage').value = '';
         document.getElementById('dishPreview').src = "https://placehold.co/100";
         document.getElementById('dishOrder').value = '';
+        document.getElementById('dishVeg').value = 'veg';
         document.getElementById('sizesContainer').innerHTML = '';
         document.getElementById('addonsContainer').innerHTML = '';
     } else {
@@ -479,6 +481,7 @@ export async function showDishModal(dishId = null) {
             document.getElementById('dishOrder').value = d.order || '';
             document.getElementById('dishImage').value = d.image || '';
             document.getElementById('dishPreview').src = d.image || "https://placehold.co/100";
+            document.getElementById('dishVeg').value = d.veg === false ? 'nonveg' : 'veg';
 
             const sizesContainer = document.getElementById('sizesContainer');
             sizesContainer.innerHTML = '';
@@ -891,6 +894,15 @@ export function loadCombos() {
             const fmt = ms => ms ? new Date(ms).toLocaleDateString() : '—';
             const statusLabel = disabled ? 'Disabled' : (active ? 'Active' : 'Expired');
             const statusClass = disabled ? 'disabled' : (active ? 'available' : 'out');
+            const maxRed = c.maxRedemptions || 0;
+            const perCust = c.perCustomerLimit || 0;
+            const perDay = c.perDayLimit || 0;
+            const used = c.currentRedemptions || 0;
+            const capText = [
+                maxRed > 0 ? `Total: ${used}/${maxRed}` : 'Total: ∞',
+                perCust > 0 ? `Cust: 0/${perCust}` : 'Cust: ∞',
+                perDay > 0 ? `Day: 0/${perDay}` : 'Day: ∞'
+            ].join(' · ');
             return `
             <tr class="glass-card p-20">
                 <td>
@@ -899,6 +911,7 @@ export function loadCombos() {
                 <td style="font-size:13px;color:var(--text-secondary);">${escapeHtml(itemsTxt)}</td>
                 <td style="font-weight:700;">₹${orig} → ₹${price}</td>
                 <td style="font-weight:700;color:var(--text-secondary);">${escapeHtml(disc)}</td>
+                <td style="font-size:12px;color:var(--text-secondary);">${capText}</td>
                 <td>
                     <span class="stock-badge ${statusClass}">${statusLabel}</span>
                 </td>
@@ -1070,6 +1083,24 @@ export async function showComboModal(comboId = null) {
                     <div class="form-row" style="margin:0;">
                         <label for="comboEndAt">Active Until</label>
                         <input type="date" id="comboEndAt" class="form-input" value="${combo ? _toInputDate(combo.endAt) : in30}" aria-describedby="errDates">
+                    </div>
+                </div>
+                <div class="cmb-sec">Redemption Caps</div>
+                <div class="cmb-grid2">
+                    <div class="form-row" style="margin:0;">
+                        <label for="comboMaxRedemptions">Max Total Redemptions</label>
+                        <input type="number" id="comboMaxRedemptions" class="form-input" min="0" step="1" value="${combo?.maxRedemptions ?? 0}" aria-describedby="maxRedemptionsHint">
+                        <small id="maxRedemptionsHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
+                    </div>
+                    <div class="form-row" style="margin:0;">
+                        <label for="comboPerCustomerLimit">Max Per Customer</label>
+                        <input type="number" id="comboPerCustomerLimit" class="form-input" min="0" step="1" value="${combo?.perCustomerLimit ?? 0}" aria-describedby="perCustomerHint">
+                        <small id="perCustomerHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
+                    </div>
+                    <div class="form-row" style="margin:0;">
+                        <label for="comboPerDayLimit">Max Per Day</label>
+                        <input type="number" id="comboPerDayLimit" class="form-input" min="0" step="1" value="${combo?.perDayLimit ?? 0}" aria-describedby="perDayHint">
+                        <small id="perDayHint" class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">0 = unlimited</small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1252,6 +1283,9 @@ export async function showComboModal(comboId = null) {
         const endAt = _parseLocalDate(document.getElementById('comboEndAt').value, true);
         const entries = selectedEntries();
         const original = entries.reduce((s, x) => s + x.base * x.qty, 0);
+        const maxRedemptions = parseInt(document.getElementById('comboMaxRedemptions').value) || 0;
+        const perCustomerLimit = parseInt(document.getElementById('comboPerCustomerLimit').value) || 0;
+        const perDayLimit = parseInt(document.getElementById('comboPerDayLimit').value) || 0;
 
         let ok = true;
         if (!name) { showErr('errName', 'Enter a combo name'); document.getElementById('comboName').focus(); ok = false; }
@@ -1261,6 +1295,9 @@ export async function showComboModal(comboId = null) {
             valInput.focus(); ok = false;
         }
         if (!startAt || !endAt || !(endAt > startAt)) { showErr('errDates', 'End date must be after start date'); document.getElementById('comboStartAt').focus(); ok = false; }
+        if (maxRedemptions < 0 || perCustomerLimit < 0 || perDayLimit < 0) {
+            showErr('errDiscount', 'Redemption caps cannot be negative'); ok = false;
+        }
         if (!ok) return;
 
         const items = dishes.filter(d => sel.has(d.id)).map(d => ({
@@ -1290,6 +1327,9 @@ export async function showComboModal(comboId = null) {
             const payload = {
                 name, items, discountType: type, discountValue: value, startAt, endAt,
                 image,
+                maxRedemptions: maxRedemptions > 0 ? maxRedemptions : null,
+                perCustomerLimit: perCustomerLimit > 0 ? perCustomerLimit : null,
+                perDayLimit: perDayLimit > 0 ? perDayLimit : null,
                 sourceOid: Outlet.current,
                 updatedAt: Date.now()
             };

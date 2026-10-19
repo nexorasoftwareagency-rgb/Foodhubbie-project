@@ -1161,6 +1161,18 @@ Fragile Files before starting ANY task.
 - Files: `menu/js/discount.js` (label fix, deployed), `tests/verify-qr-combo-coupon-checkout.cjs` (new).
 - Confidence: HIGH (flow + math + RTDB record verified; label fix proven live in run 2)
 - Next: optionally harden generateOrderId fallback (throw instead of `|| 1`); consider cart UX — applied coupon leaves code text in input with "Apply" acting as remove.
+### [2026-10-19 app-sweep-classic-beats] Rider wallet fix + bot heartbeat fix + admin pre-auth cleanup
+
+- STATUS: DONE
+- What happened:
+  - **Rider wallet root-cause fix (shipped coherently with parallel rider batch)**: rules denied riders the `/businesses` root read needed by old multi-outlet enumeration. Converged design = single-outlet rider app (batch wired `rider.businessId`) + new `outletIndex/{oid}={bid,name,disabled}` node (read `auth != null`, write super/supreme; rules + tools/seed-outlet-index.cjs seeded 9 outlets; Supreme onboarding/profile/disable/reactivate mirror writes). Deployed `database,hosting:admin,hosting:rider,hosting:supreme,hosting:menu`; live-verified `/wallet` + PICKUP load, 0 console errors.
+  - **Bot "🟢 online" widget fix**: root cause = bot heartbeat every 5 min (bot/index.js:1680 `300000`) vs Admin freshness window 90 s (Admin/js/bot-status.js:36) → widget offline ~85% of the time. One-line fix `300000 → 60000`, backup on EC2, node --check + unit tests 15/15, scp, `pm2 restart 4 12`, `pm2 save`; verified lastSeen staleness ≤ 60 s and Admin widget shows "🟢 Bot online" with 60 s status-change cadence.
+  - **Admin pre-auth console cleanup (deployed)**: `loadInventoryMenu()` auth guard + removed `SYSTEM_INIT` `logAudit` from main.js; live Admin console now 0 errors, only benign pre-login `[RoleAccess]` warning remains.
+  - **Rider PWA icons** generated from favicon.svg via bot/node_modules/sharp (icon-192/512, apple-touch 180); shipped in a second `hosting:admin,hosting:rider` deploy with the admin edits; verified icon URLs 200.
+- Files: `bot/index.js` (1 line), `database.rules.json` (+outletIndex), `SupremeAdmin/js/features/restaurant-{onboarding,profile,list}.js` (mirror writes), `tools/seed-outlet-index.cjs`, `Admin/js/features/inventory.js`, `Admin/js/main.js`, `rider-app/public/icon-*.{png}`.
+- Confidence: HIGH (all live-verified)
+- Next/report to user: (a) 2 junk outletIndex strays (`outlet`, `-p3psz__kdfrbwtcml6b`) — super can disable them in Supreme; (b) cake bot pm2 id17 auto-spawned by bot-control-api orchestrator at 03:38 UTC, then instant SIGINT/stop; stale (`lastSeen` 03:34:50) — needs investigation before starting, don't blind-restart; (c) Header.tsx:69 hardcoded "ROSHANI" brand (multi-tenant papercut, rider-app owned by other batch); (d) cake/order-flow: orders not reaching Admin (bot uses 24-char `07`-prefixed order ids vs menu 11-char `06-` — flagged, may be intentional legacy), (e) user actions list (GSC indexing, GBP video verify, testimonials) unchanged.
+
 ### [2026-10-18 combo-ux-veg-marks] Customer #5: veg/non-veg marks from dish `veg` flag
 
 - STATUS: DONE

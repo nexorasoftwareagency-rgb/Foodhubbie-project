@@ -5,7 +5,7 @@
  * delivery-specific fields (address + location) and a direct order write
  * (menu/js/delivery-order.js) instead of a table-session attach.
  */
-import { outletRef, get, set as fbSet, OUTLET } from './firebase.js';
+import { outletRef, get, set as fbSet, OUTLET, update, runTransaction } from './firebase.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getWebviewStorageKey } from './cart.js';
 import * as UI from './ui.js';
 import { haptic } from './ui.js';
@@ -247,7 +247,7 @@ function _renderComboOffers() {
     }
 }
 
-function _addComboToCart(comboId) {
+async function _addComboToCart(comboId) {
     const combo = M.combos.find(c => c.id === comboId);
     if (!combo) return;
     const now = Date.now();
@@ -255,6 +255,57 @@ function _addComboToCart(comboId) {
         UI.showToast('This combo is no longer active');
         return;
     }
+
+    // --- Redemption cap enforcement ---
+    const maxRedemptions = combo.maxRedemptions || 0;
+    if (maxRedemptions > 0) {
+        const current = combo.currentRedemptions || 0;
+        if (current >= maxRedemptions) {
+            UI.showToast('Combo limit reached — no more available');
+            return;
+        }
+        const ref = outletRef(`combos/${combo.id}/currentRedemptions`);
+        const result = await runTransaction(ref, (val) => {
+            const next = (val || 0) + 1;
+            if (next > maxRedemptions) return null;
+            return next;
+        });
+        if (!result.committed) {
+            UI.showToast('Combo limit reached — no more available');
+            return;
+        }
+    }
+
+    const perCustomerLimit = combo.perCustomerLimit || 0;
+    if (perCustomerLimit > 0) {
+        const customerId = M.sessionId || 'default';
+        const ref = outletRef(`combos/${combo.id}/redemptionsByCustomer/${customerId}`);
+        const result = await runTransaction(ref, (val) => {
+            const next = (val || 0) + 1;
+            if (next > perCustomerLimit) return null;
+            return next;
+        });
+        if (!result.committed) {
+            UI.showToast('You have reached your limit for this combo');
+            return;
+        }
+    }
+
+    const perDayLimit = combo.perDayLimit || 0;
+    if (perDayLimit > 0) {
+        const today = new Date().toISOString().slice(0, 10);
+        const ref = outletRef(`combos/${combo.id}/redemptionsByDay/${today}`);
+        const result = await runTransaction(ref, (val) => {
+            const next = (val || 0) + 1;
+            if (next > perDayLimit) return null;
+            return next;
+        });
+        if (!result.committed) {
+            UI.showToast('Daily limit reached for this combo');
+            return;
+        }
+    }
+
     const items = Object.values(combo.items || {});
     const entries = [];
     items.forEach(it => {
