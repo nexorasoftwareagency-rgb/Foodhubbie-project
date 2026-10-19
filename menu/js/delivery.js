@@ -516,30 +516,54 @@ document.getElementById('btnApplyDiscount')?.addEventListener('click', async () 
 // Location — requested on page load (real-app pattern), re-offered if
 // denied, and the ONLY thing gating "PLACE ORDER".
 // ---------------------------------------------------------------
+// DIAGNOSTIC — only renders when the URL has ?debug=1 (customers never see it).
+function _diag(msg) {
+    if (!new URLSearchParams(location.search).has('debug')) return;
+    let el = document.getElementById('geoDiag');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'geoDiag';
+        el.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#000;color:#0f0;font:11px/1.45 monospace;padding:8px;border-radius:8px;max-height:45vh;overflow:auto;white-space:pre-wrap;word-break:break-all;';
+        document.body.appendChild(el);
+    }
+    el.textContent += (el.textContent ? '\n' : '') + msg;
+    el.scrollTop = el.scrollHeight;
+}
+
 function requestLocationPermission() {
     if (!navigator.geolocation) {
+        _diag('geo=ABSENT');
         showLocationBanner("Location isn't supported on this device — the delivery fee can't be calculated automatically.");
         return;
     }
-    // Chrome permanently-denied check: getCurrentPosition would instant-fail
-    // with no prompt, causing a silent retry loop. Query the permission state
-    // first — if it's already 'denied', show unblock instructions instead.
+    _diag('env geo=1 perm=' + (!!navigator.permissions) + ' iframe=' + (window.top !== window.self) + ' sw=' + (!!(navigator.serviceWorker && navigator.serviceWorker.controller)));
+    _diag('ua=' + navigator.userAgent);
+
     if (navigator.permissions?.query) {
+        let qResolved = false;
         navigator.permissions.query({ name: 'geolocation' }).then((status) => {
-            if (status.state === 'denied') {
-                showLocationBlockedHelp();
-                return;
-            }
+            qResolved = true;
+            _diag('permState=' + status.state);
+            if (status.state === 'denied') { showLocationBlockedHelp(); return; }
             _callGetLocation();
-        }).catch(() => _callGetLocation());
+        }).catch((e) => { _diag('permQueryErr=' + (e && e.message)); _callGetLocation(); });
+        setTimeout(() => { if (!qResolved) { _diag('permQuery STUCK >2s → calling getCurrentPosition anyway'); _callGetLocation(); } }, 2000);
     } else {
+        _diag('perm API absent → direct getCurrentPosition');
         _callGetLocation();
     }
 }
 
 function _callGetLocation() {
+    const t0 = Date.now();
+    let settled = false;
+    const hb = setInterval(() => { if (!settled) _diag('waiting ' + ((Date.now() - t0) / 1000).toFixed(1) + 's...'); }, 1000);
+    setTimeout(() => { if (!settled) _diag('WATCHDOG: 10s no callback from getCurrentPosition'); }, 10000);
+    _diag('getCurrentPosition() called');
     navigator.geolocation.getCurrentPosition(
         (pos) => {
+            settled = true; clearInterval(hb);
+            _diag('SUCCESS ' + pos.coords.latitude + ',' + pos.coords.longitude);
             M.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             hideLocationBanner();
             closeLocDialog();
@@ -547,11 +571,9 @@ function _callGetLocation() {
             ensureDeliveryFee();
         },
         (err) => {
-            console.warn('[Location] Permission denied or error:', err.message, 'code:', err.code);
-            if (err.code === 1) { // PERMISSION_DENIED — permanent block, not retryable
-                showLocationBlockedHelp();
-                return;
-            }
+            settled = true; clearInterval(hb);
+            _diag('ERROR code=' + err.code + ' msg=' + err.message);
+            if (err.code === 1) { showLocationBlockedHelp(); return; }
             const statusEl = document.getElementById('locDialogStatus');
             if (statusEl) statusEl.textContent = 'Could not get your location. Check that Location is ON in phone Settings, then try again.';
         },
