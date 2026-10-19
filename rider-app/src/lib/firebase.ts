@@ -1,11 +1,5 @@
 // === src/lib/firebase.ts ===
-// Firebase init for the ROSHANI project — a separate Firebase project from
-// FoodHubbie. Roshani's rider portal also runs Firebase App Check (reCAPTCHA v3),
-// which FoodHubbie's rider app does not use — replicated here for parity with
-// the real, deployed Roshani rider portal.
-
 import { initializeApp, type FirebaseApp } from "firebase/app";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import {
   getDatabase,
   ref,
@@ -53,21 +47,7 @@ const ROSHANI_FIREBASE_CONFIG = {
   appId: "1:372428105696:web:a3a979191a5cf94569ed85",
 };
 
-const RECAPTCHA_V3_SITE_KEY = "6LeAlcwsAAAAAH4F3p5aCNvyPlhC3BRHOXTdDEGK";
-
 const app: FirebaseApp = initializeApp(ROSHANI_FIREBASE_CONFIG);
-
-if (typeof window !== "undefined") {
-  try {
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
-      isTokenAutoRefreshEnabled: true,
-    });
-    console.log("[App Check] Activated for Roshani Rider Portal");
-  } catch (err) {
-    console.warn("[App Check] Failed to initialize — continuing without it", err);
-  }
-}
 
 const db: Database = getDatabase(app);
 const auth: Auth = getAuth(app);

@@ -22,6 +22,8 @@ export type Rider = {
   isAdmin: boolean;
   /** Outlet this rider is assigned to — used for order filtering and isolation. */
   outlet: OutletId;
+  /** Parent business id for this rider's outlet (needed to build db paths). */
+  businessId?: string;
   /** Average customer rating (1-5), computed from RiderRating records. */
   rating?: number;
   /** Rider's preferred shift schedule (auto-suggest online/offline times). */
@@ -181,7 +183,7 @@ export type OfflineAction = {
 };
 
 export type OutletSettings = {
-  Store: { lat: string; lng: string };
+  Store: { lat: string; lng: string; storeName?: string };
   Delivery: {
     backupCode: string;
   };

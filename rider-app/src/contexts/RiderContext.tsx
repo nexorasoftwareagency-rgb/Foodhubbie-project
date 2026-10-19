@@ -8,7 +8,6 @@ import { logRiderError } from "@/services/auditService";
 import { toast } from "@/hooks/use-toast";
 import type { Rider, RiderStats } from "@/types";
 import type { OutletId } from "@/lib/constants";
-import { resolveBusinessIdForOutlet } from "@/lib/constants";
 
 type RiderContextValue = {
   rider: Rider | null;
@@ -39,18 +38,6 @@ export function RiderProvider({ children }: { children: ReactNode }) {
   const [retryTick, setRetryTick] = useState(0);
   const [toggling, setToggling] = useState(false);
 
-  // Initialize outlet -> businessId cache at app boot
-  useEffect(() => {
-    if (!user?.uid || !rider?.outlet) return;
-    const outlet = rider.outlet;
-    // Pre-populate cache so async path helpers work without extra round-trips
-    resolveBusinessIdForOutlet(outlet).then(bid => {
-      console.log('[RiderContext] Cached businessId for', outlet, ':', bid);
-    }).catch(err => {
-      console.error('[RiderContext] Failed to resolve businessId:', err);
-    });
-  }, [user?.uid, rider?.outlet]);
-
 // Subscribe to global rider stats (single node for all outlets)
   useEffect(() => {
     if (!user?.uid) return;
@@ -65,13 +52,13 @@ export function RiderProvider({ children }: { children: ReactNode }) {
     return () => { unsub(); };
   }, [user?.uid, outlets]);
 
-  // Load all outlets the rider can access (for cross-outlet delivery)
+  // Load ONLY the rider's own outlet — riders never see other restaurants
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid || !rider?.outlet) return;
     let cancelled = false;
     setOutletsLoading(true);
     setOutletsError(null);
-    loadOutlets()
+    loadOutlets(rider)
       .then((list) => {
         if (!cancelled) {
           setOutlets(list);
@@ -87,7 +74,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setOutletsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [user?.uid, retryTick]);
+  }, [user?.uid, rider?.outlet, rider?.businessId, retryTick]);
 
   const isOnline = rider?.status === "Online";
 

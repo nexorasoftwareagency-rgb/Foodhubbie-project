@@ -20,7 +20,7 @@ import {
   serverNow,
   waitForServerTimeOffset,
 } from "@/lib/firebase";
-import { dbPaths, PROXIMITY, OTP_LIMITS, type OutletId, outletBusinessIdCache } from "@/lib/constants";
+import { dbPaths, PROXIMITY, OTP_LIMITS, type OutletId, outletBusinessIdCache, FALLBACK_COORDS, resolveBusinessIdForOutlet } from "@/lib/constants";
 import { applyDeliveryStat } from "@/lib/deliveryStats";
 import { logRiderError } from "@/services/auditService";
 import { getDistanceKm, isGhostOrder, formatOrderId } from "@/lib/utils";
@@ -75,67 +75,38 @@ export type OutletInfo = {
   businessId: string;
 };
 
-export async function loadOutlets(): Promise<OutletInfo[]> {
-  // Discover all businesses and their outlets dynamically
-  const businessesSnap = await get(ref(db, "businesses"));
-  const businesses = (businessesSnap.val() || {}) as Record<string, any>;
-  
-  // Collect all outlet refs first, then batch-read all settings in one Promise.all
-  const outletRefs: Array<{ bid: string; oid: string; outletData: any }> = [];
-  for (const [bid, business] of Object.entries(businesses)) {
-    const outlets = business.outlets || {};
-    for (const [oid, outlet] of Object.entries(outlets)) {
-      outletRefs.push({ bid, oid, outletData: outlet });
-    }
-  }
-  
-  // Batch read all Store + Delivery settings in parallel
-  // Use Promise.allSettled so one outlet's failure doesn't block others
-  const settingsResults = await Promise.allSettled(
-    outletRefs.map(({ bid, oid }) =>
-      Promise.all([
-        get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Store`)),
-        get(ref(db, `businesses/${bid}/outlets/${oid}/settings/Delivery`)),
-      ]).then(([storeSnap, deliverySnap]) => ({ bid, oid, storeSnap, deliverySnap }))
-    )
-  );
-  
-  // Keep null placeholders so index i stays aligned with outletRefs[i].
-  const allSettings = settingsResults.map((result, i) => {
-    if (result.status === "fulfilled") return result.value;
-    console.error(`[loadOutlets] Failed to load settings for outlet ${outletRefs[i].oid}:`, result.reason);
-    return null;
-  });
+export async function loadOutlets(rider?: { outlet?: string; businessId?: string }): Promise<OutletInfo[]> {
+  // Riders belong to exactly one restaurant — the outlet their account was
+  // created under. Load ONLY that outlet's rider-readable settings; never
+  // enumerate other outlets (no cross-restaurant access).
+  const outletId = rider?.outlet;
+  if (!outletId) return [];
 
-  const results: OutletInfo[] = [];
-  for (let i = 0; i < outletRefs.length; i++) {
-    const settings = allSettings[i];
-    if (!settings) continue;
-    const { bid, oid, outletData: outletMeta } = outletRefs[i];
-    const { storeSnap, deliverySnap } = settings;
-    
-    const store = (storeSnap.val() || {}) as OutletSettings["Store"];
-    const delivery = (deliverySnap.val() || {}) as OutletSettings["Delivery"];
-    const outletMetaData = outletMeta as Record<string, any>;
-    
-    // Get display name from outlet settings or use outlet ID
-    const displayName = outletMetaData.name || outletMetaData.id || oid;
-    
-    // Pre-populate businessId cache so sync dbPaths works
-    outletBusinessIdCache.set(oid, bid);
-    
-    results.push({
-      id: oid,
-      name: displayName,
-      icon: "🏪",
-      color: "#E84908",
-      lat: parseFloat(store.lat as any) || 25.887944,
-      lng: parseFloat(store.lng as any) || 85.026194,
-      backupCode: delivery.backupCode || "",
-      businessId: bid,
-    });
-  }
-  return results;
+  // Resolve businessId from rider record or via outletIndex lookup.
+  // Existing riders created before businessId was added may lack it, so
+  // resolve on the fly rather than returning an empty outlet list.
+  const businessId = rider?.businessId ?? await resolveBusinessIdForOutlet(outletId);
+
+  // Pre-populate businessId cache so sync dbPaths works
+  outletBusinessIdCache.set(outletId, businessId);
+
+  const [storeSnap, deliverySnap] = await Promise.all([
+    get(ref(db, `businesses/${businessId}/outlets/${outletId}/settings/Store`)),
+    get(ref(db, `businesses/${businessId}/outlets/${outletId}/settings/Delivery`)),
+  ]);
+  const store = (storeSnap.val() || {}) as OutletSettings["Store"];
+  const delivery = (deliverySnap.val() || {}) as OutletSettings["Delivery"];
+
+  return [{
+    id: outletId,
+    name: store.storeName || outletId,
+    icon: "🏪",
+    color: "#E84908",
+    lat: parseFloat(store.lat as any) || FALLBACK_COORDS.lat,
+    lng: parseFloat(store.lng as any) || FALLBACK_COORDS.lng,
+    backupCode: delivery.backupCode || "",
+    businessId,
+  }];
 }
 
 /** ─── Real-time order listeners across both fixed outlets ───────────────────── */

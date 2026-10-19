@@ -402,7 +402,7 @@ export async function saveRiderAccount() {
             const _sa = getSecondaryAuth();
             const userCredential = await createUserWithEmailAndPassword(_sa, email, pass);
             const uid = userCredential.user.uid;
-            await set(ref(db, `riders/${uid}`), { uid, name, email, phone, fatherName, age, aadharNo, qualification, address, profilePhoto, aadharPhoto, status: "Offline", createdAt: Date.now() });
+            await set(ref(db, `riders/${uid}`), { uid, name, email, phone, fatherName, age, aadharNo, qualification, address, profilePhoto, aadharPhoto, status: "Offline", outlet: Outlet.current, businessId: BUSINESS_BY_OUTLET[Outlet.current], createdAt: Date.now() });
             await signOut(_sa);
             logAudit("Riders", `Created New Rider: ${name}`, uid);
             closePasswordModal();

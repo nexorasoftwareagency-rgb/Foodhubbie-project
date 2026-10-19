@@ -11,31 +11,34 @@ export const FALLBACK_COORDS = { lat: 25.887944, lng: 85.026194 };
 /** In-memory cache for outlet -> businessId mapping */
 export const outletBusinessIdCache = new Map<OutletId, string>();
 
-/** Resolve businessId for an outlet at runtime. */
+/** Resolve businessId for an outlet at runtime.
+ *  Reads the platform-maintained outletIndex node first (riders cannot read
+ *  the full `businesses` tree — rules gate it to admins). Falls back to
+ *  scanning `businesses/` directly if the outlet isn't indexed yet, so
+ *  existing outlets created before the index exist still work. */
 export async function resolveBusinessIdForOutlet(outletId: OutletId): Promise<string> {
   if (outletBusinessIdCache.has(outletId)) {
     return outletBusinessIdCache.get(outletId)!;
   }
   const { db, ref, get } = await import("@/lib/firebase");
-  const snap = await get(ref(db, `businesses`));
-  const businesses = (snap.val() || {}) as Record<string, any>;
-  
-  for (const [bid, business] of Object.entries(businesses)) {
-    if (business.outlets && business.outlets[outletId]) {
-      outletBusinessIdCache.set(outletId, bid);
-      return bid;
+  const snap = await get(ref(db, `outletIndex/${outletId}`));
+  const entry = (snap.val() || {}) as { bid?: string };
+  if (!entry.bid) {
+    // Fallback: scan businesses tree for the outlet. Riders can't read this
+    // path directly, so this runs in Admin context only; for riders the
+    // index should be pre-seeded. Fallback is a safety net for legacy data.
+    const businessesSnap = await get(ref(db, `businesses`));
+    const businesses = (businessesSnap.val() || {}) as Record<string, { outlets?: Record<string, any> }>;
+    for (const [bid, business] of Object.entries(businesses)) {
+      if (business?.outlets?.[outletId]) {
+        outletBusinessIdCache.set(outletId, bid);
+        return bid;
+      }
     }
+    throw new Error(`outletIndex has no mapping for outlet "${outletId}" — outlets only exist after the onboarding wizard (or seed) writes them`);
   }
-  // Fallback to first business (should not happen in production)
-  const firstBid = Object.keys(businesses)[0];
-  if (!firstBid) {
-    // The `businesses` node is empty — refuse to cache `undefined`, which would
-    // otherwise silently poison every future tenantPath() call for this outlet
-    // (producing paths like `businesses/undefined/outlets/...`) until reload.
-    throw new Error(`resolveBusinessIdForOutlet: no businesses found in Firebase for outlet "${outletId}"`);
-  }
-  outletBusinessIdCache.set(outletId, firstBid);
-  return firstBid;
+  outletBusinessIdCache.set(outletId, entry.bid);
+  return entry.bid;
 }
 
 /** Sync version — works when outletBusinessIdCache is already populated (after RiderContext init).
