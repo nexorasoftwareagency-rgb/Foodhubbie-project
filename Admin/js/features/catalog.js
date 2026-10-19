@@ -1,5 +1,5 @@
 ﻿import { Outlet, BUSINESS_ID, db, uploadImage, deleteImage, ref, get, set, update, remove, push, onValue, child } from '../firebase.js';
-import { showToast, escapeHtml, logAudit, getSkeletonRows, previewImage } from '../utils.js';
+import { showToast, escapeHtml, logAudit, getSkeletonRows, getSkeletonDivs, previewImage } from '../utils.js';
 import { state } from '../state.js';
 import { requireAdminReauth } from '../auth.js';
 import { showConfirm, showDeleteConfirm } from '../ui-utils.js';
@@ -866,10 +866,10 @@ export function loadCombos() {
     const tbody = document.getElementById('comboListBody');
     const empty = document.getElementById('noCombosMsg');
     if (!tbody) return;
-    tbody.innerHTML = getSkeletonRows(3, 7);
+    tbody.innerHTML = getSkeletonDivs(4);
     _combosUnsub = onValue(Outlet.ref('combos'), async snap => {
         const combos = [];
-        snap.forEach(ch => combos.push({ id: ch.key, ...ch.val() }));
+        snap.forEach(ch => { combos.push({ id: ch.key, ...ch.val() }); });
         if (combos.length === 0) {
             tbody.innerHTML = '';
             if (empty) empty.style.display = '';
@@ -904,28 +904,32 @@ export function loadCombos() {
                 perDay > 0 ? `Day: 0/${perDay}` : 'Day: ∞'
             ].join(' · ');
             return `
-            <tr class="glass-card p-20">
-                <td>
-                    <div style="font-weight:800;">${escapeHtml(c.name || 'Unnamed Combo')}</div>
-                </td>
-                <td style="font-size:13px;color:var(--text-secondary);">${escapeHtml(itemsTxt)}</td>
-                <td style="font-weight:700;">₹${orig} → ₹${price}</td>
-                <td style="font-weight:700;color:var(--text-secondary);">${escapeHtml(disc)}</td>
-                <td style="font-size:12px;color:var(--text-secondary);">${capText}</td>
-                <td>
-                    <span class="stock-badge ${statusClass}">${statusLabel}</span>
-                </td>
-                <td style="font-size:12px;color:var(--text-secondary);">${fmt(c.startAt)} → ${fmt(c.endAt)}</td>
-                <td>
-                    <label class="toggle-switch">
-                        <input type="checkbox" data-action="toggleCombo" data-id="${c.id}" ${disabled ? '' : 'checked'} onchange="window.__toggleCombo('${c.id}', this.checked)">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <button class="btn-secondary btn-small" data-action="editCombo" data-id="${c.id}"><i data-lucide="edit-3" class="icon-14"></i></button>
-                    <button class="btn-secondary btn-small" data-action="deleteCombo" data-id="${c.id}"><i data-lucide="trash-2" class="icon-14"></i></button>
-                    <button class="btn-secondary btn-small" data-action="previewCombo" data-id="${c.id}" data-oid="${Outlet.current}"><i data-lucide="external-link" class="icon-14"></i> Preview</button>
-                </td>
-            </tr>`;
+            <div class="browser-dish-card combo-card" data-combo-id="${c.id}">
+                <div class="browser-dish-select"><input type="checkbox" class="combo-row-select" data-id="${c.id}"></div>
+                <div class="browser-dish-img">
+                    <img src="${escapeHtml(c.image || 'https://placehold.co/200/orange/white?text=Combo')}" alt="${escapeHtml(c.name || 'Combo')}">
+                    <div class="browser-dish-stock ${statusClass}">${statusLabel}</div>
+                    ${disc ? `<div class="combo-disc-chip">${escapeHtml(disc)}</div>` : ''}
+                </div>
+                <div class="browser-dish-info">
+                    <div class="browser-dish-name" title="${escapeHtml(c.name || 'Unnamed Combo')}">${escapeHtml(c.name || 'Unnamed Combo')}</div>
+                    <div class="browser-dish-category" title="${escapeHtml(itemsTxt)}">${escapeHtml(itemsTxt)}</div>
+                    <div class="browser-dish-pricing">
+                        <span class="browser-price-chip combo-price-orig"><s>₹${orig}</s></span>
+                        <span class="browser-price-chip combo-price-final">₹${price}</span>
+                    </div>
+                    <div class="browser-dish-category combo-meta" style="font-size:11px;">${fmt(c.startAt)} → ${fmt(c.endAt)} · ${escapeHtml(capText)}</div>
+                    <div class="browser-dish-actions">
+                        <label class="toggle-switch combo-toggle" title="${disabled ? 'Enable combo' : 'Pause combo'}">
+                            <input type="checkbox" data-action="toggleCombo" data-id="${c.id}" ${disabled ? '' : 'checked'} onchange="window.__toggleCombo('${c.id}', this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <button class="btn-action-v4" data-action="editCombo" data-id="${c.id}" title="Edit Combo"><i data-lucide="edit-3" style="width:14px;"></i></button>
+                        <button class="btn-action-v4 danger" data-action="deleteCombo" data-id="${c.id}" title="Delete Combo"><i data-lucide="trash-2" style="width:14px;"></i></button>
+                        <button class="btn-action-v4" data-action="previewCombo" data-id="${c.id}" data-oid="${Outlet.current}" title="Preview in customer menu"><i data-lucide="external-link" style="width:14px;"></i></button>
+                    </div>
+                </div>
+            </div>`;
         }).join('');
         loadLucide().then(() => window.lucide?.createIcons({ root: tbody }));
     });
@@ -939,13 +943,120 @@ window.__toggleCombo = async (id, enabled) => {
             disabledBy: !enabled ? (window.currentUserId || 'admin') : null
         });
         showToast(`${!enabled ? 'Paused' : 'Activated'} combo`, 'success');
+        loadCombos();
     } catch (e) {
         console.error('[Combos] Toggle failed:', e);
         showToast('Failed to update combo status', 'error');
     }
 };
 
-export const editCombo = (id) => showComboModal(id);
+window.__bulkToggleCombos = async (enable) => {
+    const selected = document.querySelectorAll('#comboListBody .combo-row-select:checked');
+    if (selected.length === 0) return;
+    try {
+        await Promise.all(Array.from(selected).map(el =>
+            update(Outlet.ref(`combos/${el.dataset.id}`), {
+                disabled: !enable,
+                disabledAt: !enable ? Date.now() : null,
+                disabledBy: !enable ? (window.currentUserId || 'admin') : null
+            })
+        ));
+        showToast(`${enable ? 'Enabled' : 'Paused'} ${selected.length} combo${selected.length > 1 ? 's' : ''}`, 'success');
+        loadCombos();
+    } catch (e) {
+        console.error('[Combos] Bulk toggle failed:', e);
+        showToast('Failed to update combos', 'error');
+    }
+};
+
+window.__bulkDeleteCombos = async () => {
+    const selected = document.querySelectorAll('#comboListBody .combo-row-select:checked');
+    if (selected.length === 0) return;
+    if (!confirm(`Delete ${selected.length} combo${selected.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    try {
+        await Promise.all(Array.from(selected).map(el =>
+            remove(Outlet.ref(`combos/${el.dataset.id}`))
+        ));
+        showToast(`Deleted ${selected.length} combo${selected.length > 1 ? 's' : ''}`, 'success');
+        loadCombos();
+    } catch (e) {
+        console.error('[Combos] Bulk delete failed:', e);
+        showToast('Failed to delete combos', 'error');
+    }
+};
+
+let _selectedComboIds = new Set();
+
+function _updateBulkActionBar() {
+    const bar = document.getElementById('comboBulkActionBar');
+    const countEl = document.getElementById('comboBulkCount');
+    const count = document.querySelectorAll('#comboListBody .combo-row-select:checked').length;
+    if (count === 0) {
+        bar.classList.add('hidden');
+        _selectedComboIds.clear();
+    } else {
+        bar.classList.remove('hidden');
+        countEl.textContent = `${count} selected`;
+    }
+}
+
+function _initBulkActions() {
+    const bar = document.getElementById('comboBulkActionBar');
+    if (!bar) return;
+
+    // Select all / deselect all
+    document.getElementById('btnBulkEnable')?.addEventListener('click', () => _bulkToggleCombos(true));
+    document.getElementById('btnBulkDisable')?.addEventListener('click', () => _bulkToggleCombos(false));
+    document.getElementById('btnBulkDelete')?.addEventListener('click', _bulkDeleteCombos);
+    document.getElementById('btnBulkCancel')?.addEventListener('click', () => {
+        document.querySelectorAll('#comboListBody .combo-row-select').forEach(cb => cb.checked = false);
+        _updateBulkActionBar();
+    });
+
+    // Row selection
+    document.getElementById('comboListBody')?.addEventListener('change', e => {
+        if (e.target.matches('.combo-row-select')) {
+            _updateBulkActionBar();
+        }
+    });
+}
+
+window.__bulkToggleCombos = async (enable) => {
+    const selected = document.querySelectorAll('#comboListBody .combo-row-select:checked');
+    if (selected.length === 0) return;
+    try {
+        await Promise.all(Array.from(selected).map(el =>
+            update(Outlet.ref(`combos/${el.dataset.id}`), {
+                disabled: !enable,
+                disabledAt: !enable ? Date.now() : null,
+                disabledBy: !enable ? (window.currentUserId || 'admin') : null
+            })
+        ));
+        showToast(`${enable ? 'Enabled' : 'Paused'} ${selected.length} combo${selected.length > 1 ? 's' : ''}`, 'success');
+        loadCombos();
+    } catch (e) {
+        console.error('[Combos] Bulk toggle failed:', e);
+        showToast('Failed to update combos', 'error');
+    }
+};
+
+window.__bulkDeleteCombos = async () => {
+    const selected = document.querySelectorAll('#comboListBody .combo-row-select:checked');
+    if (selected.length === 0) return;
+    if (!confirm(`Delete ${selected.length} combo${selected.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    try {
+        await Promise.all(Array.from(selected).map(el =>
+            remove(Outlet.ref(`combos/${el.dataset.id}`))
+        ));
+        showToast(`Deleted ${selected.length} combo${selected.length > 1 ? 's' : ''}`, 'success');
+        loadCombos();
+    } catch (e) {
+        console.error('[Combos] Bulk delete failed:', e);
+        showToast('Failed to delete combos', 'error');
+    }
+};
+
+document.addEventListener('DOMContentLoaded', _initBulkActions);
 
 export async function deleteCombo(id) {
     const comboSnap = await get(Outlet.ref(`combos/${id}`));
@@ -1391,6 +1502,7 @@ export async function showComboModal(comboId = null) {
 
     $('cbwBack').addEventListener('click', () => { if (step > 0) goStep(step - 1); });
     $('cbwNext').addEventListener('click', () => {
+        syncDraft();
         if (step < 4) {
             const currentErr = VALIDATORS[step]();
             if (currentErr) return validateStep(step);

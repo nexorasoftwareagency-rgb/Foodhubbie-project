@@ -1504,21 +1504,14 @@
                         </button>
                     </div>
                     <p class="text-secondary-small mb-14">Combos appear at the top of the customer QR menu and WhatsApp webview. Each combo bundles dishes at a discount for a limited time.</p>
-                    <table class="premium-table-v4">
-                        <thead>
-                            <tr>
-                                <th style="width:22%">Combo</th>
-                                <th style="width:26%">Items</th>
-                                <th style="width:14%">Price</th>
-                                <th style="width:12%">Discount</th>
-                                <th style="width:14%">Redemptions</th>
-                                <th style="width:10%">Status</th>
-                                <th style="width:16%">Valid</th>
-                                <th style="width:20%">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="comboListBody"></tbody>
-                    </table>
+                    <div id="comboListBody" class="browser-dish-grid combo-cards" aria-live="polite"></div>
+                    <div id="comboBulkActionBar" class="bulk-action-bar hidden">
+                        <span class="bulk-count" id="comboBulkCount">0 selected</span>
+                        <button class="btn-secondary btn-sm" id="btnBulkEnable">Enable Selected</button>
+                        <button class="btn-secondary btn-sm" id="btnBulkDisable">Disable Selected</button>
+                        <button class="btn-secondary btn-danger btn-sm" id="btnBulkDelete">Delete Selected</button>
+                        <button class="btn-secondary btn-sm" id="btnBulkCancel">Cancel</button>
+                    </div>
                     <div id="noCombosMsg" class="text-secondary-small text-center p-16">No combos yet. Click "Add Combo" to create one.</div>
                 </div>
             </div>
