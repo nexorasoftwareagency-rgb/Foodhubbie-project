@@ -5,6 +5,7 @@ module.exports = {
       script: 'index.js',
       cwd: './bot',
       watch: false,
+      max_memory_restart: '600M',
       env: {
         NODE_ENV: 'production',
         OUTLET: 'pizza'
@@ -15,6 +16,7 @@ module.exports = {
       script: 'index.js',
       cwd: './bot',
       watch: false,
+      max_memory_restart: '600M',
       env: {
         NODE_ENV: 'production',
         OUTLET: 'cake'

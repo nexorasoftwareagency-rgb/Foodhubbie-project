@@ -56,7 +56,7 @@ async function startWorker(admin, processName, nextHealthPort, bid, oid, outlet)
 
   await new Promise((resolve, reject) => {
     pm2.start(
-      { name, cwd: botDir, script: 'index.js', env, autorestart: true, max_restarts: 20, min_uptime: 10000 },
+      { name, cwd: botDir, script: 'index.js', env, autorestart: true, max_restarts: 20, min_uptime: 10000, max_memory_restart: '600M' },
       (err, proc) => (err ? reject(err) : resolve(proc))
     );
   });

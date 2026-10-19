@@ -34,6 +34,15 @@ function resolveOutletId() {
     return process.env.OUTLET_ID || process.env.OUTLET || 'pizza';
 }
 
+// 'outlet' is the placeholder ~a dozen call sites use as a fallback
+// (`order.outlet || 'outlet'`, `sendImage(..., outlet = 'outlet')`) — it is NOT a
+// real tenant. Normalise it (and any falsy value) to THIS process's own outlet so
+// a write can never land on a phantom `businesses/{bid}/outlets/outlet/` path.
+const PLACEHOLDER_OUTLET = 'outlet';
+function normalizeOutletId(outletId) {
+    return (!outletId || outletId === PLACEHOLDER_OUTLET) ? resolveOutletId() : outletId;
+}
+
 /**
  * Build a multi-tenant path string.
  * @param {string} businessId
@@ -43,7 +52,7 @@ function resolveOutletId() {
  */
 function outletPath(businessId, outletId, ...rest) {
     const bid = businessId || resolveBusinessId();
-    const oid = outletId || resolveOutletId();
+    const oid = normalizeOutletId(outletId);
     const tail = rest.filter(Boolean).join('/');
     return `businesses/${bid}/outlets/${oid}${tail ? `/${tail}` : ''}`;
 }
@@ -60,6 +69,7 @@ function resolvePath(scope, ...rest) {
 
 /** businessId for an outlet — env wins, else reverse index, else legacy map, else throw. */
 function resolveBusinessIdFor(outletId) {
+    outletId = normalizeOutletId(outletId);
     // 1. Explicit env var (orchestrator sets per-instance)
     if (process.env.BUSINESS_ID) return process.env.BUSINESS_ID;
     // 2. Reverse index (O(1) - populated at startup)

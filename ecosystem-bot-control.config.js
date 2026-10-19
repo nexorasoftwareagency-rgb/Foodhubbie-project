@@ -5,6 +5,7 @@ module.exports = {
       script: 'server.js',
       cwd: './bot-control-api',
       watch: false,
+      max_memory_restart: '400M',
       env: {
         NODE_ENV: 'production',
         BOT_CONTROL_PORT: '4000',

@@ -8,6 +8,11 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 // OUTLET CONFIGURATION (UNIFIED CORE)
 // =============================
 const OUTLET = (process.env.OUTLET || 'outlet').trim();
+// 'outlet' is a placeholder, not a tenant — a bot booting with it would write to
+// a phantom `outlets/outlet/` path. Fail loudly instead of silently misrouting.
+if (OUTLET === 'outlet') {
+    console.error('[CONFIG] OUTLET env is unset/placeholder — tenant paths fall back to the default business. Set OUTLET in the PM2 env.');
+}
 const OUTLET_NAME = 'Hamare Restaurant';
 const OUTLET_EMOJI = '🏪';
 // Fixed developer number — used by promo opt-out filter and report recipients.
@@ -1484,7 +1489,6 @@ async function startBot() {
         sock = makeWASocket({
         version,
         auth: state,
-        printQRInTerminal: true,
         logger: baileysLogger,
         browser: ['Windows', 'Chrome', '10'],
         connectTimeoutMs: 90000,
@@ -1677,7 +1681,11 @@ async function sendDailyReportSafely(dateOverride = null) {
 
         // 5. Expire promotion logs older than 30 days (best-effort, every 5 min)
         promo.expireOldPromoLogs(OUTLET, db).catch(err => console.error("[Promo] Log expiry error:", err));
-    }, 300000);
+
+        // 60s heartbeat (was 5 min): the Admin dashboard's freshness window is
+        // 90 s (Admin/js/bot-status.js), so a 5-min tick left the widget
+        // showing "Bot offline" ~85% of the time even with a healthy process.
+    }, 60000);
 
     // Firebase Listeners — Only initialize once, reuse across reconnects
     if (!firebaseListenersInitialized) {
@@ -1875,6 +1883,7 @@ async function sendDailyReportSafely(dateOverride = null) {
     }
 
     let _wasConnected = false;
+    let _lastQrLogged = null;
 
     sock.ev.on('connection.update', (update) => {
         if (isMetaTransport) return; // Meta transport registers its own connection.update handler
@@ -1887,7 +1896,13 @@ async function sendDailyReportSafely(dateOverride = null) {
             updateData('bot/pair', { qr, status: 'banned', updatedAt: Date.now() }, OUTLET).catch(() => {});
         }
         if (qr) {
-            qrcode.generate(qr, { small: true });
+            // Terminal QR only for interactive pairing runs (PM2 gives no TTY);
+            // the admin/wizard UI reads the QR from Firebase below. Without this
+            // guard an unpaired bot prints a fresh ASCII QR on every reconnect.
+            if (process.stdout.isTTY && qr !== _lastQrLogged) {
+                _lastQrLogged = qr;
+                qrcode.generate(qr, { small: true });
+            }
             updateData('bot/pair', { qr, status: 'waiting', updatedAt: Date.now() }, OUTLET).catch(() => {});
         }
         if (connection === 'open') {
