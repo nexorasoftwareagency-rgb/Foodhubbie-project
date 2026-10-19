@@ -217,6 +217,7 @@ let firebaseListenersInitialized = false;
 
 // Crypto/session error monitoring (for auto-healing and visibility)
 let cryptoErrorCount = 0;
+let lastCryptoLogCount = 0;
 let reconnectAttempts = 0;
 let reconnectTimer = null;
 const MAX_CRYPTO_ERRORS = 500; // Triggers session reset if exceeded rapidly
@@ -1102,7 +1103,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     parameters: [{ type: "text", text: formatOrderInvoice(id, order) }]
                 }];
                 // Legacy text/image path — used by Baileys (no sendTemplate).
-                msg = `🎉 *ORDER PLACED!* ${OUTLET_EMOJI}\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}We've received your order and our team is reviewing it now. ⏳\nYou'll get an update as soon as it's confirmed! ❤️`;
+                msg = `🎉 *ORDER PLACED!* 🍕\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}\nWe've received your order and our team is reviewing it now. ⏳\nYou'll get an update as soon as it's confirmed! ❤️`;
                 img = botSettings.imgPlacedPng || botSettings.imgPlaced || botSettings.imgConfirmedPng || botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "confirmed") {
                 if (isDineIn) {
@@ -1126,7 +1127,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                             { type: "text", text: getFoodFunnyProgress("Confirmed") }
                         ]
                     }];
-                    msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}Your order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")}`;
+                    msg = `✅ *ORDER CONFIRMED!* 🎊\n━━━━━━━━━━━━━━━━━━━━\n${formatOrderInvoice(id, order)}\nYour order is being prepared with love! ❤️\n${getFoodFunnyProgress("Confirmed")} ❤️`;
                 }
                 img = botSettings.imgConfirmedPng || botSettings.imgConfirmed || fallbackImg;
             } else if (statusLower === "ready" || statusLower === "packed") {
@@ -1139,7 +1140,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                         { type: "text", text: getFoodFunnyProgress("Ready") }
                     ]
                 }];
-                msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${formatOrderId(order.orderId || id)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")}`;
+                msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${formatOrderId(order.orderId || id)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")} ❤️`;
                 img = botSettings.imgReadyPng || botSettings.imgReady || fallbackImg;
 
                 if (!isDineIn) {
@@ -1199,7 +1200,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                         { type: "text", text: getFunnyFoodJoke() }
                     ]
                 }];
-                msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${formatOrderId(order.orderId || id)}\n🤝 *Payment:* ${order.paymentMethod}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()}`;
+                msg = `✅ *${isDineIn ? 'SERVED' : 'DELIVERED'} SUCCESSFULLY!* 🏪❤️\n━━━━━━━━━━━━━━━━━━━━\n🆔 *Order ID:* #${formatOrderId(order.orderId || id)}\n🤝 *Payment:* ${order.paymentMethod || 'COD'}\n💵 *Total Paid:* ₹${order.total || 0}\n━━━━━━━━━━━━━━━━━━━━\n*Enjoy your meal!* 😋\n${getFunnyFoodJoke()} ❤️`;
                 img = botSettings.imgDeliveredPng || botSettings.imgDelivered || fallbackImg;
             } else if (statusLower === "cancelled") {
                 templateName = "order_cancelled";
@@ -1615,8 +1616,11 @@ async function startBot() {
     // Heartbeat & Cleanup & Report Scheduling
     if (reportInterval) clearInterval(reportInterval);
     reportInterval = setInterval(async () => {
-        // Log crypto health summary (helpful to detect session degradation)
-        if (cryptoErrorCount > 0) {
+        // Crypto health summary — the heartbeat used to print this every 5 min for
+        // as long as the counter was > 0 (forever, since it only resets on
+        // reconnect), which is ~288 noise lines a day. Only report real growth.
+        if (cryptoErrorCount - lastCryptoLogCount >= 10) {
+            lastCryptoLogCount = cryptoErrorCount;
             console.log(`[CRYPTO] 📊 ${cryptoErrorCount} undecryptable messages since last connect (session ${cryptoErrorCount > 10 ? 'may need attention' : 'healthy'})`);
         }
         updateData(`bot/status`, { lastSeen: Date.now(), status: 'Online', outlet: OUTLET }, OUTLET).catch(() => { });
