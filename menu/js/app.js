@@ -668,8 +668,8 @@ function draftUnitPrice() {
 }
 function updateCustomizePrice() {
     const unit = draftUnitPrice();
-    document.getElementById('customBasePrice').textContent = UI.UI.fmtMoney(unit);
-    document.getElementById('addToOrderLabel').textContent = `ADD TO ORDER ${UI.UI.fmtMoney(unit * M.draftQty)}`;
+    document.getElementById('customBasePrice').textContent = UI.fmtMoney(unit);
+    document.getElementById('addToOrderLabel').textContent = `ADD TO ORDER ${UI.fmtMoney(unit * M.draftQty)}`;
 }
 
 document.getElementById('btnDraftQtyMinus')?.addEventListener('click', () => { haptic(10); M.draftQty = Math.max(1, M.draftQty - 1); document.getElementById('draftQtyVal').textContent = String(M.draftQty); updateCustomizePrice(); });

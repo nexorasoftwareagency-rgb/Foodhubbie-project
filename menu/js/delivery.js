@@ -322,7 +322,7 @@ function openCustomize(dishId) {
 
 function renderCustomizeScreen() {
     const sizes = _normalizeSizes(M.draftDish.sizes, M.draftDish.price);
-    document.getElementById('customBasePrice').textContent = UI.UI.fmtMoney(M.draftSize.price);
+    document.getElementById('customBasePrice').textContent = UI.fmtMoney(M.draftSize.price);
     UI.renderSizeOptions(sizes, M.draftSize.label, (idx) => { M.draftSize = sizes[idx]; renderCustomizeScreen(); });
     UI.renderAddonRows(M.draftDish.addons || [], M.draftAddons, (idx) => {
         const pos = M.draftAddons.indexOf(idx);
@@ -470,6 +470,23 @@ function requestLocationPermission() {
         showLocationBanner("Location isn't supported on this device — the delivery fee can't be calculated automatically.");
         return;
     }
+    // Chrome permanently-denied check: getCurrentPosition would instant-fail
+    // with no prompt, causing a silent retry loop. Query the permission state
+    // first — if it's already 'denied', show unblock instructions instead.
+    if (navigator.permissions?.query) {
+        navigator.permissions.query({ name: 'geolocation' }).then((status) => {
+            if (status.state === 'denied') {
+                showLocationBlockedHelp();
+                return;
+            }
+            _callGetLocation();
+        }).catch(() => _callGetLocation());
+    } else {
+        _callGetLocation();
+    }
+}
+
+function _callGetLocation() {
     navigator.geolocation.getCurrentPosition(
         (pos) => {
             M.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -479,13 +496,37 @@ function requestLocationPermission() {
             ensureDeliveryFee();
         },
         (err) => {
-            console.warn('[Location] Permission denied or error:', err.message);
+            console.warn('[Location] Permission denied or error:', err.message, 'code:', err.code);
+            if (err.code === 1) { // PERMISSION_DENIED — permanent block, not retryable
+                showLocationBlockedHelp();
+                return;
+            }
             const statusEl = document.getElementById('locDialogStatus');
-            if (statusEl) statusEl.textContent = 'Location access is required to place an order. Please allow and try again.';
+            if (statusEl) statusEl.textContent = 'Could not get your location. Check that Location is ON in phone Settings, then try again.';
         },
         // ponytail: network fix (fast) over GPS (slow) — was enableHighAccuracy:true, timeout:10000
         { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
     );
+}
+
+function showLocationBlockedHelp() {
+    const statusEl = document.getElementById('locDialogStatus');
+    if (statusEl) {
+        statusEl.innerHTML = `
+            <div style="text-align:left;font-size:13px;line-height:1.6;">
+                <strong>Location is blocked in Chrome for this site.</strong><br><br>
+                1. Tap the <strong>&#128274; lock icon</strong> in the address bar above.<br>
+                2. Tap <strong>Permissions &rarr; Location</strong>.<br>
+                3. Select <strong>Allow</strong>.<br>
+                4. Then tap the button below to reload.<br><br>
+                Also verify: phone <strong>Settings &rarr; Location</strong> is ON.
+            </div>`;
+    }
+    const grantBtn = document.getElementById('btnLocGrant');
+    if (grantBtn) {
+        grantBtn.textContent = "I've Allowed It — Reload";
+        grantBtn.dataset.reload = '1';
+    }
 }
 
 function showLocationBanner(text) {
@@ -514,6 +555,12 @@ function openLocDialog() {
         overlay.classList.add('open');
         const statusEl = document.getElementById('locDialogStatus');
         if (statusEl) statusEl.textContent = '';
+        // Reset grant button from blocked-help state back to normal
+        const grantBtn = document.getElementById('btnLocGrant');
+        if (grantBtn) {
+            grantBtn.textContent = 'Allow Location Access';
+            delete grantBtn.dataset.reload;
+        }
     }
 }
 
@@ -523,7 +570,9 @@ function closeLocDialog() {
 }
 
 // Dialog button handlers
-document.getElementById('btnLocGrant')?.addEventListener('click', () => {
+document.getElementById('btnLocGrant')?.addEventListener('click', (e) => {
+    // If showLocationBlockedHelp set the reload flag, reload instead of re-requesting
+    if (e.currentTarget.dataset.reload) { location.reload(); return; }
     const statusEl = document.getElementById('locDialogStatus');
     if (statusEl) statusEl.textContent = 'Requesting location...';
     requestLocationPermission();
