@@ -217,7 +217,7 @@ export function updateRunningBillStrip(session, groupOrders, groupTotal) {
 export function renderCategoryPills(categories, activeId, onSelect, hasCombos = false) {
     const row = document.getElementById('categoryPillsRow');
     if (!row) return;
-    const pills = [{ id: 'all', name: 'All' }, ...(hasCombos ? [{ id: '__combos', name: 'Combos' }] : []), ...categories];
+    const pills = [{ id: 'all', name: 'All' }, ...categories, ...(hasCombos ? [{ id: '__combos', name: 'Combos' }] : [])];
     row.innerHTML = pills.map(c => `
         <button class="category-pill ${activeId === c.id ? 'active' : ''}" data-cat="${esc(c.id)}">${esc(c.name)}</button>`).join('');
     row.querySelectorAll('.category-pill').forEach(btn => btn.addEventListener('click', () => onSelect(btn.dataset.cat)));
@@ -232,7 +232,7 @@ export function renderDishList(dishes, { searchTerm, activeCategoryName }, onOpe
 
     if (dishes.length === 0) {
         list.textContent = '';
-        list.insertAdjacentHTML('beforeend', '<div class="empty-cart">No dishes found.</div>');
+        list.insertAdjacentHTML('beforeend', `<div class="empty-cart">${searchTerm ? `No dishes found for "${searchTerm}"` : 'No dishes in this category'}</div>`);
         return;
     }
     list.textContent = '';
@@ -241,6 +241,7 @@ export function renderDishList(dishes, { searchTerm, activeCategoryName }, onOpe
             <div class="dish-visual">
                 <img src="${esc(d.image || '')}" alt="${esc(d.name)}" loading="lazy" onerror="this.style.visibility='hidden'">
                 <div class="dish-overlay"><span class="price-chip">${fmtMoney(d.price)}</span></div>
+                <span class="${d.veg === false ? 'combo-nonveg' : 'combo-veg'}" aria-label="${d.veg === false ? 'Non-Veg' : 'Veg'}"></span>
             </div>
             <div class="dish-content">
                 <div class="dish-card-name">${esc(d.name)}</div>

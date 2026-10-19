@@ -477,6 +477,7 @@ function renderMenuScreen(searchTerm) {
     if (dishTitle) dishTitle.classList.remove('hidden');
 
     const activeCategoryName = M.activeCategory === 'all' ? 'Popular Items' : (M.categories.find(c => c.id === M.activeCategory)?.name || 'Items');
+    if (dishTitle) dishTitle.textContent = activeCategoryName;
     UI.renderDishList(dishes, { searchTerm, activeCategoryName }, openCustomize);
 }
 
