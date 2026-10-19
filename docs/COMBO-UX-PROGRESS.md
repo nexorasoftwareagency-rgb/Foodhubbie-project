@@ -29,8 +29,8 @@ Based on comparison of our system vs Domino's & Swiggy (customer menu + admin ma
 
 | # | Suggestion | Source | Status | Notes |
 |---|---|---|---|---|
-| 9 | Offer listing table — name, code, discount, dates, status badge, redemptions, discount given, last used | Industry standard | `[ ]` | |
-| 10 | Status toggle (Enable/Disable) per offer with pause reason; draft vs live | Industry standard | `[ ]` | |
+| 9 | Offer listing table — name, code, discount, dates, status badge, redemptions, discount given, last used | Industry standard | `[x]` | Done — converted card grid to `premium-table-v4` table with combo name, items, price, discount, status badge (Active/Expired/Disabled), valid dates, and Edit/Delete/Enable-Disable toggle actions. |
+| 10 | Status toggle (Enable/Disable) per offer with pause reason; draft vs live | Industry standard | `[x]` | Done — added `disabled`/`disabledAt`/`disabledBy` fields on combo records; toggle switch in table; `isComboActive()` now checks `combo.disabled` first so disabled combos are hidden from customer QR menu and delivery webview. |
 | 11 | Redemption caps — max total, per-customer, per-day | Industry standard | `[ ]` | |
 | 12 | Customer segment targeting — new customers / all / specific outlets | Industry standard | `[ ]` | |
 | 13 | Coupon code association — link combo to coupon code (YAY99-style) redeemable at checkout | Industry standard | `[ ]` | |

@@ -4,6 +4,7 @@
 // serves only menu/, so /shared 404s there (SPA rewrite -> module graph death).
 
 export function isComboActive(combo, now = Date.now()) {
+    if (combo.disabled) return false;
     return (combo.startAt || 0) <= now && now <= (combo.endAt || 0);
 }
 

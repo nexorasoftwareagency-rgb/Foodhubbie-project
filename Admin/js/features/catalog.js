@@ -860,15 +860,15 @@ let _combosUnsub = null;
 
 export function loadCombos() {
     if (_combosUnsub) { _combosUnsub(); _combosUnsub = null; }
-    const list = document.getElementById('comboList');
+    const tbody = document.getElementById('comboListBody');
     const empty = document.getElementById('noCombosMsg');
-    if (!list) return;
-    list.innerHTML = getSkeletonRows(3, 1);
+    if (!tbody) return;
+    tbody.innerHTML = getSkeletonRows(3, 7);
     _combosUnsub = onValue(Outlet.ref('combos'), async snap => {
         const combos = [];
         snap.forEach(ch => combos.push({ id: ch.key, ...ch.val() }));
         if (combos.length === 0) {
-            list.innerHTML = '';
+            tbody.innerHTML = '';
             if (empty) empty.style.display = '';
             return;
         }
@@ -881,31 +881,55 @@ export function loadCombos() {
                 dishInfo[ch.key] = { name: d?.name || ch.key, price: Number(d?.price ?? (d?.sizes ? Object.values(d.sizes)[0] : 0)) || 0 };
             });
         } catch (_) {}
-        list.innerHTML = combos.map(c => {
+        tbody.innerHTML = combos.map(c => {
             const active = isComboActive(c);
+            const disabled = c.disabled === true;
             const itemsTxt = (c.items || []).map(it => `${dishInfo[it.dishId]?.name || it.dishId} x${it.qty}`).join(', ');
             const disc = c.discountType === 'percentage' ? `${c.discountValue}% off` : `₹${c.discountValue} off`;
             const orig = (c.items || []).reduce((s, it) => s + ((dishInfo[it.dishId]?.price ?? Number(it.price)) || 0) * (it.qty || 1), 0);
             const price = comboPriceTotal(orig, c.discountType, c.discountValue);
             const fmt = ms => ms ? new Date(ms).toLocaleDateString() : '—';
+            const statusLabel = disabled ? 'Disabled' : (active ? 'Active' : 'Expired');
+            const statusClass = disabled ? 'disabled' : (active ? 'available' : 'out');
             return `
-            <div class="glass-card p-20">
-                <div class="flex-between flex-center mb-8">
-                    <h4>${escapeHtml(c.name || 'Unnamed Combo')}</h4>
-                    <span class="stock-badge ${active ? 'available' : 'out'}">${active ? 'Active' : 'Inactive'}</span>
-                </div>
-                <p class="text-secondary-small mb-4"><strong>${escapeHtml(disc)}</strong> · ${escapeHtml(itemsTxt)}</p>
-                <p class="mb-12" style="font-weight:700;">₹${orig} → ₹${price} <span style="color:#2e7d32;font-weight:600;">(save ₹${orig - price})</span></p>
-                <p class="text-secondary-small mb-12">Valid: ${fmt(c.startAt)} → ${fmt(c.endAt)}</p>
-                <div class="flex-row flex-gap-10">
-                    <button class="btn-secondary btn-small" data-action="editCombo" data-id="${c.id}"><i data-lucide="edit-3" class="icon-14"></i> Edit</button>
-                    <button class="btn-secondary btn-small" data-action="deleteCombo" data-id="${c.id}"><i data-lucide="trash-2" class="icon-14"></i> Delete</button>
-                </div>
-            </div>`;
+            <tr class="glass-card p-20">
+                <td>
+                    <div style="font-weight:800;">${escapeHtml(c.name || 'Unnamed Combo')}</div>
+                </td>
+                <td style="font-size:13px;color:var(--text-secondary);">${escapeHtml(itemsTxt)}</td>
+                <td style="font-weight:700;">₹${orig} → ₹${price}</td>
+                <td style="font-weight:700;color:var(--text-secondary);">${escapeHtml(disc)}</td>
+                <td>
+                    <span class="stock-badge ${statusClass}">${statusLabel}</span>
+                </td>
+                <td style="font-size:12px;color:var(--text-secondary);">${fmt(c.startAt)} → ${fmt(c.endAt)}</td>
+                <td>
+                    <label class="toggle-switch">
+                        <input type="checkbox" data-action="toggleCombo" data-id="${c.id}" ${disabled ? '' : 'checked'} onchange="window.__toggleCombo('${c.id}', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <button class="btn-secondary btn-small" data-action="editCombo" data-id="${c.id}"><i data-lucide="edit-3" class="icon-14"></i></button>
+                    <button class="btn-secondary btn-small" data-action="deleteCombo" data-id="${c.id}"><i data-lucide="trash-2" class="icon-14"></i></button>
+                </td>
+            </tr>`;
         }).join('');
-        loadLucide().then(() => window.lucide?.createIcons({ root: list }));
+        loadLucide().then(() => window.lucide?.createIcons({ root: tbody }));
     });
 }
+
+window.__toggleCombo = async (id, enabled) => {
+    try {
+        await update(Outlet.ref(`combos/${id}`), {
+            disabled: !enabled,
+            disabledAt: !enabled ? Date.now() : null,
+            disabledBy: !enabled ? (window.currentUserId || 'admin') : null
+        });
+        showToast(`${!enabled ? 'Paused' : 'Activated'} combo`, 'success');
+    } catch (e) {
+        console.error('[Combos] Toggle failed:', e);
+        showToast('Failed to update combo status', 'error');
+    }
+};
 
 export const editCombo = (id) => showComboModal(id);
 

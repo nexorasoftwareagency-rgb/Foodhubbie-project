@@ -1504,7 +1504,20 @@
                         </button>
                     </div>
                     <p class="text-secondary-small mb-14">Combos appear at the top of the customer QR menu and WhatsApp webview. Each combo bundles dishes at a discount for a limited time.</p>
-                    <div id="comboList" class="dashboard-grid"></div>
+                    <table class="premium-table-v4">
+                        <thead>
+                            <tr>
+                                <th style="width:22%">Combo</th>
+                                <th style="width:26%">Items</th>
+                                <th style="width:14%">Price</th>
+                                <th style="width:12%">Discount</th>
+                                <th style="width:10%">Status</th>
+                                <th style="width:16%">Valid</th>
+                                <th style="width:20%">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comboListBody"></tbody>
+                    </table>
                     <div id="noCombosMsg" class="text-secondary-small text-center p-16">No combos yet. Click "Add Combo" to create one.</div>
                 </div>
             </div>
