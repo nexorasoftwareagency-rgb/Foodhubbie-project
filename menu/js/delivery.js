@@ -14,8 +14,7 @@ import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../share
 import { validateCoupon } from './discount.js';
 import { placeDeliveryOrder } from './delivery-order.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
-import { isIOS, isStandalone, canShowNativeInstallPrompt, promptInstall, getStoredPhone, savePhone, subscribeToNotifications } from './pwa-install.js';
-import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
+import { initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
 
 const M = {
     categories: [], dishes: [], combos: [],
@@ -81,6 +80,22 @@ async function boot() {
             }
             M._tokenValid = true;
         }
+
+        initCustomer({ mode: 'delivery' });
+        const profile = getProfile();
+        if (profile) {
+            const nameInput = document.getElementById('checkoutName');
+            const phoneInput = document.getElementById('checkoutPhone');
+            if (nameInput && !nameInput.value) nameInput.value = profile.name || '';
+            if (phoneInput && !phoneInput.value) phoneInput.value = profile.phone || '';
+        }
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('tab') === 'notifications' || params.get('order')) {
+            openNotificationsTab();
+            UI.showScreen('screenPromotions');
+            renderPromotionsScreen();
+        }
+        maybeStartOnboarding({ mode: 'delivery' });
     } catch (e) {
         console.error('[Delivery] boot failed', e);
         UI.showToast('Could not load the menu — please retry.', 'error');
@@ -755,82 +770,9 @@ async function renderPromotionsScreen() {
         _storeSettingsCache = snap.val() || {};
     }
     UI.renderPromotionsLinks(_storeSettingsCache);
-
-    // ── PWA Install / iOS / Notify Cards ────────────────────────────
-    const installCard = document.getElementById('pwaInstallCard');
-    const iosCard = document.getElementById('pwaIosCard');
-    const notifyCard = document.getElementById('pwaNotifyCard');
-    const installBtn = document.getElementById('btnPwaInstall');
-    const notifyBtn = document.getElementById('btnPwaNotify');
-
-    // Reset all
-    installCard?.classList.add('hidden');
-    iosCard?.classList.add('hidden');
-    notifyCard?.classList.add('hidden');
-
-    // Install card (Chromium only, when beforeinstallprompt is available)
-    if (!isIOS() && canShowNativeInstallPrompt() && installCard && installBtn) {
-        installCard.classList.remove('hidden');
-        installBtn.onclick = async () => {
-            haptic(15);
-            const outcome = await promptInstall();
-            if (outcome === 'accepted') {
-                UI.showToast('App installed!', 'success');
-                installCard.classList.add('hidden');
-            }
-        };
-    }
-
-    // iOS instructions card (iOS only, not yet standalone)
-    if (isIOS() && !isStandalone() && iosCard) {
-        iosCard.classList.remove('hidden');
-    }
-
-    // Notify card (all platforms)
-    // On iOS, only show if already standalone (push requires install-first)
-    // On Chromium, show regardless of install state
-    const showNotify = isIOS() ? isStandalone() : true;
-    if (showNotify && notifyCard && notifyBtn) {
-        notifyCard.classList.remove('hidden');
-        const phone = getStoredPhone();
-        const alreadySubscribed = phone !== ''; // if phone exists, assume subscribed
-        if (alreadySubscribed) {
-            notifyCard.classList.add('sent');
-            notifyBtn.style.display = 'none';
-        }
-        notifyBtn.onclick = async () => {
-            haptic(15);
-            let phone = getStoredPhone();
-            if (!phone) {
-                // First time: ask for phone via native prompt
-                const input = prompt('Enter your mobile number for order updates:');
-                if (!input) return;
-                const saved = savePhone(input);
-                if (!saved.ok) {
-                    UI.showToast(saved.error, 'error');
-                    return;
-                }
-                phone = saved.phone;
-            }
-            notifyBtn.disabled = true;
-            notifyBtn.textContent = 'Enabling…';
-            const result = await subscribeToNotifications();
-            if (result.ok) {
-                UI.showToast('Notifications enabled!', 'success');
-                notifyCard.classList.add('sent');
-                notifyBtn.style.display = 'none';
-            } else {
-                UI.showToast(result.error || 'Could not enable notifications', 'error');
-                notifyBtn.disabled = false;
-                notifyBtn.textContent = 'Enable';
-            }
-        };
-    }
+    await renderCustomerPromotions(_storeSettingsCache, 'delivery');
 }
 
-// ---------------------------------------------------------------
-// Place Order — direct write (menu/js/delivery-order.js), no chat handoff
-// ---------------------------------------------------------------
 document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) => {
     if (M._placing) return;
     if (cartIsEmpty()) { UI.showToast('Your cart is empty', 'error'); return; }
@@ -858,6 +800,7 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
     if (!address) { UI.showToast('Please enter your delivery address', 'error'); return; }
 
     M._placing = true;
+    rememberIdentity(name, phone);
     // ponytail: invalidate token IMMEDIATELY on click to prevent double-submit race
     // (guard at line 425 checks _tokenValid; doing it here beats any race to the write)
     if (M.token) M._tokenValid = false;
@@ -941,5 +884,11 @@ function showOrderSuccess(total, botPhone) {
 // Connectivity banner
 // ---------------------------------------------------------------
 document.getElementById('btnRetryConnection')?.addEventListener('click', () => window.location.reload());
+
+window.addEventListener('fh:open-order', () => {
+    openNotificationsTab();
+    UI.showScreen('screenPromotions');
+    renderPromotionsScreen();
+});
 
 boot();
