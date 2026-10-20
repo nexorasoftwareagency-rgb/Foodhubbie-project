@@ -815,12 +815,19 @@ function updateDashboardStats(orders) {
     const activeToday = todayOrders.filter(o => !['Delivered', 'Served', 'Cancelled'].includes(o.status)).length;
     const pending = todayOrders.filter(o => ["Placed", "Confirmed"].includes(o.status)).length;
 
+    const riders = state.ridersList || [];
+    const ridersOnline = riders.filter(r => isRiderFresh(r)).length;
+
     // Update UI
     const els = {
         'statOrders': activeToday,
         'statPending': pending,
         'statRevenue': `₹${revenue.toLocaleString()}`,
-        'statRidersActive': (state.ridersList || []).filter(r => isRiderFresh(r)).length
+        'statRidersActive': ridersOnline,
+        'badgeRevenue': todayOrders.length ? `${todayOrders.length} order${todayOrders.length === 1 ? '' : 's'} today` : 'No orders yet',
+        'badgeOrders': 'today',
+        'badgePending': pending ? 'awaiting action' : 'clear',
+        'badgeRiders': `of ${riders.length}`
     };
 
     Object.entries(els).forEach(([id, val]) => {
@@ -856,7 +863,7 @@ async function renderPriorityOrders(orders) {
         .slice(0, 8); // Show a few more on dashboard
 
     if (priority.length === 0) {
-        container.innerHTML = `<div class="empty-state-mini">✅ All caught up! No pending orders.</div>`;
+        container.innerHTML = `<div class="empty-state-mini"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px;margin-right:6px;"><path d="M20 6 9 17l-5-5"/></svg>No pending orders right now.</div>`;
         return;
     }
 
@@ -926,7 +933,7 @@ async function renderTopItems(orders) {
                 <div class="rank-box">#${i+1}</div>
                 <div class="info-main">
                     <span class="title">${escapeHtml(name)}</span>
-                    <span class="sub">Popular Choice</span>
+                    ${i === 0 ? '<span class="sub">Best seller</span>' : ''}
                 </div>
             </div>
             <div class="value-chip">${qty} SOLD</div>
@@ -943,10 +950,11 @@ async function renderTopCustomers(orders) {
 
     const custData = {};
     orders.forEach(o => {
-        const phone = o.phone || "Walk-in";
-        if (!custData[phone]) custData[phone] = { name: o.customerName || "Walk-in", total: 0, count: 0 };
-        custData[phone].total += (Number(o.total) || 0);
-        custData[phone].count += 1;
+        const name = o.customerName || "Walk-in";
+        const key = name.trim().toLowerCase();
+        if (!custData[key]) custData[key] = { name, total: 0, count: 0 };
+        custData[key].total += Number(o.total) || 0;
+        custData[key].count += 1;
     });
 
     const topCusts = Object.values(custData)

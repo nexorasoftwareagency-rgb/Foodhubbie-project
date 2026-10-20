@@ -380,6 +380,55 @@ html, body {
     grid-template-columns: repeat(4, 1fr);
     gap: 16px;
 }
+/* Dashboard command strip: typography-led KPIs, one accent, hairline dividers */
+#tab-dashboard .kpi-strip {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr 1fr 1fr;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 16px;
+    overflow: hidden;
+}
+#tab-dashboard .kpi-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 18px 22px;
+}
+#tab-dashboard .kpi-stat + .kpi-stat { border-left: 1px solid var(--border-color, #e5e7eb); }
+#tab-dashboard .kpi-stat__value {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--text-main, #0f172a);
+    font-variant-numeric: tabular-nums;
+}
+#tab-dashboard .kpi-stat--primary .kpi-stat__value {
+    font-size: 34px;
+    color: var(--primary, #E84908);
+}
+#tab-dashboard .kpi-stat__label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted, #64748b);
+}
+#tab-dashboard .kpi-stat__delta {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-sub, #64748b);
+}
+@media (max-width: 640px) {
+    #tab-dashboard .kpi-strip { grid-template-columns: 1fr 1fr; }
+    #tab-dashboard .kpi-stat + .kpi-stat { border-left: 0; }
+    #tab-dashboard .kpi-stat { padding: 14px 16px; border-top: 1px solid var(--border-color, #e5e7eb); }
+    #tab-dashboard .kpi-stat:nth-child(odd) { border-right: 1px solid var(--border-color, #e5e7eb); }
+    #tab-dashboard .kpi-stat:nth-child(-n+2) { border-top: 0; }
+    #tab-dashboard .kpi-stat--primary .kpi-stat__value { font-size: 28px; }
+}
 #tab-riderAnalytics .kpi-row {
     grid-template-columns: repeat(5, 1fr);
 }
@@ -9658,7 +9707,7 @@ body.pos-selection-mode .walkin-picker {
     height: 10px;
 }
 #tab-dashboard .recent-section .premium-table-v4 .status {
-    white-space: nowrap;
+    white-space: normal;
     font-size: 10px;
     padding: 2px 6px;
 }
@@ -9677,6 +9726,32 @@ body.pos-selection-mode .walkin-picker {
 #tab-dashboard .recent-section .premium-table-v4 .btn-action-v4 i {
     width: 12px;
     height: 12px;
+}
+/* Desktop: fixed column widths so all 8 columns fit without a horizontal scrollbar */
+@media (min-width: 992px) {
+    #tab-dashboard .recent-section .premium-table-v4 { table-layout: fixed; }
+    #tab-dashboard .recent-section .premium-table-v4 th:nth-child(1),
+    #tab-dashboard .recent-section .premium-table-v4 td:nth-child(1) { width: 128px; }
+    #tab-dashboard .recent-section .premium-table-v4 th:nth-child(2),
+    #tab-dashboard .recent-section .premium-table-v4 td:nth-child(2) { width: 96px; }
+    #tab-dashboard .recent-section .premium-table-v4 th:nth-child(3),
+    #tab-dashboard .recent-section .premium-table-v4 td:nth-child(3) { width: 70px; }
+    #tab-dashboard .recent-section .premium-table-v4 th:nth-child(4),
+    #tab-dashboard .recent-section .premium-table-v4 td:nth-child(4) { width: 58px; }
+    #tab-dashboard .recent-section .premium-table-v4 th:nth-child(5),
+    #tab-dashboard .recent-section .premium-table-v4 td:nth-child(5) { width: 58px; }
+    #tab-dashboard .recent-section .premium-table-v4 th:nth-child(6),
+    #tab-dashboard .recent-section .premium-table-v4 td:nth-child(6) { width: 110px; }
+    #tab-dashboard .recent-section .premium-table-v4 th:nth-child(7),
+    #tab-dashboard .recent-section .premium-table-v4 td:nth-child(7) { width: 66px; }
+    #tab-dashboard .recent-section .premium-table-v4 th:nth-child(8),
+    #tab-dashboard .recent-section .premium-table-v4 td:nth-child(8) { width: 108px; }
+    #tab-dashboard .recent-section .premium-table-v4 .identity-info-v4 { min-width: 0; }
+    #tab-dashboard .recent-section .premium-table-v4 .identity-info-v4 .name { overflow: hidden; text-overflow: ellipsis; }
+    #tab-dashboard .recent-section .premium-table-v4 select { width: 100%; max-width: 100%; min-width: 0; }
+    #tab-dashboard .recent-section .premium-table-v4 .status-dropdown { max-width: 100%; min-width: 0; }
+    #tab-dashboard .recent-section .premium-table-v4 .status-dropdown-trigger { white-space: normal; line-height: 1.15; text-align: left; max-width: 100%; }
+    #tab-dashboard .recent-section .premium-table-v4 .action-group-v4 { flex-wrap: wrap; }
 }
 .outlet-badge { background: #15803d; }
 .status-paid, .status-delivered, .trend-up { color: #15803d; }

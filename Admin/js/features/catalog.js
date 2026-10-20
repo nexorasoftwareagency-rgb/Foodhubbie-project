@@ -1005,9 +1005,9 @@ function _initBulkActions() {
     if (!bar) return;
 
     // Select all / deselect all
-    document.getElementById('btnBulkEnable')?.addEventListener('click', () => _bulkToggleCombos(true));
-    document.getElementById('btnBulkDisable')?.addEventListener('click', () => _bulkToggleCombos(false));
-    document.getElementById('btnBulkDelete')?.addEventListener('click', _bulkDeleteCombos);
+    document.getElementById('btnBulkEnable')?.addEventListener('click', () => window.__bulkToggleCombos(true));
+    document.getElementById('btnBulkDisable')?.addEventListener('click', () => window.__bulkToggleCombos(false));
+    document.getElementById('btnBulkDelete')?.addEventListener('click', () => window.__bulkDeleteCombos());
     document.getElementById('btnBulkCancel')?.addEventListener('click', () => {
         document.querySelectorAll('#comboListBody .combo-row-select').forEach(cb => cb.checked = false);
         _updateBulkActionBar();
