@@ -98,13 +98,14 @@ export function renderWalkinCategoryTabs() {
     if (!container) return;
 
     container.innerHTML = `
-        <div class="category-tab ${state.activeWalkinCategory === 'All' ? 'active' : ''}" data-action="filterWalkinByCategory" data-val="All">All</div>
+        <div class="category-tab ${state.activeWalkinCategory === 'All' ? 'active' : ''}" role="button" data-action="filterWalkinByCategory" data-val="All">All</div>
     `;
 
     state.categories.forEach(cat => {
         const tab = document.createElement('div');
         tab.className = `category-tab ${state.activeWalkinCategory === cat.name ? 'active' : ''}`;
-        tab.innerText = escapeHtml(cat.name);
+        tab.setAttribute('role', 'button');
+        tab.innerText = cat.name;
         tab.dataset.action = "filterWalkinByCategory";
         tab.dataset.val = cat.name;
         container.appendChild(tab);
@@ -159,7 +160,7 @@ export function renderWalkinDishGrid(dishes) {
         const oosClass = isOos ? ' oos-wrap is-out-of-stock' : ' oos-wrap';
         const oosOverlay = isOos ? '<div class="oos-overlay">Currently Unavailable</div>' : '';
         return `
-            <div class="pos-dish-btn-v4${oosClass}" data-action="openPOSSelectionModal" data-id="${d.id}"${isOos ? ' data-out-of-stock="true"' : ''}>
+            <div class="pos-dish-btn-v4${oosClass}" role="button" data-action="openPOSSelectionModal" data-id="${d.id}"${isOos ? ' data-out-of-stock="true"' : ''}>
                 <div class="dish-visual">
                     <img src="${escapeHtml(d.image || 'assets/images/placeholder-dish.png')}" alt="${escapeHtml(d.name)}" loading="lazy">
                     <div class="dish-overlay">
@@ -488,9 +489,9 @@ export async function renderWalkinCart() {
                    <button class="btn-remove-v4 flex-center flex-gap-6 fs-11" data-action="walkinRemoveItem" data-id="${key}">
                        <i data-lucide="trash-2" style="width:12px;"></i> Remove
                    </button>
-                   <button class="btn-remove-v4 flex-center flex-gap-6 fs-11 ml-8" data-action="openCartAddonPicker" data-id="${key}" title="Edit add-ons for this item">
+                   ${item.comboId ? '' : `<button class="btn-remove-v4 flex-center flex-gap-6 fs-11 ml-8" data-action="openCartAddonPicker" data-id="${key}" title="Edit add-ons for this item">
                        <i data-lucide="settings-2" style="width:12px;"></i> Edit
-                   </button>
+                   </button>`}
                 </div>
             </div>
         `;
@@ -499,6 +500,11 @@ export async function renderWalkinCart() {
     await loadLucide();
     window.lucide.createIcons({ root: list });
 
+    // Re-evaluate the auto discount when the cart total changed (a frozen amount
+    // would show a stale total that differs from what submit re-computes).
+    if (state.walkinAutoDiscount && state.walkinAutoDiscount.subtotal !== subtotal) {
+        state.walkinAutoDiscount = null;
+    }
     let discountValue = state.walkinDiscount;
     let discountLabel = null;
     if (state.walkinDiscountPct > 0) {
@@ -513,12 +519,12 @@ export async function renderWalkinCart() {
             // Exclude combo lines from discount matching — they already have their discount baked into unitPrice
             const nonCombo = items.filter(i => i.size !== 'Combo');
             const evalResult = await evaluateDiscount({
-                customer: null, subtotal, couponCode: null,
+                customer: null, subtotal, couponCode: state.walkinCouponCode || null,
                 cart: nonCombo.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
                 channel: 'pos'
             });
             if (evalResult && evalResult.amount > 0) {
-                state.walkinAutoDiscount = evalResult;
+                state.walkinAutoDiscount = { ...evalResult, subtotal };
                 discountValue = evalResult.amount;
                 discountLabel = evalResult.label;
             }
@@ -529,10 +535,14 @@ export async function renderWalkinCart() {
     const de = _dineinSettings;
     const taxRates = (de.taxRates && Array.isArray(de.taxRates) && de.taxRates.length > 0) ? de.taxRates : (de.taxEnabled !== false ? [{ name: de.taxName || 'GST', rate: typeof de.taxRate === 'number' ? de.taxRate : 5 }] : []);
     const scPct = typeof de.serviceChargeRate === 'number' ? de.serviceChargeRate : 0;
-    const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
+    // GST is charged on the net taxable value (after trade discounts — CGST Sec 15(3)(a)).
+    const roundedDiscount = Math.max(0, Math.round(discountValue));
+    const taxable = Math.max(0, subtotal - roundedDiscount);
+    const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(taxable * (r.rate / 100) * 100) / 100 }));
     const tax = taxItems.reduce((s, t) => s + t.amount, 0);
+    // Service charge from settings (unchanged policy).
     const sc = de.serviceChargeEnabled === true ? Math.round(subtotal * (scPct / 100) * 100) / 100 : 0;
-    const finalTotal = Math.max(0, subtotal - discountValue + tax + sc);
+    const finalTotal = Math.max(0, taxable + tax + sc);
 
     document.getElementById("walkinSubtotal").innerText = `₹${subtotal.toLocaleString()}`;
 
@@ -542,10 +552,10 @@ export async function renderWalkinCart() {
         if (discRow) discRow.classList.remove('hidden');
         const isPct = state.walkinDiscountPct > 0 || state.walkinAutoDiscount?.discount?.mode === 'percent';
         if (discVal) discVal.innerText = isPct
-            ? `-₹${discountValue.toLocaleString()} (${state.walkinDiscountPct || state.walkinAutoDiscount?.discount?.value}%)`
+            ? `-₹${roundedDiscount.toLocaleString()} (${state.walkinDiscountPct || state.walkinAutoDiscount?.discount?.value}%)`
             : discountLabel
-            ? `-₹${discountValue.toLocaleString()} (${discountLabel})`
-            : `-₹${discountValue.toLocaleString()}`;
+            ? `-₹${roundedDiscount.toLocaleString()} (${discountLabel})`
+            : `-₹${roundedDiscount.toLocaleString()}`;
     } else {
         if (discRow) discRow.classList.add('hidden');
     }
@@ -646,10 +656,11 @@ export async function checkWalkinCustomer() {
         const snap = await get(Outlet.ref(`customers/${phone}`));
         const nameInput = document.getElementById("walkinCustName");
         
-        if (snap.exists()) {
+        // Never overwrite a name the cashier already typed for this sale.
+        if (snap.exists() && nameInput && !nameInput.value.trim()) {
             const c = snap.val();
             nameInput.value = c.name || "";
-            ui.showToast(`Welcome back, ${c.name || 'Customer'}!`, "success");
+            if (c.name) ui.showToast(`Welcome back, ${c.name}!`, "success");
         }
     } catch (e) { console.error(e); }
 }
@@ -712,7 +723,7 @@ export async function applyWalkinCoupon() {
             renderWalkinCart();
             return;
         }
-        state.walkinAutoDiscount = evalResult;
+        state.walkinAutoDiscount = { ...evalResult, subtotal };
         state.walkinCouponCode = code;
         if (hint) {
             hint.classList.remove('hidden');
@@ -885,6 +896,19 @@ export async function submitWalkinSale() {
             const dish = freshDishes[item.id];
             if (!dish) throw new Error(`Item '${item.name}' is no longer available.`);
 
+            // Combo lines carry a baked (discounted) unit price — validate against
+            // the current dish base price and keep the baked price as-is.
+            if (item.comboId) {
+                const basePrice = Number(dish.price ?? (dish.sizes ? Object.values(dish.sizes)[0] : 0)) || 0;
+                const original = Math.round(basePrice * item.qty * 100) / 100;
+                item.comboLineOriginal = original;
+                if (!(item.price > 0 && item.price <= original)) {
+                    throw new Error(`Combo price for '${item.name}' is invalid — re-add the combo.`);
+                }
+                validatedSubtotal += (item.price * item.qty);
+                continue;
+            }
+
             // Validate Base Price
             let basePrice = 0;
             if (dish.sizes && dish.sizes[item.size]) {
@@ -923,13 +947,10 @@ export async function submitWalkinSale() {
         // Tax & Service Charge from dineinSettings (matches QR menu pattern)
         const dine = dineinSnap.val() || {};
         const taxRates = (dine.taxRates && Array.isArray(dine.taxRates) && dine.taxRates.length > 0) ? dine.taxRates : (dine.taxEnabled !== false ? [{ name: dine.taxName || 'GST', rate: typeof dine.taxRate === 'number' ? dine.taxRate : 5 }] : []);
-        const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
-        const tax = taxItems.reduce((s, t) => s + t.amount, 0);
         const taxName = taxRates.map(r => r.name).join(' + ') || 'Tax';
-        const scEnabled = dine.serviceChargeEnabled === true;
         const scPct = typeof dine.serviceChargeRate === 'number' ? dine.serviceChargeRate : 0;
         const scName = dine.serviceChargeName || 'Service Charge';
-        const sc = scEnabled ? Math.round(subtotal * (scPct / 100) * 100) / 100 : 0;
+        const scEnabled = dine.serviceChargeEnabled === true;
 
         // Determine final discount: manual overrides auto
         let discountValue = 0;
@@ -978,6 +999,13 @@ export async function submitWalkinSale() {
             }
         }
         discountValue = Math.max(0, Math.round(discountValue));
+        const isManualDiscount = discountSource === 'manual:flat' || discountSource === 'manual:percent';
+
+        // GST on the net taxable value after discount (CGST Sec 15(3)(a)).
+        const taxable = Math.max(0, subtotal - discountValue);
+        const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(taxable * (r.rate / 100) * 100) / 100 }));
+        const tax = taxItems.reduce((s, t) => s + t.amount, 0);
+        const sc = scEnabled ? Math.round(subtotal * (scPct / 100) * 100) / 100 : 0;
 
         // Approval ceiling: a manual discount above settings/Security/discountCeilingPct
         // needs a manager PIN before the sale is written.
@@ -985,7 +1013,7 @@ export async function submitWalkinSale() {
         const counterStaffUid = sessionStorage.getItem('counterStaffUid') || state.adminData?.uid;
         if (!await gateManualDiscountPin({ discountValue, subtotal, discountId, staffUid: counterStaffUid })) return;
 
-        const total = Math.max(0, subtotal + tax + sc - discountValue);
+        const total = Math.max(0, taxable + tax + sc);
 
         const today = new Date();
         const dd = today.getDate().toString().padStart(2, '0');
@@ -1140,6 +1168,10 @@ export async function submitWalkinSale() {
 export async function openCartAddonPicker(cartKey) {
     const item = state.walkinCart[cartKey];
     if (!item) return;
+    if (item.comboId) {
+        ui.showToast("Remove and re-add the combo to change it", "warning");
+        return;
+    }
 
     // Fetch full dish data for addons
     const snap = await get(Outlet.ref(`dishes/${item.id}`));
@@ -1279,7 +1311,10 @@ export function addComboToWalkinCart(comboId) {
                 size: 'Combo',
                 price: unit,
                 qty: qty,
-                addons: []
+                addons: [],
+                comboId: combo.id,
+                comboName: combo.name,
+                comboLineOriginal: Math.round(e.base * qty * 100) / 100
             };
         }
         added += qty;

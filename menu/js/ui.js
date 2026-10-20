@@ -341,9 +341,9 @@ export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serv
         taxRows.classList.toggle('hidden', taxItems.length === 0);
     }
 
-    // Service charge row (only when the customer opted in)
+    // Service charge row
     const scRow = document.getElementById('cartServiceChargeRow');
-    if (scRow) scRow.classList.toggle('hidden', sc <= 0);
+    if (scRow) scRow.classList.toggle('hidden', !scEnabled);
     if (el('cartServiceChargeName')) el('cartServiceChargeName').textContent = serviceChargeName || 'Service Charge';
     if (el('cartServiceChargePct')) el('cartServiceChargePct').textContent = String(scRate);
     if (el('cartServiceCharge')) el('cartServiceCharge').textContent = fmtMoney(sc);
@@ -639,7 +639,7 @@ export function renderSessionBillCard(session, ordersMap, taxName, taxPercent, t
     }
 
     const scRow = document.getElementById('sessionBillSCRow');
-    if (scRow) scRow.classList.toggle('hidden', !scEnabled || totalSC <= 0);
+    if (scRow) scRow.classList.toggle('hidden', !scEnabled);
     if (el('sessionBillSCLabel')) el('sessionBillSCLabel').textContent = `${serviceChargeName || 'Service Charge'} (${scRate}%)`;
     if (el('sessionBillSC')) el('sessionBillSC').textContent = fmtMoney(totalSC);
 

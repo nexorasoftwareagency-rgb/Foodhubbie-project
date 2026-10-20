@@ -91,17 +91,21 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
             qty: l.qty,
             price: l.unitPrice,
             addons: l.addons || [],
-            instructions: l.instructions || ''
+            instructions: l.instructions || '',
+            ...(l.comboId ? { comboId: l.comboId, comboName: l.comboName, comboLineOriginal: l.comboLineOriginal } : {})
         };
     });
 
     const subtotal = round2(cartSubtotal());
+    // GST must be charged on the net taxable value: trade discounts recorded on
+    // the invoice are excluded from the taxable value (CGST Sec 15(3)(a)).
+    const discountAmount = discount && discount.amount > 0 ? Math.min(round2(discount.amount), subtotal) : 0;
+    const taxable = round2(subtotal - discountAmount);
     const rates = (taxRates && Array.isArray(taxRates) && taxRates.length > 0) ? taxRates : (taxEnabled ? [{ name: 'Tax', rate: taxPercent }] : []);
-    const taxItems = rates.map(r => ({ name: r.name, rate: r.rate, amount: round2(subtotal * (r.rate / 100)) }));
+    const taxItems = rates.map(r => ({ name: r.name, rate: r.rate, amount: round2(taxable * (r.rate / 100)) }));
     const tax = taxItems.reduce((s, t) => s + t.amount, 0);
     const serviceCharge = serviceChargeEnabled ? round2(subtotal * (serviceChargeRate / 100)) : 0;
-    const discountAmount = discount && discount.amount > 0 ? Math.min(round2(discount.amount), subtotal + tax + serviceCharge) : 0;
-    const total = round2(subtotal + tax + serviceCharge - discountAmount);
+    const total = round2(taxable + tax + serviceCharge);
     const taxName = rates.map(r => r.name).join(' + ');
 
     const orderPayload = {

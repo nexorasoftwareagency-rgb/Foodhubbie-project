@@ -98,6 +98,11 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261020-040023-8b1a] Website top header redesign: proper button nav + working mobile menu across all website pages
+- TIER: 2 (medium-risk)
+- STATUS: IN PROGRESS
+- Started: 2026-10-20 04:00 UTC
+
 ### [20261019-075500-com2] Combos tab as menu-item-style cards; receipt shows COMBO groups + per-group savings + order Total Combo Savings; POS combo-line price-validation fix (was throwing)
 - TIER: 2 (medium-risk)
 - STATUS: DONE

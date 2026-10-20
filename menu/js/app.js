@@ -451,6 +451,7 @@ async function loadMenu() {
         .filter(([, c]) => isComboActive(c, now) && _comboVisibleForCustomer(c))
         .map(([id, c]) => ({ id, ...c }));
     renderMenuScreen();
+    renderRecentSearches();
 }
 
 function renderMenuScreen(searchTerm) {
@@ -702,6 +703,57 @@ document.getElementById('menuSortSelect')?.addEventListener('change', (e) => {
     M.sortKey = e.target.value;
     renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
 });
+
+// --- Recent searches ---
+function _getRecentSearches() {
+    try { return JSON.parse(sessionStorage.getItem('recentSearches') || '[]'); } catch (_) { return []; }
+}
+function _saveRecentSearch(term) {
+    if (!term || term.length < 2) return;
+    let recent = _getRecentSearches();
+    recent = recent.filter(t => t !== term);
+    recent.unshift(term);
+    if (recent.length > 8) recent.pop();
+    try { sessionStorage.setItem('recentSearches', JSON.stringify(recent)); } catch (_) {}
+    renderRecentSearches();
+}
+function renderRecentSearches() {
+    const container = document.getElementById('recentSearches');
+    if (!container) return;
+    const recent = _getRecentSearches();
+    if (!recent.length) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = recent.map(term => `
+        <button class="recent-search-chip" data-search-term="${esc(term)}">
+            ${esc(term)} <span class="remove" title="Remove">&times;</span>
+        </div>`).join('');
+    container.querySelectorAll('.recent-search-chip').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const term = btn.dataset.searchTerm;
+            const input = document.getElementById('dishSearchInput');
+            if (input) { input.value = term; input.focus(); }
+            renderMenuScreen(term);
+        });
+        btn.querySelector('.remove')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            let recent = _getRecentSearches();
+            recent = recent.filter(t => t !== btn.dataset.searchTerm);
+            try { sessionStorage.setItem('recentSearches', JSON.stringify(recent)); } catch (_) {}
+            renderRecentSearches();
+        });
+    });
+}
+// Hook into search input to save searches
+const _origSearchInput = document.getElementById('dishSearchInput');
+if (_origSearchInput) {
+    _origSearchInput.addEventListener('input', () => {
+        const val = _origSearchInput.value.trim();
+        if (val) _saveRecentSearch(val);
+    });
+}
 
 // ---------------------------------------------------------------
 // CUSTOMIZATION

@@ -23,15 +23,39 @@ window.ReceiptTemplates = {
      * @returns {String} Full HTML document string
      */
     generateThermalReceipt: function(order, store, isReprint = false) {
-        const itemsHtml = order.items.map(i => `
+        const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+        // Combo lines carry BOTH the menu (original) line value and the baked
+        // combo price. Billing standard: itemise at original price, then show
+        // combo savings as an explicit deduction, so the arithmetic reconciles.
+        const lineOrig = i => {
+            const orig = Number(i.comboOriginal || 0);
+            const paid = r2(Number(i.price || 0) * Number(i.quantity || 0));
+            return orig > paid ? r2(orig) : paid;
+        };
+        const itemTotal = r2(order.items.reduce((s, i) => s + lineOrig(i), 0));
+        const comboSavings = r2(order.items.reduce((s, i) => s + Math.max(0, lineOrig(i) - r2(Number(i.price || 0) * Number(i.quantity || 0))), 0));
+        const discount = r2(order.discount || 0);
+        const subtotalNet = r2(Number(order.subtotal != null ? order.subtotal : itemTotal) - discount);
+
+        let itemsHtml = '';
+        let curComboId = null;
+        order.items.forEach(i => {
+            const cid = i.comboId || '';
+            if (cid && cid !== curComboId) {
+                itemsHtml += `<tr><td colspan="3" class="bold" style="padding:6px 0 2px; font-size:0.85rem;">COMBO: ${this.escapeHtml(i.comboName || 'Combo')} 🎉</td></tr>`;
+            }
+            curComboId = cid || null;
+            itemsHtml += `
             <tr>
                 <td style="padding: 4px 0;">
-                    ${this.escapeHtml(i.name)} ${i.size && i.size !== "Regular" ? `<br><small style="font-size:0.7rem; opacity:0.8;">(${this.escapeHtml(i.size)})</small>` : ""}
+                    ${cid ? '   ↳ ' : ''}${this.escapeHtml(i.name)} ${i.size && i.size !== "Regular" ? `<br><small style="font-size:0.7rem; opacity:0.8;">(${this.escapeHtml(i.size)})</small>` : ""}
                 </td>
                 <td style="text-align:center;">${i.quantity}</td>
-                <td style="text-align:right;">${(i.price * i.quantity).toFixed(2)}</td>
+                <td style="text-align:right;">${lineOrig(i).toFixed(2)}</td>
             </tr>
-        `).join('');
+            ` + (i.addon ? `<tr><td colspan="3" style="padding:0 0 4px; font-size:0.7rem; opacity:0.8;">   — ${this.escapeHtml(i.addon)}</td></tr>` : '');
+        });
+        itemsHtml += `<tr><td colspan="3" style="border-top:1px dashed #000;"></td></tr>`;
 
         // Generate dynamic feedback link using base URL from settings or default
         const baseUrl = store.reviewUrl || `https://foodhubbie-qrmenu.web.app/feedback`;
@@ -139,13 +163,15 @@ window.ReceiptTemplates = {
                         <span>${order.items.reduce((sum, i) => sum + i.quantity, 0)}</span>
                     </div>
                     <div class="summary-row">
-                        <span>Subtotal:</span>
-                        <span>₹${Number(order.subtotal || 0).toFixed(2)}</span>
+                        <span>Item Total:</span>
+                        <span>₹${itemTotal.toFixed(2)}</span>
                     </div>
+                    ${comboSavings > 0 ? `<div class="summary-row" style="color:#047857;"><span class="bold">Combo Savings 🎉:</span> <span class="bold">-₹${comboSavings.toFixed(2)}</span></div>` : ''}
+                    ${discount > 0 ? `<div class="summary-row"><span class="bold">Discount${order.discountLabel ? ` (${this.escapeHtml(order.discountLabel)})` : ''}:</span> <span class="bold">-₹${discount.toFixed(2)}</span></div>` : ''}
+                    ${(comboSavings > 0 || discount > 0) ? `<div class="summary-row"><span>Subtotal (net):</span> <span>₹${subtotalNet.toFixed(2)}</span></div>` : ''}
                     ${order.taxItems && Array.isArray(order.taxItems) && order.taxItems.length > 0 ? order.taxItems.map(t => `<div class="summary-row"><span>${this.escapeHtml(t.name)} (${t.rate}%):</span> <span>₹${Number(t.amount).toFixed(2)}</span></div>`).join('') : (order.tax > 0 ? `<div class="summary-row"><span>${this.escapeHtml(order.taxName || 'Tax')}:</span> <span>₹${Number(order.tax).toFixed(2)}</span></div>` : '')}
-                    ${order.serviceCharge > 0 ? `<div class="summary-row"><span>${this.escapeHtml(order.serviceChargeName || 'Service Charge')}${order.serviceChargeRate ? ` (${String(order.serviceChargeRate)}%)` : ''}:</span> <span>₹${Number(order.serviceCharge).toFixed(2)}</span></div>` : ''}
                     ${order.deliveryFee > 0 ? `<div class="summary-row"><span>Delivery:</span> <span>₹${Number(order.deliveryFee).toFixed(2)}</span></div>` : ''}
-                    ${order.discount > 0 ? `<div class="summary-row"><span class="bold">Discount${order.discountLabel ? ` (${this.escapeHtml(order.discountLabel)})` : ''}:</span> <span class="bold">-₹${Number(order.discount).toFixed(2)}</span></div>` : ''}
+                    ${order.serviceCharge > 0 ? `<div class="summary-row"><span>${this.escapeHtml(order.serviceChargeName || 'Service Charge')}${order.serviceChargeRate ? ` (${String(order.serviceChargeRate)}%)` : ''}:</span> <span>₹${Number(order.serviceCharge).toFixed(2)}</span></div>` : ''}
                     
                     <div class="summary-row grand-total">
                         <span style="font-size: 1rem;">NET PAYABLE</span>
