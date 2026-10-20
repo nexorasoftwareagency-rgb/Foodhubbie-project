@@ -35,19 +35,20 @@
 
 ## Pages
 - https://foodhubbie-web.web.app/ — product, features, pricing
-- https://foodhubbie-web.web.app/architecture.html — customer/dine-in/rider/admin flows
-- https://foodhubbie-web.web.app/signup.html — restaurant registration (writes onboardingRequests)
-- https://foodhubbie-web.web.app/book.html — demo/inquiry via WhatsApp
-- https://foodhubbie-web.web.app/contact.html — WhatsApp +91 97246 49971
+- https://foodhubbie-web.web.app/architecture — customer/dine-in/rider/admin flows
+- https://foodhubbie-web.web.app/signup — restaurant registration (writes onboardingRequests)
+- https://foodhubbie-web.web.app/privacy - privacy policy: what data is stored, who can see it, deletion requests
+- https://foodhubbie-web.web.app/book — demo/inquiry via WhatsApp
+- https://foodhubbie-web.web.app/contact — WhatsApp +91 97246 49971
 
-- https://foodhubbie-web.web.app/qr-ordering.html — QR code ordering system
-- https://foodhubbie-web.web.app/pos-billing.html — POS billing software
-- https://foodhubbie-web.web.app/kds.html — kitchen display system
-- https://foodhubbie-web.web.app/riders.html — rider delivery management
-- https://foodhubbie-web.web.app/use-cases.html — use cases: cafes, family restaurants, cloud kitchens
-- https://foodhubbie-web.web.app/pricing.html — pricing (₹1–5 per order, ₹500 setup)
-- https://foodhubbie-web.web.app/compare.html — vs monthly-fee POS suites
-- https://foodhubbie-web.web.app/best-software.html — 2026 software buyer's guide
+- https://foodhubbie-web.web.app/qr-ordering — QR code ordering system
+- https://foodhubbie-web.web.app/pos-billing — POS billing software
+- https://foodhubbie-web.web.app/kds — kitchen display system
+- https://foodhubbie-web.web.app/riders — rider delivery management
+- https://foodhubbie-web.web.app/use-cases — use cases: cafes, family restaurants, cloud kitchens
+- https://foodhubbie-web.web.app/pricing — pricing (₹1–5 per order, ₹500 setup)
+- https://foodhubbie-web.web.app/compare — vs monthly-fee POS suites
+- https://foodhubbie-web.web.app/best-software — 2026 software buyer's guide
 
 ## Live apps
 - Admin: https://foodhubbie-admins.web.app
