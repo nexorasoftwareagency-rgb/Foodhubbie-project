@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Outlet Restaurant Software | FoodHubbie ERP</title>
+<meta name="description" content="Run two, five or ten outlets from one login: separate menus, staff, riders and reports per outlet, with each location's orders billed on its own usage.">
+<link rel="canonical" href="https://foodhubbie-web.web.app/multi-outlet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Multi-Outlet Restaurant Software | FoodHubbie ERP">
+<meta property="og:description" content="One login, every location. Each outlet keeps its own menu, tables, riders, staff and reports — and its own order-based billing.">
+<meta property="og:image" content="https://foodhubbie-web.web.app/assets/shots/admin-dashboard.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="shared.css?v=2">
+<script src="shared/nav.js" defer></script>
+<style>
+  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%)}
+  h1{font-size:clamp(28px,5vw,42px)}
+  section{padding:64px 0 0}
+  h2{font-size:clamp(24px,4vw,36px);letter-spacing:-.02em;font-weight:800;margin-bottom:14px}
+  .lead{color:var(--muted);max-width:680px;margin-bottom:36px;font-size:16px;line-height:1.7}
+  .imgs{display:grid;grid-template-columns:1.4fr 1fr;gap:24px;margin-top:24px;align-items:start}
+  @media(max-width:860px){.imgs{grid-template-columns:1fr}}
+  .imgs figure{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin:0}
+  .imgs img{width:100%;display:block}
+  .imgs figcaption{padding:14px 18px;font-size:13px;color:var(--muted)}
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px}
+  @media(max-width:860px){.benefits{grid-template-columns:1fr}}
+  .benefit{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+  .benefit .ico{font-size:30px;margin-bottom:10px}
+  .benefit b{font-size:15px;display:block;margin-bottom:6px}
+  .benefit p{font-size:13.5px;color:var(--muted);line-height:1.65}
+  .faq{max-width:760px;margin-top:28px}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .faq summary{font-weight:700;font-size:15px;cursor:pointer}
+  .faq p{color:var(--muted);font-size:14px;line-height:1.7;margin-top:10px}
+  .cta-strip{background:linear-gradient(135deg,#fff0e6,#ffe3d2);border:1px solid #ffd9c2;border-radius:var(--radius);padding:36px;text-align:center;margin-top:64px}
+  .cta-strip h2{margin-bottom:8px}
+  .cta-strip p{color:var(--muted);margin-bottom:20px}
+  .cta-strip a{margin:4px}
+  footer{margin-top:72px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+</style>
+<script type="module" src="shared/ga4.js"></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"Multi-Outlet","item":"https://foodhubbie-web.web.app/multi-outlet"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-20","mainEntity":[{"@type":"Question","name":"Do I pay a licence fee for each outlet?","acceptedAnswer":{"@type":"Answer","text":"No. There is no per-location licence. Each outlet's orders are billed on their own per-order usage, so a second outlet on the same login adds only the orders it actually takes."}},{"@type":"Question","name":"Is each outlet's data separate?","acceptedAnswer":{"@type":"Answer","text":"Yes. Menus, tables, QR codes, orders, customers, staff, riders and reports belong to a specific outlet. Switching outlets switches the data set, and a staff account only reaches the outlets it was created for."}},{"@type":"Question","name":"Can an outlet manager see the other outlets?","acceptedAnswer":{"@type":"Answer","text":"Only if you give them access. Staff accounts are created per outlet, so a manager at one branch works inside that branch unless the owner adds them to another."}},{"@type":"Question","name":"Is there a combined view across all outlets?","acceptedAnswer":{"@type":"Answer","text":"Each outlet's dashboard, reports and billing are its own. Comparing outlets means switching between them rather than a single merged revenue number, and there is no consolidated multi-outlet report today."}}]}
+</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav aria-label="Main">
+      <a class="logo" href="/">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
+      <div class="links" id="navLinks">
+        <a class="link" href="/architecture">How It Works</a>
+        <a class="link" href="/qr-ordering">QR Ordering</a>
+        <a class="link" href="/pos-billing">POS Billing</a>
+        <a class="link" href="/kds">Kitchen</a>
+        <a class="link" href="/pricing">Pricing</a>
+        <div class="nav-more">
+          <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="nav-more-menu" id="navMoreMenu">
+            <a class="link" href="/riders">Riders</a>
+            <a class="link" href="/table-management">Tables</a>
+            <a class="link" href="/whatsapp-ordering">WhatsApp Ordering</a>
+            <a class="link" href="/whatsapp-marketing">WhatsApp Marketing</a>
+            <a class="link" href="/inventory">Inventory</a>
+            <a class="link" href="/multi-outlet">Multi-Outlet</a>
+            <a class="link" href="/use-cases">Cafes &amp; Restos</a>
+            <a class="link" href="/compare">Compare</a>
+            <a class="link" href="/best-software">2026 Guide</a>
+            <a class="link" href="/contact">Contact</a>
+          </div>
+        </div>
+        <a class="nav-cta" href="/signup">Start free trial</a>
+      </div>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--muted);margin-bottom:14px"><a href="/" style="color:var(--muted);text-decoration:none">Home</a>&nbsp;/&nbsp;<span style="color:var(--brand);font-weight:600">Multi-Outlet</span></nav>
+    <div class="kicker">For growing groups</div>
+    <h1>Multi-Outlet Restaurant Software</h1>
+    <p class="sub">A second branch should not mean a second system. Add an outlet to the same login, give it its own menu and staff, and let each location take orders, run its kitchen and answer to its own numbers.</p>
+    <div class="ctas" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px">
+      <a class="btn" href="/signup">Start free trial →</a>
+      <a class="btn ghost" href="/book">Book a 15-min demo →</a>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+
+  <section>
+    <h2>One login, separate businesses</h2>
+    <p class="lead">The outlet switcher in the top bar is the whole idea: every screen — orders, tables, menu, inventory, customers, riders, reports — redraws for the outlet you selected. Staff at the branch keep their own accounts; you keep the view from the top.</p>
+    <div class="imgs">
+      <figure>
+        <img src="assets/shots/admin-dashboard.webp" alt="FoodHubbie admin dashboard with outlet switcher" loading="lazy" decoding="async">
+        <figcaption>The dashboard is per outlet — orders, KPIs and live state change with the switcher.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/shots/dashboard.webp" alt="Outlet-level reporting in FoodHubbie" loading="lazy" decoding="async">
+        <figcaption>Each outlet answers to its own revenue and order reports.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>What is shared, what is separate</h2>
+    <div class="benefits">
+      <div class="benefit"><div class="ico">🏪</div><b>Separate by default</b><p>Menu and prices, tables and their QR codes, inventory, customers, riders, staff and reports all belong to one outlet.</p></div>
+      <div class="benefit"><div class="ico">🔑</div><b>Your login spans them</b><p>One owner account switches between outlets. No second subscription, no separate dashboard to keep open.</p></div>
+      <div class="benefit"><div class="ico">👥</div><b>Staff stay in their branch</b><p>Accounts are created per outlet, so a manager or rider sees the location they were added to.</p></div>
+      <div class="benefit"><div class="ico">📱</div><b>Menus can differ</b><p>A cafe's menu and a restaurant's menu are separate catalogues — different items, prices and availability, on their own QR codes.</p></div>
+      <div class="benefit"><div class="ico">🛵</div><b>Riders per location</b><p>Each branch assigns from its own rider list, with its own delivery ledger, because a rider cannot deliver for two kitchens at once.</p></div>
+      <div class="benefit"><div class="ico">🧾</div><b>Usage per outlet</b><p>Orders are counted where they are taken, so the bill for a quiet branch is not inflated by a busy one.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Set up the second outlet</h2>
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><div><b>Add the outlet</b><p>Name and location under the same account, so it appears in the switcher.</p></div></div>
+      <div class="step"><div class="step-n">2</div><div><b>Build or copy the menu</b><p>Start from the existing catalogue or build a local one — the branch's prices and specials can differ from day one.</p></div></div>
+      <div class="step"><div class="step-n">3</div><div><b>Add tables and staff</b><p>Create the branch's tables to print its QRs, then add the manager and staff accounts that work there.</p></div></div>
+      <div class="step"><div class="step-n">4</div><div><b>Run both from one place</b><p>Switch outlet to check the evening's sales, then switch back. Each branch's <a href="/pos-billing">POS</a>, <a href="/kds">kitchen display</a> and <a href="/riders">riders</a> stay on their own data.</p></div></div>
+    </div>
+    <p class="note">Adding an outlet is a setup step with your onboarding — see <a href="/pricing">pricing</a> for the one-time setup and per-order rates.</p>
+  </section>
+
+  <section>
+    <h2>Multi-outlet questions, answered plainly</h2>
+    <div class="faq">
+      <details><summary>Do I pay a licence fee for each outlet?</summary><p>No. There is no per-location licence. Each outlet's orders are billed on their own per-order usage, so a second outlet on the same login adds only the orders it actually takes.</p></details>
+      <details><summary>Is each outlet's data separate?</summary><p>Yes. Menus, tables, QR codes, orders, customers, staff, riders and reports belong to a specific outlet. Switching outlets switches the data set, and a staff account only reaches the outlets it was created for.</p></details>
+      <details><summary>Can an outlet manager see the other outlets?</summary><p>Only if you give them access. Staff accounts are created per outlet, so a manager at one branch works inside that branch unless the owner adds them to another.</p></details>
+      <details><summary>Is there a combined view across all outlets?</summary><p>Each outlet's dashboard, reports and billing are its own. Comparing outlets means switching between them rather than a single merged revenue number, and there is no consolidated multi-outlet report today.</p></details>
+    </div>
+  </section>
+
+  <section class="cta-strip">
+    <h2>Open the next branch on the same system</h2>
+    <p>Rates and setup are on the <a href="/pricing">pricing page</a>; the demo can run on two outlets at once.</p>
+    <a class="btn" href="/signup">Start free trial →</a>
+    <a class="btn ghost" href="https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%20run%20more%20than%20one%20outlet%20and%20want%20to%20see%20multi-outlet%20setup.%20(From%3A%20foodhubbie-web.web.app)" target="_blank" rel="noopener">WhatsApp us</a>
+  </section>
+
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="/">Home</a> · <a href="/multi-outlet">Multi-Outlet</a> · <a href="/pricing">Pricing</a> · <a href="/use-cases">Cafes &amp; Restos</a> · <a href="/compare">Compare</a> · <a href="/contact">Contact</a> · <a href="/privacy">Privacy</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
