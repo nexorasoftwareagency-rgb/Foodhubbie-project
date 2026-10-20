@@ -1127,6 +1127,7 @@ export async function showComboModal(comboId = null) {
         perCustomerLimit: combo?.perCustomerLimit ?? 0,
         perDayLimit: combo?.perDayLimit ?? 0,
         couponCode: combo?.couponCode || '',
+        customerSegment: combo?.customerSegment || 'all',
         image: combo?.image || null,
         file: null
     };
@@ -1305,6 +1306,15 @@ export async function showComboModal(comboId = null) {
                     </select>
                     <small class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Customers must enter this code at checkout to redeem the combo</small>
                 </div>
+                <div class="cbw-sec-title" style="margin-top:18px;">Customer Segment</div>
+                <div class="form-row" style="margin:0;">
+                    <select id="cbwCustomerSegment" class="form-input">
+                        <option value="all">All customers</option>
+                        <option value="new">New customers only</option>
+                        <option value="returning">Returning customers only</option>
+                    </select>
+                    <small class="form-hint" style="display:block;margin-top:4px;color:var(--text-sub);font-size:12px;">Show this combo only to customers matching the selected segment</small>
+                </div>
             </section>
 
             <section class="cbw-section" data-step="4" aria-label="Step 5: Review and Publish">
@@ -1335,6 +1345,7 @@ export async function showComboModal(comboId = null) {
         draft.perCustomerLimit = parseInt($('cbwPerCustomerLimit').value) || 0;
         draft.perDayLimit = parseInt($('cbwPerDayLimit').value) || 0;
         draft.couponCode = $('cbwCouponCode')?.value.trim() || null;
+        draft.customerSegment = $('cbwCustomerSegment')?.value || 'all';
     };
 
     // hydrate edited combo / current draft into the controls
@@ -1348,6 +1359,7 @@ export async function showComboModal(comboId = null) {
     $('cbwPerCustomerLimit').value = draft.perCustomerLimit;
     $('cbwPerDayLimit').value = draft.perDayLimit;
     $('cbwCouponCode').value = draft.couponCode || '';
+    $('cbwCustomerSegment').value = draft.customerSegment || 'all';
     if (draft.image) {
         $('cbwPreview').src = draft.image;
         $('cbwPreview').classList.remove('hidden');
@@ -1603,6 +1615,7 @@ export async function showComboModal(comboId = null) {
                 perCustomerLimit: draft.perCustomerLimit > 0 ? draft.perCustomerLimit : null,
                 perDayLimit: draft.perDayLimit > 0 ? draft.perDayLimit : null,
                 couponCode: draft.couponCode,
+                customerSegment: draft.customerSegment || 'all',
                 sourceOid: Outlet.current,
                 updatedAt: Date.now()
             };

@@ -447,7 +447,7 @@ async function loadMenu() {
     M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.stock !== false).map(([id, d]) => ({ id, ...d }));
     const now = Date.now();
     M.combos = Object.entries(comboSnap.val() || {})
-        .filter(([, c]) => isComboActive(c, now))
+        .filter(([, c]) => isComboActive(c, now) && _comboVisibleForCustomer(c))
         .map(([id, c]) => ({ id, ...c }));
     renderMenuScreen();
 }
@@ -488,6 +488,16 @@ function _comboVegMark(c) {
         if (d && d.veg === false) return 'combo-nonveg';
     }
     return 'combo-veg';
+}
+
+function _comboVisibleForCustomer(c) {
+    const segment = c.customerSegment || 'all';
+    if (segment === 'all') return true;
+    const session = Session.session || {};
+    const orderCount = (session.orders || []).length;
+    if (segment === 'new') return orderCount === 0;
+    if (segment === 'returning') return orderCount > 0;
+    return true;
 }
 function _comboData(c) {
     const entries = Object.values(c.items || {}).map(it => {
@@ -859,7 +869,9 @@ function renderCartScreen() {
     document.getElementById(id)?.addEventListener('click', () => { renderCartScreen(); UI.showScreen('screenCart'); });
 });
 document.getElementById('btnBackFromCart')?.addEventListener('click', () => UI.showScreen('screenMenu'));
-document.getElementById('btnBackFromCustomize')?.addEventListener('click', () => UI.showScreen('screenMenu'));
+document.getElementById('cartSCOptIn')?.addEventListener('change', () => {
+    UI.updateCartTotals(cartSubtotal(), M.taxPercent, M.taxName, M.taxEnabled, M.serviceChargeEnabled, M.serviceChargeName, M.serviceChargeRate, M.appliedDiscount, M.taxRates);
+});document.getElementById('btnBackFromCustomize')?.addEventListener('click', () => UI.showScreen('screenMenu'));
 
 // Guest count stepper
 document.getElementById('btnGuestMinus')?.addEventListener('click', () => { haptic(10); M.guestCount = Math.max(1, M.guestCount - 1); M._guestCountDirty = true; document.getElementById('guestCountVal').textContent = String(M.guestCount); });
@@ -907,7 +919,7 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async () => 
         // Fire-and-forget: contact save is important but shouldn't block order
         saveCheckoutContact(name, phone, M.guestCount, note).catch(e => console.warn('[PlaceOrder] saveCheckoutContact failed:', e?.message || e));
 
-        const { orderId } = await placeOrder({ taxPercent: M.taxPercent, taxEnabled: M.taxEnabled, taxRates: M.taxRates, serviceChargeEnabled: M.serviceChargeEnabled, serviceChargeRate: M.serviceChargeRate, customerName: name, customerPhone: phone, discount: M.appliedDiscount });
+        const { orderId } = await placeOrder({ taxPercent: M.taxPercent, taxEnabled: M.taxEnabled, taxRates: M.taxRates, serviceChargeEnabled: M.serviceChargeEnabled, applyServiceCharge: document.getElementById('cartSCOptIn')?.checked === true, serviceChargeRate: M.serviceChargeRate, customerName: name, customerPhone: phone, discount: M.appliedDiscount });
         M.appliedDiscount = null;
         watchOrder(orderId);
         UI.showScreen('screenTracking');
