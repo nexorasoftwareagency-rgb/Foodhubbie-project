@@ -83,8 +83,13 @@
         <div class="search-row">
             <div class="search-input-wrap">
                 <svg class="icon" style="width:16px;height:16px;color:var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="text" id="dishSearchInput" placeholder="Search for dishes…">
+                <input type="search" id="dishSearchInput" name="dishSearch" placeholder="Search for dishes…" autocomplete="off" aria-label="Search for dishes" enterkeyhint="search">
             </div>
+            <select id="menuSortSelect" class="form-input" style="margin-left:8px;">
+                <option value="popularity">Popularity</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+            </select>
         </div>
 
         <!-- Combo Offers / Today's Deals (promoted section under top bar) -->
@@ -141,7 +146,7 @@
                 </div>
 
                 <div class="custom-section-label">Special Instructions (Optional)</div>
-                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicy…"></textarea>
+                <textarea class="special-instructions" id="specialInstructions" name="specialInstructions" aria-label="Special instructions for this dish" placeholder="e.g. No onion, less spicy…"></textarea>
             </div>
         </div>
         <div class="custom-footer">
@@ -173,12 +178,12 @@
              at checkout (not before browsing), per the spec's UX decision -->
         <div id="checkoutFieldsWrap" class="checkout-fields-wrap hidden">
             <div class="form-group-mini">
-                <label>Your Name <span style="color:var(--error)">*</span></label>
-                <input type="text" id="checkoutName" placeholder="e.g. Rohan" required>
+                <label for="checkoutName">Your Name <span style="color:var(--error)">*</span></label>
+                <input type="text" id="checkoutName" name="name" autocomplete="name" placeholder="e.g. Rohan" required>
             </div>
             <div class="form-group-mini">
-                <label>Mobile Number <span style="color:var(--error)">*</span></label>
-                <input type="tel" id="checkoutPhone" placeholder="e.g. 98765 43210" maxlength="10" inputmode="numeric" required>
+                <label for="checkoutPhone">Mobile Number <span style="color:var(--error)">*</span></label>
+                <input type="tel" id="checkoutPhone" name="phone" autocomplete="tel" placeholder="e.g. 98765 43210" maxlength="10" inputmode="numeric" required>
             </div>
             <div class="form-group-mini">
                 <label>Guests</label>
@@ -189,13 +194,13 @@
                 </div>
             </div>
             <div class="form-group-mini">
-                <label>Special Note (Optional)</label>
-                <textarea id="checkoutNote" placeholder="e.g. Birthday celebration, allergens…" rows="2" maxlength="200"></textarea>
+                <label for="checkoutNote">Special Note (Optional)</label>
+                <textarea id="checkoutNote" name="note" placeholder="e.g. Birthday celebration, allergens…" rows="2" maxlength="200"></textarea>
             </div>
             <div class="form-group-mini discount-input-wrap" id="discountInputWrap">
-                <label>Discount Code (Optional)</label>
+                <label for="discountCodeInput">Discount Code (Optional)</label>
                 <div class="discount-input-row">
-                    <input type="text" id="discountCodeInput" placeholder="e.g. WELCOME20" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    <input type="text" id="discountCodeInput" name="discountCode" placeholder="e.g. WELCOME20" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false">
                     <button type="button" class="btn-apply-discount" id="btnApplyDiscount">Apply</button>
                 </div>
                 <div class="discount-msg hidden" id="discountMsg"></div>
@@ -533,7 +538,7 @@
 
 </div>
 
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/app.js"></script>
 <script>

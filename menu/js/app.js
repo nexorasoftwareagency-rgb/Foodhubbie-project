@@ -21,6 +21,7 @@ import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
 const M = {
     categories: [], dishes: [], combos: [],
     activeCategory: 'all',
+    sortKey: 'popularity',
     draftDish: null, draftSize: null, draftAddons: [], draftQty: 1,
     _savedDraft: null, // preserved draft when group choice interrupts customization
     taxEnabled: true, taxName: 'GST', taxPercent: 5, taxRates: [{ name: 'GST', rate: 5 }],
@@ -465,6 +466,14 @@ function renderMenuScreen(searchTerm) {
     }
     if (searchTerm) dishes = dishes.filter(d => (d.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
+    // Sort dishes
+    if (M.sortKey === 'price-asc') {
+        dishes = [...dishes].sort((a, b) => (a.price || 0) - (b.price || 0));
+    } else if (M.sortKey === 'price-desc') {
+        dishes = [...dishes].sort((a, b) => (b.price || 0) - (a.price || 0));
+    }
+    // popularity: keep original order (RTDB order)
+
     // Hide dish list when "Combos" filter is active
     const dishList = document.getElementById('dishListContainer');
     const dishTitle = document.getElementById('menuSectionTitle');
@@ -689,6 +698,10 @@ document.getElementById('dishSearchInput')?.addEventListener('input', (e) => {
     const val = e.target.value.trim();
     _searchTimer = setTimeout(() => renderMenuScreen(val), 150);
 });
+document.getElementById('menuSortSelect')?.addEventListener('change', (e) => {
+    M.sortKey = e.target.value;
+    renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
+});
 
 // ---------------------------------------------------------------
 // CUSTOMIZATION
@@ -878,9 +891,7 @@ function renderCartScreen() {
     document.getElementById(id)?.addEventListener('click', () => { renderCartScreen(); UI.showScreen('screenCart'); });
 });
 document.getElementById('btnBackFromCart')?.addEventListener('click', () => UI.showScreen('screenMenu'));
-document.getElementById('cartSCOptIn')?.addEventListener('change', () => {
-    UI.updateCartTotals(cartSubtotal(), M.taxPercent, M.taxName, M.taxEnabled, M.serviceChargeEnabled, M.serviceChargeName, M.serviceChargeRate, M.appliedDiscount, M.taxRates);
-});document.getElementById('btnBackFromCustomize')?.addEventListener('click', () => UI.showScreen('screenMenu'));
+document.getElementById('btnBackFromCustomize')?.addEventListener('click', () => UI.showScreen('screenMenu'));
 
 // Guest count stepper
 document.getElementById('btnGuestMinus')?.addEventListener('click', () => { haptic(10); M.guestCount = Math.max(1, M.guestCount - 1); M._guestCountDirty = true; document.getElementById('guestCountVal').textContent = String(M.guestCount); });
@@ -928,7 +939,7 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async () => 
         // Fire-and-forget: contact save is important but shouldn't block order
         saveCheckoutContact(name, phone, M.guestCount, note).catch(e => console.warn('[PlaceOrder] saveCheckoutContact failed:', e?.message || e));
 
-        const { orderId } = await placeOrder({ taxPercent: M.taxPercent, taxEnabled: M.taxEnabled, taxRates: M.taxRates, serviceChargeEnabled: M.serviceChargeEnabled, applyServiceCharge: document.getElementById('cartSCOptIn')?.checked === true, serviceChargeRate: M.serviceChargeRate, customerName: name, customerPhone: phone, discount: M.appliedDiscount });
+        const { orderId } = await placeOrder({ taxPercent: M.taxPercent, taxEnabled: M.taxEnabled, taxRates: M.taxRates, serviceChargeEnabled: M.serviceChargeEnabled, serviceChargeRate: M.serviceChargeRate, customerName: name, customerPhone: phone, discount: M.appliedDiscount });
         M.appliedDiscount = null;
         watchOrder(orderId);
         UI.showScreen('screenTracking');

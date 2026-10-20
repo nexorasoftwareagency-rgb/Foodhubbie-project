@@ -20,6 +20,7 @@ import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
 const M = {
     categories: [], dishes: [], combos: [],
     activeCategory: 'all',
+    sortKey: 'popularity',
     draftDish: null, draftSize: null, draftAddons: [], draftQty: 1,
     appliedDiscount: null,
     location: null,          // { lat, lng } — set once geolocation permission is granted
@@ -147,6 +148,12 @@ function renderMenuScreen(searchTerm) {
         if (activeCat) dishes = dishes.filter(d => d.category === activeCat.name);
     }
     if (searchTerm) dishes = dishes.filter(d => (d.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
+
+    if (M.sortKey === 'price-asc') {
+        dishes = [...dishes].sort((a, b) => (a.price || 0) - (b.price || 0));
+    } else if (M.sortKey === 'price-desc') {
+        dishes = [...dishes].sort((a, b) => (b.price || 0) - (a.price || 0));
+    }
 
     const dishList = document.getElementById('dishListContainer');
     const dishTitle = document.getElementById('menuSectionTitle');
@@ -343,6 +350,10 @@ document.getElementById('dishSearchInput')?.addEventListener('input', (e) => {
     clearTimeout(_searchTimer);
     const val = e.target.value.trim();
     _searchTimer = setTimeout(() => renderMenuScreen(val), 150);
+});
+document.getElementById('menuSortSelect')?.addEventListener('change', (e) => {
+    M.sortKey = e.target.value;
+    renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
 });
 
 // ---------------------------------------------------------------

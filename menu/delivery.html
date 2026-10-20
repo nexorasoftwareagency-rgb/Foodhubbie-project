@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Open Graph / WhatsApp Link Preview -->
-<meta property="og:title" content="FoodHubbie � Order for Delivery">
+<meta property="og:title" content="FoodHubbie — Order for Delivery">
 <meta property="og:description" content="Browse our menu, customize your order, and get it delivered hot! Fresh food delivered to your door.">
 <meta property="og:image" content="https://foodhubbie-qrmenu.web.app/assets/og-banner.jpg">
 <meta property="og:image:width" content="1200">
@@ -15,16 +15,16 @@
 <meta property="og:site_name" content="FoodHubbie">
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="FoodHubbie � Order for Delivery">
+<meta name="twitter:title" content="FoodHubbie — Order for Delivery">
 <meta name="twitter:description" content="Browse our menu, customize your order, and get it delivered hot!">
 <meta name="twitter:image" content="https://foodhubbie-qrmenu.web.app/assets/og-banner.jpg">
-<title>FoodHubbie � Order for Delivery</title>
+<title>FoodHubbie — Order for Delivery</title>
 <meta name="theme-color" content="#E84908">
 <link rel="manifest" href="manifest.json">
 <script src="js/dynamic-manifest.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<!-- SAME stylesheet as the dine-in QR app (menu/index.html) � every dish
+<!-- SAME stylesheet as the dine-in QR app (menu/index.html) — every dish
      card, button, color, and font below comes from this file, unmodified,
      so this page looks identical to the existing menu app. -->
 <link rel="stylesheet" href="css/app.css">
@@ -55,16 +55,16 @@
 <body>
 
 <a href="#screenMenu" class="skip-link">Skip to main content</a>
-<h1 class="sr-only">FoodHubbie � Delivery Menu</h1>
+<h1 class="sr-only">FoodHubbie — Delivery Menu</h1>
 
 <div id="app">
 
     <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner"></div>
-        <p style="font-size:13px;color:var(--text-sub);">Loading menu�</p>
+        <p style="font-size:13px;color:var(--text-sub);">Loading menu…</p>
     </div>
     <div id="offlineBanner" class="offline-banner">
-        Connection trouble �
+        Connection trouble —
         <button id="btnRetryConnection" type="button" style="background:none;border:none;color:#fff;text-decoration:underline;font:inherit;font-weight:800;cursor:pointer;padding:0;margin-left:4px;">Tap to retry</button>
     </div>
 
@@ -89,8 +89,13 @@
         <div class="search-row">
             <div class="search-input-wrap">
                 <svg class="icon" style="width:16px;height:16px;color:var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="text" id="dishSearchInput" placeholder="Search for dishes�">
+                <input type="search" id="dishSearchInput" name="dishSearch" placeholder="Search for dishes…" autocomplete="off" aria-label="Search for dishes" enterkeyhint="search">
             </div>
+            <select id="menuSortSelect" class="form-input" style="margin-left:8px;">
+                <option value="popularity">Popularity</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+            </select>
         </div>
 
         <!-- Combo Offers / Today's Deals (promoted section under top bar) -->
@@ -107,8 +112,8 @@
         <div id="menuCartBar" class="menu-cart-bar hidden">
             <button id="btnViewCartBar">
                 <span id="menuCartBarCount">0 items</span>
-                <span id="menuCartBarTotal">?0</span>
-                <span>View Cart �</span>
+                <span id="menuCartBarTotal">₹0</span>
+                <span>View Cart →</span>
             </button>
         </div>
     </div>
@@ -131,7 +136,7 @@
             <div class="custom-body">
                 <div class="custom-title-row">
                     <div class="custom-title" id="customDishName">Dish Name</div>
-                    <div class="custom-base-price" id="customBasePrice">?0</div>
+                    <div class="custom-base-price" id="customBasePrice">₹0</div>
                 </div>
                 <p class="custom-desc" id="customDishDesc" style="display:none;"></p>
 
@@ -146,7 +151,7 @@
                 </div>
 
                 <div class="custom-section-label">Special Instructions (Optional)</div>
-                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicy�"></textarea>
+                <textarea class="special-instructions" id="specialInstructions" name="specialInstructions" aria-label="Special instructions for this dish" placeholder="e.g. No onion, less spicy…"></textarea>
             </div>
         </div>
         <div class="custom-footer">
@@ -162,7 +167,7 @@
         </div>
     </div>
 
-    <!-- ============== SCREEN: CART � same as QR app's cart, minus the
+    <!-- ============== SCREEN: CART — same as QR app's cart, minus the
          table-only "Guests" stepper, plus Address + Location. Discount
          code entry point is IDENTICAL (menu/js/discount.js, unmodified). ============== -->
     <div id="screenCart" class="screen">
@@ -178,25 +183,25 @@
 
         <div id="checkoutFieldsWrap" class="checkout-fields-wrap hidden">
             <div class="form-group-mini">
-                <label>Your Name <span style="color:var(--error)">*</span></label>
-                <input type="text" id="checkoutName" placeholder="e.g. Rohan" required>
+                <label for="checkoutName">Your Name <span style="color:var(--error)">*</span></label>
+                <input type="text" id="checkoutName" name="name" autocomplete="name" placeholder="e.g. Rohan" required>
             </div>
             <div class="form-group-mini">
-                <label>Mobile Number <span style="color:var(--error)">*</span></label>
-                <input type="tel" id="checkoutPhone" placeholder="e.g. 98765 43210" maxlength="10" inputmode="numeric" required>
+                <label for="checkoutPhone">Mobile Number <span style="color:var(--error)">*</span></label>
+                <input type="tel" id="checkoutPhone" name="phone" autocomplete="tel" placeholder="e.g. 98765 43210" maxlength="10" inputmode="numeric" required>
             </div>
             <div class="form-group-mini">
-                <label>Delivery Address <span style="color:var(--error)">*</span></label>
-                <textarea id="checkoutAddress" placeholder="House / Street / Landmark" rows="2" maxlength="200" required></textarea>
+                <label for="checkoutAddress">Delivery Address <span style="color:var(--error)">*</span></label>
+                <textarea id="checkoutAddress" name="address" autocomplete="street-address" placeholder="House / Street / Landmark" rows="2" maxlength="200" required></textarea>
             </div>
             <div class="form-group-mini">
-                <label>Special Note (Optional)</label>
-                <textarea id="checkoutNote" placeholder="e.g. Ring the bell, extra spicy�" rows="2" maxlength="200"></textarea>
+                <label for="checkoutNote">Special Note (Optional)</label>
+                <textarea id="checkoutNote" name="note" placeholder="e.g. Ring the bell, extra spicy…" rows="2" maxlength="200"></textarea>
             </div>
             <div class="form-group-mini discount-input-wrap" id="discountInputWrap">
-                <label>Discount Code (Optional)</label>
+                <label for="discountCodeInput">Discount Code (Optional)</label>
                 <div class="discount-input-row">
-                    <input type="text" id="discountCodeInput" placeholder="e.g. WELCOME20" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    <input type="text" id="discountCodeInput" name="discountCode" placeholder="e.g. WELCOME20" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false">
                     <button type="button" class="btn-apply-discount" id="btnApplyDiscount">Apply</button>
                 </div>
                 <div class="discount-msg hidden" id="discountMsg"></div>
@@ -204,12 +209,12 @@
         </div>
 
         <div class="cart-summary" id="cartSummaryWrap">
-            <div class="cart-summary-row"><span>Item Total</span><span id="cartSubtotal">?0</span></div>
+            <div class="cart-summary-row"><span>Item Total</span><span id="cartSubtotal">₹0</span></div>
             <div id="cartTaxRows"></div>
-            <div class="cart-summary-row hidden" id="cartDeliveryRow"><span>Delivery Fee</span><span id="cartDeliveryFee">?0</span></div>
-            <div class="cart-summary-row hidden" id="cartServiceChargeRow"><span><span id="cartServiceChargeName">Service Charge</span> (<span id="cartServiceChargePct">0</span>%)</span><span id="cartServiceCharge">?0</span></div>
-            <div class="cart-summary-row cart-summary-discount hidden" id="cartDiscountRow"><span id="cartDiscountLabel">Discount</span><span id="cartDiscount">-?0</span></div>
-            <div class="cart-summary-row cart-summary-total"><span>Total</span><span id="cartTotal">?0</span></div>
+            <div class="cart-summary-row hidden" id="cartDeliveryRow"><span>Delivery Fee</span><span id="cartDeliveryFee">₹0</span></div>
+            <div class="cart-summary-row hidden" id="cartServiceChargeRow"><span><span id="cartServiceChargeName">Service Charge</span> (<span id="cartServiceChargePct">0</span>%)</span><span id="cartServiceCharge">₹0</span></div>
+            <div class="cart-summary-row cart-summary-discount hidden" id="cartDiscountRow"><span id="cartDiscountLabel">Discount</span><span id="cartDiscount">-₹0</span></div>
+            <div class="cart-summary-row cart-summary-total"><span>Total</span><span id="cartTotal">₹0</span></div>
             <button class="btn-place-order" id="btnPlaceOrder">PLACE ORDER</button>
         </div>
     </div>
@@ -260,9 +265,9 @@
         <div id="promotionsLinksContainer" class="promotions-links"></div>
     </div>
 
-    <!-- ============== BOTTOM NAVIGATION � Menu / Cart / Promos only.
+    <!-- ============== BOTTOM NAVIGATION — Menu / Cart / Promos only.
          Tracking, History, and table-only actions (Call Waiter / Other
-         Request) are intentionally NOT included � there's no table
+         Request) are intentionally NOT included — there's no table
          session and no order-tracking screen for delivery. ============== -->
     <nav id="bottomNav" class="bottom-nav hidden">
         <button class="bottom-nav-item active" data-bottom-tab="screenMenu">
@@ -287,7 +292,7 @@
 <!-- Location Permission Dialog -->
 <div id="locDialogOverlay" class="loc-dialog-overlay">
     <div class="loc-dialog">
-        <div class="loc-dialog-icon">??</div>
+        <div class="loc-dialog-icon">📍</div>
         <div class="loc-dialog-title">Enable Location</div>
         <div class="loc-dialog-desc">
             We need your location to calculate delivery fees and ensure your order reaches you accurately.
@@ -298,7 +303,7 @@
     </div>
 </div>
 
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/delivery.js"></script>
 <script>
