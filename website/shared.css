@@ -127,3 +127,5 @@ footer a:hover{color:#fff}
 .cmp .no{color:#9a3412;font-weight:700}
 .note{background:var(--brand-light);border:1px solid #ffd9c2;border-radius:12px;padding:16px 20px;font-size:14px;color:var(--ink);line-height:1.7;margin-top:22px}
 .note a{color:var(--brand-dark);font-weight:600}
+/* breadcrumb navs are inline text, not the header flex bar */
+nav[aria-label="Breadcrumb"]{display:block;height:auto;gap:0}

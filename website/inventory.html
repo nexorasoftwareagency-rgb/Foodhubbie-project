@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restaurant Inventory Management Software | FoodHubbie</title>
+<meta name="description" content="Restaurant inventory management software that deducts stock as orders come in, warns before you run out and hides sold-out dishes from the menu. CSV import, no hardware.">
+<link rel="canonical" href="https://foodhubbie-web.web.app/inventory">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Restaurant Inventory Management Software | FoodHubbie">
+<meta property="og:description" content="Stock deducts itself as orders come in, low-stock items warn you before service, and sold-out dishes stop being orderable — all inside the same dashboard as your POS.">
+<meta property="og:image" content="https://foodhubbie-web.web.app/assets/shots/inventory.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
+<link rel="preload" as="image" href="assets/shots/inventory.webp" fetchpriority="high">
+<link rel="stylesheet" href="shared.css?v=2">
+<script src="shared/nav.js" defer></script>
+<style>
+  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%)}
+  h1{font-size:clamp(28px,5vw,42px)}
+  section{padding:64px 0 0}
+  h2{font-size:clamp(24px,4vw,36px);letter-spacing:-.02em;font-weight:800;margin-bottom:14px}
+  .lead{color:var(--muted);max-width:680px;margin-bottom:36px;font-size:16px;line-height:1.7}
+  .img-hero{width:100%;border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px}
+  @media(max-width:860px){.benefits{grid-template-columns:1fr}}
+  .benefit{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+  .benefit .ico{font-size:30px;margin-bottom:10px}
+  .benefit b{font-size:15px;display:block;margin-bottom:6px}
+  .benefit p{font-size:13.5px;color:var(--muted);line-height:1.65}
+  .faq{max-width:760px;margin-top:28px}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .faq summary{font-weight:700;font-size:15px;cursor:pointer}
+  .faq p{color:var(--muted);font-size:14px;line-height:1.7;margin-top:10px}
+  .cta-strip{background:linear-gradient(135deg,#fff0e6,#ffe3d2);border:1px solid #ffd9c2;border-radius:var(--radius);padding:36px;text-align:center;margin-top:64px}
+  .cta-strip h2{margin-bottom:8px}
+  .cta-strip p{color:var(--muted);margin-bottom:20px}
+  .cta-strip a{margin:4px}
+  footer{margin-top:72px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+</style>
+<script type="module" src="shared/ga4.js"></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"Inventory Management","item":"https://foodhubbie-web.web.app/inventory"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-20","mainEntity":[{"@type":"Question","name":"Does stock deduct automatically when an order is placed?","acceptedAnswer":{"@type":"Answer","text":"Yes. When a dish is linked to an inventory item, placing an order reduces that item by the quantity sold — from QR table orders, POS bills and delivery orders alike. If no link exists, the system matches the inventory item by name."}},{"@type":"Question","name":"Do I need a barcode scanner or special hardware?","acceptedAnswer":{"@type":"Answer","text":"No. Stock counts are adjusted in the dashboard on any phone, tablet or laptop, and an existing stock sheet can be imported as CSV. There is no scanner or proprietary hardware to buy."}},{"@type":"Question","name":"Can I import the stock sheet I already keep in Excel?","acceptedAnswer":{"@type":"Answer","text":"Yes. Export it as CSV with the columns name, sku, stock, threshold, unit, supplier and cost, then import it — up to 500 rows per import. Units, suppliers and per-item cost come in with the stock."}},{"@type":"Question","name":"What happens when an item falls below its minimum?","acceptedAnswer":{"@type":"Answer","text":"The item shows a low-stock badge, and an item that is close to its minimum is flagged reorder-soon. Crossing the minimum raises a warning in the dashboard and writes it to the audit log, so the change is on record."}},{"@type":"Question","name":"Can I stop taking orders for a dish that has run out?","acceptedAnswer":{"@type":"Answer","text":"Yes. Each dish has an availability toggle tied to its stock item. Switch it off and customers can no longer order it from the QR menu; the kitchen and POS see the same state."}}]}
+</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav aria-label="Main">
+      <a class="logo" href="/">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
+      <div class="links" id="navLinks">
+        <a class="link" href="/architecture">How It Works</a>
+        <a class="link" href="/qr-ordering">QR Ordering</a>
+        <a class="link" href="/pos-billing">POS Billing</a>
+        <a class="link" href="/kds">Kitchen</a>
+        <a class="link" href="/pricing">Pricing</a>
+        <div class="nav-more">
+          <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="nav-more-menu" id="navMoreMenu">
+            <a class="link" href="/riders">Riders</a>
+            <a class="link" href="/whatsapp-ordering">WhatsApp Ordering</a>
+            <a class="link" href="/inventory">Inventory</a>
+            <a class="link" href="/use-cases">Cafes &amp; Restos</a>
+            <a class="link" href="/compare">Compare</a>
+            <a class="link" href="/best-software">2026 Guide</a>
+            <a class="link" href="/contact">Contact</a>
+          </div>
+        </div>
+        <a class="nav-cta" href="/signup">Start free trial</a>
+      </div>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--muted);margin-bottom:14px"><a href="/" style="color:var(--muted);text-decoration:none">Home</a>&nbsp;/&nbsp;<span style="color:var(--brand);font-weight:600">Inventory</span></nav>
+    <div class="kicker">Feature</div>
+    <h1>Restaurant Inventory Management Software</h1>
+    <p class="sub">Stock that moves with every order. Link an ingredient or item to the dishes it goes into, and the count drops as customers order — with a warning before you run out, not after the kitchen does.</p>
+    <div class="ctas" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px">
+      <a class="btn" href="/signup">Start free trial →</a>
+      <a class="btn ghost" href="/book">Book a 15-min demo →</a>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+
+  <section>
+    <h2>A stock sheet that updates itself</h2>
+    <p class="lead">Most restaurants track stock in a notebook or a spreadsheet that is accurate on Monday and fiction by Friday. Here the count lives next to the order flow: every QR table order, counter bill and delivery order reduces the linked inventory item, so the number you look at is the number after today's service.</p>
+    <figure>
+      <img class="img-hero" src="assets/shots/inventory.webp" alt="FoodHubbie restaurant inventory screen showing stock levels, minimum thresholds and cost per item" fetchpriority="high" decoding="async">
+      <figcaption style="color:var(--muted);font-size:13px;margin-top:10px">Stock, minimum threshold, unit, supplier and cost — per item, in the same dashboard as orders and billing.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>What it does on a normal day</h2>
+    <div class="benefits">
+      <div class="benefit"><div class="ico">📉</div><b>Deducts on every order</b><p>Dishes are linked to stock items, so a sale reduces the count without anyone touching a spreadsheet. Delivery and dine-in are counted the same way.</p></div>
+      <div class="benefit"><div class="ico">🔔</div><b>Warns before you run out</b><p>Each item has a minimum. When stock reaches it the item is marked low; close to it, it reads reorder-soon — so the purchase list is written before the rush, not during it.</p></div>
+      <div class="benefit"><div class="ico">🚫</div><b>Sold out means unorderable</b><p>Switch a dish's availability off and it stops appearing as orderable on the QR menu. No "sorry, that's finished" conversations from the kitchen to the counter.</p></div>
+      <div class="benefit"><div class="ico">📥</div><b>Your existing sheet imports</b><p>Bring your current list in as CSV — name, SKU, stock, minimum, unit, supplier, cost — up to 500 rows at a time. You do not re-type last month's count.</p></div>
+      <div class="benefit"><div class="ico">💰</div><b>Cost per item, not per guess</b><p>Each item carries its unit cost, which is what turns "we sold ₹40,000" into "we sold ₹40,000 and spent this much on stock".</p></div>
+      <div class="benefit"><div class="ico">🧾</div><b>Every change is logged</b><p>Manual adjustments and low-stock crossings go into the audit trail, with who changed what — useful when the count and the shelf disagree.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Spreadsheet vs built-in inventory</h2>
+    <p class="lead">A spreadsheet is free and familiar. It is also a second place to type the same numbers, and it never knows what was ordered.</p>
+    <div class="cmp-wrap">
+      <table class="cmp">
+        <thead><tr><th>&nbsp;</th><th>Spreadsheet</th><th>FoodHubbie inventory</th></tr></thead>
+        <tbody>
+          <tr><td>Updating the count</td><td class="no">Manually, at the end of the day</td><td class="yes">Deducted as orders are placed</td></tr>
+          <tr><td>Knowing what is nearly out</td><td class="no">Depends on who checks the sheet</td><td class="yes">Low-stock and reorder-soon flags per item</td></tr>
+          <tr><td>Stopping a sold-out dish</td><td class="no">Tell the waiter, hope it reaches the counter</td><td class="yes">Availability toggle — removed from the menu</td></tr>
+          <tr><td>Cost of goods</td><td class="no">Maintained separately, drifts</td><td class="yes">Unit cost sits on the item itself</td></tr>
+          <tr><td>Who changed what</td><td class="no">Nobody knows</td><td class="yes">Adjustments recorded in the audit log</td></tr>
+          <tr><td>Extra cost</td><td class="yes">Free</td><td class="yes">Included in the standard plan</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Inventory feeds the same reports as billing — see <a href="/pos-billing">POS and billing</a> for how day-close numbers are put together, and <a href="/pricing">pricing</a> for what the plan includes.</p>
+  </section>
+
+  <section>
+    <h2>Set it up once, in four steps</h2>
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><div><b>Import or add your items</b><p>CSV from your existing sheet, or add items one at a time: name, unit, supplier, cost, current stock.</p></div></div>
+      <div class="step"><div class="step-n">2</div><div><b>Set a minimum on each</b><p>The minimum is your reorder line. It is the number of units you never want to go below before the next delivery.</p></div></div>
+      <div class="step"><div class="step-n">3</div><div><b>Link items to dishes</b><p>Connect a dish to the stock it consumes so sales deduct the right item automatically.</p></div></div>
+      <div class="step"><div class="step-n">4</div><div><b>Check the flags daily</b><p>Low and reorder-soon items are already separated from the rest. Top up, adjust the count, or toggle a dish off for the evening.</p></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Inventory questions, answered plainly</h2>
+    <div class="faq">
+      <details><summary>Does stock deduct automatically when an order is placed?</summary><p>Yes. When a dish is linked to an inventory item, placing an order reduces that item by the quantity sold — from QR table orders, POS bills and delivery orders alike. If no link exists, the system matches the inventory item by name.</p></details>
+      <details><summary>Do I need a barcode scanner or special hardware?</summary><p>No. Stock counts are adjusted in the dashboard on any phone, tablet or laptop, and an existing stock sheet can be imported as CSV. There is no scanner or proprietary hardware to buy.</p></details>
+      <details><summary>Can I import the stock sheet I already keep in Excel?</summary><p>Yes. Export it as CSV with the columns name, sku, stock, threshold, unit, supplier and cost, then import it — up to 500 rows per import. Units, suppliers and per-item cost come in with the stock.</p></details>
+      <details><summary>What happens when an item falls below its minimum?</summary><p>The item shows a low-stock badge, and an item that is close to its minimum is flagged reorder-soon. Crossing the minimum raises a warning in the dashboard and writes it to the audit log, so the change is on record.</p></details>
+      <details><summary>Can I stop taking orders for a dish that has run out?</summary><p>Yes. Each dish has an availability toggle tied to its stock item. Switch it off and customers can no longer order it from the QR menu; the kitchen and POS see the same state.</p></details>
+    </div>
+  </section>
+
+  <section class="cta-strip">
+    <h2>Know what is in the store before service starts</h2>
+    <p>Inventory is part of the standard plan — the same ₹1–5 per order, ₹500 one-time setup, no separate module.</p>
+    <a class="btn" href="/signup">Start free trial →</a>
+    <a class="btn ghost" href="https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%27d%20like%20to%20see%20the%20inventory%20module.%20(From%3A%20foodhubbie-web.web.app)" target="_blank" rel="noopener">WhatsApp us</a>
+  </section>
+
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="/">Home</a> · <a href="/architecture">How It Works</a> · <a href="/pos-billing">POS Billing</a> · <a href="/kds">Kitchen Display</a> · <a href="/inventory">Inventory</a> · <a href="/whatsapp-ordering">WhatsApp Ordering</a> · <a href="/contact">Contact</a> · <a href="/privacy">Privacy</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Ordering System for Restaurants | FoodHubbie</title>
+<meta name="description" content="Customers order from your WhatsApp: menu, customizations, delivery status and rider details in one thread. Official Meta API — ₹5 per order or 1% of sales.">
+<link rel="canonical" href="https://foodhubbie-web.web.app/whatsapp-ordering">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="WhatsApp Ordering System for Restaurants | FoodHubbie">
+<meta property="og:description" content="Menu, customizations, order status and rider details — all in the chat your customers already use. No app to install, no commission on the order value.">
+<meta property="og:image" content="https://foodhubbie-web.web.app/assets/shots/whatsapp-bot.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
+<link rel="preload" as="image" href="assets/shots/whatsapp-bot.webp" fetchpriority="high">
+<link rel="stylesheet" href="shared.css?v=2">
+<script src="shared/nav.js" defer></script>
+<style>
+  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%)}
+  h1{font-size:clamp(28px,5vw,42px)}
+  section{padding:64px 0 0}
+  h2{font-size:clamp(24px,4vw,36px);letter-spacing:-.02em;font-weight:800;margin-bottom:14px}
+  .lead{color:var(--muted);max-width:680px;margin-bottom:36px;font-size:16px;line-height:1.7}
+  .img-hero{width:100%;border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px}
+  @media(max-width:860px){.benefits{grid-template-columns:1fr}}
+  .benefit{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+  .benefit .ico{font-size:30px;margin-bottom:10px}
+  .benefit b{font-size:15px;display:block;margin-bottom:6px}
+  .benefit p{font-size:13.5px;color:var(--muted);line-height:1.65}
+  .faq{max-width:760px;margin-top:28px}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .faq summary{font-weight:700;font-size:15px;cursor:pointer}
+  .faq p{color:var(--muted);font-size:14px;line-height:1.7;margin-top:10px}
+  .cta-strip{background:linear-gradient(135deg,#fff0e6,#ffe3d2);border:1px solid #ffd9c2;border-radius:var(--radius);padding:36px;text-align:center;margin-top:64px}
+  .cta-strip h2{margin-bottom:8px}
+  .cta-strip p{color:var(--muted);margin-bottom:20px}
+  .cta-strip a{margin:4px}
+  footer{margin-top:72px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+</style>
+<script type="module" src="shared/ga4.js"></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"WhatsApp Ordering","item":"https://foodhubbie-web.web.app/whatsapp-ordering"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-20","mainEntity":[{"@type":"Question","name":"Do customers need to install an app to order on WhatsApp?","acceptedAnswer":{"@type":"Answer","text":"No. They message the restaurant's WhatsApp number and the bot replies with the menu. Ordering, customizations and delivery updates all happen in the same chat they already have installed."}},{"@type":"Question","name":"Is my WhatsApp number at risk if I send order updates?","acceptedAnswer":{"@type":"Answer","text":"Orders are sent through Meta's official WhatsApp Cloud API, with approved message templates, rather than an unofficial connection. That is the sending route Meta supports for business messaging, which is why it carries no ban risk from bulk sends."}},{"@type":"Question","name":"Can I send offers and promotions on WhatsApp?","acceptedAnswer":{"@type":"Answer","text":"Yes, on the WhatsApp Official plans — campaigns go out as approved marketing templates at ₹1 per message, only to customers who opted in, and STOP is always honoured. Promotional campaigns are disabled on any non-official connection."}},{"@type":"Question","name":"Does the customer see delivery status in the chat?","acceptedAnswer":{"@type":"Answer","text":"Yes. Order confirmation, preparation and out-for-delivery updates are sent as WhatsApp messages, and the rider's name and phone number reach the customer when the order is assigned."}},{"@type":"Question","name":"How is WhatsApp ordering billed?","acceptedAnswer":{"@type":"Answer","text":"Orders on the WhatsApp Official plan are ₹5 per order, or 1% of total sales if you prefer the commission model. Promotional messages are ₹1 each, and the one-time setup is ₹500. QR and POS-only plans bill ₹1–2 per order and do not include WhatsApp."}}]}
+</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav aria-label="Main">
+      <a class="logo" href="/">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
+      <div class="links" id="navLinks">
+        <a class="link" href="/architecture">How It Works</a>
+        <a class="link" href="/qr-ordering">QR Ordering</a>
+        <a class="link" href="/pos-billing">POS Billing</a>
+        <a class="link" href="/kds">Kitchen</a>
+        <a class="link" href="/pricing">Pricing</a>
+        <div class="nav-more">
+          <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="nav-more-menu" id="navMoreMenu">
+            <a class="link" href="/riders">Riders</a>
+            <a class="link" href="/whatsapp-ordering">WhatsApp Ordering</a>
+            <a class="link" href="/inventory">Inventory</a>
+            <a class="link" href="/use-cases">Cafes &amp; Restos</a>
+            <a class="link" href="/compare">Compare</a>
+            <a class="link" href="/best-software">2026 Guide</a>
+            <a class="link" href="/contact">Contact</a>
+          </div>
+        </div>
+        <a class="nav-cta" href="/signup">Start free trial</a>
+      </div>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--muted);margin-bottom:14px"><a href="/" style="color:var(--muted);text-decoration:none">Home</a>&nbsp;/&nbsp;<span style="color:var(--brand);font-weight:600">WhatsApp Ordering</span></nav>
+    <div class="kicker">Feature</div>
+    <h1>WhatsApp Ordering System for Restaurants</h1>
+    <p class="sub">The ordering app your customer already has open. They message your restaurant, see the live menu, choose their options, and get order updates in the same thread — no download, no commission on the order value.</p>
+    <div class="ctas" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px">
+      <a class="btn" href="/signup">Start free trial →</a>
+      <a class="btn ghost" href="/book">Book a 15-min demo →</a>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+
+  <section>
+    <h2>Ordering where the conversation already happens</h2>
+    <p class="lead">QR ordering works at the table. WhatsApp ordering works everywhere else: the customer who called yesterday, the office order for twelve, the regular who wants the usual. They send a message, the bot answers with your menu, and the order lands in the same live dashboard as every other channel.</p>
+    <figure>
+      <img class="img-hero" src="assets/shots/whatsapp-bot.webp" alt="FoodHubbie WhatsApp ordering bot conversation with menu and order flow" fetchpriority="high" decoding="async">
+      <figcaption style="color:var(--muted);font-size:13px;margin-top:10px">The bot replies with the menu, takes the order and keeps the customer updated — inside WhatsApp.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>One order, from greeting to doorstep</h2>
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><div><b>The customer messages you</b><p>The bot answers instantly with a welcome and the menu, so the first reply is not "we'll get back to you".</p></div></div>
+      <div class="step"><div class="step-n">2</div><div><b>They choose what they want</b><p>Items and their options — size, spice, add-ons — come through exactly as your menu defines them, not as free text the kitchen has to interpret.</p></div></div>
+      <div class="step"><div class="step-n">3</div><div><b>It lands in your dashboard</b><p>The order appears with the channel marked WhatsApp, in the same list as QR and counter orders, and goes to the <a href="/kds">kitchen display</a> like any other.</p></div></div>
+      <div class="step"><div class="step-n">4</div><div><b>The customer gets updates</b><p>Order confirmed, being prepared, out for delivery — and when a rider is assigned, the rider's name and number arrive on WhatsApp.</p></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What the restaurant gets out of it</h2>
+    <div class="benefits">
+      <div class="benefit"><div class="ico">📱</div><b>No app to sell</b><p>Customers already have WhatsApp. There is no download, no account creation and no "install our app" conversation at the counter.</p></div>
+      <div class="benefit"><div class="ico">🔄</div><b>Repeat orders get easier</b><p>The chat history sits where the customer already looks, so re-ordering the usual is a message away instead of a fresh walk-through of the menu.</p></div>
+      <div class="benefit"><div class="ico">🧾</div><b>Same kitchen, same bill</b><p>A WhatsApp order is an ordinary order: it reaches the kitchen screen, appears in billing and counts in the day's reports.</p></div>
+      <div class="benefit"><div class="ico">🛡️</div><b>Official API, no ban risk</b><p>Messages go through Meta's Cloud API with approved templates, not an unofficial connection. One bad campaign does not cost you the number.</p></div>
+      <div class="benefit"><div class="ico">📣</div><b>Opt-in audience you own</b><p>Customers who agree to promotions become your campaign list. Campaigns send at ₹1 per message and STOP is honoured every time.</p></div>
+      <div class="benefit"><div class="ico">📊</div><b>Channel performance, visible</b><p>Order counts and revenue are tagged by channel, so you can see what WhatsApp actually brings in versus table QR and walk-ins.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>WhatsApp ordering vs an aggregator</h2>
+    <p class="lead">Aggregators bring discovery and take a commission on every order. Your own WhatsApp channel brings repeat customers at a flat per-order fee — the two do different jobs.</p>
+    <div class="cmp-wrap">
+      <table class="cmp">
+        <thead><tr><th>&nbsp;</th><th>Aggregator app</th><th>Your WhatsApp ordering</th></tr></thead>
+        <tbody>
+          <tr><td>New customer discovery</td><td class="yes">Yes — their main advantage</td><td class="no">No — relies on your own customers</td></tr>
+          <tr><td>Cost per order</td><td class="no">Commission on order value</td><td class="yes">₹5 flat, or 1% if you prefer</td></tr>
+          <tr><td>Who owns the customer</td><td class="no">The platform</td><td class="yes">You — the chat is yours</td></tr>
+          <tr><td>Menu control</td><td class="no">Their listing rules</td><td class="yes">Your menu, changed when you want</td></tr>
+          <tr><td>Offers to past customers</td><td class="no">Limited, platform-priced</td><td class="yes">₹1 per message, opt-in list</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Running both is normal: aggregators for new customers, WhatsApp and <a href="/qr-ordering">table QR</a> for the ones who come back. The <a href="/compare">comparison page</a> covers how this stacks up against monthly-fee POS suites.</p>
+  </section>
+
+  <section>
+    <h2>WhatsApp ordering questions, answered plainly</h2>
+    <div class="faq">
+      <details><summary>Do customers need to install an app to order on WhatsApp?</summary><p>No. They message the restaurant's WhatsApp number and the bot replies with the menu. Ordering, customizations and delivery updates all happen in the same chat they already have installed.</p></details>
+      <details><summary>Is my WhatsApp number at risk if I send order updates?</summary><p>Orders are sent through Meta's official WhatsApp Cloud API, with approved message templates, rather than an unofficial connection. That is the sending route Meta supports for business messaging, which is why it carries no ban risk from bulk sends.</p></details>
+      <details><summary>Can I send offers and promotions on WhatsApp?</summary><p>Yes, on the WhatsApp Official plans — campaigns go out as approved marketing templates at ₹1 per message, only to customers who opted in, and STOP is always honoured. Promotional campaigns are disabled on any non-official connection.</p></details>
+      <details><summary>Does the customer see delivery status in the chat?</summary><p>Yes. Order confirmation, preparation and out-for-delivery updates are sent as WhatsApp messages, and the rider's name and phone number reach the customer when the order is assigned.</p></details>
+      <details><summary>How is WhatsApp ordering billed?</summary><p>Orders on the WhatsApp Official plan are ₹5 per order, or 1% of total sales if you prefer the commission model. Promotional messages are ₹1 each, and the one-time setup is ₹500. QR and POS-only plans bill ₹1–2 per order and do not include WhatsApp.</p></details>
+    </div>
+  </section>
+
+  <section class="cta-strip">
+    <h2>Turn the chat into an ordering channel</h2>
+    <p>Rates and worked examples are on the <a href="/pricing">pricing page</a>; the demo runs on your own menu.</p>
+    <a class="btn" href="/signup">Start free trial →</a>
+    <a class="btn ghost" href="https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%27d%20like%20to%20try%20WhatsApp%20ordering.%20(From%3A%20foodhubbie-web.web.app)" target="_blank" rel="noopener">WhatsApp us</a>
+  </section>
+
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="/">Home</a> · <a href="/architecture">How It Works</a> · <a href="/qr-ordering">QR Ordering</a> · <a href="/inventory">Inventory</a> · <a href="/whatsapp-ordering">WhatsApp Ordering</a> · <a href="/contact">Contact</a> · <a href="/privacy">Privacy</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
