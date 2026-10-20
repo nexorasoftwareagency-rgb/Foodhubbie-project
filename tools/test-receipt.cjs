@@ -50,6 +50,14 @@ check('net subtotal', num(h1, 'Subtotal (net)'), 368);
 check('gst', num(h1, 'GST (5%)'), 18.4);
 check('net payable', num(h1, 'NET PAYABLE'), 386.4);
 
+// Case 1b — same combo data as stored by QR/POS orders (`comboLineOriginal`).
+const order1b = { ...order1, items: order1.items.map(i => i.comboId
+    ? { name: i.name, quantity: i.quantity, price: i.price, comboId: i.comboId, comboName: i.comboName, comboLineOriginal: i.comboOriginal }
+    : i) };
+const h1b = T.generateThermalReceipt(order1b, store);
+check('comboLineOriginal item total', num(h1b, 'Item Total'), 525);
+check('comboLineOriginal savings', num(h1b, 'Combo Savings'), -47);
+
 // Case 2 — service charge from settings (2%, unchanged policy); no combo; no discount.
 const order2 = {
     orderId: '01-1231-8', customerName: 'Test',

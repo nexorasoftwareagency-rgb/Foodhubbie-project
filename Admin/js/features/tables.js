@@ -2271,7 +2271,7 @@ async function _printBillForGroup(tableId, groupId) {
         Object.values(o.items || {}).forEach(it => {
             const qty = Number(it.qty || 1);
             const price = Number(it.price || 0);
-            allItems.push({ name: it.name || 'Item', qty, price, size: it.size || '', addon: it.addon || '', ...(it.comboId ? { comboId: it.comboId, comboName: it.comboName, comboOriginal: it.comboOriginal } : {}) });
+            allItems.push({ name: it.name || 'Item', qty, price, size: it.size || '', addon: it.addon || '', ...(it.comboId ? { comboId: it.comboId, comboName: it.comboName, comboOriginal: it.comboOriginal || it.comboLineOriginal } : {}) });
             subtotal += price * qty;
         });
         orderTax += Number(o.tax || 0);
@@ -2356,7 +2356,7 @@ async function _printSessionBill(tableId) {
         Object.values(o.items || {}).forEach(it => {
             const qty = Number(it.qty || 1);
             const price = Number(it.price || 0);
-            allItems.push({ name: it.name || 'Item', qty, price, size: it.size || '', addon: it.addon || '', ...(it.comboId ? { comboId: it.comboId, comboName: it.comboName, comboOriginal: it.comboOriginal } : {}) });
+            allItems.push({ name: it.name || 'Item', qty, price, size: it.size || '', addon: it.addon || '', ...(it.comboId ? { comboId: it.comboId, comboName: it.comboName, comboOriginal: it.comboOriginal || it.comboLineOriginal } : {}) });
             subtotal += price * qty;
         });
         orderTax += Number(o.tax || 0);

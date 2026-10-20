@@ -28,7 +28,7 @@ window.ReceiptTemplates = {
         // combo price. Billing standard: itemise at original price, then show
         // combo savings as an explicit deduction, so the arithmetic reconciles.
         const lineOrig = i => {
-            const orig = Number(i.comboOriginal || 0);
+            const orig = Number(i.comboOriginal || i.comboLineOriginal || 0);
             const paid = r2(Number(i.price || 0) * Number(i.quantity || 0));
             return orig > paid ? r2(orig) : paid;
         };
