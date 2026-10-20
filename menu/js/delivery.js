@@ -138,7 +138,7 @@ function renderMenuScreen(searchTerm) {
         const input = document.getElementById('dishSearchInput');
         if (input) input.value = '';
         renderMenuScreen();
-    }, M.combos.length > 0);
+    });
 
     const combosOnly = M.activeCategory === '__combos';
     _renderComboOffers();

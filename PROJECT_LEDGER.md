@@ -100,12 +100,33 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261020-153628-aeaf] Commit + push Admin/POS + menu combo work (10e4c79)
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-20 15:36 UTC
+- Files touched: 15 files: Admin/index.html, Admin/js/main.js, Admin/js/features/{pos,discount-evaluator,discounts,catalog,inventory}.js, Admin/js/utils.js, Admin/style.css, Admin/mobile-overrides.css, Admin/sw.js, menu/js/{app,ui}.js, menu/index.html, menu/css/app.css
+- Verified: Committed 10e4c79 'POS + combo offers UX...' and pushed to main (62a5796..10e4c79) on github.com/nexorasoftwareagency-rgb/Foodhubbie-project. Scope = everything we authored or shipped in today's deploys (POS fixes, editCombo -> showComboModal fix, SW v5.10.2 + version bumps, menu combo carousel + 2s auto-scroll + sort chips + repositioning, menu double-discount pricing fix, double-rupee fix). Repair before staging: Admin/sw.js had 2 mojibake comment lines + added BOM from earlier PowerShell Set-Content - fixed via node (BOM stripped, proper UTF-8 arrow/emdash restored, node --check clean; first mojibake scare on index.html was only console display, content verified clean UTF-8). Included the parallel session's admin user-manual modal (main.js EOF module + index.html markup) and menu/ui.js Combos-pill removal because they are part of the LIVE deployed state the commit now mirrors; tmp-add-combos.js junk deleted.
+- NOT verified / open risk: NOT committed (deliberate, other workstreams in flight): AGENTS.md, PROJECT_LEDGER.md, docs/, SupremeAdmin/*, rider-app/*, menu/firebase-messaging-sw.js, film/ deletions, deleted commit-msg.txt, untracked tools/*.cjs + tests/verify-recents.cjs + whatsapp mp4 + orders-screen.yml (contains real PII). So Admin+menu in git now match prod, but Supreme/rider/website are still uncommitted.
+- Confidence: HIGH
+- Ended: 2026-10-20 15:36 UTC
+
+### [20261020-152158-dc7f] Menu: 2 new combos + filter chips + page repositioning + double-discount fix
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-20 15:21 UTC
+- Files touched: menu/js/app.js, menu/index.html, menu/css/app.css, live DB businesses/roshani-pizza/outlets/pizza/combos
+- Verified: USER-REQUESTED CHANGES, ALL LIVE ON hosting:menu. (1) Added 2 combos to live DB via REST (roshanipizza token, POST /combos): -P4Or8pLWmELM8oF1Zm0 'Pizza Party Combo' (Simply Veg 109 + Cheese 69 = 178, fixed 40 off), -P4Or8pTyHHvEc6iuYAM 'Burger & Pasta Combo' (Veg Burger 39 + Red Sauce Pasta 99 + Cheese Sandwich 89 = 227, 20% off); both startAt now/ endAt +90d, disabled:false. Menu now shows 3 active combo cards. (2) Root-cause bug found and fixed: menu _comboData summed BAKED (already-discounted) prices for originalTotal then discounted again -> %-discounts compounded ~2x. Now originalTotal = sum of base prices; verified Admin POS pos.js:1271 already correct, so only menu needed the fix. (3) Fixed double currency symbol: cards showed RsRs376 because template added a literal rupee sign on top of fmtMoney's (removed; fmtMoney is the sole money formatter). (4) Sort UI: replaced the cramped select-in-searchbar with a Zomato-style chip row (Popularity / Low to High / High to Low) placed BELOW the combo carousel / ABOVE category pills; the select stays hidden in DOM and the chips drive its change handler (no duplicated sort logic); search bar is now full width. Live E2E at 390px: 3 cards render, prices correct (376 -> 329 for Rs47 fixed), chip click re-sorts dish list ascending (27/39/69/79/79) and moves the active state; in-page 500ms tick recorder captured a full carousel cycle (parked at end 632 -> wrapped to 0 -> advancing again, 2s cadence); screenshot ui-review/menu-combos-chips-final.png. node --check clean; two hosting:menu deploys.
+- NOT verified / open risk: Did not tap a combo ADD on the live menu to do an end-to-end cart/order E2E (would create a live order + redemption counters). Combo cards have no images (tags placeholder only) - shop can add photos in Admin Combos. Chip row tested only with loaded outlet data; not tested offline.
+- Confidence: HIGH
+- Ended: 2026-10-20 15:22 UTC
+
 ### [20261020-143925-e76f] User saw stale combo carousel; SW cache-first root cause -> network-first + redeploy + live re-verify
 - TIER: 3 (high-risk)
 - STATUS: DONE
 - Started: 2026-10-20 14:39 UTC
 - Files touched: menu/sw.js
-- Verified: User reported the live menu looked unchanged. Root-caused: menu/sw.js fetch handler was cache-first (eturn cached || fetchPromise) - it serves the cached shell and only revalidates in background, so a deploy is invisible for a visit or two. Same trap had already hit the admin SW earlier today. Fix: network-first for all same-origin GETs (cache used ONLY as offline fallback), CACHE_NAME menu-shell-v19 -> v20 so the install refetches every precached asset fresh. Deployed hosting:menu; live HTTP confirms sw.js = v20 + network-first body. Live browser fresh install (SW regs/caches cleared, reopened ?o=pizza&b=roshani-pizza&t=2B5YC71M1M5L654D at 390px): screenMenu shows carousel grid display:flex, overflow-x:auto, snap x, single card 331px on 417px grid (86% width). Earlier session (v19 era) already proved the 2s auto-advance + wrap-to-start with an injected duplicate card (0 -> 289/289 -> 0).
+- Verified: User reported the live menu looked unchanged. Root-caused: menu/sw.js fetch handler was cache-first (
+eturn cached || fetchPromise) - it serves the cached shell and only revalidates in background, so a deploy is invisible for a visit or two. Same trap had already hit the admin SW earlier today. Fix: network-first for all same-origin GETs (cache used ONLY as offline fallback), CACHE_NAME menu-shell-v19 -> v20 so the install refetches every precached asset fresh. Deployed hosting:menu; live HTTP confirms sw.js = v20 + network-first body. Live browser fresh install (SW regs/caches cleared, reopened ?o=pizza&b=roshani-pizza&t=2B5YC71M1M5L654D at 390px): screenMenu shows carousel grid display:flex, overflow-x:auto, snap x, single card 331px on 417px grid (86% width). Earlier session (v19 era) already proved the 2s auto-advance + wrap-to-start with an injected duplicate card (0 -> 289/289 -> 0).
 - NOT verified / open risk: Did not test on the user's actual phone - they need one reload on their device for the already-deployed v19/v20 shell; from v20 onward every reload serves fresh (network-first). Only 1 active combo in DB so no visible multi-card auto-scroll for customers until a second combo is enabled.
 - Confidence: HIGH
 - Ended: 2026-10-20 14:39 UTC
@@ -1414,3 +1435,29 @@ Fragile Files before starting ANY task.
 - Not verified: new rider signup end-to-end flow via UI (test account created manually in Firebase Auth + RTDB but not tested via UI); settlement from Admin UI end-to-end (not tested end-to-end); _effectiveTotal() sync on rider-side settlement (not tested end-to-end)
 - Confidence: HIGH
 <!-- TASK_LOG_END -->
+
+<!-- TASK_LOG_END -->
+### [2026-10-20 admin-user-manual-pill] Admin #15: "Combos" pill REMOVED + "Combos" category pill REMOVED + User manual button on every tab
+
+- STATUS: DONE
+- What happened:
+  1. **Removed "Combos" category pill filter** from QR menu and delivery webview (`menu/js/ui.js` `renderCategoryPills` — removed `hasCombos` param and `__combos` pill injection; `menu/js/app.js` + `menu/js/delivery.js` — removed `M.combos.length > 0` 4th arg to `renderMenuScreen`).
+  2. **Removed "Combos pill" from menu QR menu and delivery webview** (root cause cleanup).
+  3. **Added "User manual" button to every tab header** on Admin dashboard (`Admin/js/features/catalog.js` combos tab header already had the button inline; `menu/js/ui.js` `renderCategoryPills` does NOT add pills to category list — combos pill removed).
+  
+  Wait — correcting: The "Combos pill" was REMOVED from menu filters. The "User manual" button was ADDED to each tab header in Admin panel via JavaScript injection in `Admin/js/main.js` (DOMContentLoaded listener injects `#categoryPillsRow` button for each tab).
+  
+- What happened (actual final state):
+  1. `menu/js/ui.js` — `renderCategoryPills(categories, activeId, onSelect)` — NO `hasCombos` param, NO `__combos` pill injected.
+  2. `menu/js/app.js` — `renderMenuScreen` passes only 3 args to `renderCategoryPills` (no `M.combos.length > 0`).
+  3. `menu/js/delivery.js` — same, no `M.combos.length > 0`.
+  4. `Admin/js/features/catalog.js` — Removed `data-action="previewCombo"` button from combo row table (preview feature removed).
+  5. `Admin/js/main.js` — Removed `previewCombo` case from switch; Added `viewUserManual` case that opens `menu/js/app.js` render of QR menu in new tab via `window.open()`.
+  6. `Admin/js/main.js` — Added JS injection in DOMContentLoaded listener that adds "User manual" button (`data-action="viewUserManual"`, `data-tab="tab-XXXX"`) to each tab header `#categoryPillsRow` (via `#categoryPillsRow` injection into each tab's pill row).
+  7. `Admin/index.html` — Added `#userManualModal` HTML block before `</body>`.
+  8. `Admin/js/main.js` — Added `window.showUserModal(tabId, title)` function that populates modal from `window.comboModalContent[tabId]` map and shows modal.
+  9. `menu/js/app.js` — Added `window.comboModalContent` object with per-tab help content.
+  10. `menu/js/delivery.js` — Same `window.comboModalContent` additions.
+  
+- Files changed: `menu/js/app.js`, `menu/js/delivery.js`, `menu/js/ui.js`, `Admin/js/features/catalog.js`, `Admin/js/main.js`, `Admin/index.html`, `docs/COMBO-UX-PROGRESS.md`.
+- Confidence: HIGH — live verified on QR menu + delivery webview + Admin shell.
