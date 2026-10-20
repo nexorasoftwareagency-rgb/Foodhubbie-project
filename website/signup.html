@@ -15,7 +15,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
-<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="shared.css?v=2">
+  <script src="shared/nav.js" defer></script>
 <style>
   /* shared.css: vars, reset, nav, hero, forms, bottom-nav, footer base */
   body{background:var(--soft)}
@@ -37,13 +38,27 @@
 
 <header>
   <div class="wrap">
-    <nav>
-      <a class="logo" href="index.html">Food<span>Hubbie</span> ERP</a>
-      <div class="links">
-        <a class="link" href="index.html">Home</a>
-        <a class="link" href="book.html">Book a Demo</a>
-        <a class="link" href="contact.html">Contact</a>
+    <nav aria-label="Main">
+      <a class="logo" href="index.html">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
+      <div class="links" id="navLinks">
+        <a class="link" href="architecture.html">How It Works</a>
+        <a class="link" href="qr-ordering.html">QR Ordering</a>
+        <a class="link" href="pos-billing.html">POS Billing</a>
+        <a class="link" href="kds.html">Kitchen</a>
+        <a class="link" href="pricing.html">Pricing</a>
+        <div class="nav-more">
+          <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="nav-more-menu" id="navMoreMenu">
+            <a class="link" href="riders.html">Riders</a>
+            <a class="link" href="use-cases.html">Cafes &amp; Restos</a>
+            <a class="link" href="compare.html">Compare</a>
+            <a class="link" href="best-software.html">2026 Guide</a>
+            <a class="link" href="contact.html">Contact</a>
+          </div>
+        </div>
+        <a class="nav-cta" href="signup.html">Start free trial</a>
       </div>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
     </nav>
   </div>
 </header>

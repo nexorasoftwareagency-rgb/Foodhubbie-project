@@ -16,7 +16,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"></noscript>
 <link rel="preload" as="image" href="assets/shots/menu-landing.webp" fetchpriority="high">
-<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="shared.css?v=2">
+  <script src="shared/nav.js" defer></script>
 <style>
   .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%)}
   h1{font-size:clamp(28px,5vw,42px)}
@@ -51,22 +52,34 @@
 {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"QR Code Ordering System","item":"https://foodhubbie-web.web.app/qr-ordering.html"}]}
 </script>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is a QR code ordering system?","acceptedAnswer":{"@type":"Answer","text":"A QR code ordering system lets customers scan a QR code on the table with their phone, open the restaurant's menu instantly — no app download — customize and place their order directly, and have it appear live in the kitchen and billing dashboard. FoodHubbie runs exactly this for restaurants, cafes and cloud kitchens."}},{"@type":"Question","name":"How much does a QR ordering system cost?","acceptedAnswer":{"@type":"Answer","text":"FoodHubbie charges a flat ₹1–5 per order depending on plan, plus a one-time ₹500 setup. There is no monthly fee and the free trial covers the full feature set."}},{"@type":"Question","name":"Do customers need to install an app?","acceptedAnswer":{"@type":"Answer","text":"No. The menu opens in the customer's phone browser the moment they scan the QR code. Nothing to download, nothing to sign up for."}},{"@type":"Question","name":"Does the QR table order go directly to the kitchen?","acceptedAnswer":{"@type":"Answer","text":"Yes. Orders appear on the kitchen display and admin dashboard in real time with the table number so staff can serve without taking notes or confirming twice."}},{"@type":"Question","name":"Can the table bill be split or closed at the table?","acceptedAnswer":{"@type":"Answer","text":"Yes. FoodHubbie supports multi-bill groups — a table session can hold separate bill requests that the cashier accepts or rejects, and the customer can request the bill right from the same screen."}}]}
+{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-18","mainEntity":[{"@type":"Question","name":"What is a QR code ordering system?","acceptedAnswer":{"@type":"Answer","text":"A QR code ordering system lets customers scan a QR code on the table with their phone, open the restaurant's menu instantly — no app download — customize and place their order directly, and have it appear live in the kitchen and billing dashboard. FoodHubbie runs exactly this for restaurants, cafes and cloud kitchens."}},{"@type":"Question","name":"How much does a QR ordering system cost?","acceptedAnswer":{"@type":"Answer","text":"FoodHubbie charges a flat ₹1–5 per order depending on plan, plus a one-time ₹500 setup. There is no monthly fee and the free trial covers the full feature set."}},{"@type":"Question","name":"Do customers need to install an app?","acceptedAnswer":{"@type":"Answer","text":"No. The menu opens in the customer's phone browser the moment they scan the QR code. Nothing to download, nothing to sign up for."}},{"@type":"Question","name":"Does the QR table order go directly to the kitchen?","acceptedAnswer":{"@type":"Answer","text":"Yes. Orders appear on the kitchen display and admin dashboard in real time with the table number so staff can serve without taking notes or confirming twice."}},{"@type":"Question","name":"Can the table bill be split or closed at the table?","acceptedAnswer":{"@type":"Answer","text":"Yes. FoodHubbie supports multi-bill groups — a table session can hold separate bill requests that the cashier accepts or rejects, and the customer can request the bill right from the same screen."}}]}
 </script>
 </head>
 <body>
 
 <header>
   <div class="wrap">
-    <nav>
-      <a class="logo" href="index.html">Food<span>Hubbie</span> ERP</a>
-      <div class="links">
-        <a class="link" href="index.html">Home</a>
+    <nav aria-label="Main">
+      <a class="logo" href="index.html">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
+      <div class="links" id="navLinks">
         <a class="link" href="architecture.html">How It Works</a>
-        <a class="link" href="qr-ordering.html" style="color:var(--brand)">QR Ordering</a>
-        <a class="link" href="contact.html">Contact</a>
-        <a class="btn" href="signup.html" style="padding:10px 22px;font-size:14px">Start free trial</a>
+        <a class="link" href="qr-ordering.html">QR Ordering</a>
+        <a class="link" href="pos-billing.html">POS Billing</a>
+        <a class="link" href="kds.html">Kitchen</a>
+        <a class="link" href="pricing.html">Pricing</a>
+        <div class="nav-more">
+          <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="nav-more-menu" id="navMoreMenu">
+            <a class="link" href="riders.html">Riders</a>
+            <a class="link" href="use-cases.html">Cafes &amp; Restos</a>
+            <a class="link" href="compare.html">Compare</a>
+            <a class="link" href="best-software.html">2026 Guide</a>
+            <a class="link" href="contact.html">Contact</a>
+          </div>
+        </div>
+        <a class="nav-cta" href="signup.html">Start free trial</a>
       </div>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
     </nav>
   </div>
 </header>
