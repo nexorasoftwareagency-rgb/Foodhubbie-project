@@ -44,6 +44,10 @@
 - https://foodhubbie-web.web.app/pos-billing.html — POS billing software
 - https://foodhubbie-web.web.app/kds.html — kitchen display system
 - https://foodhubbie-web.web.app/riders.html — rider delivery management
+- https://foodhubbie-web.web.app/use-cases.html — use cases: cafes, family restaurants, cloud kitchens
+- https://foodhubbie-web.web.app/pricing.html — pricing (₹1–5 per order, ₹500 setup)
+- https://foodhubbie-web.web.app/compare.html — vs monthly-fee POS suites
+- https://foodhubbie-web.web.app/best-software.html — 2026 software buyer's guide
 
 ## Live apps
 - Admin: https://foodhubbie-admins.web.app

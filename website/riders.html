@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rider Delivery Management for Restaurants | FoodHubbie</title>
 <meta name="description" content="Delivery management software for restaurants: assign any rider — yours or a freelancer — track every delivery live, pay per delivery. Rider app, owner dashboard and WhatsApp updates in one flow.">
-<link rel="canonical" href="https://foodhubbie-web.web.app/riders.html">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍕</text></svg>">
+<link rel="canonical" href="https://foodhubbie-web.web.app/riders">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="theme-color" content="#E84908">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Rider Delivery Management for Restaurants | FoodHubbie">
@@ -49,10 +51,10 @@
 </style>
 <script type="module" src="shared/ga4.js"></script>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"Rider Delivery Management","item":"https://foodhubbie-web.web.app/riders.html"}]}
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"Rider Delivery Management","item":"https://foodhubbie-web.web.app/riders"}]}
 </script>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-18","mainEntity":[{"@type":"Question","name":"How do restaurants manage their delivery riders?","acceptedAnswer":{"@type":"Answer","text":"FoodHubbie gives the restaurant a rider roster where every rider has their own login to a personal rider app. Delivery orders land on the owner's dashboard with an Assign button; assigning pushes the job straight to that rider's phone, and the customer gets their name and number on WhatsApp. Status flows assign → pickup → delivered, live for everyone."}},{"@type":"Question","name":"Can I use freelance or part-time riders instead of staff?","acceptedAnswer":{"@type":"Answer","text":"Yes — that's how FoodHubbie is designed. There is no payroll module you must feed; a freelance rider just needs a phone number to get a login. You pay per delivery from the COD collected, settle daily, and the rider ledger keeps the count."}},{"@type":"Question","name":"What do customers see when a rider is assigned?","acceptedAnswer":{"@type":"Answer","text":"The customer gets a WhatsApp message with the rider's name and phone number, and an OTP-based handover message when the order goes out for delivery — so nobody calls the restaurant asking 'where is my order?'."}},{"@type":"Question","name":"How are delivery payments calculated?","acceptedAnswer":{"@type":"Answer","text":"Per delivery, not per month. Each completed delivery is logged against the rider in the ledger; you decide the per-delivery rate and settle. COD collections stay with the rider and are tracked until the ledger clears."}}]}
+{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-20","mainEntity":[{"@type":"Question","name":"Does the rider need to install an app?","acceptedAnswer":{"@type":"Answer","text":"The rider app runs in the phone's browser, so there is no app-store download. Riders sign in with the account you create for them."}},{"@type":"Question","name":"How does the customer get the rider's number?","acceptedAnswer":{"@type":"Answer","text":"When an order goes out for delivery, the customer receives the rider's name and phone number on WhatsApp, so they can coordinate the handoff."}},{"@type":"Question","name":"How do restaurants manage their delivery riders?","acceptedAnswer":{"@type":"Answer","text":"FoodHubbie gives the restaurant a rider roster where every rider has their own login to a personal rider app. Delivery orders land on the owner's dashboard with an Assign button; assigning pushes the job straight to that rider's phone, and the customer gets their name and number on WhatsApp. Status flows assign → pickup → delivered, live for everyone."}},{"@type":"Question","name":"Can I use freelance or part-time riders instead of staff?","acceptedAnswer":{"@type":"Answer","text":"Yes — that's how FoodHubbie is designed. There is no payroll module you must feed; a freelance rider just needs a phone number to get a login. You pay per delivery from the COD collected, settle daily, and the rider ledger keeps the count."}},{"@type":"Question","name":"What do customers see when a rider is assigned?","acceptedAnswer":{"@type":"Answer","text":"The customer gets a WhatsApp message with the rider's name and phone number, and an OTP-based handover message when the order goes out for delivery — so nobody calls the restaurant asking \"where is my order?\"."}},{"@type":"Question","name":"How are delivery payments calculated?","acceptedAnswer":{"@type":"Answer","text":"Per delivery, not per month. Each completed delivery is logged against the rider in the ledger; you decide the per-delivery rate and settle. COD collections stay with the rider and are tracked until the ledger clears."}}]}
 </script>
 </head>
 <body>
@@ -60,24 +62,24 @@
 <header>
   <div class="wrap">
     <nav aria-label="Main">
-      <a class="logo" href="index.html">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
+      <a class="logo" href="/">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
       <div class="links" id="navLinks">
-        <a class="link" href="architecture.html">How It Works</a>
-        <a class="link" href="qr-ordering.html">QR Ordering</a>
-        <a class="link" href="pos-billing.html">POS Billing</a>
-        <a class="link" href="kds.html">Kitchen</a>
-        <a class="link" href="pricing.html">Pricing</a>
+        <a class="link" href="/architecture">How It Works</a>
+        <a class="link" href="/qr-ordering">QR Ordering</a>
+        <a class="link" href="/pos-billing">POS Billing</a>
+        <a class="link" href="/kds">Kitchen</a>
+        <a class="link" href="/pricing">Pricing</a>
         <div class="nav-more">
           <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
           <div class="nav-more-menu" id="navMoreMenu">
-            <a class="link" href="riders.html">Riders</a>
-            <a class="link" href="use-cases.html">Cafes &amp; Restos</a>
-            <a class="link" href="compare.html">Compare</a>
-            <a class="link" href="best-software.html">2026 Guide</a>
-            <a class="link" href="contact.html">Contact</a>
+            <a class="link" href="/riders">Riders</a>
+            <a class="link" href="/use-cases">Cafes &amp; Restos</a>
+            <a class="link" href="/compare">Compare</a>
+            <a class="link" href="/best-software">2026 Guide</a>
+            <a class="link" href="/contact">Contact</a>
           </div>
         </div>
-        <a class="nav-cta" href="signup.html">Start free trial</a>
+        <a class="nav-cta" href="/signup">Start free trial</a>
       </div>
       <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
     </nav>
@@ -88,11 +90,11 @@
   <div class="wrap">
     <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--muted);margin-bottom:14px"><a href="/" style="color:var(--muted);text-decoration:none">Home</a>&nbsp;/&nbsp;<span style="color:var(--brand);font-weight:600">Riders</span></nav>
     <div class="kicker">Feature</div>
-    <h1>Your own delivery fleet, without delivery-agency fees</h1>
-    <p class="sub">Delivery management software that treats every rider — your staff or a freelancer — as a one-tap assignment: the order lands on their phone, the customer gets their name on WhatsApp, and you watch it delivered live. Pay per delivery, not per %.</p>
+    <h1>Restaurant Delivery &amp; Rider Management Software</h1>
+    <p class="sub">Your own delivery fleet, without delivery-agency fees. Delivery management software that treats every rider — your staff or a freelancer — as a one-tap assignment: the order lands on their phone, the customer gets their name on WhatsApp, and you watch it delivered live. Pay per delivery, not per %.</p>
     <div class="ctas" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px">
-      <a class="btn" href="signup.html">Start free trial →</a>
-      <a class="btn ghost" href="book.html">Book a 15-min demo →</a>
+      <a class="btn" href="/signup">Start free trial →</a>
+      <a class="btn ghost" href="/book">Book a 15-min demo →</a>
     </div>
   </div>
 </section>
@@ -137,6 +139,9 @@
   <section>
     <h2>Rider questions, answered plainly</h2>
     <div class="faq">
+      <details><summary>Does the rider need to install an app?</summary><p>The rider app runs in the phone's browser, so there is no app-store download. Riders sign in with the account you create for them.</p></details>
+      <details><summary>How does the customer get the rider's number?</summary><p>When an order goes out for delivery, the customer receives the rider's name and phone number on WhatsApp, so they can coordinate the handoff.</p></details>
+
       <details open><summary>How do restaurants manage their delivery riders?</summary><p>FoodHubbie gives the restaurant a rider roster where every rider has their own login to a personal rider app. Delivery orders land on the owner's dashboard with an Assign button; assigning pushes the job straight to that rider's phone, and the customer gets their name and number on WhatsApp. Status flows assign → pickup → delivered, live for everyone.</p></details>
       <details><summary>Can I use freelance or part-time riders instead of staff?</summary><p>Yes — that's how FoodHubbie is designed. There is no payroll module you must feed; a freelance rider just needs a phone number to get a login. You pay per delivery from the COD collected, settle daily, and the rider ledger keeps the count.</p></details>
       <details><summary>What do customers see when a rider is assigned?</summary><p>The customer gets a WhatsApp message with the rider's name and phone number, and an OTP-based handover message when the order goes out for delivery — so nobody calls the restaurant asking "where is my order?".</p></details>
@@ -144,10 +149,45 @@
     </div>
   </section>
 
-  <section class="cta-strip">
+    <section>
+    <h2>How a delivery order moves</h2>
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><div><b>Assign a rider</b><p>From the order screen, one tap assigns the delivery to a staff rider or a freelancer. No dispatch agency in between.</p></div></div>
+      <div class="step"><div class="step-n">2</div><div><b>The rider sees the job</b><p>Their app shows the order, the address and the amount to collect — so they are not calling the counter for details.</p></div></div>
+      <div class="step"><div class="step-n">3</div><div><b>The customer knows who is coming</b><p>The rider's name and phone number reach the customer on WhatsApp when the order goes out for delivery.</p></div></div>
+      <div class="step"><div class="step-n">4</div><div><b>OTP handoff and settlement</b><p>Delivery is confirmed with an OTP at the door, cash is recorded against that rider, and the day's ledger shows what each rider owes.</p></div></div>
+    </div>
+    <p class="note">Delivery orders enter through the same <a href="/pos-billing">POS</a> and <a href="/qr-ordering">ordering</a> system — there is no separate delivery software to run.</p>
+  </section>
+
+  <section>
+    <h2>Salaried riders vs freelance</h2>
+    <p class="lead">Most outlets run a mix: one or two staff riders for predictable hours, freelancers for Friday night. The system treats both the same way.</p>
+    <div class="cmp-wrap">
+      <table class="cmp">
+        <thead><tr><th>&nbsp;</th><th>Your staff rider</th><th>Freelance rider</th></tr></thead>
+        <tbody>
+          <tr><td>Cost model</td><td>Salary or shift pay</td><td>Per delivery</td></tr>
+          <tr><td>Availability</td><td>Fixed shifts</td><td>Called when you need them</td></tr>
+          <tr><td>Assignment</td><td class="yes">One tap, same app</td><td class="yes">One tap, same app</td></tr>
+          <tr><td>Tracking</td><td class="yes">Live status per order</td><td class="yes">Live status per order</td></tr>
+          <tr><td>Cash handling</td><td class="yes">Recorded in their ledger</td><td class="yes">Recorded in their ledger</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>The delivery margin question</h2>
+    <p class="lead">Aggregators charge a commission on the order value and keep the customer relationship. Running your own riders flips both: the delivery cost becomes a per-delivery amount you control, and the customer orders from you next time.</p>
+    <p>That is why rider management is part of every plan rather than a separate module — the <a href="/pricing">pricing page</a> lists the per-order rates, and <a href="/use-cases">use cases</a> shows how cloud kitchens and family restaurants use it differently.</p>
+    <p class="note">There is no per-rider fee on any plan. Staff riders and freelancers both sign in to the rider app on their phone.</p>
+  </section>
+
+<section class="cta-strip">
     <h2>Keep your next delivery order's margin</h2>
     <p>The free trial covers the rider app and the assignment flow. Bring your riders' phone numbers, go live the same day.</p>
-    <a class="btn" href="signup.html">Start free trial →</a>
+    <a class="btn" href="/signup">Start free trial →</a>
     <a class="btn ghost" href="https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%27d%20like%20to%20try%20the%20rider%20delivery%20management.%20(From%3A%20foodhubbie-web.web.app)" target="_blank" rel="noopener">WhatsApp us</a>
   </section>
 
@@ -173,7 +213,7 @@
 <footer>
   <div class="wrap">
     <div class="logo">Food<span>Hubbie</span> ERP</div>
-    <div><a href="index.html">Home</a> · <a href="architecture.html">How It Works</a> · <a href="use-cases.html">Restaurants & Cafes</a> · <a href="riders.html">Riders</a> · <a href="qr-ordering.html">QR Ordering</a> · <a href="pos-billing.html">POS Billing</a> · <a href="kds.html">Kitchen Display</a> · <a href="contact.html">Contact</a></div>
+    <div><a href="/">Home</a> · <a href="/architecture">How It Works</a> · <a href="/use-cases">Restaurants & Cafes</a> · <a href="/riders">Riders</a> · <a href="/qr-ordering">QR Ordering</a> · <a href="/pos-billing">POS Billing</a> · <a href="/kds">Kitchen Display</a> · <a href="/contact">Contact</a></div>
   </div>
 </footer>
 

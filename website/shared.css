@@ -111,3 +111,19 @@ footer .logo{color:#fff;font-weight:800;font-size:16px}
 footer .logo span{color:var(--brand)}
 footer a{color:rgba(255,255,255,.5);text-decoration:none;font-size:13px}
 footer a:hover{color:#fff}
+
+/* ---- SEO content blocks (steps, comparison tables, notes) ---- */
+.steps{display:grid;gap:14px;margin-top:28px}
+.step{display:flex;gap:16px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow)}
+.step-n{flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--brand-light);color:var(--brand-dark);font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center}
+.step b{display:block;margin-bottom:4px;font-size:15px}
+.step p{font-size:13.5px;color:var(--muted);line-height:1.65}
+.cmp-wrap{overflow-x:auto;margin-top:24px}
+.cmp{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14px;min-width:560px}
+.cmp th,.cmp td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+.cmp th{background:var(--soft);font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.cmp tr:last-child td{border-bottom:0}
+.cmp .yes{color:#0f7a3d;font-weight:700}
+.cmp .no{color:#9a3412;font-weight:700}
+.note{background:var(--brand-light);border:1px solid #ffd9c2;border-radius:12px;padding:16px 20px;font-size:14px;color:var(--ink);line-height:1.7;margin-top:22px}
+.note a{color:var(--brand-dark);font-weight:600}

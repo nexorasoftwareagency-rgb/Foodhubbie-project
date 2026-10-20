@@ -437,44 +437,7 @@
         "!.well-known/**",
         "**/node_modules/**"
       ],
-      "rewrites": [
-        {
-          "source": "/use-cases",
-          "destination": "/use-cases.html"
-        },
-        {
-          "source": "/riders",
-          "destination": "/riders.html"
-        },
-        {
-          "source": "/kds",
-          "destination": "/kds.html"
-        },
-        {
-          "source": "/pos-billing",
-          "destination": "/pos-billing.html"
-        },
-        {
-          "source": "/qr-ordering",
-          "destination": "/qr-ordering.html"
-        },
-        {
-          "source": "/signup",
-          "destination": "/signup.html"
-        },
-        {
-          "source": "/architecture",
-          "destination": "/architecture.html"
-        },
-        {
-          "source": "/book",
-          "destination": "/book.html"
-        },
-        {
-          "source": "/contact",
-          "destination": "/contact.html"
-        }
-      ],
+      "cleanUrls": true,
       "headers": [
         {
           "source": "**/*.@(html|js|css)",
