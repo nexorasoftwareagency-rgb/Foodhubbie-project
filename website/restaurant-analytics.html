@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restaurant Analytics &amp; Reports Software | FoodHubbie</title>
+<meta name="description" content="Restaurant analytics that answer the day's questions: revenue and order reports with period comparison, order-level detail, rider ledger, discount and WhatsApp usage — exportable to Excel and PDF.">
+<link rel="canonical" href="https://foodhubbie-web.web.app/restaurant-analytics">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Restaurant Analytics &amp; Reports Software | FoodHubbie">
+<meta property="og:description" content="Revenue, orders, average ticket, rider earnings and discount usage in one report — with a previous-period comparison and a clean PDF for the accountant.">
+<meta property="og:image" content="https://foodhubbie-web.web.app/assets/shots/analytics-1.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
+<link rel="preload" as="image" href="assets/shots/analytics-1.webp" fetchpriority="high">
+<link rel="stylesheet" href="shared.css?v=2">
+<script src="shared/nav.js" defer></script>
+<style>
+  .hero{padding:72px 0 48px;background:radial-gradient(ellipse 1200px 500px at 50% -15%,#fff0e6,transparent 70%)}
+  h1{font-size:clamp(28px,5vw,42px)}
+  section{padding:64px 0 0}
+  h2{font-size:clamp(24px,4vw,36px);letter-spacing:-.02em;font-weight:800;margin-bottom:14px}
+  .lead{color:var(--muted);max-width:680px;margin-bottom:36px;font-size:16px;line-height:1.7}
+  .img-hero{width:100%;border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+  @media(max-width:860px){.duo{grid-template-columns:1fr}}
+  .duo figure{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin:0}
+  .duo img{width:100%;display:block;height:300px;object-fit:cover;object-position:top}
+  .duo figcaption{padding:14px 18px;font-size:13px;color:var(--muted)}
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px}
+  @media(max-width:860px){.benefits{grid-template-columns:1fr}}
+  .benefit{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+  .benefit .ico{font-size:30px;margin-bottom:10px}
+  .benefit b{font-size:15px;display:block;margin-bottom:6px}
+  .benefit p{font-size:13.5px;color:var(--muted);line-height:1.65}
+  .faq{max-width:760px;margin-top:28px}
+  .faq details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .faq summary{font-weight:700;font-size:15px;cursor:pointer}
+  .faq p{color:var(--muted);font-size:14px;line-height:1.7;margin-top:10px}
+  .cta-strip{background:linear-gradient(135deg,#fff0e6,#ffe3d2);border:1px solid #ffd9c2;border-radius:var(--radius);padding:36px;text-align:center;margin-top:64px}
+  .cta-strip h2{margin-bottom:8px}
+  .cta-strip p{color:var(--muted);margin-bottom:20px}
+  .cta-strip a{margin:4px}
+  footer{margin-top:72px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+</style>
+<script type="module" src="shared/ga4.js"></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie-web.web.app/"},{"@type":"ListItem","position":2,"name":"Restaurant Analytics","item":"https://foodhubbie-web.web.app/restaurant-analytics"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-20","mainEntity":[{"@type":"Question","name":"Which reports does FoodHubbie give a restaurant?","acceptedAnswer":{"@type":"Answer","text":"A revenue report for any date range with total revenue, order count, average order value and unique customers plus a previous-period comparison; an order-level detail table; rider performance with orders and earnings; discount usage; expenses; and WhatsApp message usage per day."}},{"@type":"Question","name":"Can I export the report for my accountant?","acceptedAnswer":{"@type":"Answer","text":"Yes. The revenue report exports to Excel for the spreadsheet and to PDF for a signed copy, both covering the selected date range and outlet. The rider report exports the same way."}},{"@type":"Question","name":"Does it compare this week to last week?","acceptedAnswer":{"@type":"Answer","text":"Yes. The revenue report fetches the previous period of equal length, so a date range shows the change in revenue, orders and average ticket rather than a number in isolation."}},{"@type":"Question","name":"Are cancelled orders counted in revenue?","acceptedAnswer":{"@type":"Answer","text":"No. Cancelled orders are excluded from revenue, KPI totals and CSV exports, so the report matches what was actually billed."}}]}
+</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav aria-label="Main">
+      <a class="logo" href="/">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
+      <div class="links" id="navLinks">
+        <a class="link" href="/architecture">How It Works</a>
+        <a class="link" href="/qr-ordering">QR Ordering</a>
+        <a class="link" href="/pos-billing">POS Billing</a>
+        <a class="link" href="/kds">Kitchen</a>
+        <a class="link" href="/pricing">Pricing</a>
+        <div class="nav-more">
+          <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="nav-more-menu" id="navMoreMenu">
+            <a class="link" href="/riders">Riders</a>
+            <a class="link" href="/table-management">Tables</a>
+            <a class="link" href="/whatsapp-ordering">WhatsApp Ordering</a>
+            <a class="link" href="/whatsapp-marketing">WhatsApp Marketing</a>
+            <a class="link" href="/inventory">Inventory</a>
+            <a class="link" href="/multi-outlet">Multi-Outlet</a>
+            <a class="link" href="/restaurant-analytics">Reports</a>
+            <a class="link" href="/use-cases">Cafes &amp; Restos</a>
+            <a class="link" href="/compare">Compare</a>
+            <a class="link" href="/best-software">2026 Guide</a>
+            <a class="link" href="/contact">Contact</a>
+          </div>
+        </div>
+        <a class="nav-cta" href="/signup">Start free trial</a>
+      </div>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <nav aria-label="Breadcrumb" style="font-size:13px;color:var(--muted);margin-bottom:14px"><a href="/" style="color:var(--muted);text-decoration:none">Home</a>&nbsp;/&nbsp;<span style="color:var(--brand);font-weight:600">Restaurant Analytics</span></nav>
+    <div class="kicker">Reports</div>
+    <h1>Restaurant Analytics &amp; Reports</h1>
+    <p class="sub">Not a wall of charts — the four numbers a shift actually turns on: what came in, how many orders it took, what the average ticket was, and whether that is up or down on the same period last week.</p>
+    <div class="ctas" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px">
+      <a class="btn" href="/signup">Start free trial →</a>
+      <a class="btn ghost" href="/book">Book a 15-min demo →</a>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+
+  <section>
+    <h2>A revenue report you can defend</h2>
+    <p class="lead">Pick a date range — today, this week, a festival weekend — and the report totals revenue from orders that were actually billed, with cancelled orders excluded. The previous period of equal length is fetched alongside, so every figure arrives with something to compare against.</p>
+    <figure>
+      <img class="img-hero" src="assets/shots/analytics-1.webp" alt="FoodHubbie revenue report with KPIs and previous-period comparison" fetchpriority="high" decoding="async">
+      <figcaption style="color:var(--muted);font-size:13px;margin-top:10px">Total revenue, orders, average order value and unique customers — each with its change against the previous period.</figcaption>
+    </figure>
+    <div class="duo">
+      <figure>
+        <img src="assets/shots/analytics-2.webp" alt="Order-level sales detail table" loading="lazy" decoding="async">
+        <figcaption>Drill into the orders behind the total: date, customer, outlet, order type, payment, amount and items.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/shots/analytics-3.webp" alt="Revenue trend and report export options" loading="lazy" decoding="async">
+        <figcaption>Trend across the range, then export the same data to Excel or a PDF.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>What else feeds the picture</h2>
+    <div class="benefits">
+      <div class="benefit"><div class="ico">🧾</div><b>Order-level detail</b><p>Every order in the range with its customer, channel and payment method — the answer to "where did Sunday's revenue come from?"</p></div>
+      <div class="benefit"><div class="ico">🛵</div><b>Rider performance</b><p>Deliveries and earnings per rider across the same period, with an earnings trend and its own export.</p></div>
+      <div class="benefit"><div class="ico">🏷️</div><b>Discount usage</b><p>Which coupons and offers were redeemed, so a promotion is judged by orders rather than by messages sent.</p></div>
+      <div class="benefit"><div class="ico">💸</div><b>Expenses and cost index</b><p>Running costs sit next to revenue, and the per-order cost view keeps the ₹1/₹2/₹5 usage honest.</p></div>
+      <div class="benefit"><div class="ico">💬</div><b>WhatsApp usage</b><p>Messages sent per day, split into order notices, rider broadcasts, promos and admin alerts — the actual bill, not an estimate.</p></div>
+      <div class="benefit"><div class="ico">🍽️</div><b>Built on the order data</b><p>Reports read the same order records the <a href="/pos-billing">POS</a>, <a href="/qr-ordering">QR menu</a> and <a href="/whatsapp-ordering">WhatsApp ordering</a> write — one source, not three exports to reconcile.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Month-end in four steps</h2>
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><div><b>Choose the range</b><p>A day, a week, the month to date, or a custom start and end date. The outlet filter applies the same way as everywhere else in the dashboard.</p></div></div>
+      <div class="step"><div class="step-n">2</div><div><b>Read the comparison</b><p>Revenue, orders and average ticket each show the change against the previous equal period — a rise in revenue with a fall in orders is a different story from a real lift.</p></div></div>
+      <div class="step"><div class="step-n">3</div><div><b>Check the detail</b><p>The order table is the audit trail. Cancelled orders are already excluded, so the total matches what was billed.</p></div></div>
+      <div class="step"><div class="step-n">4</div><div><b>Export and file it</b><p>Excel for the accountant, PDF for the folder. Both cover exactly the range on screen.</p></div></div>
+    </div>
+    <p class="note">Reports are per outlet. For groups, see <a href="/multi-outlet">multi-outlet</a> — each branch keeps its own numbers.</p>
+  </section>
+
+  <section>
+    <h2>WhatsApp blast vs. recorded reports</h2>
+    <p class="lead">Most small restaurants already have numbers — in a notebook, in a delivery app's dashboard, in a WhatsApp group at closing time. The difference is whether the number can be traced back to the orders behind it.</p>
+    <div class="cmp-wrap">
+      <table class="cmp">
+        <thead><tr><th>&nbsp;</th><th>Notebook / app dashboard</th><th>FoodHubbie reports</th></tr></thead>
+        <tbody>
+          <tr><td>Source of revenue</td><td class="no">Written down at closing, from memory</td><td class="yes">Order records written at the moment of sale</td></tr>
+          <tr><td>Cancelled orders</td><td class="no">Often still counted</td><td class="yes">Excluded from totals and exports</td></tr>
+          <tr><td>Comparison</td><td class="no">Requires manual maths</td><td class="yes">Previous period fetched automatically</td></tr>
+          <tr><td>Order detail</td><td class="no">Not retained</td><td class="yes">Every order, channel and payment method</td></tr>
+          <tr><td>Handover</td><td class="no">Photographs of pages</td><td class="yes">Excel and PDF for the same range</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Reporting questions, answered plainly</h2>
+    <div class="faq">
+      <details><summary>Which reports does FoodHubbie give a restaurant?</summary><p>A revenue report for any date range with total revenue, order count, average order value and unique customers plus a previous-period comparison; an order-level detail table; rider performance with orders and earnings; discount usage; expenses; and WhatsApp message usage per day.</p></details>
+      <details><summary>Can I export the report for my accountant?</summary><p>Yes. The revenue report exports to Excel for the spreadsheet and to PDF for a signed copy, both covering the selected date range and outlet. The rider report exports the same way.</p></details>
+      <details><summary>Does it compare this week to last week?</summary><p>Yes. The revenue report fetches the previous period of equal length, so a date range shows the change in revenue, orders and average ticket rather than a number in isolation.</p></details>
+      <details><summary>Are cancelled orders counted in revenue?</summary><p>No. Cancelled orders are excluded from revenue, KPI totals and CSV exports, so the report matches what was actually billed.</p></details>
+    </div>
+  </section>
+
+  <section class="cta-strip">
+    <h2>Know what the week actually did</h2>
+    <p>Reports with every plan — see <a href="/pricing">pricing</a> for the one-time setup and the per-order rate.</p>
+    <a class="btn" href="/signup">Start free trial →</a>
+    <a class="btn ghost" href="https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%27d%20like%20a%20demo%20of%20the%20reports.%20(From%3A%20foodhubbie-web.web.app)" target="_blank" rel="noopener">WhatsApp us</a>
+  </section>
+
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="/">Home</a> · <a href="/restaurant-analytics">Reports</a> · <a href="/multi-outlet">Multi-Outlet</a> · <a href="/pricing">Pricing</a> · <a href="/compare">Compare</a> · <a href="/contact">Contact</a> · <a href="/privacy">Privacy</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
