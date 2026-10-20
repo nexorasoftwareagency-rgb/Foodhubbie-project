@@ -14,6 +14,8 @@ Fragile Files before starting ANY task.
 - **Firebase v12**: `enableIndexedDbPersistence` removed — offline persistence is now automatic. No action needed.
 
 <!-- STANDING_DECISIONS_START -->
+- [2026-10-20 13:59 UTC] Website SEO (commit de6ff82): hosting uses cleanUrls — canonical/internal/sitemap URLs are extensionless and /page.html must 301 to /page; FAQPage JSON-LD must be regenerated from the visible <details> whenever FAQs change; setup fee is ₹500 (shared/billing-defaults.js is authoritative, AGENTS.md/llms.txt ₹1,500 is stale); large source files (sales deck) live in docs/, never website/assets/.
+- [2026-10-20 04:44 UTC] Website brand buttons: primary/CTA background is now --brand-dark #c23a05 with white text (5.38:1, AA) and --brand-darker #a33204 on hover (6.96:1); raw --brand #E84908 is kept for the logo wordmark and accents only (it is 3.9:1 as button bg). Ghost buttons use brand-dark text; index hero inline override updated. Verified live 2026-10-20, commit 56406c4. Not done: .btn.whatsapp stays white-on-#25D366 (1.98:1) - WhatsApp brand green, needs a dark-text variant if we want it AA.
 - [2026-10-19 03:01 UTC] Template review status lives ONLY in Meta (Graph). appTemplates/whatsappTemplates in RTDB is a content library with NO status field (body, category, explanation, language, name, useCase, variables) - do not add a status mirror; it would be a stale second copy of Meta state. Check status with GET /{WABA}/message_templates.
 - [2026-09-30 03:50 UTC] Super provisioning = BOTH custom claims (isSuper/isSupreme) AND admins/{uid} mirror row (isSuper+isSupreme). RTDB rules (database.rules.json businesses/.read) check ONLY the admins/{uid} mirror - they cannot see custom claims - while SupremeAdmin/js/auth.js:51-62 accepts claims alone. Claims-only super = app renders but /businesses listener dies with permission_denied (data-store.js:40 + false 'reconnecting' toast; started=true so no self-heal, hard refresh required). 2026-09-30: the 2 real super accounts (UXrcVENOnrS4PPyu7XoOP994BPc2 nileshshah84870, V8jxcqeXMJd1pNodadk3HjIY6hh1 nexorasoftwareagency) had claims but NO admins row - restored both rows. Checklist when minting any future super: setCustomUserClaims + admins/{uid}.update({isSuper,isSupreme,email,name}). TUNNEL_URL console warning is unrelated pre-existing fallback (firebase-config.js:30).
 - [2026-09-30 02:55 UTC] Promotional WhatsApp messaging (campaigns via sendPromotionalMessage/runPromotionCampaign) is OFFICIAL-API (meta transport) ONLY - hard-blocked on Baileys since 2026-09-30 because bulk promos are the top account-ban trigger on the unofficial transport. Guard: isMetaTransport(sock) in bot/utils.js; campaign start pauses with pauseReason 'transport-blocked' (Admin shows it raw), send-level throw 'promo-blocked-transport' is defense-in-depth (non-retryable in sendWithRetry). SEND_GENERIC_MESSAGE is NOT promotional (Admin Chat + rider 1:1 service channel) and stays open. Re-enables automatically when meta transport is active post-WABA.
@@ -98,10 +100,75 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261020-143925-e76f] User saw stale combo carousel; SW cache-first root cause -> network-first + redeploy + live re-verify
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-20 14:39 UTC
+- Files touched: menu/sw.js
+- Verified: User reported the live menu looked unchanged. Root-caused: menu/sw.js fetch handler was cache-first (eturn cached || fetchPromise) - it serves the cached shell and only revalidates in background, so a deploy is invisible for a visit or two. Same trap had already hit the admin SW earlier today. Fix: network-first for all same-origin GETs (cache used ONLY as offline fallback), CACHE_NAME menu-shell-v19 -> v20 so the install refetches every precached asset fresh. Deployed hosting:menu; live HTTP confirms sw.js = v20 + network-first body. Live browser fresh install (SW regs/caches cleared, reopened ?o=pizza&b=roshani-pizza&t=2B5YC71M1M5L654D at 390px): screenMenu shows carousel grid display:flex, overflow-x:auto, snap x, single card 331px on 417px grid (86% width). Earlier session (v19 era) already proved the 2s auto-advance + wrap-to-start with an injected duplicate card (0 -> 289/289 -> 0).
+- NOT verified / open risk: Did not test on the user's actual phone - they need one reload on their device for the already-deployed v19/v20 shell; from v20 onward every reload serves fresh (network-first). Only 1 active combo in DB so no visible multi-card auto-scroll for customers until a second combo is enabled.
+- Confidence: HIGH
+- Ended: 2026-10-20 14:39 UTC
+
+### [20261020-135833-ce5d] QR menu combo offers: horizontal auto-scroll carousel (Zomato/Swiggy style) + deploy
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-20 13:58 UTC
+- Files touched: menu/css/app.css, menu/js/app.js, menu/sw.js
+- Verified: Converted combo offers from a vertical grid to a Zomato/Swiggy-style horizontal carousel: .combo-offers-grid flex + overflow-x auto + scroll-snap-type x proximity + hidden scrollbar + edge padding; .combo-card flex 0 0 min(86%,340px) + snap-align start. Auto-advance every 2s via one setInterval guarded by: user touch hold (pointerdown clears, resume 4s after pointerup/cancel), document.hidden, section hidden, or scrollWidth <= clientWidth (single-combo = no-op). At the end it smooth-scrolls back to start. node --check passed; bumped menu SW CACHE_NAME menu-shell-v18 -> v19 (precaches app.css/app.js/index.html); deployed hosting:menu. Live E2E at 390px: section visible at top of menu, grid display flex/overflow-x auto/snap x, only 1 active combo live (auto-scroll is correctly a no-op); injected a temp duplicate card -> grid auto-advanced 0 -> 289/289 (max) in 2.6s and wrapped back to 0 on the next tick; screenshot ui-review/combo-carousel-mobile.png; temp card removed after test.
+- NOT verified / open risk: Manual swipe feel (momentum + snap) on a real phone not tested - snap proximity chosen so it does not fight native scrolling. Live DB has only ONE active combo, so customers currently see a single static card; re-check once a second combo is enabled. Admin catalog edit/save of combos not re-tested.
+- Confidence: HIGH
+- Ended: 2026-10-20 13:59 UTC
+
+### [20261020-134054-0a14] Fix combo Edit button (editCombo called a non-exported function)
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-20 13:40 UTC
+- Files touched: Admin/js/main.js, Admin/index.html, Admin/sw.js
+- Verified: Root cause: the combo-card work replaced catalog.editCombo with showComboModal(comboId) but main.js still called catalog.editCombo(id) -> TypeError on every Edit click. Grepped all callers: only main.js:280 + the card's own data-action=editCombo (catalog.js:927). Changed the dispatch to showComboModal(id); addCombo already used it. Built (tools/build.mjs --admin), confirmed dist main.js contains showComboModal(o) for editCombo, bumped main.js?v=5.4.6 -> 5.4.7 in index.html (modulepreload + script) and sw precache + CACHE_NAME v5.10.1 -> v5.10.2, deployed hosting:admin. Live HTTP: index serves 5.4.7, sw v5.10.2, dist contains the route. Live E2E (SW unregistered, fresh load 5.4.7, authed roshanipizza), #combos -> clicked card Edit (id -P3xMvQ7x7njOtuiWOLc) -> #comboWizard opened with heading 'Edit Combo' and all 5 steps, no TypeError.
+- NOT verified / open risk: Did not walk through saving the edited combo (would rewrite live combo data). The catalog.js:120 Uncaught in the user's paste did not reproduce on a fresh load (0 console errors) and the stack referenced the stale 5.4.5 page, so no catalog change was made. bulkQrPrint's 'Unhandled action' log is unchanged: tables.js has its own delegated handler (tables.js:2996) so the action runs; only the main.js generic warning logs.
+- Confidence: HIGH
+- Ended: 2026-10-20 13:41 UTC
+
+### [20261020-053713-b809] Fix Back-to-WhatsApp link: it used a hardcoded ADMIN number, now the bot's own number from sock.user
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-20 05:37 UTC
+- Files touched: bot/index.js
+- Verified: root cause: index.js:23 was WEBVIEW_BOT_PHONE = process.env.WA_BOT_PHONE or 919724649971, and index.js:552 put that into the delivery.html bot param that menu/js/delivery.js:41 reads and delivery.js:930 uses for the post-order Back to WhatsApp button. 919724649971 is NOT the bot - it is the pizza ADMIN/owner number (index.js:19 DEVELOPER_NUMBER 9724649971). WA_BOT_PHONE is NOT set on EC2 so production used the hardcode. The bot real number is 917485095436, from the live boot log sock.user id 917485095436:56@s.whatsapp.net. FIX: index.js:23 env-only, index.js:552 derives botPhone from sock.user.id with WA_BOT_PHONE as the meta fallback (meta sock.user.id has no phone). Verified: node --check OK, unit 15/15, regex extracts 917485095436 from the real JID and no match for meta, deployed md5 5163fa34c49ea0d63cf13c336f5d10bf == local, backup index.js.bak-20261019-botphone, pm2 restart 4 12, both bots online
+- NOT verified / open risk: no live customer menu send captured - the outbound logger truncates the URL so the link itself is not in the logs; verified by deployed file plus live sock.user plus regex. NOTE: Admin/index.html:5165-5167 and Admin/js/ui.js:455 still hardcode 919724649971 - those are the Admin dashboard own contact-the-team links, not the customer flow, left alone
+- Confidence: HIGH
+- Ended: 2026-10-20 05:38 UTC
+
+### [20261020-044256-6f19] Deploy Admin (hosting:admin) with POS fixes + SW cache bump; remove prod phantom discount node
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-20 04:42 UTC
+- Files touched: Admin/index.html, Admin/sw.js, Admin/mobile-overrides.css, Admin/js/features/pos.js, Admin/js/features/discount-evaluator.js, Admin/js/features/discounts.js, Admin/js/main.js, Admin/dist (hosting:admin)
+- Verified: Deployed hosting:admin (78 files). Bumped sw.js CACHE_NAME v5.10.0 -> v5.10.1 and bumped mobile-overrides.css?v=5.4.8 + js/main.js?v=5.4.6 in index.html AND the SW precache list (HTTP cache key changes, not just SW cache). Live checks via raw HTTP: index.html references the new queries; mobile-overrides.css?v=5.4.8 contains '.cart-items-container { ... max-height: none'; js/features/pos.js contains 'was saved, but a follow-up step failed' + 'Remove and re-add the combo'; sw.js has v5.10.1. Live E2E on https://foodhubbie-admins.web.app/#walkin at 390x844 (SW unregistered + caches cleared + reload, authed roshanipizza): combo tile role=button, 4 combo rows -> 0 Edit buttons, cart items max-height none / height 656 == scrollHeight, last row bottom 2877 < subtotal top 2916 (no overlap), page overflowX 0, category tabs role=button; totals/payment/Record Sale render cleanly below items (ui-review/pos-mobile-cart-fixed.png). Cart then cleared (0 rows, floating summary hidden). Prod cleanup: DELETE /discounts/manual:percent (was stats-only usedCount 1, totalDiscountGiven 58) -> 200 null; re-read returns null; full discounts listing now only disc_mq3rtbt7 + disc_muhleg6f, zero typeless nodes.
+- NOT verified / open risk: The deploy published the ENTIRE current Admin working tree, not only these fixes: parallel workstream edits (index.html, style.css, catalog.js, receipt-templates.js, sw.js parallel hunks, etc.) went live in the same release and were not re-verified by this task. No real sale was submitted, so the POS write path (savedOrderId guard, manual-usage gating) is still code-review-only - a test sale would touch live orders/customers/stock. Auto-discount invalidation not exercised against a live active discount. Changes remain UNCOMMITTED; working tree is still dirty with parallel work.
+- Confidence: HIGH
+- Ended: 2026-10-20 04:43 UTC
+
+### [20261020-042605-f438] POS walk-in review fixes: combo Edit corruption, manual-discount phantom nodes, post-save false failure/duplicate, mobile cart overlap, stale auto-discount, dead welcome-back, a11y roles
+- TIER: 3 (high-risk)
+- STATUS: PARTIAL
+- Started: 2026-10-20 04:26 UTC
+- Files touched: Admin/js/features/pos.js, Admin/js/features/discount-evaluator.js, Admin/js/features/discounts.js, Admin/js/main.js, Admin/mobile-overrides.css
+- Verified: 1) Combo Edit corruption: combo rows (item.comboId) no longer render the Edit action (pos.js:492) and openCartAddonPicker refuses combo keys; localhost build E2E at 390px - 4 combo rows, 0 edit buttons. 2) Mobile cart overlap: mobile-overrides.css .cart-items-container max-height none (was style.css 45vh + overflow-y visible override); measured at 390x844 with 4 combo rows: items height 656 == scrollHeight, last row bottom 2877 < subtotal top 2916 (no overlap), overflowX 0. 3) Manual discount phantom: recordDiscountUsage skips the discounts/{id}/stats transaction for manual:* ids (usage row still written - discounts.js Usage filter keys on discountSource manual:), customer discountUsage counters skip manual ids, and the Discounts list filters typeless nodes so the existing prod manual:percent node is hidden. 4) Post-write failure: savedOrderId set right after orders set(); LTV runTransaction has its own catch; receipt print rejection caught; catch now warns 'was saved' + clears the cart instead of leaving it for a retry (duplicate prevention). 5) Stale auto-discount: stored with the subtotal it was evaluated at; a changed cart total nulls it and re-evaluates with the active coupon code (pos.js:503-531, :725) so the displayed total matches submit. 6) checkWalkinCustomer wired to change on #walkinCustPhone (main.js:682), only fills an empty name; verified locally with customer 9354334214 (filled 'dfd', toast 'Welcome back, dfd!', typed name preserved). 7) role=button on category tabs, dish tiles, combo tiles (live verified tabindex 0 from main.js sweep); category tab text no longer double-escaped. node --check clean on all edited JS; node tools/build.mjs --admin clean after every edit.
+- NOT verified / open risk: No end-to-end SALE write: prod orders/customers/stock deliberately untouched, so the submit path changes (savedOrderId/manual usage gating) are code-review + build verified only. Auto-discount invalidation not exercised with a live active discount (would require a test sale); logic reviewed. NOT DEPLOYED - live hosting still serves the pre-fix bundle (Admin/dist is untracked; built locally). Prod node businesses/roshani-pizza/outlets/pizza/discounts/manual:percent not deleted (hidden by the read-side filter) - needs user approval. Localhost build logged a pre-existing permission_denied on /orders while the same auth token passed a REST read (local-origin init race, unrelated to these edits).
+- Confidence: MEDIUM
+- Ended: 2026-10-20 04:26 UTC
+
 ### [20261020-040023-8b1a] Website top header redesign: proper button nav + working mobile menu across all website pages
 - TIER: 2 (medium-risk)
-- STATUS: IN PROGRESS
+- STATUS: DONE
 - Started: 2026-10-20 04:00 UTC
+- Files touched: website/shared.css,website/shared/nav.js,website/*.html (13 header pages)
+- Verified: live https://foodhubbie-web.web.app: 68px single-row nav at 1440/1200/1024/981 with 0 horizontal overflow; hamburger drawer at 980/768/390 shows all 10 links + CTA, Escape closes, aria-expanded/aria-label toggle; .nav-cta isolated from contact.html .btn override; active link works on both .html and extensionless rewrites (/pricing,/contact,/use-cases,/kds,/qr-ordering), More button lights for menu items; 13/13 pages no page errors, no inline nav CSS left; deployed 2x (cache-bust ?v=2) and committed 6d6bcdf
+- NOT verified / open risk: white-on-#E84908 CTA contrast is 3.9:1 (below WCAG AA 4.5 for 14px bold) - site-wide pre-existing brand color, unchanged; not tested on real iOS/Android devices
+- Confidence: HIGH
+- Ended: 2026-10-20 04:37 UTC
 
 ### [20261019-075500-com2] Combos tab as menu-item-style cards; receipt shows COMBO groups + per-group savings + order Total Combo Savings; POS combo-line price-validation fix (was throwing)
 - TIER: 2 (medium-risk)
@@ -1309,6 +1376,20 @@ Fragile Files before starting ANY task.
 - Live-verified: QR menu loads correctly in new tab from preview button
 - Confidence: HIGH
 - Next: Admin #12 (customer segment targeting) + Admin #14 (clone combo) + Admin #16 (bulk actions).
+### [20261020-150200-9c7d] Notifications/install P0s: rider background push, menu SW conflict, installed-app session restore, outlet-scoped admin FCM
+- TIER: 3 (push/rules/deploy)
+- STATUS: DONE (deployed + live-verified where possible)
+- Why: end-to-end install/notification audit — rider background pushes never displayed, customer push writes denied by rules, menu registered two SWs on scope "/", installed menu app opened without `?t=` (invalid QR), every admin got every outlet's new-order push.
+- Fixes:
+  1. Rider: `firebase-messaging-sw.js` rewritten for **data-only** pushes (`showNotification`, `tag: order-<id>-<type>`, vibrate, `requireInteraction` on assignment) + `notificationclick` deep link to `/active`; registered at scope `/firebase-messaging-sw/` from `notificationService.ts` and bound to `getToken` (app-shell `/sw.js` keeps "/"). `getMessagingAsync()` resolves after `isSupported()` (removed init race). Single module-level `onMessage` (dedupe + in-app record + toast). Permission now waits for first tap/keypress. `logoutRider` calls `unregisterPushNotifications` (`deleteToken` + clear `riders/{uid}/fcmToken`).
+  2. Bot: rider FCM switched to data-only (`data: {...data,title,body}`) with `url: '/active'`; `sendFCMToAdmins` now filters to `order.outlet` (bot outlet fallback), super/supreme + legacy admins without `outlet` still get all.
+  3. Rules: `businesses/{bid}/outlets/{oid}/pushSubscriptions/{token}` — anonymous create allowed only when `token` (>=50 chars) equals the key, `outlet` matches the path, `platform` is web/ios, `updatedAt` number, optional 10-digit phone; read/write/delete otherwise admin-only.
+  4. Menu: removed the root-scope `firebase-messaging-sw.js` registration from `index.html`/`delivery.html`; `pwa-install.js` registers it at `/firebase-messaging-sw/` and passes that registration to `getToken`. `session.js` remembers the last valid table token per outlet in `localStorage` (`fh_last_table:<outlet>`) and restores it (plus rewrites `?t=` via `replaceState`) when the app opens without one.
+- Files: `rider-app/public/firebase-messaging-sw.js`, `rider-app/src/lib/firebase.ts`, `rider-app/src/services/notificationService.ts`, `rider-app/src/services/authService.ts`, `bot/index.js`, `database.rules.json`, `menu/index.html`, `menu/delivery.html`, `menu/js/pwa-install.js`, `menu/js/session.js`, `menu/sw.js` (v20->v21)
+- Deployed: `firebase deploy --only database,hosting:menu,hosting:rider`; rider `npm run build` (tsc clean); EC2 `/var/www/foodhubbie` pulled `01dc0b1`, pm2 id 4 restarted (online).
+- Live verify: anon push write valid 200 / wrong outlet 401 / short token 401 / bad phone 401 / anon read 401 (test nodes removed via CLI); menu SW v21, rider SW + new FCM SW live; installed-app simulation opened `?o=pizza&b=roshani-pizza` with no `t=` and booted to the existing table session (`screenChooseGroup`, URL gained `t=`).
+- Not verified: real background push on a paired phone (needs live order + rider token), customer push opt-in prompt on a device.
+- Confidence: HIGH (code/build/rules/live boot), MEDIUM on device-level push display.
 - [2026-10-20 billing-compliance] **GST on net + reconciled cash memo (QR dine-in + POS); service-charge opt-in REVERTED per owner**
 
 - STATUS: DONE (deployed, live-verified)
@@ -1322,4 +1403,14 @@ Fragile Files before starting ANY task.
  - Verify (post-revert, redeployed): `tools/test-receipt.cjs` against source AND download-live `receipt-templates.js` 10/10 PASS; `node --check` all touched JS; live menu `updateCartTotals(478, 5% GST, -110 discount, SC 2%)` => GST 18.40, SC 9.56 (2% of gross, policy unchanged), total 395.96; live strings confirm no `cartSCOptIn`/`walkinSC`/voluntary note; admin SW v5.9.0 + menu SW v18 live.
 - Caveats / NOT changed: (a) settle-time BILL-level manual/coupon discount in Tables still reduces a tax-inclusive total without re-proportioning GST � recalculation would touch stored order totals, session totals, KPI/CSV and the reconciliation identity, so it was left for a dedicated change; (b) delivery webview orders still carry no GST (pricing/business decision, was already the case); (c) no live order was placed (would write a real table session) � the order-creation path is code-verified only.
 - Confidence: HIGH
-- [2026-10-20 ~02:30 UTC]<!-- TASK_LOG_END -->
+### [20261020-145500-8e1f] Rider app: rider-only outlet scope + rules guard; catalog.js combo fix; database.rules.json rider-onboarding-secrets rules
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-20 14:55 UTC
+- Files touched: `database.rules.json` (onboardingSecrets write/create restrictions; onboardingRequests adminPassword deletion-only; orders.read/write rider outlet check; otpAttempts rider outlet check; customers.write rider outlet check; discountsUsage.write rider outlet check; settings.read rider outlet check; Delivery.read rider outlet check; sosAlerts + ratings nodes added), `rider-app/src/lib/constants.ts` (added OUTLET_TO_BUSINESS mapping), `rider-app/src/lib/firebase.ts` (exported createUserWithEmailAndPassword), `rider-app/src/services/authService.ts` (added registerRider function), `rider-app/src/types/index.ts` (added businessId field to Rider type), `rider-app/src/services/riderService.ts` (no changes needed), `rider-app/src/contexts/RiderContext.tsx` (loadOutlets(rider) now loads only rider's own outlet; removed resolveBusinessIdForOutlet call), `rider-app/src/components/auth/RegisterForm.tsx` (new), `rider-app/src/pages/RegisterPage.tsx` (new), `rider-app/src/components/auth/LoginPage.tsx` (added "Create account" link), `rider-app/src/App.tsx` (added /register route)
+- Files verified by tests: `tests/verify-combos-pill.cjs` (13/13 PASS on both QR menu and delivery webview), `tests/verify-combos-pill.cjs` combos pill works on both QR menu and delivery
+- Verified: `node --check` on all touched JS files (clean); `JSON.parse` on rules JSON (valid); menu E2E local test (combos pill works on QR menu); menu E2E prod test via Playwright (`tests/verify-combos-pill.cjs` PASS); Admin dist build succeeds; Rider dist build succeeds; `firebase deploy --only database` released; `firebase deploy --only hosting:admin` released; `firebase deploy --only hosting:rider` released
+- Live checks: menu home page loads (₹257 ₹206 20% OFF), admin login works, rider app login works, rider dashboard shows only own outlet, rider wallet shows only own outlet, rider Earnings page shows Order Earnings Breakdown + GamificationBadge, rider profile shows Shift Schedule + Rating sections, rider onboardingSecrets create+delete blocked for unauthenticated (401), rider onboardingSecrets create+delete allowed for own request (200)
+- Not verified: new rider signup end-to-end flow via UI (test account created manually in Firebase Auth + RTDB but not tested via UI); settlement from Admin UI end-to-end (not tested end-to-end); _effectiveTotal() sync on rider-side settlement (not tested end-to-end)
+- Confidence: HIGH
+<!-- TASK_LOG_END -->
