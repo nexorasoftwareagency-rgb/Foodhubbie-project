@@ -56,7 +56,7 @@
     "settlements": {
       "$riderId": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || auth.uid == $riderId)",
-        ".write": "auth != null && (root.child('admins').child(auth.uid).exists())"
+        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || auth.uid == $riderId)"
       }
     },
     "migrationStatus": {
@@ -132,6 +132,12 @@
               "$orderId": {
                 ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || (root.child('riders').child(auth.uid).exists() && root.child('riders').child(auth.uid).child('outlet').val() == $outletId))",
                 ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || (root.child('riders').child(auth.uid).exists() && root.child('riders').child(auth.uid).child('outlet').val() == $outletId))"
+              }
+            },
+            "pushSubscriptions": {
+              ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
+              "$tokenKey": {
+                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)) || (newData.exists() && newData.hasChildren(['token', 'outlet', 'platform', 'updatedAt']) && newData.child('token').isString() && newData.child('token').val().length >= 50 && newData.child('token').val().length <= 4096 && newData.child('outlet').val() == $outletId && newData.child('platform').isString() && (newData.child('platform').val() == 'web' || newData.child('platform').val() == 'ios') && newData.child('updatedAt').isNumber() && (!newData.child('business').exists() || newData.child('business').isString()) && (!newData.child('phone').exists() || newData.child('phone').val() == null || (newData.child('phone').isString() && newData.child('phone').val().matches(/^[0-9]{10}$/))) && newData.child('token').val() == $tokenKey)"
               }
             },
             "orders": {

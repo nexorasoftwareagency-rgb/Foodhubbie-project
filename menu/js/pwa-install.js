@@ -32,6 +32,24 @@ const PHONE_STORAGE_KEY = 'fh_customer_phone';
 
 let deferredInstallPrompt = null;
 let messagingInstance = null;
+// Background push uses its own worker. Registering it at "/" would replace the
+// app-shell worker (sw.js) — two workers cannot share a scope — so it gets the
+// dedicated "/firebase-messaging-sw/" scope and getToken is bound to it.
+const FCM_SW_URL = 'firebase-messaging-sw.js';
+const FCM_SW_SCOPE = 'firebase-messaging-sw/';
+let fcmRegistration = null;
+
+function getFcmRegistration() {
+    if (!fcmRegistration) {
+        fcmRegistration = navigator.serviceWorker
+            .register(FCM_SW_URL, { scope: FCM_SW_SCOPE })
+            .catch((e) => {
+                console.warn('[PWA] FCM SW registration failed:', e?.message || e);
+                return null;
+            });
+    }
+    return fcmRegistration;
+}
 
 function getMessagingInstance() {
     if (!messagingInstance) {
@@ -118,7 +136,8 @@ export async function subscribeToNotifications() {
             return { ok: false, error: 'Notification permission was not granted.' };
         }
 
-        const swRegistration = await navigator.serviceWorker.ready;
+        const swRegistration = await getFcmRegistration();
+        if (!swRegistration) return { ok: false, error: 'Notifications could not start on this browser.' };
         const token = await getToken(messaging, {
             vapidKey: VAPID_PUBLIC_KEY,
             serviceWorkerRegistration: swRegistration

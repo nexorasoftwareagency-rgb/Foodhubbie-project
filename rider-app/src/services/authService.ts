@@ -3,15 +3,18 @@ import {
   auth,
   db,
   ref,
+  set,
   update,
   onDisconnect,
   serverTimestamp,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   firebaseSignOut,
   onAuthStateChanged,
 } from "@/lib/firebase";
 import type { User } from "firebase/auth";
-import { dbPaths } from "@/lib/constants";
+import { dbPaths, OUTLET_TO_BUSINESS, type OutletId } from "@/lib/constants";
+import type { Rider } from "@/types";
 
 /** Riders authenticate with {10-digit phone}@rider.com, matching auth.js exactly. */
 export function normalizeIdentifier(identifier: string): string {
@@ -56,6 +59,54 @@ export async function loginRider(identifier: string, password: string): Promise<
   }
 }
 
+/** Register a new rider account via Firebase Auth + write rider profile to RTDB.
+ *  The rider record lands in the correct outlet tree via businessId. Returns
+  *  the created User. */
+export async function registerRider(params: {
+  identifier: string;
+  password: string;
+  name: string;
+  outlet: OutletId;
+}): Promise<User> {
+  const email = normalizeIdentifier(params.identifier);
+  if (!email) throw new Error("Invalid email or phone number");
+
+  const cred = await createUserWithEmailAndPassword(auth, email, params.password);
+  const { user } = cred;
+
+  // Resolve businessId from outlet (mirrors Admin/BUSINESS_BY_OUTLET mapping)
+  const outletId = params.outlet;
+  const businessId = OUTLET_TO_BUSINESS[outletId] ?? outletId;
+
+  const riderPayload: Partial<Rider> = {
+    uid: user.uid,
+    name: params.name || "",
+    outlet: outletId,
+    businessId,
+    status: "Offline",
+    lastSeen: Date.now(),
+    isAdmin: false,
+  };
+
+  try {
+    await set(ref(db, dbPaths.rider(user.uid)), riderPayload);
+  } catch (err) {
+    // Rollback: attempt to delete the auth user if profile write fails.
+    // Client SDK cannot delete users directly; this is best-effort only.
+    try {
+      await firebaseSignOut(auth);
+    } catch {}
+    throw err;
+  }
+
+  try {
+    localStorage.setItem("isLoggedIn", "true");
+  } catch {
+    /* ignore storage errors (private mode) */
+  }
+  return user;
+}
+
 export async function logoutRider(uid?: string): Promise<void> {
   try {
     if (uid) {
@@ -66,6 +117,15 @@ export async function logoutRider(uid?: string): Promise<void> {
     }
   } catch {
     /* best-effort — proceed with sign out regardless */
+  }
+  // Drop this device's push subscription first (still authenticated, so the
+  // rider can clear their own fcmToken), otherwise the next rider on the same
+  // phone would receive the previous rider's order alerts.
+  try {
+    const { unregisterPushNotifications } = await import("./notificationService");
+    await unregisterPushNotifications(uid);
+  } catch {
+    /* ignore */
   }
   try {
     localStorage.removeItem("isLoggedIn");

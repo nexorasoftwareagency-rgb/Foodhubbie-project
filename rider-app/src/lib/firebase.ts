@@ -21,6 +21,7 @@ import {
 } from "firebase/database";
 import {
   getAuth,
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -33,7 +34,7 @@ import {
   getDownloadURL,
   type FirebaseStorage,
 } from "firebase/storage";
-import { getMessaging, getToken, onMessage, isSupported, type Messaging } from "firebase/messaging";
+import { getMessaging, getToken, onMessage, deleteToken, isSupported, type Messaging } from "firebase/messaging";
 
 // Real config from rider/js/firebase.js — the Roshani rider portal intentionally
 // runs on its own Firebase project, independent from the Roshani Admin project.
@@ -56,18 +57,25 @@ const auth: Auth = getAuth(app);
 const storage: FirebaseStorage = getStorage(app);
 
 let messaging: Messaging | null = null;
+// Resolves once isSupported() settles, so callers never race the async probe
+// (previously a token request on first auth could see null and silently bail).
+let messagingPromise: Promise<Messaging | null> | null = null;
 if (typeof window !== "undefined") {
-  isSupported()
-    .then((supported) => {
-      if (supported) messaging = getMessaging(app);
-    })
-    .catch(() => {
-      messaging = null;
+  messagingPromise = isSupported()
+    .then((supported) => (supported ? getMessaging(app) : null))
+    .catch(() => null)
+    .then((m) => {
+      messaging = m;
+      return m;
     });
 }
 
 export function getMessagingInstance(): Messaging | null {
   return messaging;
+}
+
+export async function getMessagingAsync(): Promise<Messaging | null> {
+  return messagingPromise ? messagingPromise : null;
 }
 
 // Corrects for client device clock drift/manipulation using Firebase's own
@@ -141,6 +149,7 @@ export {
   serverTimestamp,
   onDisconnect,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   firebaseSignOut,
   onAuthStateChanged,
   storageRef,
@@ -148,6 +157,7 @@ export {
   getDownloadURL,
   getToken,
   onMessage,
+  deleteToken,
 };
 
 export default app;

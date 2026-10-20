@@ -20,7 +20,7 @@ const DEVELOPER_NUMBER = "9724649971";
 
 // WhatsApp delivery webview — served from the QR menu hosting target.
 const WEBVIEW_DELIVERY_HOST = "https://foodhubbie-qrmenu.web.app";
-const WEBVIEW_BOT_PHONE = process.env.WA_BOT_PHONE || "919724649971";
+const WEBVIEW_BOT_PHONE = process.env.WA_BOT_PHONE || "";
 
 const fs = require('fs');
 const path = require('path');
@@ -549,7 +549,12 @@ async function resendMenuCTA(sock, sender, user, store, bot, ctaText) {
     }
     const phone = sender.replace(/[^0-9]/g, '').slice(-10);
     const token = await getOrCreateWebviewToken(OUTLET, phone, user);
-    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${WEBVIEW_BOT_PHONE}&token=${token}`;
+    // "Back to WhatsApp" in the webview must return the customer to THIS bot, so
+    // take the number from the connected socket (per-outlet, never hardcoded).
+    // Baileys sock.user.id is "<phone>:<device>@s.whatsapp.net"; meta transport has
+    // no phone there, so it falls back to WA_BOT_PHONE (set it to the WABA number).
+    const botPhone = (sock?.user?.id || '').match(/^(\d+):/)?.[1] || WEBVIEW_BOT_PHONE;
+    const menuUrl = `${WEBVIEW_DELIVERY_HOST}/delivery.html?b=${resolveBusinessIdFor(OUTLET)}&o=${OUTLET}&session=${phone}&src=wa&bot=${botPhone}&token=${token}`;
     const menuImg = bot?.menuImage || store?.bannerImage;
         if (!ctaText) ctaText = `👇 *niche link pe Click karke abhi order Karen* 👇`;
     return sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl);
@@ -836,14 +841,18 @@ async function addInAppNotification(uid, title, body, type = 'info', icon = 'bel
 
 async function sendFCMToAdmins(orderId, order) {
     try {
-        const outlet = order.outlet || 'outlet';
+        const outlet = order.outlet || resolveOutletId() || 'outlet';
         const snap = await db.ref('admins').once('value');
         const admins = snap.val();
         if (!admins) return;
         // Keep uid alongside each token so a dead token can be traced back
         // to the admin record it belongs to and cleaned up below.
+        // Only that outlet's staff (plus super/supreme and legacy records with
+        // no outlet) get the alert — otherwise every restaurant's owner sees
+        // other outlets' order ids, totals and customer names.
         const entries = Object.entries(admins)
             .filter(([, a]) => !!a.fcmToken)
+            .filter(([, a]) => a.isSuper === true || a.isSupreme === true || !a.outlet || String(a.outlet) === String(outlet))
             .map(([uid, a]) => ({ uid, token: a.fcmToken }));
         if (entries.length === 0) return;
         // De-dupe by token (two admin records could share a token on a
@@ -911,8 +920,10 @@ async function sendFCMToRider(riderId, title, body, data = {}) {
         if (!token) return;
         await admin.messaging().send({
             token,
-            notification: { title, body },
-            data,
+            // Data-only: the rider SW builds the notification (custom tag/vibrate
+            // and deep link). Sending `notification` too would let the SDK
+            // auto-display a second, untagged popup alongside ours.
+            data: { ...data, title, body },
             android: { priority: 'high' },
             webpush: { headers: { Urgency: 'high' } }
         });
@@ -2315,7 +2326,7 @@ function initFCMWatcher() {
         riderUid = rider?.uid || riderUid;
       }
       if (riderUid) {
-        sendFCMToRider(riderUid, 'New Order Assigned!', `Order #${formatOrderId(after.orderId || orderId)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: './index.html' });
+        sendFCMToRider(riderUid, 'New Order Assigned!', `Order #${formatOrderId(after.orderId || orderId)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: '/active' });
       }
     } else if (after.riderId && after.status && after.status !== before.status) {
       const s = String(after.status).toLowerCase();

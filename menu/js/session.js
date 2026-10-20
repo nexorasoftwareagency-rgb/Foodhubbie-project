@@ -31,6 +31,20 @@ function getTokenFromUrl() {
     return params.get('t');
 }
 
+// The installed app / a notification tap opens the manifest's start_url without
+// ?t=, so remember the last valid table token for this outlet and reuse it.
+// Tokens are long-lived per table (not per visit); a rotated/removed token just
+// fails validation and falls through to the normal invalid-QR screen.
+const LAST_TABLE_KEY = `fh_last_table:${OUTLET}`;
+
+function rememberTableToken(token) {
+    try { localStorage.setItem(LAST_TABLE_KEY, token); } catch { /* private mode */ }
+}
+
+function recallTableToken() {
+    try { return localStorage.getItem(LAST_TABLE_KEY); } catch { return null; }
+}
+
 /**
  * Validates the token against /tables and returns the matching table
  * record, or null if no table has this token (Decision #5/#6).
@@ -166,10 +180,27 @@ async function joinOrCreateSession(table) {
  * Returns { ok: true } on success or { ok: false, reason } on failure.
  */
 export async function initSession() {
-    const token = getTokenFromUrl();
-    const table = await validateToken(token);
+    let token = getTokenFromUrl();
+    let table = await validateToken(token);
+
+    if (!table) {
+        const saved = recallTableToken();
+        if (saved && saved !== token) {
+            table = await validateToken(saved);
+            if (table) {
+                token = saved;
+                try {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('t', saved);
+                    window.history.replaceState(null, '', url);
+                } catch { /* non-critical */ }
+            }
+        }
+    }
+
     if (!table) return { ok: false, reason: 'invalid-token' };
 
+    rememberTableToken(token);
     table.__outlet = OUTLET;
     Session.table = table;
     Session.tableId = table.id;

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'menu-shell-v18';
+const CACHE_NAME = 'menu-shell-v21';
 const ASSETS = [
   './index.html',
   './delivery.html',
@@ -42,15 +42,15 @@ self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('securetoken.googleapis.com')) return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request).then((response) => {
-        if (response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => cached);
-      return cached || fetchPromise;
-    })
+    // ponytail: network-first — cache is only the offline fallback, never the
+    // served answer. Cache-first (`cached || fetch`) made deploys invisible
+    // for a visit or two.
+    fetch(event.request).then((response) => {
+      if (response.status === 200) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      }
+      return response;
+    }).catch(() => caches.match(event.request))
   );
 });

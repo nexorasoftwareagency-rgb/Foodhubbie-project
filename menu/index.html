@@ -547,9 +547,6 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(function(err) {
     console.warn('[PWA] SW registration failed:', err);
   });
-  navigator.serviceWorker.register('firebase-messaging-sw.js').catch(function(err) {
-    console.warn('[PWA] FCM SW registration failed:', err);
-  });
 }
 </script>
 </body>
