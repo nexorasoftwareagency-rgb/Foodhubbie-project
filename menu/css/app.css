@@ -731,8 +731,22 @@ img{max-width:100%; display:block;}
 /* Combo Offers — mobile-first, Zomato/Swiggy-grade */
 .combo-offers-section{margin:14px 0 4px;}
 .combo-offers-section.hidden{display:none;}
-.combo-offers-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
-.combo-card{display:flex;min-width:0;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s;}
+.combo-offers-grid{display:flex;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding-left:16px;padding:2px 16px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.combo-offers-grid::-webkit-scrollbar{display:none;}
+
+/* ---------- Sort filter chips (Zomato-style) ---------- */
+.menu-filter-row{display:flex;align-items:center;gap:8px;padding:2px 16px 10px;overflow-x:auto;scrollbar-width:none;}
+.menu-filter-row::-webkit-scrollbar{display:none;}
+.menu-filter-chip{
+    flex-shrink:0;padding:8px 15px;border-radius:20px;
+    border:1.5px solid var(--border);background:var(--card);
+    font-size:12px;font-weight:700;color:var(--text-sub);cursor:pointer;
+    touch-action:manipulation;white-space:nowrap;
+    transition:background .2s ease,color .2s ease,border-color .2s ease,transform .1s ease;
+}
+.menu-filter-chip:active{transform:scale(.95);}
+.menu-filter-chip.active{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 3px 10px rgba(232,73,8,.25);}
+.combo-card{display:flex;min-width:0;flex:0 0 min(86%,340px);scroll-snap-align:start;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s;}
 .combo-card:active{transform:scale(.985);}
 .combo-card-img{position:relative;width:92px;height:92px;flex-shrink:0;border-radius:10px;overflow:visible;background:var(--bg);}
 .combo-card-img .combo-img-frame{position:absolute;inset:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;}

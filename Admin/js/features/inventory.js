@@ -457,6 +457,10 @@ function updateMenuVisibility() {
 export async function loadInventoryMenu() {
     const container = document.getElementById('inventoryMenuGrid');
     if (!container) return;
+    // Pre-auth boot hydrides toggles from localStorage and calls this before any
+    // Firebase auth — dishes may be public but the inventory read is admin-only,
+    // so a pre-auth read here just spams a permission-denied error. Re-run on login/tab open.
+    if (!auth.currentUser || !state.currentOutlet) return;
     const showAvailability = document.getElementById('toggleAvailability')?.checked;
     const showStock = document.getElementById('toggleStockTracking')?.checked;
     container.innerHTML = '<div class="text-center p-20 text-muted">Loading menu...</div>';

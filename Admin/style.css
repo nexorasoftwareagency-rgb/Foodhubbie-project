@@ -10108,6 +10108,43 @@ body.pos-selection-mode .walkin-picker {
     grid-column: 1 / -1;
 }
 
+/* Combo cards (Combos tab) — reuses browser-dish-card pattern */
+.combo-cards {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.combo-disc-chip {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    background: var(--primary-dark);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
+
+.combo-price-orig {
+    opacity: 0.55;
+}
+
+.combo-price-final {
+    background: var(--primary-dark);
+    color: #fff;
+    font-weight: 700;
+}
+
+.combo-card .toggle-switch {
+    flex-shrink: 0;
+    align-self: center;
+}
+
+.browser-dish-actions .combo-toggle {
+    margin-right: 4px;
+}
+
 @media (max-width: 1024px) {
     .menu-browser-layout {
         flex-direction: column;

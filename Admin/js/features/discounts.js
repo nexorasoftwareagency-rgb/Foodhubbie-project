@@ -130,7 +130,9 @@ function _renderCard(d) {
 }
 
 async function _renderList() {
-    const all = Object.entries(_allDiscountsSnap).map(([id, d]) => ({ id, ...d }));
+    // Ignore typeless nodes (e.g. legacy "manual:flat" stats-only entries) —
+    // they are not editable discounts and render as blank cards.
+    const all = Object.entries(_allDiscountsSnap).filter(([, d]) => d && d.type).map(([id, d]) => ({ id, ...d }));
     const groups = { active: [], scheduled: [], expired: [] };
     for (const d of all) {
         const s = _status(d);

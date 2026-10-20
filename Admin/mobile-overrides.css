@@ -997,6 +997,7 @@
     /* Cart Items */
     .cart-items-container {
         flex: none !important;
+        max-height: none !important;
         overflow-y: visible !important;
         min-height: 50px;
     }

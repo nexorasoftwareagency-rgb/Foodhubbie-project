@@ -85,7 +85,7 @@
                 <svg class="icon" style="width:16px;height:16px;color:var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                 <input type="search" id="dishSearchInput" name="dishSearch" placeholder="Search for dishes…" autocomplete="off" aria-label="Search for dishes" enterkeyhint="search">
             </div>
-            <select id="menuSortSelect" class="form-input" style="margin-left:8px;">
+            <select id="menuSortSelect" hidden aria-label="Sort dishes">
                 <option value="popularity">Popularity</option>
                 <option value="price-asc">Price: Low to High</option>
                 <option value="price-desc">Price: High to Low</option>
@@ -97,6 +97,13 @@
         <div id="comboOffersSection" class="combo-offers-section hidden">
             <div class="menu-section-title">Combo Offers</div>
             <div id="comboOffersGrid" class="combo-offers-grid"></div>
+        </div>
+
+        <!-- Sort filter chips (drive the hidden #menuSortSelect) -->
+        <div class="menu-filter-row" id="menuSortRow" role="group" aria-label="Sort dishes">
+            <button class="menu-filter-chip active" data-sort="popularity" type="button">⚡ Popularity</button>
+            <button class="menu-filter-chip" data-sort="price-asc" type="button">₹ Low to High</button>
+            <button class="menu-filter-chip" data-sort="price-desc" type="button">₹ High to Low</button>
         </div>
 
         <div class="category-pills" id="categoryPillsRow"></div>

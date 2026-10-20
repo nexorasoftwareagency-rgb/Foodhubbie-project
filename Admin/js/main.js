@@ -40,6 +40,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         form.addEventListener('submit', e => e.preventDefault());
     });
 
+    // Inject "User manual" button into each tab header
+    document.querySelectorAll('.screen').forEach(screen => {
+        const panelHeader = screen.querySelector('.panel-header, .section-header-row');
+        if (panelHeader && !panelHeader.querySelector('[data-action="viewUserManual"]')) {
+            const tabId = screen.id;
+            const btn = document.createElement('button');
+            btn.className = 'btn-secondary btn-sm';
+            btn.setAttribute('data-action', 'viewUserManual');
+            btn.setAttribute('data-tab', tabId);
+            btn.setAttribute('title', 'User Manual');
+            btn.innerHTML = '<i data-lucide="book-open" class="icon-14"></i> User Manual';
+            panelHeader.appendChild(btn);
+        }
+    });
+    loadLucide();
+
+
     window.hideLoader = () => {
         const loader = document.getElementById('initial-loader');
         if (loader) {
@@ -277,12 +294,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'deleteDish': logger.info('CATALOG', `Delete dish: ${id}`); (await useMod('catalog')).deleteDish(id); break;
                 case 'editCategory': logger.info('CATALOG', `Edit category: ${id}`); (await useMod('catalog')).editCategory(id); break;
                 case 'addCombo': logger.info('CATALOG', 'Add combo'); (await useMod('catalog')).showComboModal(); break;
-                case 'editCombo': logger.info('CATALOG', `Edit combo: ${id}`); (await useMod('catalog')).editCombo(id); break;
+                case 'editCombo': logger.info('CATALOG', `Edit combo: ${id}`); (await useMod('catalog')).showComboModal(id); break;
                 case 'deleteCombo': logger.info('CATALOG', `Delete combo: ${id}`); (await useMod('catalog')).deleteCombo(id); break;
-                case 'previewCombo': {
-                    logger.info('CATALOG', `Preview combo: ${id} (outlet: ${oid})`);
-                    const menuUrl = `https://foodhubbie-qrmenu.web.app/?o=${encodeURIComponent(oid)}&b=roshani-pizza`;
-                    window.open(menuUrl, '_blank');
+                case 'viewUserManual': {
+                    logger.info('CATALOG', `Show user manual for combo: ${id}`);
+                    const title = 'Combo Offers';
+                    const content = `
+                        <strong>Create Combo Offers</strong><br>
+                        • Click <strong>Add Combo</b> to create a new combo offer.<br>
+                        • Fill in combo name, select dishes and quantities.<br>
+                        • Set discount type (Percentage % off or Fixed Amount ₹ off) and value.<br>
+                        • Set active date range (start date and end date).<br>
+                        • Set optional caps: total redemptions, per customer, per day.<br>
+                        • Enter a <strong>Coupon Code</strong> to require customers to enter it at checkout.<br>
+                        <br>
+                        <strong>How combos appear to customers:</strong><br>
+                        • Combos appear at the top of the customer QR menu and WhatsApp webview in a "Combo Offers" section.<br>
+                        • Each combo card shows: combo name, items with quantities, original price → combo price, discount badge.<br>
+                        • Customers click "Add Combo" to add all items to cart at once.<br>
+                        • Customers can click a combo card to see full details in a popup modal with an "Add to Cart" button.
+                    `;
+                    showUserManual(title, content);
                     break;
                 }
                 case 'adjustStock': logger.info('INVENTORY', `Adjust stock: ${id} (${val})`); (await useMod('inventory')).adjustStock(id, parseInt(val, 10)); break;
@@ -680,6 +712,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.addEventListener('change', async (e) => {
         try {
             const el = e.target;
+            if (el.id === 'walkinCustPhone') (await useMod('pos')).checkWalkinCustomer();
             const action = el.getAttribute('data-action');
             if (!action) return;
             const id = el.getAttribute('data-id');
@@ -885,3 +918,348 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 console.log("\uD83D\uDE80 FoodHubbie ERP Modules Loaded");
+
+// Show user manual modal for a specific tab
+window.showUserManual = (tabId, title) => {
+    const modal = document.getElementById('userManualModal');
+    const titleEl = document.getElementById('umTitle');
+    const contentEl = document.getElementById('umContent');
+    if (!modal || !titleEl || !contentEl) return;
+
+    const manuals = {
+        combos: {
+            title: 'Combos — Combo Offers',
+            content: `
+                <strong>Create Combo Offers</strong><br>
+                • Click <strong>Add Combo</strong> to create a new combo offer.<br>
+                • Fill in combo name, select dishes and quantities.<br>
+                • Set discount type (Percentage % off or Fixed Amount ₹ off) and value.<br>
+                • Set active date range (start date and end date).<br>
+                • Set optional caps: total redemptions, per customer, per day.<br>
+                • Enter a <strong>Coupon Code</strong> to require customers to enter it at checkout.<br>
+                <br>
+                <strong>How combos appear to customers:</strong><br>
+                • Combos appear at the top of the customer QR menu and WhatsApp webview in a "Combo Offers" section.<br>
+                • Each combo card shows: combo name, items with quantities, original price → combo price, discount badge.<br>
+                • Customers click "Add Combo" to add all items to cart at once.<br>
+                • Customers can click a combo card to see full details in a popup modal with an "Add to Cart" button.
+            `
+        },
+        orders: {
+            title: 'Orders',
+            content: `
+                <strong>Order Management</strong><br>
+                • View all customer orders with status, totals, and timestamps.<br>
+                • Use filters to filter by date, status, or search by order ID/customer name.<br>
+                • Click an order to view detailed items and customer information.<br>
+                • Change order status (Placed, Preparing, Ready, Served, Cancelled) as needed.<br>
+                • Orders are auto-attached to the active session for billing.
+            `
+        },
+        tables: {
+            title: 'Tables',
+            content: `
+                <strong>Table Management</strong><br>
+                • View all tables with status (Active, Occupied, Billing, Disabled).<br>
+                • Assign QR codes to tables for customer ordering.<br>
+                • Enable/disable tables.<br>
+                • View table sessions and active orders.<br>
+                • Monitor rider assignments per table.
+            `
+        },
+        payments: {
+            title: 'Payments',
+            content: `
+                <strong>Payment Management</strong><br>
+                • View all payment records across all restaurants.<br>
+                • Filter by date range, restaurant, or payment status.<br>
+                • View usage statistics and revenue per plan.<br>
+                • Export payment reports.<br>
+                • Record payments manually for each outlet.
+            `
+        },
+        riderAnalytics: {
+            title: 'Rider Analytics',
+            content: `
+                <strong>Rider Analytics</strong><br>
+                • View rider performance metrics: deliveries completed, average delivery time, ratings.<br>
+                • Track rider earnings and commission.<br>
+                • View rider activity trends over time.<br>
+                • Export rider performance reports.
+            `
+        },
+        inventory: {
+            title: 'Inventory',
+            content: `
+                <strong>Inventory Management</strong><br>
+                • Track dish ingredients and stock levels.<br>
+                • Receive low stock alerts.<br>
+                • Manage ingredient usage across dishes.<br>
+                • View inventory valuation and usage trends.
+            `
+        },
+        promotions: {
+            title: 'Promotions',
+            content: `
+                <strong>Promotion Management</strong><br>
+                • Create promotional campaigns for restaurants.<br>
+                • Set promo codes, discount types, and values.<br>
+                • Track promotion usage and effectiveness.<br>
+                • Schedule promotions with start and end dates.<br>
+                • Manage promotional budget allocation.
+            `
+        },
+        discounts: {
+            title: 'Discounts',
+            content: `
+                <strong>Discount Management</strong><br>
+                • Create discount types: Global, Category, First Order, Coupon.<br>
+                • Set discount percentage or fixed amount.<br>
+                • Set validity dates and usage limits.<br>
+                • Track discount usage and revenue impact.<br>
+                • Link discounts to combos via coupon codes.
+            `
+        },
+        'staff-management': {
+            title: 'Staff Management',
+            content: `
+                <strong>Staff Management</strong><br>
+                • Manage restaurant staff (admins, managers, cashiers, waiters).<br>
+                • Assign roles and permissions.<br>
+                • Track staff performance and activity.<br>
+                • Manage staff schedules and availability.
+            `
+        },
+        settings: {
+            title: 'Settings',
+            content: `
+                <strong>Restaurant Settings</strong><br>
+                • Configure outlet settings (name, currency, tax, service charge).<br>
+                • Configure dish categories.<br>
+                • Manage billing plans and subscriptions.<br>
+                • Configure delivery settings.<br>
+                • Manage restaurant contact information.
+            `
+        },
+        catalog: {
+            title: 'Menu Catalog',
+            content: `
+                <strong>Menu Catalog Management</strong><br>
+                • Manage dishes: add, edit, delete menu items.<br>
+                • Manage categories: create, edit, delete dish categories.<br>
+                • Upload dish images and set prices.<br>
+                • Manage dish availability (in stock/out of stock).<br>
+                • Link dishes to categories for menu organization.
+            `
+        },
+        menu: {
+            title: 'Menu Management',
+            content: `
+                <strong>Menu Management</strong><br>
+                • View and manage all dishes across categories.<br>
+                • Add, edit, or delete menu items.<br>
+                • Manage dish categories and organization.<br>
+                • Track dish prices and availability.
+            `
+        },
+        orders: {
+            title: 'Orders',
+            content: `
+                <strong>Order Management</strong><br>
+                • View all customer orders with status, totals, and timestamps.<br>
+                • Use filters to search by date, status, or customer name.<br>
+                • Click an order to view detailed items and customer information.<br>
+                • Change order status (Placed, Preparing, Ready, Served, Cancelled).<br>
+                • Orders are auto-attached to the active session for billing.
+            `
+        },
+        tables: {
+            title: 'Table Management',
+            content: `
+                <strong>Table Management</strong><br>
+                • View all tables with status (Active, Occupied, Billing, Disabled).<br>
+                • Assign QR codes to tables for customer ordering.<br>
+                • Enable/disable tables.<br>
+                • View table sessions and active orders.<br>
+                • Monitor rider assignments per table.
+            `
+        },
+        riders: {
+            title: 'Rider Management',
+            content: `
+                <strong>Rider Management</strong><br>
+                • Manage delivery riders: add, edit, delete riders.<br>
+                • View rider performance: deliveries completed, ratings.<br>
+                • Track rider availability and delivery assignments.<br>
+                • Manage rider earnings and payouts.
+            `
+        },
+        customers: {
+            title: 'Customer Management',
+            content: `
+                <strong>Customer Management</strong><br>
+                • View all customers with order history.<br>
+                • Track customer orders and loyalty.<br>
+                • Manage customer profiles and contact information.<br>
+                • Track customer lifetime value and order frequency.
+            `
+        },
+        chat: {
+            title: 'Chat',
+            content: `
+                <strong>Customer Chat</strong><br>
+                • View and reply to customer messages.<br>
+                • Track conversation history.<br>
+                • Respond to customer inquiries promptly.<br>
+                • Track conversation status (open, resolved).
+            `
+        },
+        reports: {
+            title: 'Reports',
+            content: `
+                <strong>Reports</strong><br>
+                • View sales reports by date range.<br>
+                • View order reports by restaurant, category, or dish.<br>
+                • Export reports in various formats.<br>
+                • Track revenue trends over time.
+            `
+        },
+        riderAnalytics: {
+            title: 'Rider Analytics',
+            content: `
+                <strong>Rider Analytics</strong><br>
+                • View rider performance metrics: deliveries completed, average delivery time, ratings.<br>
+                • Track rider earnings and commission.<br>
+                • View rider activity trends over time.<br>
+                • Export rider performance reports.
+            `
+        },
+        inventory: {
+            title: 'Inventory Management',
+            content: `
+                <strong>Inventory Management</strong><br>
+                • Track dish ingredients and stock levels.<br>
+                • Receive low stock alerts.<br>
+                • Manage ingredient usage across dishes.<br>
+                • View inventory valuation and usage trends.
+            `
+        },
+        feedback: {
+            title: 'Customer Feedback',
+            content: `
+                <strong>Customer Feedback</strong><br>
+                • View customer feedback and ratings.<br>
+                • Track feedback trends over time.<br>
+                • Respond to customer feedback.<br>
+                • Use feedback to improve service quality.
+            `
+        },
+        walkin: {
+            title: 'Walk-in Orders',
+            content: `
+                <strong>Walk-in Order Management</strong><br>
+                • Manage walk-in customer orders (POS).<br>
+                • Create orders for walk-in customers.<br>
+                • Track walk-in order status.<br>
+                • Link walk-in orders to tables for billing.
+            `
+        },
+        menu: {
+            title: 'Menu Management',
+            content: `
+                <strong>Menu Management</strong><br>
+                • View and manage all dishes across categories.<br>
+                • Add, edit, delete menu items.<br>
+                • Manage dish categories and organization.<br>
+                • Track dish prices and availability.
+            `
+        },
+        'menu-browser': {
+            title: 'Menu Browser',
+            content: `
+                <strong>Menu Browser</strong><br>
+                • Browse menu items across all categories.<br>
+                • Search dishes by name or category.<br>
+                • View dish details and pricing.<br>
+                • Filter dishes by dietary preferences.
+            `
+        },
+        notifications: {
+            title: 'Notifications',
+            content: `
+                <strong>Notification Management</strong><br>
+                • View and manage customer notifications.<br>
+                • Send promotional notifications.<br>
+                • Track notification delivery status.<br>
+                • Manage notification preferences.
+            `
+        },
+        liveTracker: {
+            title: 'Live Tracker',
+            content: `
+                <strong>Live Tracker</strong><br>
+                • Track orders in real-time.<br>
+                • View rider location and delivery status.<br>
+                • Monitor order preparation status.<br>
+                • Notify customers of order status changes.
+            `
+        },
+        payments: {
+            title: 'Payments',
+            content: `
+                <strong>Payment Management</strong><br>
+                • View all payment records across all restaurants.<br>
+                • Filter by date range, restaurant, or payment status.<br>
+                • View usage statistics and revenue per plan.<br>
+                • Export payment reports.<br>
+                • Record payments for each outlet.
+            `
+        },
+        feedback: {
+            title: 'Customer Feedback',
+            content: `
+                <strong>Customer Feedback</strong><br>
+                • View customer feedback and ratings.<br>
+                • Track feedback trends over time.<br>
+                • Respond to customer feedback.<br>
+                • Use feedback to improve service quality.
+            `
+        },
+        costs: {
+            title: 'Costs',
+            content: `
+                <strong>Cost Management</strong><br>
+                • Track restaurant costs and expenses.<br>
+                • View cost breakdown by category.<br>
+                • Analyze cost trends over time.<br>
+                • Manage cost centers and budgets.
+            `
+        },
+        expenses: {
+            title: 'Expenses',
+            content: `
+                <strong>Expense Management</strong><br>
+                • Track restaurant expenses.<br>
+                • Categorize expenses by type.<br>
+                • View expense trends over time.<br>
+                • Manage expense approvals and reimbursements.
+            `
+        },
+        dashboard: {
+            title: 'Dashboard',
+            content: `
+                <strong>Dashboard Overview</strong><br>
+                • View key performance indicators (KPIs) at a glance.<br>
+                • View order statistics, revenue, and customer metrics.<br>
+                • Track business performance over time.<br>
+                • Quick access to key management functions.
+            `
+        }
+    };
+
+    const data = manuals[tabId] || { title: 'User Manual', content: '<p>No specific help available for this section.</p>' };
+    document.getElementById('umTitle').textContent = data.title;
+    document.getElementById('umContent').innerHTML = data.content;
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+};

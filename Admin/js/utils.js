@@ -154,7 +154,10 @@ export const standardizeOrderData = (o) => {
         size: i.size || "",
         quantity: parseInt(i.qty || i.quantity || 1, 10),
         price: parseFloat(i.price || i.unitPrice || i.total || 0),
-        addon: i.addon || (i.addons && Array.isArray(i.addons) ? i.addons.map(a => a.name).join(', ') : "")
+        addon: i.addon || (i.addons && Array.isArray(i.addons) ? i.addons.map(a => a.name).join(', ') : ""),
+        comboId: i.comboId || "",
+        comboName: i.comboName || "",
+        comboOriginal: parseFloat(i.comboOriginal || i.comboLineOriginal || 0)
     }));
 
     const orderDate = o.createdAt ? new Date(o.createdAt) : new Date();

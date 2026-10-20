@@ -274,30 +274,35 @@ export async function evaluateDiscount(ctx = {}) {
  */
 export async function recordDiscountUsage({ discountId, orderId, customerPhone, amountGiven, channel, discountLabel, discountSource, globalLimit, isVoid }) {
     try {
-        // Bump stats atomically — abort if globalLimit would be exceeded
-        let reserved = true;
-        const txResult = await runTransaction(Outlet.ref(`discounts/${discountId}/stats`), (cur) => {
-            cur = cur || {};
-            const currentCount = cur.usedCount || 0;
-            const nextCount = isVoid ? Math.max(0, currentCount - 1) : currentCount + 1;
-            // amountGiven arrives already correctly signed by the caller
-            // (negative for a void, positive for a normal redemption) — do
-            // NOT re-negate it here. An earlier version did `isVoid ? -amount
-            // : amount`, which double-negated a void's already-negative
-            // value back to positive: voiding a discount INCREASED
-            // totalDiscountGiven instead of decreasing it, and recorded a
-            // positive audit-trail entry for a void instead of a negative
-            // one — so summing a discount's usage history would overcount
-            // by double the voided amount instead of netting to zero.
-            const amount = Math.round(Number(amountGiven) || 0);
-            if (globalLimit && nextCount > globalLimit) { reserved = false; return; }
-            return {
-                usedCount: nextCount,
-                totalDiscountGiven: (cur.totalDiscountGiven || 0) + amount,
-                lastUsedAt: Date.now()
-            };
-        });
-        if (!reserved || !txResult.committed) { console.warn(`[Discounts] Redemption cap reached or tx failed for ${discountId}`); return; }
+        // Manual discounts (POS "Manual Discount" / %) have no `discounts/{id}`
+        // record — bumping their stats creates phantom nodes that render as
+        // blank cards in the Discounts tab. Their usage row is still logged.
+        if (!String(discountId || '').startsWith('manual:')) {
+            // Bump stats atomically — abort if globalLimit would be exceeded
+            let reserved = true;
+            const txResult = await runTransaction(Outlet.ref(`discounts/${discountId}/stats`), (cur) => {
+                cur = cur || {};
+                const currentCount = cur.usedCount || 0;
+                const nextCount = isVoid ? Math.max(0, currentCount - 1) : currentCount + 1;
+                // amountGiven arrives already correctly signed by the caller
+                // (negative for a void, positive for a normal redemption) — do
+                // NOT re-negate it here. An earlier version did `isVoid ? -amount
+                // : amount`, which double-negated a void's already-negative
+                // value back to positive: voiding a discount INCREASED
+                // totalDiscountGiven instead of decreasing it, and recorded a
+                // positive audit-trail entry for a void instead of a negative
+                // one — so summing a discount's usage history would overcount
+                // by double the voided amount instead of netting to zero.
+                const amount = Math.round(Number(amountGiven) || 0);
+                if (globalLimit && nextCount > globalLimit) { reserved = false; return; }
+                return {
+                    usedCount: nextCount,
+                    totalDiscountGiven: (cur.totalDiscountGiven || 0) + amount,
+                    lastUsedAt: Date.now()
+                };
+            });
+            if (!reserved || !txResult.committed) { console.warn(`[Discounts] Redemption cap reached or tx failed for ${discountId}`); return; }
+        }
         const usageId = push(Outlet.ref('discountsUsage')).key;
         await Outlet.ref(`discountsUsage/${usageId}`).set({
             discountId, discountLabel: discountLabel || '',

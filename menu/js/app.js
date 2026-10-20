@@ -455,7 +455,7 @@ async function loadMenu() {
 }
 
 function renderMenuScreen(searchTerm) {
-    UI.renderCategoryPills(M.categories, M.activeCategory, (catId) => {     M.activeCategory = catId; document.getElementById('dishSearchInput').value = ''; renderMenuScreen(); }, M.combos.length > 0);
+    UI.renderCategoryPills(M.categories, M.activeCategory, (catId) => {     M.activeCategory = catId; document.getElementById('dishSearchInput').value = ''; renderMenuScreen(); });
 
     const combosOnly = M.activeCategory === '__combos';
     _renderComboOffers();
@@ -516,7 +516,9 @@ function _comboData(c) {
     }).filter(e => e.dish);
     const prices = bakeComboUnitPrices(entries.map(e => ({ base: e.base, qty: e.qty })), c.discountType, c.discountValue);
     const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
-    const originalTotal = entries.reduce((s, e, i) => s + prices[i], 0);
+    // Sum BASE prices — the baked prices are already discounted; summing them
+    // applied the discount twice (Zomato-style card showed ~₹58 off a ₹58% off).
+    const originalTotal = entries.reduce((s, e) => s + e.base * e.qty, 0);
     const comboPrice = comboPriceTotal(originalTotal, c.discountType, c.discountValue);
     return { entries, prices, disc, originalTotal, comboPrice, saving: originalTotal - comboPrice };
 }
@@ -545,8 +547,8 @@ function _renderComboOffers() {
                 <div class="combo-card-title">${esc(c.name)}</div>
                 <div class="combo-card-items">${esc(dishNames)}</div>
                 <div class="combo-card-price-row">
-                    <span class="combo-card-orig">₹${UI.fmtMoney(d.originalTotal)}</span>
-                    <span class="combo-card-price">₹${UI.fmtMoney(d.comboPrice)}</span>
+                    <span class="combo-card-orig">${UI.fmtMoney(d.originalTotal)}</span>
+                    <span class="combo-card-price">${UI.fmtMoney(d.comboPrice)}</span>
                     <span class="combo-card-disc">${d.disc}</span>
                     <span class="combo-card-hint">Tap for details ›</span>
                 </div>
@@ -554,6 +556,18 @@ function _renderComboOffers() {
         </div>`;
     }).join('');
     if (!grid._cbListener) {
+        // Auto-advance every 2s; pause while/4s after the user touches.
+        grid.addEventListener('pointerdown', () => { grid._cbHold = true; clearTimeout(grid._cbResume); });
+        const release = () => { clearTimeout(grid._cbResume); grid._cbResume = setTimeout(() => { grid._cbHold = false; }, 4000); };
+        grid.addEventListener('pointerup', release);
+        grid.addEventListener('pointercancel', release);
+        grid._cbAuto = setInterval(() => {
+            if (grid._cbHold || document.hidden || section.classList.contains('hidden') || grid.scrollWidth <= grid.clientWidth + 4) return;
+            const step = (grid.firstElementChild?.offsetWidth || grid.clientWidth) + 12;
+            if (grid.scrollLeft >= grid.scrollWidth - grid.clientWidth - 4) grid.scrollTo({ left: 0, behavior: 'smooth' });
+            else grid.scrollBy({ left: step, behavior: 'smooth' });
+        }, 2000);
+        grid._cbListener = true;
         grid._cbListener = true;
         grid.addEventListener('click', e => {
         const fab = e.target.closest('.combo-fab');
@@ -701,7 +715,16 @@ document.getElementById('dishSearchInput')?.addEventListener('input', (e) => {
 });
 document.getElementById('menuSortSelect')?.addEventListener('change', (e) => {
     M.sortKey = e.target.value;
+    document.querySelectorAll('.menu-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.sort === M.sortKey));
     renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
+});
+document.getElementById('menuSortRow')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.menu-filter-chip');
+    if (!chip) return;
+    touchSession();
+    const sel = document.getElementById('menuSortSelect');
+    sel.value = chip.dataset.sort;
+    sel.dispatchEvent(new Event('change'));
 });
 
 // --- Recent searches ---

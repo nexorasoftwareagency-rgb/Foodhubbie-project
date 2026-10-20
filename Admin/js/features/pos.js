@@ -880,6 +880,10 @@ export async function submitWalkinSale() {
         btn.innerHTML = '<span class="spinner"></span> Processing...';
     }
 
+    // Once the order doc is written the sale HAS happened: a later failure
+    // (LTV/print) must not report failure and leave the cart for a retry,
+    // which would write the same sale twice.
+    let savedOrderId = null;
     try {
         // --- PHASE 3.22: PRICE VALIDATION ---
         const [dishesSnap, categoriesSnap, dineinSnap] = await Promise.all([
@@ -1067,6 +1071,7 @@ export async function submitWalkinSale() {
         // 1. Save Order
         logger.firebase('POS', `Saving order to Firebase: orders/${orderId}`);
         await set(Outlet.ref(`orders/${orderId}`), orderData);
+        savedOrderId = orderId;
         logger.firebase('POS', `Order saved: ${orderId}`);
 
         // 2. Auto-deduct inventory
@@ -1074,7 +1079,7 @@ export async function submitWalkinSale() {
         await autoDeductStock(items);
         logger.info('POS', 'Stock deducted');
 
-        // 2b. Record discount usage + mark first-order as consumed (best-effort)
+        // 2b. Record discount usage + mark first-order as consumed (best-effort).
         if (discountId && discountValue > 0) {
             try {
                 await recordDiscountUsage({
@@ -1103,7 +1108,7 @@ export async function submitWalkinSale() {
                         fresh.firstOrderDiscountUsed = Date.now();
                         fresh.firstOrderDiscountId = discountId;
                     }
-                    if (discountId && discountValue > 0) {
+                    if (discountId && !isManualDiscount && discountValue > 0) {
                         fresh.discountUsage = { [discountId]: 1 };
                     }
                     return fresh;
@@ -1123,12 +1128,12 @@ export async function submitWalkinSale() {
                     updated.firstOrderDiscountUsed = Date.now();
                     updated.firstOrderDiscountId = discountId;
                 }
-                if (discountId && discountValue > 0) {
+                if (discountId && !isManualDiscount && discountValue > 0) {
                     updated.discountUsage = updated.discountUsage || {};
                     updated.discountUsage[discountId] = (updated.discountUsage[discountId] || 0) + 1;
                 }
                 return updated;
-            });
+            }).catch(e => console.warn('[POS] customer LTV update failed:', e?.message || e));
         }
 
         playSuccessSound();
@@ -1136,14 +1141,21 @@ export async function submitWalkinSale() {
         logAudit("Sales", `POS Sale Recorded: #${orderId}`, `Total: ₹${total}`);
         logger.success('POS', `Sale completed: #${orderId} (Total: ₹${total}, ${state.walkinPayMethod || 'Cash'})`);
 
-        // 3. Print Receipt
-        printOrderReceipt(orderData);
+        // 4. Print Receipt (best-effort — a printer failure must not fail the sale)
+        printOrderReceipt(orderData).catch(e => console.warn('[POS] receipt print failed:', e?.message || e));
         logger.info('POS', 'Receipt printed');
 
         // 4. Reset
         clearWalkinCart();
 
     } catch (e) {
+        if (savedOrderId) {
+            // Order already written — never invite a retry that duplicates it.
+            logger.error('POS', `Sale #${savedOrderId} saved, post-sale step failed: ${e.message}`, e);
+            ui.showToast(`Sale #${savedOrderId} was saved, but a follow-up step failed: ${e.message}`, "warning");
+            clearWalkinCart();
+            return;
+        }
         logger.error('POS', `Sale failed: ${e.message}`, e);
         ui.showToast("Failed to process sale: " + e.message, "error");
         // Only clear counter staff session on auth/permission errors, not transient failures
@@ -1262,7 +1274,7 @@ function _comboTilesHtml() {
         }, 0);
         const comboPrice = comboPriceTotal(originalTotal, c.discountType, c.discountValue);
         return `
-        <div class="pos-combo-tile" data-action="addComboToWalkinCart" data-id="${c.id}" style="grid-column:1/-1;display:flex;gap:12px;align-items:center;padding:12px;border:2px solid var(--accent);border-radius:12px;background:linear-gradient(135deg,#fff8f5,#fff);cursor:pointer;">
+        <div class="pos-combo-tile" role="button" data-action="addComboToWalkinCart" data-id="${c.id}" style="grid-column:1/-1;display:flex;gap:12px;align-items:center;padding:12px;border:2px solid var(--accent);border-radius:12px;background:linear-gradient(135deg,#fff8f5,#fff);cursor:pointer;">
             <div style="flex-shrink:0;width:52px;height:52px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;">🏷️</div>
             <div style="flex:1;min-width:0;">
                 <div style="font-weight:800;font-size:14px;">${escapeHtml(c.name)}</div>
