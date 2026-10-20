@@ -193,6 +193,8 @@ img{max-width:100%; display:block;}
 .cart-summary-row{display:flex; justify-content:space-between; font-size:13px; color:var(--text-sub); margin-bottom:8px;}
 .cart-summary-total{font-size:17px; font-weight:900; color:var(--text); padding-top:8px; border-top:1px solid var(--border);}
 .cart-session-note{ font-size:12px; color:var(--primary); background:rgba(232,73,8,.06); border-radius:10px; padding:8px 10px; margin:10px 0; }
+.cart-sc-optin{ display:flex; align-items:flex-start; gap:8px; font-size:12px; color:var(--text-sub); margin:0 0 8px; cursor:pointer; line-height:1.4; }
+.cart-sc-optin input{ width:16px; height:16px; margin-top:1px; accent-color:var(--primary); flex-shrink:0; }
 .btn-place-order{ width:100%; background:var(--primary); color:#fff; padding:16px; border-radius:14px; font-size:15px; font-weight:800; margin-top:6px; }
 .btn-place-order:disabled{opacity:.6;}
 
@@ -723,8 +725,8 @@ img{max-width:100%; display:block;}
 /* Combo Offers — mobile-first, Zomato/Swiggy-grade */
 .combo-offers-section{margin:14px 0 4px;}
 .combo-offers-section.hidden{display:none;}
-.combo-offers-grid{display:grid;grid-template-columns:1fr;gap:12px;}
-.combo-card{display:flex;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s;}
+.combo-offers-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
+.combo-card{display:flex;min-width:0;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s;}
 .combo-card:active{transform:scale(.985);}
 .combo-card-img{position:relative;width:92px;height:92px;flex-shrink:0;border-radius:10px;overflow:visible;background:var(--bg);}
 .combo-card-img .combo-img-frame{position:absolute;inset:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;}
@@ -764,3 +766,12 @@ img{max-width:100%; display:block;}
 .combo-sheet-save{margin-top:10px;padding:10px 12px;border-radius:10px;background:#fff6ef;border:1px solid #ffe0c2;font-size:13px;font-weight:700;color:#e65100;}
 .combo-sheet-cta{width:100%;margin-top:14px;padding:14px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-weight:800;font-size:15px;letter-spacing:.3px;cursor:pointer;font-family:inherit;}
 .combo-sheet-cta:active{opacity:.85;}
+/* Cross-sell item in combo sheet */
+.combo-cross-sell{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-top:10px;cursor:pointer;transition:border-color .15s ease;}
+.combo-cross-sell:hover{border-color:var(--accent);}
+.combo-cross-sell-img{width:48px;height:48px;border-radius:8px;flex-shrink:0;object-fit:cover;background:var(--bg);}
+.combo-cross-sell-info{flex:1;min-width:0;}
+.combo-cross-sell-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.combo-cross-sell-price{font-size:12px;font-weight:700;color:var(--primary);margin-left:auto;}
+.combo-cross-sell-btn{padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;}
+.combo-cross-sell-btn:hover{background:var(--primary);color:#fff;border-color:var(--primary);}

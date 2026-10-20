@@ -558,13 +558,22 @@ function _renderComboOffers() {
         const combo = combos.find(c => c.id === card.getAttribute('data-combo-id'));
         if (!combo) return;
         const cd = _comboData(combo);
+        const comboDishIds = new Set(cd.entries.map(e => e.dish.id));
+        const crossSell = M.dishes
+            .filter(d => !comboDishIds.has(d.id))
+            .slice(0, 2)
+            .map(d => {
+                const p = d.price != null ? d.price : (d.sizes ? Object.values(d.sizes)[0] : 0);
+                return { id: d.id, name: d.name, price: p || 0 };
+            });
         UI.showComboSheet({
             name: combo.name,
             discLabel: cd.disc,
             saving: cd.saving,
             price: cd.comboPrice,
-            rows: cd.entries.map((e, i) => ({ name: e.dish.name, qty: e.qty, unitPrice: cd.prices[i] }))
-            }, () => _addComboToCart(combo.id));
+            rows: cd.entries.map((e, i) => ({ name: e.dish.name, qty: e.qty, unitPrice: cd.prices[i] })),
+            crossSell
+        }, () => _addComboToCart(combo.id));
         });
     }
 }

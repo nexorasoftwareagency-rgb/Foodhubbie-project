@@ -322,7 +322,10 @@ export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serv
     if (deliveryFeeEl) deliveryFeeEl.textContent = fmtMoney(fee);
 
     const rates = (taxRates && Array.isArray(taxRates) && taxRates.length > 0) ? taxRates : (taxEnabled !== false ? [{ name: taxName || 'Tax', rate: taxPercent || 5 }] : []);
-    const taxItems = rates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(subtotal * (r.rate / 100) * 100) / 100 }));
+    // Discount first, then tax on the net taxable value (CGST Sec 15(3)(a)).
+    const discountAmount = discount && discount.amount > 0 ? Math.min(discount.amount, subtotal) : 0;
+    const taxable = Math.max(0, subtotal - discountAmount);
+    const taxItems = rates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(taxable * (r.rate / 100) * 100) / 100 }));
     const tax = taxItems.reduce((s, t) => s + t.amount, 0);
     const scEnabled = serviceChargeEnabled === true;
     const scRate = typeof serviceChargeRate === 'number' ? serviceChargeRate : 0;
@@ -338,16 +341,15 @@ export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serv
         taxRows.classList.toggle('hidden', taxItems.length === 0);
     }
 
-    // Service charge row
+    // Service charge row (only when the customer opted in)
     const scRow = document.getElementById('cartServiceChargeRow');
-    if (scRow) scRow.classList.toggle('hidden', !scEnabled);
+    if (scRow) scRow.classList.toggle('hidden', sc <= 0);
     if (el('cartServiceChargeName')) el('cartServiceChargeName').textContent = serviceChargeName || 'Service Charge';
     if (el('cartServiceChargePct')) el('cartServiceChargePct').textContent = String(scRate);
     if (el('cartServiceCharge')) el('cartServiceCharge').textContent = fmtMoney(sc);
 
     // Discount row
     const discountRow = document.getElementById('cartDiscountRow');
-    const discountAmount = discount && discount.amount > 0 ? Math.min(discount.amount, subtotal + tax + sc + fee) : 0;
     if (discountRow) discountRow.classList.toggle('hidden', discountAmount <= 0);
     if (el('cartDiscountLabel')) {
         const pctInfo = discount?.mode === 'percent' && discount?.value ? ` (${discount.value}% off)` : '';
@@ -355,8 +357,9 @@ export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serv
     }
     if (el('cartDiscount')) el('cartDiscount').textContent = '-' + fmtMoney(discountAmount);
 
-    if (el('cartTotal')) el('cartTotal').textContent = fmtMoney(subtotal + tax + sc + fee - discountAmount);
-    return { tax, serviceCharge: sc, discount: discountAmount, deliveryFee: fee, total: subtotal + tax + sc + fee - discountAmount };
+    const total = taxable + tax + sc + fee;
+    if (el('cartTotal')) el('cartTotal').textContent = fmtMoney(total);
+    return { tax, serviceCharge: sc, discount: discountAmount, deliveryFee: fee, total };
 }
 
 export function updateSessionNoteInCart(session, groupOrders, groupTotal) {
@@ -636,7 +639,7 @@ export function renderSessionBillCard(session, ordersMap, taxName, taxPercent, t
     }
 
     const scRow = document.getElementById('sessionBillSCRow');
-    if (scRow) scRow.classList.toggle('hidden', !scEnabled);
+    if (scRow) scRow.classList.toggle('hidden', !scEnabled || totalSC <= 0);
     if (el('sessionBillSCLabel')) el('sessionBillSCLabel').textContent = `${serviceChargeName || 'Service Charge'} (${scRate}%)`;
     if (el('sessionBillSC')) el('sessionBillSC').textContent = fmtMoney(totalSC);
 
@@ -762,13 +765,28 @@ export function resetDiscountInput() {
 }
 
 /* ---- Combo detail bottom sheet (Zomato-style) ---- */
-export function showComboSheet({ name, discLabel, saving, price, rows }, onAdd) {
+export function showComboSheet({ name, discLabel, saving, price, rows, crossSell = [] }, onAdd) {
     hideComboSheet();
     document.querySelectorAll('#comboSheetBackdrop, #comboSheet').forEach(el => el.remove());
     const back = document.createElement('div');
     back.className = 'combo-sheet-backdrop'; back.id = 'comboSheetBackdrop';
     const sheet = document.createElement('div');
     sheet.className = 'combo-sheet'; sheet.id = 'comboSheet'; sheet.setAttribute('role','dialog');
+
+    let crossSellHtml = '';
+    if (crossSell.length) {
+        crossSellHtml = '<div class="cbw-sec-title" style="margin-top:14px;">Also add</div>';
+        crossSellHtml += crossSell.map(c => `
+            <div class="combo-cross-sell" data-cross-sell-id="${c.id}">
+                ${c.image ? `<img src="${esc(c.image)}" class="combo-cross-sell-img" alt="${esc(c.name)}">` : `<div class="cbw-img-empty" style="width:48px;height:48px;border-radius:8px;background:var(--neutral-200,#e2e8f0);display:flex;align-items:center;justify-content:center;color:var(--neutral-400,#94a3b8);">🍽</div>`}
+                <div class="combo-cross-sell-info">
+                    <div class="combo-cross-sell-name">${esc(c.name)}</div>
+                    <span class="combo-cross-sell-price">+${fmtMoney(c.price)}</span>
+                </div>
+                <button class="combo-cross-sell-btn">Add</button>
+            </div>`).join('');
+    }
+
     sheet.innerHTML = `
         <div class="combo-sheet-grab"></div>
         <div class="combo-sheet-head">
@@ -776,6 +794,7 @@ export function showComboSheet({ name, discLabel, saving, price, rows }, onAdd) 
             <button class="combo-sheet-close" id="comboSheetClose" aria-label="Close">✕</button>
         </div>
         ${rows.map(r => `<div class="combo-sheet-row"><span>${esc(r.name)} <span class="qty">×${r.qty}</span></span><span>${fmtMoney(r.unitPrice * r.qty)}</span></div>`).join('')}
+        ${crossSellHtml}
         <div class="combo-sheet-save">${esc(discLabel)} · You save ${fmtMoney(saving)}</div>
         <button class="combo-sheet-cta" id="comboSheetAdd">ADD TO CART · ${fmtMoney(price)}</button>`;
     document.body.append(back, sheet);
@@ -784,6 +803,23 @@ export function showComboSheet({ name, discLabel, saving, price, rows }, onAdd) 
     back.addEventListener('click', close);
     sheet.querySelector('#comboSheetClose').addEventListener('click', close);
     sheet.querySelector('#comboSheetAdd').addEventListener('click', () => { hideComboSheet(); onAdd(); });
+    sheet.querySelectorAll('.combo-cross-sell-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dishId = btn.closest('.combo-cross-sell').dataset.crossSellId;
+            const dish = M.dishes.find(d => d.id === dishId);
+            if (dish) {
+                addLine({
+                    dishId: dish.id, name: dish.name, img: dish.image || '',
+                    size: 'Regular', addons: [], instructions: '',
+                    qty: 1, unitPrice: _dishPrice(dish)
+                });
+                clearDiscountIfCartChanged();
+                UI.showToast(`${dish.name} added to cart`, 'success');
+                hideComboSheet();
+            }
+        });
+    });
     document.addEventListener('keydown', function escClose(e){ if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escClose); }});
 }
 
