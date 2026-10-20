@@ -12,8 +12,7 @@ import * as UI from './ui.js';
 import { haptic } from './ui.js';
 import { esc } from './ui.js';
 import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
-import { isIOS, isStandalone, canShowNativeInstallPrompt, promptInstall, getStoredPhone, savePhone, subscribeToNotifications } from './pwa-install.js';
-import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
+import { initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
 
 // ---------------------------------------------------------------
 // Module state for menu browsing
@@ -242,7 +241,51 @@ async function boot() {
         _showConnectionIssue();
     } finally {
         clearTimeout(_bootWatchdog);
+        if (_bootReady) _afterBoot();
     }
+}
+
+let _postBootStarted = false;
+function _afterBoot() {
+    if (_postBootStarted) return;
+    _postBootStarted = true;
+
+    initCustomer({ mode: 'dine-in' });
+    const profile = getProfile();
+    if (profile?.name) UI.updateGreeting(profile.name);
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'notifications') {
+        openNotificationsTab();
+        UI.showScreen('screenPromotions');
+        renderPromotionsScreen();
+    }
+
+    maybeStartOnboarding({ mode: 'dine-in' });
+
+    const orderId = params.get('order');
+    if (orderId) setTimeout(() => openOrderFromPush(orderId), 700);
+}
+
+async function openOrderFromPush(orderId) {
+    const oid = String(orderId || '');
+    if (!/^[A-Za-z0-9_-]{1,100}$/.test(oid)) return;
+    let order = M.ordersCache[oid];
+    if (!order) {
+        try {
+            const snap = await get(outletRef(`orders/${oid}`));
+            order = snap.val();
+        } catch (e) { /* fall through */ }
+    }
+    if (order && String(order.sessionId || '') === String(Session.session?.sessionId || '')) {
+        watchOrder(oid);
+        UI.showScreen('screenTracking');
+        return;
+    }
+    openNotificationsTab();
+    UI.showScreen('screenPromotions');
+    renderPromotionsScreen();
+    UI.showToast('Open updates for this order in Notifications.', 'success');
 }
 
 async function _retryBoot() {
@@ -383,14 +426,14 @@ function onSessionUpdated(session) {
     }
     UI.updateRunningBillStrip(session, groupOrders, _groupTotalForBill());
     UI.updateSessionNoteInCart(session, groupOrders, _groupTotalForBill());
-    // Show greeting when customer name is known
-    if (session.customerName) {
-        UI.updateGreeting(session.customerName);
-        // Pre-fill checkout fields from session data
+    // Show greeting / pre-fill checkout from this session or the saved profile
+    const savedProfile = getProfile();
+    if (session.customerName || savedProfile?.name) {
+        UI.updateGreeting(session.customerName || savedProfile.name);
         const nameInput = document.getElementById('checkoutName');
         const phoneInput = document.getElementById('checkoutPhone');
-        if (nameInput && !nameInput.value) nameInput.value = session.customerName;
-        if (phoneInput && !phoneInput.value) phoneInput.value = session.customerPhone || '';
+        if (nameInput && !nameInput.value) nameInput.value = session.customerName || savedProfile.name || '';
+        if (phoneInput && !phoneInput.value) phoneInput.value = session.customerPhone || savedProfile.phone || '';
     }
     // Pre-fill guest count from session (only if user hasn't manually changed it)
     if (!M._guestCountDirty && session.guestCount && session.guestCount > 0) {
@@ -1011,6 +1054,7 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async () => 
 
     try {
         const note = document.getElementById('checkoutNote')?.value.trim() || '';
+        rememberIdentity(name, phone);
         // Fire-and-forget: contact save is important but shouldn't block order
         saveCheckoutContact(name, phone, M.guestCount, note).catch(e => console.warn('[PlaceOrder] saveCheckoutContact failed:', e?.message || e));
 
@@ -1163,77 +1207,7 @@ async function renderPromotionsScreen() {
         _storeSettingsCache = snap.val() || {};
     }
     UI.renderPromotionsLinks(_storeSettingsCache);
-
-    // ── PWA Install / iOS / Notify Cards ────────────────────────────
-    const installCard = document.getElementById('pwaInstallCard');
-    const iosCard = document.getElementById('pwaIosCard');
-    const notifyCard = document.getElementById('pwaNotifyCard');
-    const installBtn = document.getElementById('btnPwaInstall');
-    const notifyBtn = document.getElementById('btnPwaNotify');
-
-    // Reset all
-    installCard?.classList.add('hidden');
-    iosCard?.classList.add('hidden');
-    notifyCard?.classList.add('hidden');
-
-    // Install card (Chromium only, when beforeinstallprompt is available)
-    if (!isIOS() && canShowNativeInstallPrompt() && installCard && installBtn) {
-        installCard.classList.remove('hidden');
-        installBtn.onclick = async () => {
-            haptic(15);
-            const outcome = await promptInstall();
-            if (outcome === 'accepted') {
-                UI.showToast('App installed!', 'success');
-                installCard.classList.add('hidden');
-            }
-        };
-    }
-
-    // iOS instructions card (iOS only, not yet standalone)
-    if (isIOS() && !isStandalone() && iosCard) {
-        iosCard.classList.remove('hidden');
-    }
-
-    // Notify card (all platforms)
-    // On iOS, only show if already standalone (push requires install-first)
-    // On Chromium, show regardless of install state
-    const showNotify = isIOS() ? isStandalone() : true;
-    if (showNotify && notifyCard && notifyBtn) {
-        notifyCard.classList.remove('hidden');
-        const phone = getStoredPhone();
-        const alreadySubscribed = phone !== ''; // if phone exists, assume subscribed
-        if (alreadySubscribed) {
-            notifyCard.classList.add('sent');
-            notifyBtn.style.display = 'none';
-        }
-        notifyBtn.onclick = async () => {
-            haptic(15);
-            let phone = getStoredPhone();
-            if (!phone) {
-                // First time: ask for phone via native prompt
-                const input = prompt('Enter your mobile number for order updates:');
-                if (!input) return;
-                const saved = savePhone(input);
-                if (!saved.ok) {
-                    UI.showToast(saved.error, 'error');
-                    return;
-                }
-                phone = saved.phone;
-            }
-            notifyBtn.disabled = true;
-            notifyBtn.textContent = 'Enabling…';
-            const result = await subscribeToNotifications();
-            if (result.ok) {
-                UI.showToast('Notifications enabled!', 'success');
-                notifyCard.classList.add('sent');
-                notifyBtn.style.display = 'none';
-            } else {
-                UI.showToast(result.error || 'Could not enable notifications', 'error');
-                notifyBtn.disabled = false;
-                notifyBtn.textContent = 'Enable';
-            }
-        };
-    }
+    await renderCustomerPromotions(_storeSettingsCache, 'dine-in');
 }
 
 // Cleanup Firebase listeners on page unload
@@ -1249,6 +1223,7 @@ document.getElementById('discountCodeInput')?.addEventListener('keydown', (e) =>
 window.addEventListener('beforeunload', () => { cleanupSession(); _cleanupOrderListeners(); });
 window.addEventListener('pagehide', () => { cleanupSession(); _cleanupOrderListeners(); });
 window.addEventListener('popstate', UI.handlePopState);
+window.addEventListener('fh:open-order', (e) => openOrderFromPush(e.detail?.orderId));
 
 // Boot
 boot().catch(err => {
