@@ -95,7 +95,9 @@ async function boot() {
             UI.showScreen('screenPromotions');
             renderPromotionsScreen();
         }
-        maybeStartOnboarding({ mode: 'delivery' });
+        if (!params.get('order') && params.get('tab') !== 'notifications') {
+            maybeStartOnboarding({ mode: 'delivery' });
+        }
     } catch (e) {
         console.error('[Delivery] boot failed', e);
         UI.showToast('Could not load the menu — please retry.', 'error');

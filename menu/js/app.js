@@ -254,6 +254,13 @@ function _afterBoot() {
     const profile = getProfile();
     if (profile?.name) UI.updateGreeting(profile.name);
 
+    if (profile) {
+        const nameInput = document.getElementById('checkoutName');
+        const phoneInput = document.getElementById('checkoutPhone');
+        if (nameInput && !nameInput.value) nameInput.value = profile.name || '';
+        if (phoneInput && !phoneInput.value) phoneInput.value = profile.phone || '';
+    }
+
     const params = new URLSearchParams(window.location.search);
     if (params.get('tab') === 'notifications') {
         openNotificationsTab();
@@ -261,7 +268,9 @@ function _afterBoot() {
         renderPromotionsScreen();
     }
 
-    maybeStartOnboarding({ mode: 'dine-in' });
+    if (!params.get('order') && params.get('tab') !== 'notifications') {
+        maybeStartOnboarding({ mode: 'dine-in' });
+    }
 
     const orderId = params.get('order');
     if (orderId) setTimeout(() => openOrderFromPush(orderId), 700);
