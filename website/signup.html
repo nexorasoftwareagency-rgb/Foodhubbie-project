@@ -31,6 +31,10 @@
   .radio-card .radio-title{font-weight:700;font-size:14px;margin-bottom:2px}
   .radio-card .radio-desc{font-size:12px;color:var(--muted)}
 
+  .terms-check{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.6;color:var(--muted);margin:18px 0 4px;cursor:pointer}
+  .terms-check input{width:16px;height:16px;flex:none;margin-top:3px;accent-color:var(--brand)}
+  .terms-check a{color:var(--brand-dark);font-weight:600}
+
   footer{margin-top:56px}
   footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
 </style>
@@ -150,17 +154,22 @@
         <div class="radio-desc">Multi-outlet · custom volume rates</div>
       </label>
     </div>
-    <div class="hint">One-time software setup ₹500 — non-refundable, adjusted in your first bill</div>
+    <div class="hint">No monthly fee on any plan — you pay per order. One-time software setup ₹500, non-refundable, adjusted in your first bill. See <a href="/pricing" style="color:var(--brand-dark);font-weight:600">pricing</a> and the <a href="/billing-policy" style="color:var(--brand-dark);font-weight:600">billing policy</a>.</div>
 
     <label>WhatsApp Bot *</label>
     <div class="radio-group" id="waGroup">
       <label class="radio-card selected" data-value="meta">
         <input type="radio" name="whatsapp" value="meta" checked required>
         <div class="radio-title">Meta Official</div>
-        <div class="radio-desc">₹5/order or 1% · zero ban risk · best promos</div>
+        <div class="radio-desc">₹5/order or 1% · official Meta API · promos enabled</div>
       </label>
     </div>
     <div class="hint">Every new restaurant ships on the official Meta API — promo-ready from day one.</div>
+
+    <label class="terms-check" for="fTerms">
+      <input type="checkbox" id="fTerms" required>
+      <span>I have read and agree to the <a href="/billing-policy" target="_blank" rel="noopener">Billing &amp; Cancellation</a>, <a href="/refund-policy" target="_blank" rel="noopener">Refund &amp; Termination</a>, <a href="/whatsapp-policy" target="_blank" rel="noopener">WhatsApp Messaging</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy</a> policies. *</span>
+    </label>
 
     <button type="submit" class="submit-btn" id="submitBtn">Submit Application</button>
 
@@ -192,11 +201,13 @@
 <footer>
   <div class="wrap">
     <div class="logo">Food<span>Hubbie</span> ERP</div>
-    <div><a href="/">Home</a> · <a href="/book">Book a Demo</a> · <a href="/contact">Contact</a> · <a href="/privacy">Privacy</a></div>
+    <div><a href="/">Home</a> · <a href="/book">Book a Demo</a> · <a href="/contact">Contact</a> · <a href="/privacy">Privacy</a> · <a href="/billing-policy">Billing</a> · <a href="/refund-policy">Refunds</a> · <a href="/whatsapp-policy">WhatsApp policy</a></div>
   </div>
 </footer>
 
 <script>
+  var TERMS_VERSION = '2026-10-21';
+
   // Radio card selection
   document.querySelectorAll('.radio-group').forEach(function(group) {
     group.addEventListener('click', function(e) {
@@ -221,6 +232,7 @@
     var adminPassword2 = document.getElementById('fPassword2').value;
     var plan = document.querySelector('input[name="plan"]:checked');
     var whatsappConnect = document.querySelector('input[name="whatsapp"]:checked');
+    var terms = document.getElementById('fTerms');
 
     if (!businessName || !outletName || !contactPhone || !contactEmail) return false;
     if (!adminEmail || !adminName || !adminPassword) return false;
@@ -230,6 +242,11 @@
     }
     if (!plan || !whatsappConnect) {
       alert('Please select a plan and WhatsApp option.');
+      return false;
+    }
+    if (!terms || !terms.checked) {
+      alert('Please accept the billing, refund, WhatsApp and privacy policies.');
+      terms.focus();
       return false;
     }
 
@@ -254,6 +271,8 @@
           template: '',
           source: 'website',
           status: 'pending',
+          termsVersion: TERMS_VERSION,
+          termsAcceptedAt: Date.now(),
           createdAt: Date.now()
         })
       });

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Messaging Policy | FoodHubbie</title>
+<meta name="description" content="Consent, opt-outs, approved templates, token usage and the limits of what FoodHubbie can guarantee on WhatsApp.">
+<link rel="canonical" href="https://foodhubbie-web.web.app/whatsapp-policy">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="WhatsApp Messaging Policy | FoodHubbie">
+<meta property="og:description" content="Consent, opt-outs, approved templates, token usage and the limits of what FoodHubbie can guarantee on WhatsApp.">
+<meta property="og:image" content="https://foodhubbie-web.web.app/assets/shots/admin-dashboard.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="shared.css?v=2">
+<script src="shared/nav.js" defer></script>
+<style>
+  body{background:var(--soft)}
+  .prose{max-width:780px;margin:0 auto}
+  .prose h2{font-size:22px;margin:36px 0 10px}
+  .prose h2:first-of-type{margin-top:0}
+  .prose p,.prose li{color:var(--muted);line-height:1.8;font-size:15px}
+  .prose p{margin:10px 0}
+  .prose ul{padding-left:22px;margin:12px 0}
+  .prose li{margin:7px 0}
+  .prose b{color:var(--ink)}
+  .prose a{color:var(--brand-dark);font-weight:600}
+  .prose table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  .prose th,.prose td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);color:var(--muted)}
+  .prose th{color:var(--ink);font-size:13px;text-transform:uppercase;letter-spacing:.4px}
+  .upd{display:inline-block;background:var(--brand-light);color:var(--brand-dark);font-weight:700;font-size:13px;border-radius:999px;padding:6px 14px;margin-bottom:22px}
+  footer{margin-top:56px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+</style>
+<script type="module" src="shared/ga4.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav aria-label="Main">
+      <a class="logo" href="/">Food<span>Hubbie</span><em class="logo-tag">ERP</em></a>
+      <div class="links" id="navLinks">
+        <a class="link" href="/architecture">How It Works</a>
+        <a class="link" href="/qr-ordering">QR Ordering</a>
+        <a class="link" href="/pos-billing">POS Billing</a>
+        <a class="link" href="/kds">Kitchen</a>
+        <a class="link" href="/pricing">Pricing</a>
+        <div class="nav-more">
+          <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="nav-more-menu" id="navMoreMenu">
+            <a class="link" href="/riders">Riders</a>
+            <a class="link" href="/table-management">Tables</a>
+            <a class="link" href="/whatsapp-ordering">WhatsApp Ordering</a>
+            <a class="link" href="/whatsapp-marketing">WhatsApp Marketing</a>
+            <a class="link" href="/customer-database">Customers</a>
+            <a class="link" href="/multi-outlet">Multi-Outlet</a>
+            <a class="link" href="/restaurant-analytics">Reports</a>
+            <a class="link" href="/inventory">Inventory</a>
+            <a class="link" href="/use-cases">Cafes &amp; Restos</a>
+            <a class="link" href="/compare">Compare</a>
+            <a class="link" href="/best-software">2026 Guide</a>
+            <a class="link" href="/contact">Contact</a>
+          </div>
+        </div>
+        <a class="nav-cta" href="/signup">Start free trial</a>
+      </div>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <a href="/" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;margin-bottom:28px">&larr; Back to Home</a>
+    <div class="kicker">Policies</div>
+    <h1>WhatsApp Messaging Policy</h1>
+    <p class="sub">Consent, opt-outs, approved templates, token usage and the limits of what FoodHubbie can guarantee on WhatsApp.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="prose">
+      <span class="upd">Last updated: 21 October 2026</span>
+
+      <h2>Official API only for promotions</h2>
+      <p>WhatsApp ordering and promotional campaigns run on the <b>official Meta WhatsApp Cloud API</b>, with templates approved by Meta. On an unofficial connection (a linked WhatsApp session) promotional sending is switched off by the software — those numbers are limited to transactional messages about an order in progress. This is deliberate: bulk promotional sending on unofficial connections is the fastest way to get a number restricted.</p>
+
+      <h2>Consent comes first</h2>
+      <ul>
+        <li>Each customer record carries a promotional-consent flag. A campaign audience is built only from customers who opted in.</li>
+        <li>Imported numbers without consent are not a valid audience, and the campaign builder does not create one.</li>
+        <li>Customers can reply <b>STOP</b> at any time. The opt-out is applied immediately and that number is excluded from later campaigns. Transactional messages about an order already in progress continue.</li>
+        <li>The outlet is responsible for how consent was collected at its counter or website.</li>
+      </ul>
+
+      <h2>Templates and message content</h2>
+      <p>Marketing messages outside an open 24-hour conversation must use a Meta-approved template. The composer starts from approved shells (offer, discount, festive, win-back — in English and Hinglish) and fills in the offer details; the wording and structure that Meta approved is preserved. Meta may reject or later pause a template; when that happens the campaign cannot be sent until a replacement is approved.</p>
+
+      <h2>Cost and limits</h2>
+      <ul>
+        <li><b>&#8377;1 per promotional message</b>, prepaid as tokens, one token per message.</li>
+        <li>A campaign is capped at <b>300 recipients</b>. Sends are paced rather than blasted, and a campaign can be paused or stopped from the dashboard while it runs.</li>
+        <li>Meta's own conversation charges for the official API are billed by Meta, separately from our &#8377;1.</li>
+        <li>WhatsApp order notifications are part of the per-order rate on the <a href="/billing-policy">billing policy</a>, not charged per message.</li>
+      </ul>
+
+      <h2>What we cannot guarantee</h2>
+      <p>Delivery, template approval and account standing are controlled by Meta. We cannot guarantee that a message is delivered, that a template is approved, or that Meta will not restrict a number for reasons outside our control. What we do control: consent-only audiences, approved templates, paced sending, an emergency stop, and keeping promotional sending off unofficial connections.</p>
+
+      <h2>Your data in messages</h2>
+      <p>Message content, phone numbers and delivery status pass through Meta's Cloud API and are processed by Meta as a service provider. On this side, message history is stored with the outlet so staff can answer customers. See the <a href="/privacy">privacy policy</a> for the full picture.</p>
+
+      <h2>Abuse</h2>
+      <p>Using FoodHubbie to message people who did not opt in, to send prohibited content, or to evade a Meta restriction ends the service for that outlet under the <a href="/refund-policy">termination policy</a>.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span> ERP</div>
+    <div><a href="/">Home</a> &middot; <a href="/pricing">Pricing</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/billing-policy">Billing</a> &middot; <a href="/refund-policy">Refunds</a> &middot; <a href="/whatsapp-policy">WhatsApp</a> &middot; <a href="/contact">Contact</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

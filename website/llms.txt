@@ -37,6 +37,9 @@
 - https://foodhubbie-web.web.app/ — product, features, pricing
 - https://foodhubbie-web.web.app/architecture — customer/dine-in/rider/admin flows
 - https://foodhubbie-web.web.app/signup — restaurant registration (writes onboardingRequests)
+- https://foodhubbie-web.web.app/billing-policy - Billing: per-order rates by channel, 500 setup, cancelled/refunded orders not billed, invoice disputes
+- https://foodhubbie-web.web.app/refund-policy - Refunds and termination: setup fee non-refundable, no lock-in, 30-day data retention after closure
+- https://foodhubbie-web.web.app/whatsapp-policy - WhatsApp policy: official API only for promos, consent-only audiences, STOP honoured, approved templates, 1/msg
 - https://foodhubbie-web.web.app/privacy - privacy policy: what data is stored, who can see it, deletion requests
 - https://foodhubbie-web.web.app/book — demo/inquiry via WhatsApp
 - https://foodhubbie-web.web.app/contact — WhatsApp +91 97246 49971
