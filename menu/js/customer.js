@@ -1030,6 +1030,37 @@ export async function saveOrderRating(orderId, rating, comment = '') {
     }
 }
 
+// Writes a placed order to the customer's own order history so it appears in
+// the Account tab and feeds lifetime points / total spent. Fire-and-forget
+// from order.js — must never reject the caller.
+export async function writeCustomerOrder(order) {
+    if (!order || !order.customerPhone || !order.orderId || !order.outlet) return false;
+    const phone = String(order.customerPhone);
+    try {
+        await set(outletRef(`customers/${phone}/orders/${String(order.orderId)}`), {
+            orderId: String(order.orderId),
+            outlet: order.outlet,
+            business: order.business,
+            customerPhone: phone,
+            customerName: order.customerName || '',
+            status: order.status || 'Placed',
+            total: Number(order.total || 0),
+            createdAt: Number(order.createdAt || Date.now()),
+            source: order.source || 'QR',
+            table: order.table || '',
+            tableId: order.tableId || '',
+            sessionId: order.sessionId || '',
+            orderGroupId: order.orderGroupId || '',
+            paymentStatus: order.paymentStatus || 'Pending',
+            itemCount: order.itemCount || 0,
+            itemsSummary: order.itemsSummary || []
+        });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 function orderItemNames(order) {
     const items = order.itemsSummary || [];
     if (!items.length) return `${order.itemCount || 0} item${order.itemCount !== 1 ? 's' : ''}`;
