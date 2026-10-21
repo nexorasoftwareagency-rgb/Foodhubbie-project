@@ -1048,12 +1048,19 @@ function canRateOrder(order) {
     return (status === 'delivered' || status === 'served') && !_ratings[String(order.id)];
 }
 
+function starSvg(filled) {
+    if (filled) {
+        return `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
+    }
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+}
+
 function ratingStarsHtml(order) {
     const orderId = String(order.id || '');
     const rated = _ratings[orderId];
-    if (rated) return `<span class="rating-chip">Rated ★${rated.rating}</span>`;
+    if (rated) return `<span class="rating-chip">Rated ${starSvg(true)} ${rated.rating}</span>`;
     if (!canRateOrder(order)) return '';
-    return `<div class="rating-stars" data-order-id="${esc(orderId)}">${[5, 4, 3, 2, 1].map(n => `<button type="button" class="rating-star" data-rating="${n}" aria-label="Rate ${n} stars">${n === 5 ? '★' : '☆'}</button>`).join('')}</div><button type="button" class="rating-save" data-order-id="${esc(orderId)}" style="display:none">Save</button>`;
+    return `<div class="rating-stars" data-order-id="${esc(orderId)}">${[5, 4, 3, 2, 1].map(n => `<button type="button" class="rating-star" data-rating="${n}" aria-label="Rate ${n} stars">${starSvg(false)}</button>`).join('')}</div><button type="button" class="rating-save" data-order-id="${esc(orderId)}" style="display:none">Save</button>`;
 }
 
 function bindAccountRatings() {
