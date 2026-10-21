@@ -1,11 +1,13 @@
 // === src/components/layout/AuthGuard.tsx ===
 import type { ReactNode } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { user, authLoading, hadPriorSession } = useAuth();
+  const [location] = useLocation();
 
   if (authLoading && !hadPriorSession) {
     return (
@@ -25,6 +27,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   }
 
   if (!user) {
+    if (location === "/register") return <>{children}</>;
     return <LoginPage />;
   }
 
