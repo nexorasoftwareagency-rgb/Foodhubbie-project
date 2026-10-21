@@ -12,8 +12,20 @@ All marketing images are **real product screenshots** with a branded frame. No s
 | PH gallery 3 — analytics | 1270×760 (@2x) | `promo/assets/ph-gallery-3.png` | Product Hunt |
 | PH gallery 4 — promotions | 1270×760 (@2x) | `promo/assets/ph-gallery-4.png` | Product Hunt |
 | Logo / thumbnail | 240×240 (@2x) | `promo/assets/logo-240.png` | Product Hunt thumbnail, directory avatars |
+| Demo walkthrough video | 32s · 1280×720 (~1MB) | `promo/assets/demo-walkthrough-32s.mp4` | Product Hunt, X/Threads, directory listings |
+| Demo video poster | 1280×720 | `promo/assets/demo-poster.png` | Video placeholder before autoplay |
 
-Screenshot sources live in `website/assets/shots/` (23 shots, PII-scrubbed).
+Video: real 2m16s screen recording of the live admin (dashboard → KDS confirm
+→ Ready toast → table card ₹352.03 → analytics), trimmed to 32s. Owner email
+masked to `owner@foodhubbie.app`.
+
+Screenshot sources live in `website/assets/shots/`. Six shots replaced
+2026-10-21 with real-data captures (1440×900, email masked, owner's own demo
+outlet data): `admin-dashboard.webp`, `dashboard.webp` (₹213/₹352/₹691
+KPIs), `live-orders.webp` (KDS, 3 populated columns), `table-management.webp`
+(3 occupied tables, ₹647 today), `orders.webp` (Placed/PREPARING/Ready rows),
+`analytics-3.webp` (7-day revenue trend). `analytics-1/2.webp` still ₹0 —
+do not gallery them.
 
 ## Missing (highest value first)
 
@@ -30,12 +42,10 @@ Rejected during gallery build — keep this list so nobody reuses them:
 
 | Shot | Problem |
 |---|---|
-| `admin-dashboard.webp`, `dashboard.webp` | ₹0 revenue, "0 active orders", rows of CANCELLED |
-| `analytics-1.webp`, `analytics-2.webp` | ₹0 / 0 orders |
-| `live-orders.webp`, `table-management.webp` | Empty states ("No orders to confirm", all tables free) |
-| `orders.webp` | Mostly CANCELLED rows |
+| `analytics-1.webp`, `analytics-2.webp` | ₹0 / 0 orders (analytics-3 now has real 7D data, safe) |
 | `whatsapp-bot.webp` | Chat list pixelated for PII — unreadable, looks broken in a gallery |
 | anything showing `roshanpizza@gmail.com` or a real customer phone | PII rule |
+| any dashboard/table shot with a real customer name | Released only for internal docs; keep customer PII out of marketing galleries |
 
 ## Regenerating
 
