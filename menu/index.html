@@ -7,10 +7,11 @@
 <title>FoodHubbie — Order</title>
 <meta name="theme-color" content="#E84908">
 <link rel="manifest" href="manifest.json">
-<script src="js/dynamic-manifest.js"></script>
+<script src="js/dynamic-manifest.js" defer></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="css/app.css">
+<link rel="preload" href="css/app.css" as="style" onload="this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="css/app.css"></noscript>
 </head>
 <body>
 
