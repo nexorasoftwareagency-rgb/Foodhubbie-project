@@ -6,6 +6,7 @@
  * (menu/js/delivery-order.js) instead of a table-session attach.
  */
 import { outletRef, get, set as fbSet, OUTLET, update, runTransaction } from './firebase.js';
+import { Session } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getWebviewStorageKey } from './cart.js';
 import * as UI from './ui.js';
 import { haptic } from './ui.js';
@@ -143,7 +144,7 @@ async function loadMenu() {
     M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.stock !== false).map(([id, d]) => ({ id, ...d }));
     const now = Date.now();
     M.combos = Object.entries(comboSnap.val() || {})
-        .filter(([, c]) => isComboActive(c, now))
+        .filter(([, c]) => isComboActive(c, now) && _comboVisibleForCustomer(c))
         .map(([id, c]) => ({ id, ...c }));
     renderMenuScreen();
     renderRecentSearches();
@@ -205,6 +206,16 @@ function _comboData(c) {
     const originalTotal = entries.reduce((s, e, i) => s + prices[i], 0);
     const comboPrice = comboPriceTotal(originalTotal, c.discountType, c.discountValue);
     return { entries, prices, disc, originalTotal, comboPrice, saving: originalTotal - comboPrice };
+}
+
+function _comboVisibleForCustomer(c) {
+    const segment = c.customerSegment || 'all';
+    if (segment === 'all') return true;
+    const session = Session.session || {};
+    const orderCount = (session.orders || []).length;
+    if (segment === 'new') return orderCount === 0;
+    if (segment === 'returning') return orderCount > 0;
+    return true;
 }
 
 function _renderComboOffers() {
