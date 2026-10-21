@@ -15,7 +15,7 @@ Canonical facts (must match the site, `shared/billing-defaults.js`, and the back
 
 | # | Task | Why | Done when |
 |---|------|-----|-----------|
-| 0.1 | Resolve the ₹3 vs ₹5 WhatsApp rate | Site says WhatsApp orders ₹5; `billing-defaults.js` has `WA: 3`. A campaign that quotes a price the invoice contradicts kills trust in one sentence | One number written in `billing-defaults.js`, site pricing, `llms.txt`, `BACKLINK-KIT.md` |
+| 0.1 | ~~Resolve the ₹3 vs ₹5 WhatsApp rate~~ | Done 2026-10-21: owner confirmed **₹5 final**. `billing-defaults.js/.cjs` and `cost-math.js` now carry `WA: 5` and `webview_delivery: 5`; commission mode still 1% | Site, kit and code all say ₹5 |
 | 0.2 | Enable GA4 in Firebase console | Without it every channel decision is a guess | Realtime shows our own visit |
 | 0.3 | UTM convention | `?utm_source=walkin\|whatsapp\|gbp\|reel&utm_medium=...&utm_campaign=launch` — record in a sheet | Signups attributable to a source |
 | 0.4 | Google Business Profile | Local pack is the cheapest restaurant-software lead source in India | Profile verified, 5 photos, link to site |
@@ -101,7 +101,7 @@ Definition of done for this plan: **5 paying outlets, 1 case study live, 2 chann
 
 ## Open questions for the owner
 
-1. Which WhatsApp rate is final — ₹5/order, or ₹3 as in `billing-defaults.js`?
+1. ~~Which WhatsApp rate is final~~ — ₹5, confirmed and applied in code.
 2. Trial length and what it includes (today the site says "free trial" without a number — pick 14 days).
 3. Is ₹500 setup waivable as a launch offer for the first 10 outlets? It is the easiest objection to remove and the cheapest discount to give.
 4. Who sits with the trial outlet on Saturday? Without that, Phase 1 stalls at "signed up".
