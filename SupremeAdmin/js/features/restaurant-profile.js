@@ -1004,6 +1004,7 @@ registerAction('save-detail', async () => {
       [`businesses/${bid}/outlets/${oid}/name`]: clean(d.outletName),
       [`businesses/${bid}/outlets/${oid}/contactPhone`]: clean(d.contactPhone),
       [`businesses/${bid}/outlets/${oid}/settings/Delivery/notifyPhone`]: clean(d.notifyPhone),
+      [`outletIndex/${oid}/name`]: clean(d.outletName),
       ...store,
     };
     await firebase.database().ref().update(updates);
@@ -1229,11 +1230,12 @@ function closeDisableModal() {
 async function doDisableOutlet(bid, oid) {
   try {
     const user = firebase.auth().currentUser;
-    await firebase.database().ref(`businesses/${bid}/outlets/${oid}`).update({
-      disabled: true,
-      disabledAt: firebase.database.ServerValue.TIMESTAMP,
-      disabledBy: user?.uid || 'unknown',
-      suspended: true, // orchestrator stops the worker
+    await firebase.database().ref().update({
+      [`businesses/${bid}/outlets/${oid}/disabled`]: true,
+      [`businesses/${bid}/outlets/${oid}/disabledAt`]: firebase.database.ServerValue.TIMESTAMP,
+      [`businesses/${bid}/outlets/${oid}/disabledBy`]: user?.uid || 'unknown',
+      [`businesses/${bid}/outlets/${oid}/suspended`]: true, // orchestrator stops the worker
+      [`outletIndex/${oid}/disabled`]: true,
     });
     closeDisableModal();
     // Best-effort worker stop — the flag takes effect even if this fails.
@@ -1274,11 +1276,12 @@ registerAction('reactivate-outlet', async () => {
   if (!ok) return;
   try {
     const user = firebase.auth().currentUser;
-    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}`).update({
-      disabled: false,
-      reactivatedAt: firebase.database.ServerValue.TIMESTAMP,
-      reactivatedBy: user?.uid || 'unknown',
-      suspended: false, // allow the orchestrator to run the worker again
+    await firebase.database().ref().update({
+      [`businesses/${currentBid}/outlets/${currentOid}/disabled`]: false,
+      [`businesses/${currentBid}/outlets/${currentOid}/reactivatedAt`]: firebase.database.ServerValue.TIMESTAMP,
+      [`businesses/${currentBid}/outlets/${currentOid}/reactivatedBy`]: user?.uid || 'unknown',
+      [`businesses/${currentBid}/outlets/${currentOid}/suspended`]: false, // allow the orchestrator to run the worker again
+      [`outletIndex/${currentOid}/disabled`]: false,
     });
     try {
       const token = await user.getIdToken();
@@ -1412,13 +1415,7 @@ registerAction('scan-baileys', async () => {
   openPairModal(currentBid, currentOid);
 });
 
-// Legacy handler kept so any stale cached page that still renders a
-// "reconnect-whatsapp" button doesn't throw — no-op now that the toggle
-// owns channel switching.
-registerAction('reconnect-whatsapp', async () => {
-  const { launchWhatsAppSignup } = await import('/js/features/whatsapp-linking.js');
-  launchWhatsAppSignup(currentBid, currentOid, {});
-});
+// --- end of reactivate-outlet handler ---
 
 // ---- Billing & promo tokens ----------------------------------------------
 registerAction('billing-toggle-mode', async () => {
