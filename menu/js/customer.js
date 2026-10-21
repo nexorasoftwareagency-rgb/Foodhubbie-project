@@ -10,7 +10,7 @@
  * The FCM token itself is never stored in localStorage - it only lives in
  * the outlet's pushSubscriptions record (see pwa-install.js).
  */
-import { outletRef, get, set, OUTLET } from './firebase.js';
+import { outletRef, get, set, OUTLET, BUSINESS_ID } from './firebase.js';
 import * as UI from './ui.js';
 import { esc } from './ui.js';
 import {
@@ -39,6 +39,10 @@ let _onboardingBound = false;
 let _steps = [];
 let _stepIndex = 0;
 let _draft = { name: '', phone: '' };
+let _orders = [];
+let _ratings = {};
+let _ratingsDocBound = false;
+let _ratingPending = { orderId: null, rating: null };
 let _initialized = false;
 
 function readJSON(key) {
@@ -740,7 +744,11 @@ function renderAccount() {
         </div>
         ${installAvailable ? `<button type="button" class="account-install" id="btnAcctInstall">${isIOS() ? 'How to install this app' : 'Install this app'}</button>` : ''}
         <button type="button" class="account-clear" id="btnAcctClear">Forget me on this device</button>
-        <p class="account-note">Your number is used for order updates and offers only. It is never shown publicly.</p>`;
+        <p class="account-note">Your number is used for order updates and offers only. It is never shown publicly.</p>
+        ${renderCustomerStatsAndHistory()}
+    `;
+
+    bindAccountRatings();
 
     document.getElementById('btnAcctSave')?.addEventListener('click', () => {
         const saved = saveIdentity(
@@ -811,16 +819,6 @@ function renderAccount() {
     });
 }
 
-export async function renderCustomerPromotions(store, mode = 'dine-in') {
-    _mode = mode;
-    bindPromoTabs();
-    renderPwaCards();
-    renderAccount();
-    loadInbox();
-    const queryTab = promoTabFromQuery();
-    setPromoTab(queryTab || _activeTab);
-}
-
 // ---------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------
@@ -849,4 +847,175 @@ export function initCustomer({ mode = 'dine-in' } = {}) {
 
 export function openNotificationsTab() {
     setPromoTab('notifications');
+}
+
+// ---------------------------------------------------------------
+// Customer order history, loyalty and ratings
+// ---------------------------------------------------------------
+
+function customerStats() {
+    const orders = _orders || [];
+    const valid = orders.filter(o => o && o.status !== 'Cancelled' && o.status !== 'Refunded');
+    const totalSpent = valid.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const points = Math.floor(totalSpent / 100); // 1 loyalty point per ₹100 spent
+    return { orders: orders.length, totalSpent, points };
+}
+
+async function loadCustomerData() {
+    if (!hasIdentity()) {
+        _orders = [];
+        _ratings = {};
+        renderAccount();
+        return;
+    }
+    try {
+        const [oSnap, rSnap] = await Promise.all([
+            get(outletRef(`customers/${_profile.phone}/orders`)),
+            get(outletRef(`customers/${_profile.phone}/ratings`))
+        ]);
+        const ordersRaw = oSnap.val() || {};
+        _orders = Object.entries(ordersRaw)
+            .map(([id, o]) => (o ? { id, ...o } : null))
+            .filter(Boolean)
+            .sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0))
+            .slice(0, 50);
+        _ratings = rSnap.val() || {};
+    } catch (e) {
+        _orders = [];
+        _ratings = {};
+    }
+    renderAccount();
+}
+
+export async function saveOrderRating(orderId, rating, comment = '') {
+    if (!hasIdentity() || !orderId) return false;
+    const cleanRating = Number(rating);
+    if (!cleanRating || cleanRating < 1 || cleanRating > 5) return false;
+    try {
+        await set(outletRef(`customers/${_profile.phone}/ratings/${String(orderId)}`), {
+            rating: cleanRating,
+            orderId: String(orderId),
+            outlet: OUTLET,
+            business: BUSINESS_ID,
+            comment: String(comment || '').slice(0, 500),
+            createdAt: Date.now()
+        });
+        _ratings = _ratings || {};
+        _ratings[String(orderId)] = { rating: cleanRating, comment: String(comment || ''), createdAt: Date.now() };
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function orderItemNames(order) {
+    const items = order.itemsSummary || [];
+    if (!items.length) return `${order.itemCount || 0} item${order.itemCount !== 1 ? 's' : ''}`;
+    return items.slice(0, 3).map(it => `${it.qty || 1}× ${esc(it.name || 'Item')}`).join(', ') + (items.length > 3 ? ` +${items.length - 3} more` : '');
+}
+
+function orderTime(order) {
+    const value = Number(order.createdAt || 0);
+    if (!value) return '';
+    return new Date(value).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function canRateOrder(order) {
+    if (!order) return false;
+    const status = String(order.status || '').toLowerCase();
+    return (status === 'delivered' || status === 'served') && !_ratings[String(order.id)];
+}
+
+function ratingStarsHtml(order) {
+    const orderId = String(order.id || '');
+    const rated = _ratings[orderId];
+    if (rated) return `<span class="rating-chip">Rated ★${rated.rating}</span>`;
+    if (!canRateOrder(order)) return '';
+    return `<div class="rating-stars" data-order-id="${esc(orderId)}">${[5, 4, 3, 2, 1].map(n => `<button type="button" class="rating-star" data-rating="${n}" aria-label="Rate ${n} stars">${n === 5 ? '★' : '☆'}</button>`).join('')}</div><button type="button" class="rating-save" data-order-id="${esc(orderId)}" style="display:none">Save</button>`;
+}
+
+function bindAccountRatings() {
+    if (_ratingsDocBound) return;
+    _ratingsDocBound = true;
+    document.addEventListener('click', async (e) => {
+        const star = e.target.closest('.rating-star');
+        if (star) {
+            const card = star.closest('[data-order-id]');
+            if (!card) return;
+            const orderId = card.dataset.orderId;
+            const rating = Number(star.dataset.rating);
+            _ratingPending = { orderId, rating };
+            document.querySelectorAll('#accountOrdersList .rating-star').forEach((s) => {
+                const c = s.closest('[data-order-id]');
+                s.classList.toggle('active', c && c.dataset.orderId === orderId && Number(s.dataset.rating) <= rating);
+            });
+            const saveBtn = card.querySelector('.rating-save');
+            if (saveBtn) saveBtn.style.display = '';
+            return;
+        }
+        const saveBtn = e.target.closest('.rating-save');
+        if (saveBtn) {
+            const orderId = saveBtn.dataset.orderId;
+            const rating = _ratingPending.orderId === orderId ? _ratingPending.rating : null;
+            if (!rating) return;
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving…';
+            const ok = await saveOrderRating(orderId, rating);
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save';
+            if (ok) UI.showToast('Rated ' + rating + ' ★', 'success');
+            renderAccount();
+            return;
+        }
+    });
+}
+
+function renderCustomerStatsAndHistory() {
+    const stats = customerStats();
+    if (!hasIdentity()) {
+        return `<div class="account-empty">Save your mobile number to see order history, loyalty points and ratings for this kitchen.</div>`;
+    }
+    if (stats.orders === 0) {
+        return `<div class="account-empty">No orders yet. Order from the menu to build your history.</div>`;
+    }
+    const rows = _orders.map((order) => {
+        const statusKey = String(order.status || 'Placed').toLowerCase();
+        const rated = _ratings[String(order.id)];
+        return `
+        <div class="account-order-card" data-order-id="${esc(String(order.id))}">
+            <div class="account-order-head">
+                <span class="account-order-id">Order ${esc(String(order.id))}</span>
+                <span class="account-status-pill account-status-${statusKey}">${esc(order.status || 'Placed')}</span>
+            </div>
+            <div class="account-order-meta">
+                <span class="account-order-time">${orderTime(order)}</span>
+                <span class="account-order-total">${UI.fmtMoney(order.total || 0)}</span>
+            </div>
+            <div class="account-order-items">${esc(orderItemNames(order))}</div>
+            <div class="account-order-actions">
+                ${ratingStarsHtml(order)}
+            </div>
+        </div>`;
+    }).join('');
+    return `
+    <div class="account-stats">
+        <div class="stat"><div class="stat-value">${UI.fmtMoney(stats.totalSpent)}</div><div class="stat-label">Total spent</div></div>
+        <div class="stat"><div class="stat-value">${stats.orders}</div><div class="stat-label">Orders</div></div>
+        <div class="stat"><div class="stat-value">${stats.points}</div><div class="stat-label">Loyalty points</div></div>
+    </div>
+    <div class="account-section">
+        <div class="account-section-head">Your Orders at this kitchen <span class="account-section-count">(${stats.orders})</span></div>
+        <div id="accountOrdersList" class="account-orders">${rows}</div>
+    </div>`;
+}
+
+export async function renderCustomerPromotions(store, mode = 'dine-in') {
+    _mode = mode;
+    bindPromoTabs();
+    renderPwaCards();
+    renderAccount();
+    loadInbox();
+    const queryTab = promoTabFromQuery();
+    setPromoTab(queryTab || _activeTab);
+    await loadCustomerData();
 }

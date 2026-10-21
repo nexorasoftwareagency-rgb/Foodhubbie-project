@@ -22,8 +22,9 @@
  * for how to change this if you would rather standardize on "DineIn"
  * and update orders.js's STATUS_SEQUENCES key to match.
  */
-import { outletRef, OUTLET, set, update, get, runTransaction } from './firebase.js';
+import { outletRef, OUTLET, BUSINESS_ID, set, update, get, runTransaction } from './firebase.js';
 import { Session, attachOrderToSession, ensureSession, assertOutletEnabled } from './session.js';
+import { writeCustomerOrder } from './customer.js';
 import { Cart, clearCart, subtotal as cartSubtotal, getQRStorageKey } from './cart.js';
 
 function round2(n) { return Math.round(n * 100) / 100; }
@@ -184,6 +185,27 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
             });
         };
         _writeGuest(0);
+        // Customer order history + loyalty (fire-and-forget; never blocks placement)
+        if (cleanPhone.length === 10) {
+            writeCustomerOrder({
+                orderId: newOrderRef.key,
+                outlet: OUTLET,
+                business: BUSINESS_ID,
+                customerPhone: cleanPhone,
+                customerName: customerName || '',
+                status: 'Placed',
+                total,
+                createdAt: Date.now(),
+                source: 'QR',
+                table: String(Session.table?.number || ''),
+                tableId: Session.tableId || '',
+                sessionId: Session.sessionId || '',
+                orderGroupId: Session.currentGroupId || '',
+                paymentStatus: 'Pending',
+                itemCount: Object.keys(items).length,
+                itemsSummary: Object.values(items).map((it) => ({ name: it.name, qty: it.qty, unitPrice: it.price }))
+            }).catch(() => { /* history must not fail a placed order */ });
+        }
     }
 
     return { orderId, ...orderPayload };
