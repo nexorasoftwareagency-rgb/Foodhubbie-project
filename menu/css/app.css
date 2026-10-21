@@ -886,7 +886,19 @@ img{max-width:100%; display:block;}
 .account-toggle span{ display:flex; flex-direction:column; gap:2px; min-width:0; }
 .account-toggle strong{ font-size:13px; font-weight:800; }
 .account-toggle small{ font-size:11px; color:var(--text-sub); line-height:1.35; }
-.account-toggle input{ width:40px; height:23px; flex-shrink:0; accent-color:var(--primary); }
+.account-toggle input{
+    appearance:none; -webkit-appearance:none; width:44px; height:26px; flex-shrink:0;
+    border-radius:999px; background:var(--border); position:relative; cursor:pointer;
+    transition:background .18s ease; margin:0;
+}
+.account-toggle input::before{
+    content:''; position:absolute; top:3px; left:3px; width:20px; height:20px;
+    border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(15,23,42,.25);
+    transition:transform .18s cubic-bezier(.2,.8,.2,1);
+}
+.account-toggle input:checked{ background:var(--primary); }
+.account-toggle input:checked::before{ transform:translateX(18px); }
+.account-toggle input:focus-visible{ outline:2px solid var(--primary); outline-offset:3px; }
 .account-toggle input:disabled{ opacity:.45; }
 .account-status{ padding:10px 0 12px; font-size:11px; color:var(--text-sub); }
 .account-install{

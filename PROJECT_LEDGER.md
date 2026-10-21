@@ -1461,3 +1461,22 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
   
 - Files changed: `menu/js/app.js`, `menu/js/delivery.js`, `menu/js/ui.js`, `Admin/js/features/catalog.js`, `Admin/js/main.js`, `Admin/index.html`, `docs/COMBO-UX-PROGRESS.md`.
 - Confidence: HIGH — live verified on QR menu + delivery webview + Admin shell.
+
+### [20261020-173100-cstm] Customer app onboarding + identity + offers/notifications/account + customer push
+- TIER: 3 (rules, deploy, push)
+- STATUS: DONE (deployed; live Admin promo E2E PASS; real-device push not verified)
+- Why: ship the customer-app start flow in docs/PLAN-CUSTOMER-APP-ONBOARDING.md without gating ordering or adding OTP. Phone is an identifier, not authentication.
+- Built:
+  1. menu/js/customer.js (single module): profile/consent local keys, skippable onboarding, Offers/Notifications/Account tabs, account save/clear, inbox render, foreground toast, ?order=/?tab=notifications deep links.
+  2. menu/js/pwa-install.js: notification permission/subscription meta/unsubscribe/foreground helpers; subscribe payload now carries name/phone/prefs/appMode.
+  3. menu/index.html, menu/delivery.html, menu/css/app.css: sub-tabs/panes, account card, switch styling; existing promo CSS retained.
+  4. menu/firebase-messaging-sw.js: data.url deep link, order-<id>/promo tags, same-outlet focus + navigate. menu/sw.js cache v23 (customer.js/pwa-install.js/shared modules precached).
+  5. database.rules.json: customers/{phone}/app exact-phone anon read + validated anon write + admin write; pushInbox exact-phone anon read/admin write/index sentAt; pushSubscriptions optional name/prefs/appMode; config/tunnelUrl auth read (Admin notify base).
+  6. bot-control-api/server.js: /tenant-api/notify now writes pushInbox per unique consented phone, offers filter, menu-origin link, dead-token cleanup; CORS allowlist accepts comma-separated DASHBOARD_ORIGIN plus foodhubbie-admins and foodhubbie-supremeadmin (root cause of Admin 200->failed fetch).
+  7. bot/index.js: CUSTOMER_APP_STATUS + notifyCustomerApp for non-dine-in phone orders; writes inbox and sends data-only FCM only to matching subscriptions that have not set prefs.orderUpdates=false; dedupe orderId_status; dead-token cleanup.
+- Files: menu/js/customer.js, menu/js/pwa-install.js, menu/js/app.js, menu/js/delivery.js, menu/index.html, menu/delivery.html, menu/css/app.css, menu/firebase-messaging-sw.js, menu/sw.js, database.rules.json, bot-control-api/server.js, bot/index.js, tests/customer-profile.check.mjs, docs/PROGRESS-CUSTOMER-APP-ONBOARDING.md.
+- Deployed: firebase deploy --only database; firebase deploy --only hosting:menu; EC2 bot-control-api/server.js + bot/index.js copied (backups .bak-20261020), pm2 9 + 4 restarted online.
+- Verified: node --check all changed JS; JSON rules valid; tests/customer-profile.check.mjs passes; live account write + mismatch-phone 401; live Admin test offer -> {"ok":true,"sent":1,"failed":0,"total":1,"inbox":1}; inbox entry persisted; tokenless delivery.html?o&b&tab=notifications renders Notifications; test inbox/profile/subscription nodes removed; no live orders/sessions written.
+- Not verified: real background push on paired Android/installed iOS; one live bot order transition; Admin audience/phone UI; pushInbox pruning (20-50); notification Enabled badge uses permission, not token state; forget-me is local-only.
+- Build: tools/build.mjs NOT run (no Admin JS change). Admin UI unchanged; ship requires build+deploy only if Admin JS changes.
+- Confidence: HIGH on code/rules/deploy/Admin promo; MEDIUM on device-level background delivery.
