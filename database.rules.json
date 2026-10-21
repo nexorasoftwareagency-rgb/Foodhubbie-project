@@ -232,6 +232,26 @@
                     ".write": "$phone.matches(/^[6-9][0-9]{9}$/) && newData.exists() && newData.hasChildren(['rating','orderId','outlet','createdAt']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5 && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('createdAt').isNumber() && (!newData.hasChild('comment') || newData.child('comment').isString() && newData.child('comment').val().length <= 500) && (!newData.hasChild('business') || newData.child('business').isString())",
                     ".validate": "newData.hasChildren(['rating','orderId','outlet','createdAt']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5 && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('createdAt').isNumber() && (!newData.hasChild('comment') || newData.child('comment').isString() && newData.child('comment').val().length <= 500) && (!newData.hasChild('business') || newData.child('business').isString())"
                   }
+                },
+                "loyalty": {
+                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
+                  ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
+                  ".validate": "newData.hasChildren(['phone','outlet','business','lifetimePoints','totalSpent','orderCount','tier','updatedAt']) && newData.child('phone').isString() && newData.child('phone').val() == $phone && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString() && newData.child('lifetimePoints').isNumber() && newData.child('lifetimePoints').val() >= 0 && newData.child('totalSpent').isNumber() && newData.child('totalSpent').val() >= 0 && newData.child('orderCount').isNumber() && newData.child('orderCount').val() >= 0 && newData.child('tier').isString() && (newData.child('tier').val() == 'bronze' || newData.child('tier').val() == 'silver' || newData.child('tier').val() == 'gold') && newData.child('updatedAt').isNumber() && (!newData.hasChild('tierReachedAt') || newData.child('tierReachedAt').isNumber()) && (!newData.hasChild('lastOrderAt') || newData.child('lastOrderAt').isNumber())"
+                }
+              }
+            },
+            "loyalty": {
+              "config": {
+                ".read": "true",
+                ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
+                ".validate": "newData.hasChildren(['earnRatePaisePerPoint','tiers']) && newData.child('earnRatePaisePerPoint').isNumber() && newData.child('earnRatePaisePerPoint').val() >= 1 && newData.child('tiers').hasChildren(['bronze','silver','gold'])"
+              },
+              "rankings": {
+                "$phone": {
+                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
+                  ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
+                  ".validate": "newData.hasChildren(['phone','outlet','business','lifetimePoints','totalSpent','tier','updatedAt']) && newData.child('phone').isString() && newData.child('phone').val() == $phone && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString() && newData.child('lifetimePoints').isNumber() && newData.child('lifetimePoints').val() >= 0 && newData.child('totalSpent').isNumber() && newData.child('totalSpent').val() >= 0 && newData.child('tier').isString() && (newData.child('tier').val() == 'bronze' || newData.child('tier').val() == 'silver' || newData.child('tier').val() == 'gold') && newData.child('updatedAt').isNumber()",
+                  ".indexOn": ["lifetimePoints"]
                 }
               }
             },

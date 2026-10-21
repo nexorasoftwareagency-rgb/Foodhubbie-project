@@ -954,12 +954,136 @@ function customerAppPhone(order) {
     return /^[6-9]\d{9}$/.test(last10) ? last10 : '';
 }
 
+// ── Loyalty accrual ───────────────────────────────────────────────
+// Awards points when an order reaches a final state (Delivered / Served).
+// Idempotent per orderId — writes an accrual record first so a retry never
+// double-counts. Tier is recomputed from lifetime points after each accrual.
+async function accrueLoyaltyPoints(orderId, order, status) {
+    try {
+        if (!order) return;
+        const statusLower = String(status || order.status || '').toLowerCase();
+        if (statusLower !== 'delivered' && statusLower !== 'served') return;
+
+        const phone = customerAppPhone(order);
+        if (!phone) return;
+
+        const outlet = order.outlet || OUTLET;
+        const bid = resolveBusinessIdFor(outlet);
+        const total = Number(order.total || 0);
+        if (total <= 0) return;
+
+        // Idempotency: skip if this order already accrued points.
+        const accrualRef = db.ref(resolvePath(`loyalty/accruals/${String(orderId)}`, outlet));
+        const existing = await accrualRef.once('value').catch(() => null);
+        if (existing && existing.exists()) return;
+
+        // Config: earn rate (paise per point) + tier table with multipliers.
+        const configSnap = await db.ref(resolvePath('loyalty/config', outlet)).once('value').catch(() => null);
+        const config = configSnap && configSnap.val() ? configSnap.val() : {};
+        const earnRate = config.earnRatePaisePerPoint || 100000; // ₹100 per point
+        const tiers = config.tiers || {
+            bronze: { min: 0, multiplier: 1 },
+            silver: { min: 1000, multiplier: 1.25 },
+            gold: { min: 5000, multiplier: 1.5 }
+        };
+
+        // Base points = floor(total * 100 / earnRate). earnRate in paise:
+        // 100000 paise = ₹100 per point.
+        const basePoints = Math.floor((total * 100) / earnRate);
+        if (basePoints <= 0) return;
+
+        // Read current loyalty to apply tier multiplier.
+        const loyaltyRef = db.ref(resolvePath(`loyalty/customers/${phone}`, outlet));
+        const loyaltySnap = await loyaltyRef.once('value').catch(() => null);
+        const current = loyaltySnap && loyaltySnap.val() ? loyaltySnap.val() : {};
+        const currentTier = current.tier || 'bronze';
+        const multiplier = (tiers[currentTier] && tiers[currentTier].multiplier) || 1;
+
+        const pointsEarned = Math.floor(basePoints * multiplier);
+        const newTotalSpent = (current.totalSpent || 0) + total;
+        const newOrderCount = (current.orderCount || 0) + 1;
+        const newLifetimePoints = (current.lifetimePoints || 0) + pointsEarned;
+
+        // Recompute tier from lifetime points (tiers ordered low→high).
+        let newTier = 'bronze';
+        for (const tierName of ['bronze', 'silver', 'gold']) {
+            const t = tiers[tierName];
+            if (t && newLifetimePoints >= (t.min || 0)) newTier = tierName;
+        }
+
+        const now = Date.now();
+
+        // Mark accrual (idempotency lock).
+        await accrualRef.set({
+            orderId: String(orderId),
+            phone,
+            outlet,
+            business: bid,
+            pointsEarned,
+            total,
+            status: statusLower,
+            createdAt: now
+        });
+
+        // Update customer loyalty record via transaction (defensive idempotency).
+        await loyaltyRef.transaction((cur) => {
+            const c = cur || {};
+            if (c.lastAccruedOrderId === String(orderId)) return undefined;
+            return {
+                phone,
+                outlet,
+                business: bid,
+                lifetimePoints: (c.lifetimePoints || 0) + pointsEarned,
+                totalSpent: (c.totalSpent || 0) + total,
+                orderCount: (c.orderCount || 0) + 1,
+                tier: newTier,
+                tierReachedAt: newTier !== (c.tier || 'bronze') ? now : (c.tierReachedAt || null),
+                lastOrderAt: now,
+                lastAccruedOrderId: String(orderId),
+                updatedAt: now
+            };
+        });
+
+        // Mirror for the outlet leaderboard.
+        await db.ref(resolvePath(`loyalty/rankings/${phone}`, outlet)).set({
+            phone,
+            outlet,
+            business: bid,
+            lifetimePoints: newLifetimePoints,
+            totalSpent: newTotalSpent,
+            tier: newTier,
+            updatedAt: now
+        });
+
+        // Order record with points earned (customer reads this for history).
+        await db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet)).set({
+            orderId: String(orderId),
+            outlet,
+            business: bid,
+            customerPhone: phone,
+            customerName: order.customerName || '',
+            status: statusLower,
+            total,
+            placedAt: order.createdAt || now,
+            deliveredAt: now,
+            pointsEarned,
+            source: order.source || 'QR',
+            itemCount: order.itemCount || Object.keys(order.items || {}).length
+        });
+
+        console.log(`[LOYALTY] Order #${formatOrderId(orderId)}: +${pointsEarned} pts for ${phone}, tier=${newTier}`);
+    } catch (e) {
+        console.error('[LOYALTY] accrueLoyaltyPoints error:', e.message);
+    }
+}
+
 async function notifyCustomerApp(orderId, order, status) {
     try {
         if (!order || order.type === 'dine-in' || order.isDineIn || order.tableId) return;
         const statusLower = String(status || order.status || '').toLowerCase();
         const copy = CUSTOMER_APP_STATUS[statusLower];
         const phone = customerAppPhone(order);
+        await accrueLoyaltyPoints(orderId, order, status);
         if (!copy || !phone) return;
 
         const outlet = order.outlet || OUTLET;

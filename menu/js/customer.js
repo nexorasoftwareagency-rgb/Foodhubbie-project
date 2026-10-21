@@ -43,6 +43,9 @@ let _orders = [];
 let _ratings = {};
 let _ratingsDocBound = false;
 let _ratingPending = { orderId: null, rating: null };
+let _loyaltyConfig = null;   // { earnRatePaisePerPoint, tiers, rewards }
+let _loyalty = null;         // { lifetimePoints, totalSpent, orderCount, tier, ... }
+let _customerRank = null;    // customer's rank in outlet leaderboard
 let _initialized = false;
 
 function readJSON(key) {
@@ -857,18 +860,26 @@ function customerStats() {
     const orders = _orders || [];
     const valid = orders.filter(o => o && o.status !== 'Cancelled' && o.status !== 'Refunded');
     const totalSpent = valid.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-    const points = Math.floor(totalSpent / 100); // 1 loyalty point per ₹100 spent
-    return { orders: orders.length, totalSpent, points };
+    const points = _loyalty && typeof _loyalty.lifetimePoints === 'number'
+        ? _loyalty.lifetimePoints
+        : Math.floor(totalSpent / 100);
+    const tier = _loyalty && _loyalty.tier ? _loyalty.tier : currentTier();
+    return { orders: orders.length, totalSpent, points, tier };
 }
 
 async function loadCustomerData() {
     if (!hasIdentity()) {
         _orders = [];
         _ratings = {};
+        _loyalty = null;
+        _customerRank = null;
         renderAccount();
         return;
     }
     try {
+        await loadLoyaltyConfig();
+        await loadCustomerLoyalty();
+        await computeCustomerRank();
         const [oSnap, rSnap] = await Promise.all([
             get(outletRef(`customers/${_profile.phone}/orders`)),
             get(outletRef(`customers/${_profile.phone}/ratings`))
@@ -885,6 +896,117 @@ async function loadCustomerData() {
         _ratings = {};
     }
     renderAccount();
+}
+
+// ── Loyalty config / customer record / rank ──────────────────────
+
+const TIER_ORDER = ['bronze', 'silver', 'gold'];
+
+const TIER_DISPLAY = {
+    bronze: { label: 'Bronze', color: '#8a6d3b', bg: 'rgba(138,109,59,.12)' },
+    silver: { label: 'Silver', color: '#a8a8a8', bg: 'rgba(168,168,168,.12)' },
+    gold:   { label: 'Gold',   color: '#c5a005', bg: 'rgba(197,160,5,.12)' }
+};
+
+async function loadLoyaltyConfig() {
+    try {
+        const snap = await get(outletRef('loyalty/config'));
+        _loyaltyConfig = snap && snap.exists() ? snap.val() : null;
+    } catch (e) {
+        _loyaltyConfig = null;
+    }
+    if (!_loyaltyConfig) {
+        _loyaltyConfig = {
+            earnRatePaisePerPoint: 100000,
+            tiers: {
+                bronze: { min: 0, label: 'Bronze', multiplier: 1 },
+                silver: { min: 1000, label: 'Silver', multiplier: 1.25 },
+                gold:   { min: 5000, label: 'Gold',   multiplier: 1.5 }
+            },
+            rewards: [
+                { id: 'free-samosa', label: 'Free Samosa', cost: 200, type: 'item' },
+                { id: '10pct-off',   label: '10% Off Next Order', cost: 500, type: 'discount' },
+                { id: 'free-dessert',label: 'Free Dessert', cost: 800, type: 'item' }
+            ]
+        };
+    }
+}
+
+async function loadCustomerLoyalty() {
+    if (!hasIdentity()) { _loyalty = null; return; }
+    try {
+        const snap = await get(outletRef(`customers/${_profile.phone}/loyalty`));
+        _loyalty = snap && snap.exists() ? snap.val() : null;
+    } catch (e) {
+        _loyalty = null;
+    }
+}
+
+async function computeCustomerRank() {
+    if (!hasIdentity() || !_loyaltyConfig) { _customerRank = null; return; }
+    try {
+        const snap = await get(outletRef('loyalty/rankings'));
+        const rankings = snap && snap.exists() ? snap.val() : {};
+        const entries = Object.entries(rankings)
+            .map(([phone, v]) => ({ phone, ...(v || {}) }))
+            .filter(v => v && typeof v.lifetimePoints === 'number')
+            .sort((a, b) => b.lifetimePoints - a.lifetimePoints);
+        const idx = entries.findIndex(e => e.phone === _profile.phone);
+        _customerRank = idx >= 0 ? idx + 1 : null;
+    } catch (e) {
+        _customerRank = null;
+    }
+}
+
+function tierDisplay(tier) {
+    return TIER_DISPLAY[tier] || TIER_DISPLAY.bronze;
+}
+
+function currentTier() {
+    if (_loyalty && _loyalty.tier) return _loyalty.tier;
+    if (_loyaltyConfig && _loyaltyConfig.tiers) {
+        const pts = (_loyalty && _loyalty.lifetimePoints) || 0;
+        let t = 'bronze';
+        for (const name of TIER_ORDER) {
+            const td = _loyaltyConfig.tiers[name];
+            if (td && pts >= (td.min || 0)) t = name;
+        }
+        return t;
+    }
+    return 'bronze';
+}
+
+function loyaltyPoints() {
+    if (_loyalty && typeof _loyalty.lifetimePoints === 'number') return _loyalty.lifetimePoints;
+    return 0;
+}
+
+function pointsToNextTier() {
+    const tier = currentTier();
+    const tiers = (_loyaltyConfig && _loyaltyConfig.tiers) || {};
+    let next = null;
+    for (const name of TIER_ORDER) {
+        const td = tiers[name];
+        if (td && td.min > (tiers[tier]?.min || 0)) { next = td; break; }
+    }
+    if (!next) return { reached: true, points: 0, needed: 0, pct: 100 };
+    const pts = loyaltyPoints();
+    const needed = next.min - pts;
+    const curMin = tiers[tier]?.min || 0;
+    const range = next.min - curMin;
+    const pct = range > 0 ? Math.min(100, Math.floor(((pts - curMin) / range) * 100)) : 100;
+    return { reached: false, points: Math.max(0, needed), needed: Math.max(0, needed), pct };
+}
+
+export function getLoyalty() {
+    return {
+        config: _loyaltyConfig ? { ..._loyaltyConfig } : null,
+        loyalty: _loyalty ? { ..._loyalty } : null,
+        rank: _customerRank,
+        tier: currentTier(),
+        points: loyaltyPoints(),
+        nextTier: pointsToNextTier()
+    };
 }
 
 export async function saveOrderRating(orderId, rating, comment = '') {
@@ -967,7 +1089,105 @@ function bindAccountRatings() {
             renderAccount();
             return;
         }
+        const rewardBtn = e.target.closest('.reward-btn');
+        if (rewardBtn) {
+            if (rewardBtn.disabled) return;
+            const rewardId = rewardBtn.dataset.rewardId;
+            const reward = ((_loyaltyConfig && _loyaltyConfig.rewards) || []).find(r => r.id === rewardId);
+            if (!reward) return;
+            const pts = loyaltyPoints();
+            if (pts < reward.cost) { UI.showToast('Not enough points.', 'error'); return; }
+            rewardBtn.disabled = true;
+            rewardBtn.textContent = 'Redeeming…';
+            try {
+                const code = 'LOYAL' + Math.floor(1000 + Math.random() * 9000);
+                await set(outletRef(`customers/${_profile.phone}/rewards/${rewardId}`), {
+                    rewardId,
+                    label: reward.label,
+                    cost: reward.cost,
+                    code,
+                    status: 'active',
+                    redeemedAt: Date.now(),
+                    outlet: OUTLET,
+                    business: BUSINESS_ID
+                });
+                UI.showToast(`Redeemed: ${reward.label} — code ${code}`, 'success');
+                renderAccount();
+            } catch (e) {
+                UI.showToast('Redemption failed. Try again.', 'error');
+            } finally {
+                rewardBtn.disabled = false;
+                rewardBtn.textContent = 'Redeem';
+            }
+            return;
+        }
     });
+}
+
+function renderLoyaltyStrip() {
+    const stats = customerStats();
+    const tier = stats.tier;
+    const disp = tierDisplay(tier);
+    const next = pointsToNextTier();
+    const hasIdentity = !!_profile?.phone;
+
+    return `
+    <div class="loyalty-strip">
+        <div class="loyalty-tier">
+            <span class="tier-badge" style="color:${disp.color};border-color:${disp.color}">
+                ${disp.label}
+            </span>
+            <span class="tier-points">${stats.points} points</span>
+        </div>
+        <div class="loyalty-progress">
+            <div class="progress-label">${disp.label}${next.reached ? ' — Max tier' : ' → ' + tierDisplay(next.reached ? tier : nextTierName(tier)).label}</div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${next.pct}%"></div></div>
+            <span class="progress-needed">${next.reached ? 'You reached the top tier!' : next.points + ' points to next tier'}</span>
+        </div>
+        <div class="loyalty-stats">
+            ${hasIdentity ? `<span>₹${stats.totalSpent} spent</span>` : ''}
+            <span>${stats.orders} orders</span>
+            ${_customerRank ? `<span>Rank #${_customerRank}</span>` : ''}
+        </div>
+    </div>`;
+}
+
+function nextTierName(current) {
+    const idx = TIER_ORDER.indexOf(current);
+    if (idx >= 0 && idx < TIER_ORDER.length - 1) return TIER_ORDER[idx + 1];
+    return current;
+}
+
+function renderRankings() {
+    if (!hasIdentity() || _customerRank === null) return '';
+    return `
+    <div class="account-empty" style="text-align:center;">
+        <span class="rank-badge">Your rank: #${_customerRank}</span>
+        <p class="rank-sub">among regular customers at this kitchen</p>
+    </div>`;
+}
+
+function renderRewards() {
+    const rewards = (_loyaltyConfig && _loyaltyConfig.rewards) || [];
+    const pts = loyaltyPoints();
+    if (!rewards.length) return '';
+    const cards = rewards.map(r => {
+        const affordable = pts >= r.cost;
+        return `
+        <div class="reward-card">
+            <span class="reward-cost">${r.cost} pts</span>
+            <span class="reward-label">${esc(r.label)}</span>
+            <span class="reward-type">${esc(r.type || 'item')}</span>
+            <button class="reward-btn" ${!affordable ? 'disabled' : ''} data-reward-id="${esc(r.id)}">
+                ${affordable ? 'Redeem' : 'Not enough points'}
+            </button>
+        </div>`;
+    }).join('');
+    return `
+    <div class="account-section">
+        <div class="account-section-head">Rewards</div>
+        <div class="rewards-grid">${cards}</div>
+    </div>`;
 }
 
 function renderCustomerStatsAndHistory() {
@@ -975,8 +1195,11 @@ function renderCustomerStatsAndHistory() {
     if (!hasIdentity()) {
         return `<div class="account-empty">Save your mobile number to see order history, loyalty points and ratings for this kitchen.</div>`;
     }
+    const strip = renderLoyaltyStrip();
+    const rank = renderRankings();
+    const rewards = renderRewards();
     if (stats.orders === 0) {
-        return `<div class="account-empty">No orders yet. Order from the menu to build your history.</div>`;
+        return strip + rank + rewards + `<div class="account-empty">No orders yet. Order from the menu to build your history.</div>`;
     }
     const rows = _orders.map((order) => {
         const statusKey = String(order.status || 'Placed').toLowerCase();
@@ -997,7 +1220,7 @@ function renderCustomerStatsAndHistory() {
             </div>
         </div>`;
     }).join('');
-    return `
+    return strip + rank + rewards + `
     <div class="account-stats">
         <div class="stat"><div class="stat-value">${UI.fmtMoney(stats.totalSpent)}</div><div class="stat-label">Total spent</div></div>
         <div class="stat"><div class="stat-value">${stats.orders}</div><div class="stat-label">Orders</div></div>

@@ -33,14 +33,14 @@ function _renderCustomerTable() {
 
     const sorted = [...data].sort((a, b) => {
         let av = a[_sortField], bv = b[_sortField];
-        if (_sortField === 'orderCount' || _sortField === 'ltv') { av = Number(av || 0); bv = Number(bv || 0); }
+        if (_sortField === 'orderCount' || _sortField === 'ltv' || _sortField === 'loyaltyPoints') { av = Number(av || 0); bv = Number(bv || 0); }
         else { av = String(av || '').toLowerCase(); bv = String(bv || '').toLowerCase(); }
         const cmp = av > bv ? 1 : av < bv ? -1 : 0;
         return _sortDir === 'asc' ? cmp : -cmp;
     });
 
     if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="mob-table-empty">${term ? 'No customers match your search.' : 'No customers found.'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="mob-table-empty">${term ? 'No customers match your search.' : 'No customers found.'}</td></tr>`;
         return;
     }
 
@@ -54,6 +54,9 @@ function _renderCustomerTable() {
         const mapLink = c.locationLink
             ? ` <a href="${escapeHtml(c.locationLink)}" target="_blank" rel="noopener" class="mob-map-link">MAP</a>`
             : '';
+        const tier = c.loyaltyTier || 'bronze';
+        const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+        const tierColor = tier === 'gold' ? '#c5a005' : tier === 'silver' ? '#a8a8a8' : '#8a6d3b';
         return `<tr>
             <td>
                 <div class="mob-cust-name">
@@ -67,6 +70,7 @@ function _renderCustomerTable() {
             <td>${waLink}</td>
             <td><span class="mob-addr-text" title="${escapeHtml(addrFull)}">${escapeHtml(addr)}</span>${mapLink}</td>
             <td class="mob-th-center"><span class="mob-order-count">${c.orderCount || 0}</span><div class="mob-td-sub">purchases</div></td>
+            <td class="mob-th-center"><span style="color:${tierColor};font-weight:700;text-transform:uppercase;font-size:11px;">${tierLabel}</span><div class="mob-td-sub">${fmtMoney(c.loyaltyPoints || 0)} pts</div></td>
             <td class="mob-th-right"><span class="mob-td-total">${fmtMoney(c.ltv || 0)}</span></td>
         </tr>`;
     }).join('');
@@ -90,12 +94,16 @@ export async function loadCustomers() {
     logger.info('CUSTOMERS', 'Loading customers from Firebase...');
 
     try {
-        const [custSnap, orderSnap] = await Promise.all([
+        const [custSnap, orderSnap, loySnap] = await Promise.all([
             get(Outlet.ref("customers")),
-            get(Outlet.ref("orders"))
+            get(Outlet.ref("orders")),
+            get(Outlet.ref("loyalty/rankings"))
         ]);
         const orders = [];
         orderSnap.forEach(o => { orders.push(o.val()); });
+
+        const loyalty = {};
+        loySnap.forEach(l => { loyalty[l.key] = l.val(); });
 
         const customers = [];
         custSnap.forEach(child => {
@@ -104,6 +112,7 @@ export async function loadCustomers() {
             const myOrders = orders.filter(o => o.phone === phone);
             const orderCount = myOrders.length;
             const ltv = myOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+            const loy = loyalty[phone] || {};
             customers.push({
                 name: c.name || 'Anonymous',
                 joined: c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : 'N/A',
@@ -112,7 +121,10 @@ export async function loadCustomers() {
                 address: c.address ? (c.address.length > 30 ? c.address.substring(0, 30) + "..." : c.address) : "Counter Sale / Guest",
                 addressFull: c.address || '',
                 locationLink: c.locationLink || '',
-                orderCount, ltv
+                orderCount, ltv,
+                loyaltyTier: loy.tier || 'bronze',
+                loyaltyPoints: loy.lifetimePoints || 0,
+                loyaltyRank: loy.rank
             });
         });
 
