@@ -1,12 +1,12 @@
 /**
  * FoodHubbie ERP | COST MATH (pure — no imports, runnable in node or browser)
  * Rates mirror the public pricing page (website/index.html):
- *   QR Table ₹2/order · POS counter ₹1/order · WhatsApp/webview ₹3/order
- *   Official pack: per-outlet rates override (₹5/order) or commission_1pct mode (1% of revenue)
+ *   QR Table ₹2/order · POS counter ₹1/order · WhatsApp orders ₹5/order (incl. delivery webview)
+ *   Official pack: commission_1pct mode (1% of delivery-webview revenue) overrides the flat fee
  *   Promo (marketing) message = ₹1 · cancelled/refunded orders never bill
  */
 
-export const DEFAULT_RATES = { QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2 };
+export const DEFAULT_RATES = { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2 };
 export const PROMO_RATE = 1;
 export const FREE_PROMO_TOKENS = 15;
 export const COMMISSION_PCT = 0.01;
@@ -47,12 +47,13 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     const o = (total, source, status) => ({ total, source, status: status || 'Delivered' });
     const r = computeCostIndex({ a: o(100, 'QR'), b: o(100, 'POS'), c: o(100, 'webview_delivery'), d: o(100, 'QR', 'Cancelled') });
     assert.equal(r.count, 3, 'cancelled excluded');
-    assert.equal(r.total, 6, 'QR2 + POS1 + webview3');
+    assert.equal(r.total, 8, 'QR2 + POS1 + webview5');
     assert.equal(r.bySource.QR.orders, 1);
     const p = computeCostIndex({ a: o(500, 'webview_delivery') }, DEFAULT_RATES, 'commission_1pct');
     assert.equal(p.total, 5, '1% of 500');
     const legacy = computeCostIndex({ a: { total: 100, type: 'Dine-in', status: 'Delivered' } });
     assert.equal(legacy.total, 1, 'untagged dine-in → POS rate');
     assert.equal(PROMO_RATE, 1, 'promo ₹1/token');
+    assert.equal(DEFAULT_RATES.WA, 5, 'WhatsApp order ₹5');
     console.log('cost-math OK');
 }

@@ -4,7 +4,7 @@
  * Live "cost of running the software" index for a selectable date range
  * (default: current month; From/To date inputs + This/Last month chips):
  *   - every new order (onChildAdded) is identified by source and priced:
- *       QR ₹2 · POS counter ₹1 · webview_delivery (WhatsApp flow) ₹3 · other ₹2
+ *       QR ₹2 · POS counter ₹1 · webview_delivery (WhatsApp flow) ₹5 · other ₹2
  *       (commission_1pct mode → 1% of order total instead, Official pack)
  *   - cancelled/refunded orders are excluded from billing
  *   - promo token balance KPI + promo usage cost = sent tokens × ₹1 (campaigns totalSent)
