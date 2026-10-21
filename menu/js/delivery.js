@@ -236,8 +236,8 @@ function _renderComboOffers() {
                     <div class="combo-img-scrim"></div>
                     <span class="combo-img-off">${d.disc}</span>
                 <span class="${_comboVegMark(c)}" aria-label="${_comboVegMark(c) === 'combo-veg' ? 'Veg' : 'Non-Veg'}"></span>
-                <button class="combo-fab" data-action="addCombo" data-id="${c.id}">ADD</button>
             </div>
+            <button class="combo-fab" data-action="addCombo" data-id="${c.id}">ADD</button>
             <div class="combo-card-body">
                     <div class="combo-card-title">${esc(c.name)}</div>
                     <div class="combo-card-items">${esc(dishNames)}</div>

@@ -771,7 +771,7 @@ img{max-width:100%; display:block;}
 }
 .menu-filter-chip:active{transform:scale(.95);}
 .menu-filter-chip.active{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 3px 10px rgba(232,73,8,.25);}
-.combo-card{display:flex;min-width:0;flex:0 0 min(86%,340px);scroll-snap-align:start;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s;}
+.combo-card{display:flex;min-width:0;flex:0 0 min(86%,340px);scroll-snap-align:start;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s;position:relative;}
 .combo-card:active{transform:scale(.985);}
 .combo-card-img{position:relative;width:92px;height:92px;flex-shrink:0;border-radius:10px;overflow:visible;background:var(--bg);}
 .combo-card-img .combo-img-frame{position:absolute;inset:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;}
@@ -1057,3 +1057,4 @@ body.onb-open{ overflow:hidden; }
 .reward-btn:hover{ filter:brightness(1.1); }
 .reward-btn:active{ transform:scale(.96); }
 .reward-btn:disabled{ opacity:.5; cursor:not-allowed; background:var(--border); color:var(--text-sub); }
+
