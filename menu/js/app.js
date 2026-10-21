@@ -567,7 +567,7 @@ function _comboData(c) {
         return { dish: d, base: d ? Number(d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0, qty: it.qty || 1 };
     }).filter(e => e.dish);
     const prices = bakeComboUnitPrices(entries.map(e => ({ base: e.base, qty: e.qty })), c.discountType, c.discountValue);
-    const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
+    const disc = c.discountType === 'percentage' ? `${esc(c.discountValue)}% OFF` : `₹${esc(c.discountValue)} OFF`;
     // Sum BASE prices — the baked prices are already discounted; summing them
     // applied the discount twice (Zomato-style card showed ~₹58 off a ₹58% off).
     const originalTotal = entries.reduce((s, e) => s + e.base * e.qty, 0);
@@ -592,7 +592,7 @@ function _renderComboOffers() {
         return `
         <div class="combo-card" data-combo-id="${c.id}">
             <div class="combo-card-img">
-                <div class="combo-img-frame">${c.image ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+                <div class="combo-img-frame">${c.image && /^(https?:|data:image\/)/.test(c.image) ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
                 <div class="combo-img-scrim"></div>
                 <span class="combo-img-off">${d.disc}</span>
                 <span class="${_comboVegMark(c)}" aria-label="${_comboVegMark(c) === 'combo-veg' ? 'Veg' : 'Non-Veg'}"></span>

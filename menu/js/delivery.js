@@ -267,14 +267,14 @@ function _renderComboOffers() {
         const combo = combos.find(c => c.id === card.getAttribute('data-combo-id'));
         if (!combo) return;
         const cd = _comboData(combo);
-        UI.showComboSheet({
-            name: combo.name,
-            discLabel: cd.disc,
-            saving: cd.saving,
-            price: cd.comboPrice,
-            rows: cd.entries.map((e, i) => ({ name: e.dish.name, qty: e.qty, unitPrice: cd.prices[i] }))
-        }, () => _addComboToCart(combo.id));
-        });
+                UI.showComboSheet({
+                    name: combo.name,
+                    discLabel: cd.disc,
+                    saving: cd.saving,
+                    price: cd.comboPrice,
+                    rows: cd.entries.map((e, i) => ({ dishId: e.dish.id, qty: e.qty, unitPrice: cd.prices[i] })),
+                    crossSell
+                }, () => _addComboToCart(combo.id));
     }
 }
 
