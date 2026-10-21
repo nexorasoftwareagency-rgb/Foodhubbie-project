@@ -230,25 +230,25 @@ function _renderComboOffers() {
         const d = _comboData(c);
         const dishNames = d.entries.map(e => `${e.dish.name} x${e.qty}`).join(', ');
         return `
-        <div class="combo-card" data-combo-id="${c.id}">
-            <div class="combo-card-img">
-                <div class="combo-img-frame">${c.image ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
-                <div class="combo-img-scrim"></div>
-                <span class="combo-img-off">${d.disc}</span>
+            <div class="combo-card" data-combo-id="${c.id}">
+                <div class="combo-card-img">
+                    <div class="combo-img-frame">${c.image ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+                    <div class="combo-img-scrim"></div>
+                    <span class="combo-img-off">${d.disc}</span>
                 <span class="${_comboVegMark(c)}" aria-label="${_comboVegMark(c) === 'combo-veg' ? 'Veg' : 'Non-Veg'}"></span>
                 <button class="combo-fab" data-action="addCombo" data-id="${c.id}">ADD</button>
             </div>
             <div class="combo-card-body">
-                <div class="combo-card-title">${esc(c.name)}</div>
-                <div class="combo-card-items">${esc(dishNames)}</div>
-                <div class="combo-card-price-row">
-                    <span class="combo-card-orig">₹${UI.fmtMoney(d.originalTotal)}</span>
-                    <span class="combo-card-price">₹${UI.fmtMoney(d.comboPrice)}</span>
-                    <span class="combo-card-disc">${d.disc}</span>
-                    <span class="combo-card-hint">Tap for details ›</span>
+                    <div class="combo-card-title">${esc(c.name)}</div>
+                    <div class="combo-card-items">${esc(dishNames)}</div>
+                    <div class="combo-card-price-row">
+                        <span class="combo-card-orig">${UI.fmtMoney(d.originalTotal)}</span>
+                        <span class="combo-card-price">${UI.fmtMoney(d.comboPrice)}</span>
+                        <span class="combo-card-disc">${d.disc}</span>
+                        <span class="combo-card-hint">Tap for details ›</span>
+                    </div>
                 </div>
-            </div>
-        </div>`;
+            </div>`;
     }).join('');
     if (!grid._cbListener) {
         grid._cbListener = true;
