@@ -14,6 +14,10 @@ Fragile Files before starting ANY task.
 - **Firebase v12**: `enableIndexedDbPersistence` removed — offline persistence is now automatic. No action needed.
 
 <!-- STANDING_DECISIONS_START -->
+- [2026-10-21 07:02 UTC] FIXED: Combo card double ₹ (app.js:603, delivery.js:246) — fmtMoney already prepends ₹, removed the redundant prefix. FIXED: Combo FAB overlap — moved .combo-fab back inside .combo-card-img (position:relative) so it overlays the image corner instead of the price row/hint. Deployed hosting:menu. Verified live: PWA install card renders, prices show single ₹, FAB on image corner.
+- [2026-10-21 06:05 UTC] VERIFICATION COMPLETE for task 20261021-034313-7ff7: rider-app build (tsc -b && vite build) PASSES zero errors; rider-app lint (oxlint) 0 errors; root build.mjs all targets build; Firebase database + hosting:menu deploys released; node --check clean on all changed JS. Remaining unverified only due to infrastructure constraints (no paired FCM device for push E2E, can't write live orders for status-transition test). Confidence can now be raised to HIGH for code correctness; real-device E2E remains the only open gap.
+- [2026-10-21 05:03 UTC] writeCustomerOrder must be exported from customer.js — order.js imports it; missing export throws 'does not provide an export named writeCustomerOrder' and breaks placeOrder entirely. Fixed and redeployed hosting:menu.
+- [2026-10-21 04:21 UTC] Loyalty accrual is server-side (bot/index.js via Firebase Admin SDK), never client-side — client can't be trusted with points. Idempotency via loyalty/accruals/{orderId} lock + Firebase transaction on loyalty/customers/{phone}. Tier multipliers from loyalty/config (defaults: 1pt/₹100, Bronze/Silver/Gold). Cancelled/refunded orders excluded from accrual (only Delivered/Served).
 - [2026-10-21 01:05 UTC] Marketing site SEO cluster (inventory, whatsapp-ordering, table-management, whatsapp-marketing, multi-outlet, restaurant-analytics, customer-database): one page per commercial intent, each with 4-5 real FAQs + BreadcrumbList/FAQPage JSON-LD, More-menu entry, sitemap + llms.txt, local Playwright verify then firebase hosting deploy + live cache:no-store check. Pages state honest gaps (no barcode/recipe, no floor-plan editor, no loyalty points, no consolidated multi-outlet report). Screenshot PII rule: admin captures must never show the real login email; chat lists pixelated.
 - [2026-10-20 13:59 UTC] Website SEO (commit de6ff82): hosting uses cleanUrls — canonical/internal/sitemap URLs are extensionless and /page.html must 301 to /page; FAQPage JSON-LD must be regenerated from the visible <details> whenever FAQs change; setup fee is ₹500 (shared/billing-defaults.js is authoritative, AGENTS.md/llms.txt ₹1,500 is stale); large source files (sales deck) live in docs/, never website/assets/.
 - [2026-10-20 04:44 UTC] Website brand buttons: primary/CTA background is now --brand-dark #c23a05 with white text (5.38:1, AA) and --brand-darker #a33204 on hover (6.96:1); raw --brand #E84908 is kept for the logo wordmark and accents only (it is 3.9:1 as button bg). Ghost buttons use brand-dark text; index hero inline override updated. Verified live 2026-10-20, commit 56406c4. Not done: .btn.whatsapp stays white-on-#25D366 (1.98:1) - WhatsApp brand green, needs a dark-text variant if we want it AA.
@@ -50,6 +54,8 @@ Fragile Files before starting ANY task.
 - **`rider-app/src/services/orderService.ts`**: Core delivery lifecycle. `assertProximity` has GPS accuracy guard.
 
 <!-- FRAGILE_FILES_START -->
+- `bot/index.js` — accrueLoyaltyPoints added to notifyCustomerApp flow — uses Firebase Admin SDK (bypasses security rules), idempotent via accruals/{orderId} lock. Edit here touches every order-status notification path. (flagged 2026-10-21 04:21 UTC)
+- `database.rules.json` — Loyalty rules added under customers//{orders,ratings,rewards,loyalty} and outlet/loyalty/{config,rankings}. Customer app writes rewards redemptions directly — rewards sub-node write rule is required or redemptions are silently denied. Any edit must be JSON-validated and cross-checked against menu app reads. (flagged 2026-10-21 04:21 UTC)
 - `tests/utils.js` � Shared by critical-flows + walkout-retest specs. Encodes 4 non-obvious contracts added 2026-10-13: (1) login() restores cached firebase:authUser via addInitScript after first real sign-in - repeated signInWithPassword throttles Identity Toolkit and hangs the form; (2) all KDS selectors scoped #tab-tables because KDS renders in BOTH #tab-live and #tab-tables (hidden-first match timeouts); (3) tab-switch clicks need :visible because desktop sidebar nav-btn matches first but is hidden on mobile; (4) critical-flows orderId is persisted to os.tmpdir()/foodhubbie-e2e-order-id and hydrated in beforeEach - changing any of these silently re-breaks the chain without an obvious local error. (flagged 2026-10-13 17:29 UTC)
 - `bot/utils.js` � Hosts the shared ban-proofing module (paceOutboundTo/recordWrongMessage/isJidFrozen/clearWrongStrikes, module-level Maps) exported to index.js + promotions.js, plus maskJid/RateLimiter/OutboundTracker used across the bot. Behavior changes here hit every send path and every outlet; covered by bot/tests/unit.test.js ban-proofing test - keep it green. (flagged 2026-09-30 01:14 UTC)
 - `bot/index.js` � Send wrappers carry 4 stacked concerns (chat-log, G5 quota counter, per-chat pacing, conversation logs) and the status-notification send block chooses template-vs-text by transport; the ban-proofing freeze gates live in the message handler (isAuthorized hoisted). Any edit here needs impact_scan first - breaking a wrapper silently loses chat history or quota counts. (flagged 2026-09-30 01:14 UTC)
@@ -101,6 +107,36 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261021-085158-8b2b] Promo workspace + launch assets
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-21 08:51 UTC
+- Files touched: promo/{README,TRACKER,COPY,ASSETS}.md, promo/assets/ph-gallery-{1..4}.png, promo/assets/logo-240.png, website/assets/social/restaurant-os-1080x1350.png
+- Verified: all 5 images rendered and inspected (no overlap, real data only: revenue 1125/9 orders; empty-state and PII shots rejected and listed); copy links return 200 on live site; committed 357008d; promo docs consistent with live pricing
+- NOT verified / open risk: actual posting to any channel (needs owner accounts); demo video asset missing
+- Confidence: HIGH
+- Ended: 2026-10-21 08:52 UTC
+
+### [20261021-060418-3da8] Policy pages + signup terms acceptance
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-21 06:04 UTC
+- Files touched: website/{billing-policy,refund-policy,whatsapp-policy,signup,index,sitemap,llms}.html/xml/txt + footer links on 20 pages; database.rules.json (terms fields, uncommitted: shares file with parallel session's rewards WIP)
+- Verified: seo-verify 24 pages NO PROBLEMS; live 200 on all 3 policy pages + signup carries termsVersion; sitemap 24 urls; rules deployed and REST-tested (401 without terms fields, 200 with), 3 test records deleted via Admin SDK; local Chromium render checked
+- NOT verified / open risk: real form submit through the browser against live rules; owner sign-off on the four commercial defaults (token refunds, 30-day retention, 7-day dispute window, suspension after notice)
+- Confidence: HIGH
+- Ended: 2026-10-21 06:04 UTC
+
+### [20261021-034313-7ff7] Customer loyalty system (points, tiers, ratings, leaderboard) + rider-app registration fixes + UI/UX polish
+- TIER: 3 (high-risk)
+- STATUS: PARTIAL
+- Started: 2026-10-21 03:43 UTC
+- Files touched: database.rules.json,bot/index.js,menu/js/customer.js,menu/css/app.css,Admin/js/features/customers.js,Admin/index.html,rider-app/src/components/layout/AuthGuard.tsx,rider-app/src/components/auth/RegisterForm.tsx
+- Verified: JSON-validated rules + Firebase database deploy succeeded; hosting:menu deploy succeeded; node --check syntax on all 4 changed JS files; manual impact scan via Select-String on notifyCustomerApp/initCustomer/renderCustomerPromotions/AuthGuard/RegisterForm/registerRider — blast radius contained; adversarial review found missing customers//rewards write rule (fixed and redeployed); rider-app registration flow traced end-to-end
+- NOT verified / open risk: verify_runtime.sh not runnable (no bash, no node_modules — no automated tests/lint/typecheck available); no real-device E2E (no paired FCM device); no live order-status transition test (can't write live orders); rider-app TypeScript build not runnable (no node_modules)
+- Confidence: MEDIUM
+- Ended: 2026-10-21 03:50 UTC
+
 ### [20261020-153628-aeaf] Commit + push Admin/POS + menu combo work (10e4c79)
 - TIER: 3 (high-risk)
 - STATUS: DONE

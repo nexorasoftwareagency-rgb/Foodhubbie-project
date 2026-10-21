@@ -229,6 +229,8 @@ function _renderComboOffers() {
     grid.innerHTML = combos.map(c => {
         const d = _comboData(c);
         const dishNames = d.entries.map(e => `${e.dish.name} x${e.qty}`).join(', ');
+        const comboDishIds = new Set(d.entries.map(e => e.dish.id));
+        const crossSell = M.dishes.filter(d => !comboDishIds.has(d.id) && d.price && d.price <= 150).slice(0, 2).map(d => ({ id: d.id, name: d.name, price: (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) || 0 }));
         return `
             <div class="combo-card" data-combo-id="${c.id}">
                 <div class="combo-card-img">

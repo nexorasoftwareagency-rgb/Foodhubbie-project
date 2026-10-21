@@ -586,6 +586,9 @@ function _renderComboOffers() {
     grid.innerHTML = combos.map(c => {
         const d = _comboData(c);
         const dishNames = d.entries.map(e => `${e.dish.name} x${e.qty}`).join(', ');
+        // Cross-sell: dishes not in combo, limit 2
+        const comboDishIds = new Set(d.entries.map(e => e.dish.id));
+        const crossSell = M.dishes.filter(d => !comboDishIds.has(d.id) && d.price && d.price <= 150).slice(0, 2);
         return `
         <div class="combo-card" data-combo-id="${c.id}">
             <div class="combo-card-img">

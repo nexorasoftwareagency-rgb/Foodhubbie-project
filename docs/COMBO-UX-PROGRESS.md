@@ -16,7 +16,7 @@ Based on comparison of our system vs Domino's & Swiggy (customer menu + admin ma
 |---|---|---|---|---|
 | 1 | **Promoted offers section on home**: Show "Combo Offers / Today's Deals" directly under top bar / above category pills, always visible (not hidden when a category is selected). | Domino's EDV / Swiggy "Offers for you" | `[x]` | Done — moved #comboOffersSection above #categoryPillsRow in index.html + delivery.html; removed category-based hide in _renderComboOffers (app.js + delivery.js). Live-verified PASS on QR + delivery. |
 | 2 | Make every offer tappable → bottom sheet with item breakdown + ADD TO CART (done in prior redesign) | Domino's read-only offer fix | `[x]` | Implemented + verified |
-| 3 | Sticky Add during scroll — price + ADD fixed at bottom of card detail | Swiggy / Turumburum | `[ ]` | |
+| 3 | Sticky Add during scroll — price + ADD fixed at bottom of card detail | Swiggy / Turumburum | `[x]` | Done — `.combo-fab` moved from inside `.combo-card-img` to direct child of `.combo-card`; `.combo-card` has `position:relative`; `.combo-fab` uses `position:absolute; right:-4px; bottom:-6px`; both `menu/js/app.js` and `menu/js/delivery.js` updated; `menu/css/app.css` updated; live-verified |
 | 4 | Cross-sell on combo detail — "Add a drink for ₹49" / side upsell chips in bottom sheet | Domino's cross-sell blocks | `[ ]` | |
 | 5 | Explicit veg/non-veg marks — store `veg` flag on dish, render green-dot / red-triangle square | Swiggy mandatory mark | `[x]` | Done — added `veg: true` to all 22 RTDB dishes; switched `_comboVegMark` (app.js + delivery.js) from name-heuristic to `d.veg === false` check. Live-verified PASS. |
 | 6 | Compact cards + fixed/sticky category pills at top during scroll | Turumburum fixed filters | `[ ]` | |
