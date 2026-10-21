@@ -34,9 +34,13 @@ const PORT = process.env.BOT_CONTROL_PORT || 4000;
 // Cloudflare Tunnel domain), and every dashboard request sends an
 // Authorization header, so this needs real CORS handling — without it
 // every restart/stop/reconnect/quota/bulk-restart call fails in the
-// browser before it reaches any route below. Set DASHBOARD_ORIGIN in
-// production instead of leaving the '*' default.
-const DASHBOARD_ORIGIN = process.env.DASHBOARD_ORIGIN || '*';
+// browser before it reaches any route below. Set DASHBOARD_ORIGIN to a
+// comma-separated allowlist; the Admin and Supreme origins are always allowed.
+const DASHBOARD_ORIGINS = (process.env.DASHBOARD_ORIGIN || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean)
+  .concat(['https://foodhubbie-admins.web.app', 'https://foodhubbie-supremeadmin.web.app']);
 
 // Uses the same Firebase project as the dashboard and bot workers.
 // Set GOOGLE_APPLICATION_CREDENTIALS or pass a service account explicitly.
@@ -49,10 +53,15 @@ const app = express();
 app.use(express.json());
 
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', DASHBOARD_ORIGIN);
+  const origin = req.headers.origin || '';
+  const allowAll = DASHBOARD_ORIGINS.includes('*');
+  if (allowAll || DASHBOARD_ORIGINS.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', allowAll ? '*' : origin);
+    res.header('Vary', 'Origin');
+  }
   res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  if (req.method === 'OPTIONS') return res.sendStatus(204); // preflight — must resolve before requireAuth below
+  if (req.method === 'OPTIONS') return res.sendStatus(204); // preflight - must resolve before requireAuth below
   next();
 });
 
@@ -969,34 +978,78 @@ app.post('/api/whatsapp/templates/:bid/:oid', requireSuperOnly, async (req, res)
 // ================================================================
 app.post('/tenant-api/notify', async (req, res) => {
   try {
-    const { title, body, data = {}, testMode } = req.body || {};
+    const { title, body, data = {}, testMode, audience, phone, type } = req.body || {};
     if (!title || !body) {
       return res.status(400).json({ error: 'title and body are required' });
     }
+    if (String(title).length > 100 || String(body).length > 300) {
+      return res.status(400).json({ error: 'title or body is too long' });
+    }
 
-    // Get all push subscriptions for this outlet
+    const cleanPhone = String(phone || '').replace(/[^\d]/g, '').slice(-10);
+    if (audience === 'phone' && !/^[6-9]\d{9}$/.test(cleanPhone)) {
+      return res.status(400).json({ error: 'A valid phone is required for this audience' });
+    }
+    const messageType = String(type || 'promo').slice(0, 20);
+
     const subsSnap = await admin.database()
       .ref(`businesses/${req.businessId}/outlets/${req.outlet}/pushSubscriptions`)
       .get();
 
     const subs = subsSnap.val() || {};
-    let tokens = Object.values(subs)
-      .map(s => s.token)
-      .filter(Boolean);
+    let entries = Object.entries(subs).map(([key, sub]) => ({ key, ...sub }));
 
-    // Test mode: only the requesting admin's own device — never the whole outlet
-    if (testMode === true || testMode === 'true' || data.testMode === 'true') {
-      const own = (await admin.database().ref(`admins/${req.adminUid}/fcmToken`).get()).val();
-      tokens = own ? [own] : [];
+    if (audience === 'phone') {
+      entries = entries.filter(e => String(e.phone || '') === cleanPhone);
     }
 
+    // Promotional sends honour the customer's offers preference. Existing
+    // records created before consent existed are treated as opted in.
+    if (messageType !== 'order') {
+      entries = entries.filter(e => !e.prefs || e.prefs.offers === true);
+    }
+
+    if (testMode === true || testMode === 'true' || data.testMode === 'true') {
+      const own = (await admin.database().ref(`admins/${req.adminUid}/fcmToken`).get()).val();
+      entries = own ? [{ key: 'test', token: own, phone: null }] : [];
+    }
+
+    const tokens = entries.map(e => e.token).filter(Boolean);
     if (tokens.length === 0) {
-      return res.json({ ok: true, sent: 0, message: 'No subscribers for this outlet' });
+      return res.json({ ok: true, sent: 0, inbox: 0, message: 'No subscribers for this outlet' });
+    }
+
+    const menuOrigin = (process.env.MENU_WEB_ORIGIN || 'https://foodhubbie-qrmenu.web.app').replace(/\/$/, '');
+    const link = `${menuOrigin}/${encodeURIComponent(req.outlet)}/delivery.html?o=${encodeURIComponent(req.outlet)}&b=${encodeURIComponent(req.businessId)}&tab=notifications`;
+
+    // Persist an in-app inbox entry per subscribed phone, independent of FCM
+    // delivery. This is what the customer sees under Promotions > Notifications.
+    const phoneSet = new Set(entries.map(e => String(e.phone || '')).filter(p => /^[6-9]\d{9}$/.test(p)));
+    let inboxCount = 0;
+    if (testMode !== true && testMode !== 'true' && data.testMode !== 'true') {
+      for (const customerPhone of phoneSet) {
+        try {
+          await admin.database()
+            .ref(`businesses/${req.businessId}/outlets/${req.outlet}/pushInbox/${customerPhone}`)
+            .push({
+              title: String(title).slice(0, 100),
+              body: String(body).slice(0, 300),
+              type: messageType,
+              sentAt: Date.now(),
+              ...(data.orderId ? { orderId: String(data.orderId).slice(0, 100) } : {}),
+              ...(data.status ? { status: String(data.status).slice(0, 40) } : {}),
+              url: link
+            });
+          inboxCount += 1;
+        } catch (e) {
+          console.warn('inbox write failed', e.message);
+        }
+      }
     }
 
     // FCM data values must be flat strings
     const flat = Object.fromEntries(
-      Object.entries({ title, body, ...data, outlet: req.outlet, business: req.businessId })
+      Object.entries({ title, body, ...data, type: messageType, url: link, outlet: req.outlet, business: req.businessId })
         .map(([k, v]) => [k, String(v)])
     );
 
@@ -1005,26 +1058,38 @@ app.post('/tenant-api/notify', async (req, res) => {
       data: flat,
       android: { priority: 'high' },
       apns: { payload: { aps: { 'content-available': 1 } } },
-      webpush: { fcmOptions: { link: `${process.env.ADMIN_WEB_ORIGIN || 'https://foodhubbie-admins.web.app'}/index.html?o=${req.outlet}&b=${req.businessId}` } },
+      webpush: { fcmOptions: { link } },
     };
 
     const response = await admin.messaging().sendEachForMulticast(message);
     const successCount = response.responses.filter(r => r.success).length;
     const failureCount = response.responses.length - successCount;
 
-    // Log failures for debugging (invalid/expired tokens)
     if (failureCount > 0) {
-      response.responses.forEach((r, i) => {
-        if (!r.success) {
-          console.warn(`FCM send failed for token ${tokens[i].slice(0, 12)}...: ${r.error?.message || r.error}`);
+      const deadCodes = new Set([
+        'messaging/registration-token-not-registered',
+        'messaging/invalid-argument',
+        'messaging/invalid-registration-token'
+      ]);
+      await Promise.all(response.responses.map(async (r, i) => {
+        if (r.success) return;
+        const token = tokens[i];
+        const entry = entries.find(e => e.token === token);
+        const code = r.error?.code || 'unknown';
+        console.warn(`FCM send failed for token ${token.slice(0, 12)}...: ${r.error?.message || r.error}`);
+        if (deadCodes.has(code) && entry && entry.key !== 'test') {
+          await admin.database()
+            .ref(`businesses/${req.businessId}/outlets/${req.outlet}/pushSubscriptions/${entry.key}`)
+            .remove()
+            .catch(() => {});
         }
-      });
+      }));
     }
 
-    res.json({ ok: true, sent: successCount, failed: failureCount, total: tokens.length });
+    res.json({ ok: true, sent: successCount, failed: failureCount, total: tokens.length, inbox: inboxCount });
   } catch (err) {
     console.error('tenant-api/notify failed', err);
-    res.status(500).json({ error: `Notification send failed — ${err.message}` });
+    res.status(500).json({ error: `Notification send failed - ${err.message}` });
   }
 });
 

@@ -24,8 +24,8 @@
  *     side).
  */
 
-import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
-import { app, outletRef, set, OUTLET, BUSINESS_ID } from './firebase.js';
+import { getMessaging, getToken, onMessage, deleteToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
+import { app, outletRef, set, update, OUTLET, BUSINESS_ID } from './firebase.js';
 import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
 
 const PHONE_STORAGE_KEY = 'fh_customer_phone';
@@ -121,7 +121,36 @@ function safeKeyFromToken(token) {
     return token.replace(/[.#$\[\]/]/g, '_');
 }
 
-export async function subscribeToNotifications() {
+export function getNotificationPermission() {
+    try {
+        return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+    } catch (e) {
+        return 'unsupported';
+    }
+}
+
+function subscriptionPayload(token, { name, phone, prefs, appMode } = {}) {
+    const cleanPhone = (phone || getStoredPhone() || '').replace(/[^\d]/g, '').slice(-10);
+    const payload = {
+        token,
+        phone: /^[6-9]\d{9}$/.test(cleanPhone) ? cleanPhone : null,
+        outlet: OUTLET,
+        business: BUSINESS_ID,
+        platform: isIOS() ? 'ios' : 'web',
+        appMode: appMode === 'delivery' ? 'delivery' : 'dine-in',
+        updatedAt: Date.now()
+    };
+    if (name) payload.name = String(name).trim().slice(0, 60);
+    if (prefs) {
+        payload.prefs = {
+            offers: prefs.offers === true,
+            orderUpdates: prefs.orderUpdates !== false
+        };
+    }
+    return payload;
+}
+
+export async function subscribeToNotifications({ name, phone, prefs, appMode } = {}) {
     if (VAPID_PUBLIC_KEY === 'PASTE_VAPID_PUBLIC_KEY_HERE') {
         console.error('[PWA] VAPID_PUBLIC_KEY is not set — push notifications cannot work until it is. See the comment at the top of pwa-install.js for where to get it.');
         return { ok: false, error: 'Notifications are not configured yet.' };
@@ -145,20 +174,50 @@ export async function subscribeToNotifications() {
 
         if (!token) return { ok: false, error: 'Could not get a push token from this browser.' };
 
-        const phone = getStoredPhone();
         const key = safeKeyFromToken(token);
-        await set(outletRef(`pushSubscriptions/${key}`), {
-            token,
-            phone: phone || null,
-            outlet: OUTLET,
-            business: BUSINESS_ID,
-            platform: isIOS() ? 'ios' : 'web',
-            updatedAt: Date.now()
-        });
+        await set(outletRef(`pushSubscriptions/${key}`), subscriptionPayload(token, { name, phone, prefs, appMode }));
 
-        return { ok: true };
+        return { ok: true, token };
     } catch (e) {
         console.error('[PWA] subscribeToNotifications failed:', e?.message || e);
         return { ok: false, error: 'Something went wrong enabling notifications.' };
+    }
+}
+
+// Used when the profile/preferences change after opt-in: re-derive this
+// device's token (never persisted in localStorage) and patch the same record.
+export async function updateSubscriptionMeta(meta = {}) {
+    if (getNotificationPermission() !== 'granted') return { ok: false };
+    const messaging = getMessagingInstance();
+    if (!messaging) return { ok: false };
+    try {
+        const swRegistration = await getFcmRegistration();
+        if (!swRegistration) return { ok: false };
+        const token = await getToken(messaging, { vapidKey: VAPID_PUBLIC_KEY, serviceWorkerRegistration: swRegistration });
+        if (!token) return { ok: false };
+        const key = safeKeyFromToken(token);
+        await update(outletRef(`pushSubscriptions/${key}`), subscriptionPayload(token, meta));
+        return { ok: true };
+    } catch (e) {
+        console.warn('[PWA] updateSubscriptionMeta failed:', e?.message || e);
+        return { ok: false };
+    }
+}
+
+export async function unsubscribeFromNotifications() {
+    const messaging = getMessagingInstance();
+    if (messaging) {
+        try { await deleteToken(messaging); } catch (e) { /* already gone */ }
+    }
+    return { ok: true };
+}
+
+export function onForegroundMessage(callback) {
+    const messaging = getMessagingInstance();
+    if (!messaging || typeof onMessage !== 'function') return () => {};
+    try {
+        return onMessage(messaging, callback);
+    } catch (e) {
+        return () => {};
     }
 }

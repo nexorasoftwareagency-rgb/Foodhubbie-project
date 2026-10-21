@@ -932,6 +932,85 @@ async function sendFCMToRider(riderId, title, body, data = {}) {
     }
 }
 
+// Transactional order updates for the customer app (menu PWA). Mirrors the
+// rider push: data-only FCM so the menu service worker owns the notification.
+// Best-effort - WhatsApp remains the source of truth if no device is linked.
+const CUSTOMER_APP_STATUS = {
+    'placed': { title: 'Order received', body: 'We received your order and will confirm it shortly.' },
+    'confirmed': { title: 'Order confirmed', body: 'The kitchen is preparing your order.' },
+    'preparing': { title: 'Order is being prepared', body: 'Your food is on the stove.' },
+    'ready': { title: 'Order is ready', body: 'Your order is packed and waiting for the rider.' },
+    'packed': { title: 'Order is packed', body: 'Your order is packed and waiting for the rider.' },
+    'picked up': { title: 'Order picked up', body: 'Your rider has picked up the order.' },
+    'out for delivery': { title: 'Out for delivery', body: 'Your rider is on the way. Share the delivery OTP when they arrive.' },
+    'reached drop location': { title: 'Rider has arrived', body: 'Your rider is at your location. Share the delivery OTP to receive your order.' },
+    'delivered': { title: 'Delivered', body: 'Enjoy your meal! Thank you for ordering.' },
+    'cancelled': { title: 'Order cancelled', body: 'Your order was cancelled. Contact the restaurant if this looks wrong.' }
+};
+
+function customerAppPhone(order) {
+    const digits = String(order.phone || '').replace(/\D/g, '');
+    const last10 = digits.slice(-10);
+    return /^[6-9]\d{9}$/.test(last10) ? last10 : '';
+}
+
+async function notifyCustomerApp(orderId, order, status) {
+    try {
+        if (!order || order.type === 'dine-in' || order.isDineIn || order.tableId) return;
+        const statusLower = String(status || order.status || '').toLowerCase();
+        const copy = CUSTOMER_APP_STATUS[statusLower];
+        const phone = customerAppPhone(order);
+        if (!copy || !phone) return;
+
+        const outlet = order.outlet || OUTLET;
+        const oid = formatOrderId(order.orderId || orderId);
+        const statusKey = statusLower.replace(/[^a-z0-9]+/g, '-');
+        const subsSnap = await db.ref(resolvePath('pushSubscriptions', outlet)).once('value').catch(() => null);
+        const subs = subsSnap ? (subsSnap.val() || {}) : {};
+        const entries = Object.entries(subs).filter(([, sub]) =>
+            sub && sub.token && String(sub.phone || '') === phone &&
+            (!sub.prefs || sub.prefs.orderUpdates !== false)
+        );
+        if (entries.length === 0) return;
+
+        const inboxRef = db.ref(resolvePath(`pushInbox/${phone}/${String(order.orderId || orderId).replace(/[^A-Za-z0-9_-]/g, '')}_${statusKey}`, outlet));
+
+        const existing = await inboxRef.once('value').catch(() => null);
+        if (existing && existing.exists()) return;
+
+        const bid = resolveBusinessIdFor(outlet);
+        const url = `${WEBVIEW_DELIVERY_HOST}/${outlet}/delivery.html?b=${bid}&o=${outlet}&order=${encodeURIComponent(order.orderId || orderId)}&tab=notifications`;
+        const title = `Order #${oid} - ${copy.title}`;
+
+        await inboxRef.set({
+            title,
+            body: copy.body,
+            type: 'order',
+            orderId: String(order.orderId || orderId),
+            status: statusLower,
+            sentAt: Date.now(),
+            url
+        }).catch(e => console.error('[FCM] Customer inbox write failed:', e.message));
+
+        const response = await admin.messaging().sendEachForMulticast({
+            tokens: entries.map(([, sub]) => sub.token),
+            data: { title, body: copy.body, type: 'order', orderId: String(order.orderId || orderId), status: statusLower, url, outlet, business: bid },
+            android: { priority: 'high' },
+            webpush: { fcmOptions: { link: url } }
+        });
+
+        await Promise.all(response.responses.map(async (r, i) => {
+            if (r.success) return;
+            const code = r.error?.code || '';
+            if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token') {
+                await db.ref(resolvePath(`pushSubscriptions/${entries[i][0]}`, outlet)).remove().catch(() => {});
+            }
+        }));
+    } catch (e) {
+        console.error('[FCM] notifyCustomerApp error:', e.message);
+    }
+}
+
 async function notifyAdmin(sock, orderId, order, type = 'NEW') {
     try {
         if (!sock || isSocketDead(sock)) return;
@@ -1101,6 +1180,8 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                     }
                 }
             }
+
+            notifyCustomerApp(id, { ...order, isDineIn }, currentStatus);
 
             const botSettings = await getData("settings/Bot", order.outlet) || {};
             const storeSettings = await getData("settings/Store", order.outlet) || {};
