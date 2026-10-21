@@ -1,7 +1,7 @@
 // === src/components/auth/RegisterForm.tsx ===
 import { useState, type FormEvent } from "react";
 import { Eye, EyeOff, User, Phone, MapPin } from "lucide-react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { registerRider } from "@/services/authService";
 import type { AuthErrorInfo } from "@/services/authService";
 
@@ -18,7 +18,7 @@ export function RegisterForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [, navigate] = useNavigate();
+  const [, navigate] = useLocation();
 
   const outlets = [
     { id: "pizza", name: "Roshani Pizza", icon: "🍕" },
