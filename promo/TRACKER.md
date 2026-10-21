@@ -39,7 +39,7 @@ Status as of **2026-10-21**. Update the row, then append a line to the log.
 | Logo 240Ã—240 | `promo/assets/logo-240.png` | DONE |
 | Product Hunt thumbnail 240Ã—240 | `promo/assets/logo-240.png` (same file) | DONE |
 | Show HN text | `COPY.md` â†’ Show HN | DONE |
-| Demo video / screen recording | â€” | TODO â€” highest-value missing asset |
+| Demo video 32s | `promo/assets/demo-walkthrough-32s.mp4` + `demo-poster.png` | DONE |
 | Real customer photo/quote | â€” | BLOCKED â€” needs a paying outlet's permission |
 
 ## Weekly KPIs
@@ -64,3 +64,5 @@ Status as of **2026-10-21**. Update the row, then append a line to the log.
 - Demo walkthrough video produced: `promo/assets/demo-walkthrough-32s.mp4` + poster (real 2m16s admin recording trimmed to 32s, owner email masked).
 - 6 site screenshots replaced with real-data captures (dashboard / KDS / tables / orders / 7D analytics, email masked); deployed + verified live.
 - Next: Product Hunt draft using PH gallery 1–4 + demo video; launch checklist in docs/PLAN-PROMOTE-SAAS.md.
+- Demo video embedded on homepage (hero flow, click-to-play, poster 200/1002KB total); deployed + verified playing on live site (`a1e8d10`).
+- Remaining launch actions are owner-gated (accounts, posts, warm-up) — see channel table.
