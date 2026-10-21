@@ -35,6 +35,11 @@
   .hero .devices img{width:100%;border-radius:var(--radius);box-shadow:var(--shadow-xl);border:1px solid var(--line)}
   .hero .devices .badge{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 20px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:var(--shadow)}
 
+  /* ---- Demo video ---- */
+  .demo-vid{max-width:900px;margin:36px auto 0;text-align:center}
+  .demo-vid video{width:100%;border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow-xl);display:block}
+  .demo-vid figcaption{margin-top:12px;color:var(--muted);font-size:13px}
+
   /* ---- Stats strip ---- */
   .stats{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--soft)}
   .stats .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;padding:44px 24px;text-align:center}
@@ -280,6 +285,12 @@
       <img src="assets/shots/admin-dashboard.webp" alt="FoodHubbie Admin Dashboard — real-time KPIs, multi-outlet management" fetchpriority="high" decoding="async">
       <div class="badge">🖥️ Admin Dashboard · Real-time KPIs · Multi-outlet</div>
     </div>
+    <figure class="demo-vid">
+      <video controls preload="metadata" poster="assets/demo/demo-poster.png" playsinline>
+        <source src="assets/demo/demo-walkthrough-32s.mp4" type="video/mp4">
+      </video>
+      <figcaption>32-second walkthrough — real dashboard, real orders: KDS confirm → Ready → table bill → reports</figcaption>
+    </figure>
     <div class="ecosystem-strip">
       <div class="eco-item"><span class="eco-icon">🖥️</span>Admin</div>
       <span class="eco-arrow">→</span>
