@@ -76,63 +76,135 @@ function appendLog(rec) {
 function sentToday() {
   if (!fs.existsSync(LOG)) return 0;
   const d = new Date().toISOString().slice(0, 10);
-  return fs.readFileSync(LOG, "utf8").split("\n").filter(l => l.includes(d) && /dm-sent|resend-sent|reply-sent|auto-answer/.test(l)).length;
+  return fs.readFileSync(LOG, "utf8").split("\n").filter(l => l.includes(d) && /dm[123]|dm-sent|resend-sent|reply-sent|auto-answer/.test(l)).length;
 }
 
 // ---------- messaging ----------
+// hooks: ONE tailored benefit per outlet type (outcome first, not a feature dump)
 const HOOKS = {
-  cafe: "guest table par scan karke order de deta hai — kitchen tak seedha pahunch jaata hai, no waiter-runner",
-  bakery: "counter billing ke saath QR table order bhi ek hi dashboard mein aa jaata hai",
-  "fine dining": "table ka QR order aur counter ka bill ek hi dashboard mein live sync — bill mismatch khatam",
-  qsr: "counter billing 1 order = ₹1 — super fast, table QR bhi included",
+  cafe: "guest QR scan karke order karta hai — kitchen tak seedha pahunch jaata hai, no waiter-runner",
+  bakery: "counter billing aur table order ek hi dashboard mein saath-saath chalte hain",
+  "fine dining": "table ka QR order aur counter ka bill ek hi dashboard mein live sync hote hain",
+  qsr: "counter billing sabse fast — 1 order = ₹1, table QR bhi included",
   restaurant: "dine-in table orders aur counter billing ek hi screen par aate hain"
 };
-function compose(l, resend) {
-  const greet = l.ownerName ? l.ownerName + " ji" : "Manager sahab";
+const INTRO = {
+  cafe: "Café chalata hai to billing aur table orders ek jagah hona kaam bahut aasan karta hai.",
+  bakery: "Bakery ke counter billing aur table orders ek jagah manage ho to din aasan hota hai.",
+  "fine dining": "Fine dining mein table orders aur bill ek dashboard mein dekhna bahut aasan karta hai.",
+  qsr: "Fast service outlet mein speed hi sab kuch hai — billing aur orders simple hone chahiye.",
+  restaurant: "Restaurant ka poora order-flow ek dashboard mein — counter, table QR, WhatsApp aur kitchen."
+};
+const greetFor = l => (l.ownerName ? l.ownerName + " ji" : "");
+function outletKeyOf(l) {
   const t = (l.outletType || "").toLowerCase();
-  const outletKey = (t.includes("cafe") || t.includes("bakery")) ? "cafe"
+  return (t.includes("cafe") || t.includes("bakery")) ? "cafe"
       : t.includes("fine") ? "fine dining"
       : t.includes("quick") ? "qsr" : "restaurant";
-  if (resend) return `Namaste 🙏 ${greet}, Nilesh — FoodHubbie se (fir se).\n\nShayad last message miss hua. Poora system *chalta hua* — 32 sec ka video:\n\n${VIDEO_URL}\n\nPasand aaye to bas *"demo"* likh dijiye.\n10 min mein aapke hi menu pe dikhata hoon.\n\n*10-din trial, no monthly fee.*`;
+}
+// 3-message sequence (attempts-aware): intro -> demo invite (day 3) -> final (day 7), then stop.
+// No "Manager sahab" — natural greeting; trial is always "pay after 10 days" so it stays consistent.
+function compose(l) {
+  const hook = HOOKS[outletKeyOf(l)];
+  const intro = INTRO[outletKeyOf(l)];
+  const a = l.attempts || 0;
+  if (a >= 2) {
+    return [
+      `Hi 🙏 Nilesh yahan — FoodHubbie se aakhri follow-up.`,
+      ``,
+      `Billing/ordering ko aasan karna kabhi zaroori ho to system ready hai:`,
+      `🌐 ${SITE}`,
+      ``,
+      `Ab aapke taraf se message nahi aayega. Interest kabhi bade to bas *"demo"* likh dijiye.`
+    ].join("\n");
+  }
+  if (a >= 1) {
+    return [
+      `Hi 🙏 ${greetFor(l)}, Nilesh — FoodHubbie wale, pichhle message pe follow-up.`,
+      ``,
+      `Ek chhota demo dikha doon — billing, QR orders aur kitchen sab *saath chalte hue*, aapke hi menu se. 10 min.`,
+      ``,
+      `Pehle video walkthrough? 32-sec ka hai:`,
+      `${VIDEO_URL}`,
+      ``,
+      `*Live demo* ya *video* — jo aapke liye aasan ho, bas bata dijiye.`
+    ].join("\n");
+  }
   return [
-    `Namaste 🙏 ${greet}, main Nilesh — FoodHubbie se.`,
+    `Namaste 🙏${greetFor(l) ? " " + greetFor(l) : ""}`,
     ``,
-    `Ek system aapke restaurant ke liye — ek hi dashboard mein:`,
+    `Main Nilesh, *FoodHubbie* se.`,
+    ``,
+    intro,
+    `Aapke liye seedhi baat: ${hook}.`,
+    ``,
+    `*Pay-per-order pricing:*`,
     `• Counter billing — ₹1/order`,
-    `• Table QR se order — ₹2/order`,
-    `• WhatsApp pe order — ₹5/order`,
+    `• Table QR — ₹2/order`,
+    `• WhatsApp order — ₹5/order`,
     `• Kitchen screen + reports — included`,
     ``,
-    `Aapke case ke liye seedhi baat: ${HOOKS[outletKey]}.`,
+    `Monthly fee *zero*. Setup ₹500 one-time, first bill mein adjust.`,
+    `Cancelled order ka charge nahi.`,
     ``,
-    `*Math simple hai:*`,
-    `— Monthly fee: *zero*`,
-    `— Setup: ₹500 one-time (first bill mein adjust)`,
-    `— Cancelled order: charge *zero*`,
+    `10-min ka demo aapke hi menu pe de doon? Bas *"haan"* likh dijiye.`,
     ``,
-    `10-min demo? Aapke hi menu se, live.`,
-    `👉 ${SITE}`
+    `🌐 ${SITE}`
   ].join("\n");
 }
 const OPTOUT = /(stop|band karo|nahi chahiye|not interested|mat bhejo|raha nahi|unsub)/i;
 const isOptOut = t => OPTOUT.test(t || "");
 const faqAnswer = t => {
   if (/price|kitn(a|e)|charge|rate|monthly|fees/i.test(t))
-    return `₹1 counter / ₹2 table QR / ₹5 WhatsApp — har order par, monthly koi fee nahi. ₹500 one-time setup first bill mein adjust. Cancel par charge zero.`;
+    return [
+      `Sure — puri pricing:`,
+      ``,
+      `• Counter billing — ₹1/order`,
+      `• Table QR — ₹2/order`,
+      `• WhatsApp order — ₹5/order`,
+      `• Monthly subscription — ₹0`,
+      `• One-time setup — ₹500 (first bill mein adjust)`,
+      ``,
+      `Cancelled order ka charge nahi lagta.`,
+      `Chhota demo de doon? "haan" likh dijiye.`
+    ].join("\n");
   if (/demo|dikha/i.test(t))
-    return `Demo bilkul — 10 min, aapke hi menu pe. Aaj ya kal? Thoda time bata dein, main call pe dikhata hoon.`;
+    return [
+      `Absolutely! 😊`,
+      ``,
+      `Aapke hi restaurant ka menu use karke dikhata hoon — asli flow samajh aayega. Takreeban 10 min lagte hain.`,
+      ``,
+      `Kaunsa day aur time aapke liye aasan hai?`
+    ].join("\n");
   if (/k[aie]se|kaam karta|kya hai|video/i.test(t))
-    return `32-sec video: ${VIDEO_URL} — system ka poora flow. 10-min live demo bhi de sakta hoon, bas time bata dijiye.`;
+    return [
+      `FoodHubbie billing, table QR ordering, WhatsApp orders, kitchen screen aur reports — sab ek dashboard mein laata hai.`,
+      ``,
+      `Website: ${SITE}`,
+      ``,
+      `32-sec video walkthrough: ${VIDEO_URL}`,
+      `Live demo bhi dikha sakta hoon.`
+    ].join("\n");
   return null;
 };
 
 // ---------- allowlist guard + queue ----------
+const daysSince = dmy => {
+  if (!dmy) return -1;
+  const p = String(dmy).split("/").map(Number);
+  if (p.length < 3 || p.some(isNaN)) return -1;
+  return Math.round((Date.now() - Date.UTC(p[2], p[1] - 1, p[0])) / 864e5);
+};
 function pickTargets(n) {
-  const leads = leadRead().filter(l => l.phone && !/^Duplicate$/.test(l.status || "") && l.status !== "Not interested");
-  // pendingHuman replies come first — a queued answer/waiting lead precedes fresh cold DMs
+  const leads = leadRead().filter(l =>
+      l.phone && !/^Duplicate$/.test(l.status || "") && l.status !== "Not interested" && (l.attempts || 0) < 3);
   const pendingReply = leads.filter(l => (l.replySummary || "").startsWith("needsHuman"));
-  const fresh = leads.filter(l => l.status === "New" || l.status === "Resend");
-  return [...pendingReply, ...fresh].slice(0, n);
+  const dm2Due = leads.filter(l => (l.attempts || 0) === 1 && daysSince(l.lastContact) >= 3);
+  const dm3Due = leads.filter(l => (l.attempts || 0) === 2 && daysSince(l.lastContact) >= 7);
+  const manual = leads.filter(l => l.status === "Resend" && (l.attempts || 0) > 0); // manual mark jumps the wait
+  const fresh = leads.filter(l => l.status === "New");
+  // sequence-due follow-ups outrank cold starts
+  return [...pendingReply, ...dm2Due, ...dm3Due, ...manual, ...fresh].slice(0, n);
 }
 function assertAllowlisted(phone, leads) {
   const want = String(phone).replace(/\D/g, "");
@@ -261,7 +333,7 @@ async function main(argv) {
     for (const l of leads.slice(0, 6)) console.log(" ", l.crm, l.status, String(l.name).slice(0, 34), l.phone);
     const t = pickTargets(n);
     if (!t.length) { console.log("QUEUE EMPTY"); return finishReport([]); }
-    console.log("\nNEXT UP:", t[0].crm, "->", t[0].ownerName || "Manager sahab", "(pending:" + t[0].status + ")\n---\n" + compose(t[0], (t[0].status || "").startsWith("Replied")));
+    console.log("\nNEXT UP:", t[0].crm, "->", t[0].ownerName || "-", "(pending:" + t[0].status + ", attempts:" + (t[0].attempts || 0) + ")\n---\n" + compose(t[0]));
     return finishReport([]);
   }
 
@@ -329,18 +401,18 @@ async function main(argv) {
     const lead = targets[0];
     assertAllowlisted(lead.phone, leads);
     if (lead.status === "Not interested") throw new Error("opted-out, refusing: " + lead.crm);
-    const resend = (lead.status || "").startsWith("Replied") || lead.status === "Resend";
-    const msg = compose(lead, resend);
+    const kind = ["dm1", "dm2", "dm3"][lead.attempts || 0]; // attempts 0->dm1, 1->dm2, 2->dm3
+    const msg = compose(lead);
     if (webMode) {
       const {ctx, p} = await bootWeb();
       await webSend(p, lead.phone.replace(/\D/g, ""), msg);
       await ctx.close();
-      appendLog({crm: lead.crm, name: lead.name, phone: lead.phone, type: resend ? "resend-sent" : "dm-sent", text: msg, status: "ok"});
+      appendLog({crm: lead.crm, name: lead.name, phone: lead.phone, type: kind, text: msg, status: "ok"});
       leadUpdate(lead.crm, {status: "Contacted", "attempts": (lead.attempts || 0) + 1, "first contact": lead.status === "New" ? today() : undefined, "last contact": today()});
       did.push(lead.crm + ":web");
     } else {
       const sock = await bootBaileys();
-      const okS = await sendTracked(sock, lead, msg, resend ? "resend-sent" : "dm-sent");
+      const okS = await sendTracked(sock, lead, msg, kind);
       if (okS) leadUpdate(lead.crm, {status: "Contacted", "attempts": (lead.attempts || 0) + 1, "first contact": lead.status === "New" ? today() : undefined, "last contact": today()});
       did.push(lead.crm + (okS ? ":baileys" : ":unreachable"));
       if (targets.length > 1) {
@@ -349,8 +421,7 @@ async function main(argv) {
           await sleep(HUMAN_GAP());                       // 5-14s random gap (owner rule) — EVERY send
           const l2 = targets[i];
           assertAllowlisted(l2.phone, leads);
-          const msg2 = compose(l2, (l2.status || "").startsWith("Replied"));
-          const ok2 = await sendTracked(sock, l2, msg2, (l2.status || "").startsWith("Replied") ? "resend-sent" : "dm-sent");
+          const ok2 = await sendTracked(sock, l2, compose(l2), ["dm1", "dm2", "dm3"][l2.attempts || 0]);
           if (ok2) leadUpdate(l2.crm, {status: "Contacted", "attempts": (l2.attempts || 0) + 1, "first contact": l2.status === "New" ? today() : undefined, "last contact": today()});
           did.push(l2.crm + (ok2 ? ":ok" : ":unreachable"));
         }
