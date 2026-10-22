@@ -65,7 +65,7 @@ DV = {
 }
 
 def read_csv_rows():
-    rows = []
+    rows, seen = [], set()
     for f in sorted(glob.glob(os.path.join(CSV_DIR, "*.csv"))):
         src = os.path.basename(f.rsplit("-", 2)[0])
         with open(f, encoding="utf-8", newline="") as fh:
@@ -73,6 +73,10 @@ def read_csv_rows():
                 name = (r.get("name") or "").strip()
                 if not name:
                     continue
+                import re as _re
+                key = _re.sub(r"[^a-z0-9]", "", name.lower())
+                dup = key in seen
+                seen.add(key)
                 area = ""
                 addr = (r.get("addr") or "").replace('"', "")
                 low = name.lower()
@@ -80,7 +84,7 @@ def read_csv_rows():
                 rows.append(dict(name=name, phone=(r.get("phone") or "").strip(),
                                  website=(r.get("website") or "").strip(),
                                  maps=(r.get("href") or "").strip(), addr=addr,
-                                 outlet=outlet, source=src))
+                                 outlet=outlet, source=src, dup=dup))
     return rows
 
 def sheet_readme(wb):
@@ -152,9 +156,14 @@ def sheet_leads(wb, rows):
             c = ws.cell(row=i, column=j, value=v)
             c.border = THIN
         k = len(vals) + 1
-        for name, default in (("status", "New"), ("channel", "WhatsApp"), ("attempts", 0)):
-            j = next(idx for idx, cc in enumerate(COLS, start=1) if cc[0].lower().startswith(name))
+        status = "Duplicate" if r["dup"] else "New"
+        note = "same name in another batch — kept the first"
+        for name_, default in (("status", status), ("channel", "WhatsApp"), ("attempts", 0)):
+            j = next(idx for idx, cc in enumerate(COLS, start=1) if cc[0].lower().startswith(name_))
             ws.cell(row=i, column=j, value=default).border = THIN
+        if r["dup"]:
+            jn = next(idx for idx, cc in enumerate(COLS, start=1) if cc[0] == "Notes")
+            ws.cell(row=i, column=jn, value=note).border = THIN
         ws.cell(row=i, column=k-1).border = THIN
     ws.sheet_view.zoomScale = 90
 
