@@ -50,7 +50,15 @@
     // represents the customer's ongoing relationship with this restaurant,
     // not one specific table visit - session establishment still runs
     // fresh every time the app opens, exactly as it does today.
-    var scopedUrl = './index.html?' + params;
+    //
+    // These MUST be absolute. The manifest is served from a blob: URL, and a
+    // blob has no usable base path, so a relative "./index.html" resolves to
+    // nothing - Chrome drops it ("property 'start_url' ignored, URL is
+    // invalid") and the install loses its per-outlet start_url and scope.
+    // Build them against the real path of the current outlet instead.
+    var outletBase = window.location.pathname.replace(/[^/]*$/, '') || '/';
+    var scopedUrl = new URL('index.html?' + params, window.location.origin + outletBase).href;
+    var scopeUrl = new URL(outletBase, window.location.origin).href;
 
     var manifest = {
         name: 'FoodHubbie',
@@ -62,7 +70,7 @@
         orientation: 'portrait',
         background_color: '#ffffff',
         theme_color: '#E84908',
-        scope: './',
+        scope: scopeUrl,
         dir: 'ltr',
         lang: 'en-US',
         icons: [
