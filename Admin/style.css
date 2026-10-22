@@ -325,7 +325,7 @@ html, body {
     display: none !important;
 }
 
-/* Base main styles â€” ensures scroll works on all viewports */
+/* Base main styles — ensures scroll works on all viewports */
 .main {
     flex: 1;
     min-width: 0;
@@ -901,7 +901,7 @@ tr.premium-row-v4:focus-visible {
     display: block;
 }
 .form-input.error ~ .field-error::before {
-    content: 'âš  ';
+    content: '⚠ ';
 }
 @keyframes shake {
     0%,100% { transform: translateX(0); }
@@ -3038,7 +3038,7 @@ tr.premium-row-v4:focus-visible {
     display: none;
 }
 
-/* The "sticky-cart" name was never actually wired up to position:sticky â€”
+/* The "sticky-cart" name was never actually wired up to position:sticky —
    only enable it on the desktop 2-column layout (matches .walkin-layout's
    own breakpoint); on mobile the cart is its own full-width section below
    the picker, where sticky would just look broken. */
@@ -3049,7 +3049,7 @@ tr.premium-row-v4:focus-visible {
     }
 }
 
-/* ---------- Cart row v5 â€” qty badge / size subtitle / icon actions ---------- */
+/* ---------- Cart row v5 — qty badge / size subtitle / icon actions ---------- */
 .cart-row-v5 {
     display: flex;
     align-items: flex-start;
@@ -3592,7 +3592,7 @@ tr.premium-row-v4:focus-visible {
    RESPONSIVE / MOBILE 
    =========================== */
 
-/* HAMBURGER BUTTON â€” hidden on desktop */
+/* HAMBURGER BUTTON — hidden on desktop */
 .hamburger-btn {
     align-items: center;
     background: var(--white);
@@ -3612,7 +3612,7 @@ tr.premium-row-v4:focus-visible {
     z-index: 1100;
 }
 
-/* SIDEBAR OVERLAY â€” hidden on desktop */
+/* SIDEBAR OVERLAY — hidden on desktop */
 /* Removed redundant base overlay - managed in 768px block */
 
 /* CLEAN ADAPTIVE BREAKPOINT FOLLOWS */
@@ -5215,7 +5215,7 @@ body {
 /* The base style above assumes a dark surrounding context (semi-transparent
    white on dark) and renders almost invisible on the Reports table's white
    Tabulator cells. These data-method variants (matching the real values
-   written by pos.js and the WhatsApp bot â€” Cash, UPI, COD) make payment
+   written by pos.js and the WhatsApp bot — Cash, UPI, COD) make payment
    method legible and distinguishable at a glance. */
 .badge-payment[data-method="cash"] {
     background: #f0fdf4; border-color: rgba(34, 197, 94, 0.25); color: #166534;
@@ -5967,7 +5967,7 @@ body {
 .border-t-white-10 { border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .text-white-50 { color: rgba(255, 255, 255, 0.5); }
 
-/* === ORDER DRAWER v5 â€” status stepper redesign === */
+/* === ORDER DRAWER v5 — status stepper redesign === */
 
 /* Overlay */
 .drawer-overlay {
@@ -6145,7 +6145,7 @@ body {
 }
 .dw-eyebrow i { width: 11px; height: 11px; }
 
-/* Customer / context card â€” shape adapts per order type */
+/* Customer / context card — shape adapts per order type */
 .dw-ctx-full {
     background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px;
 }
@@ -6226,7 +6226,7 @@ body {
 }
 .dw-btn-mark-paid:hover { background: rgba(255,255,255,.16); }
 
-/* Rider â€” only rendered when actually relevant (delivery orders, post-Ready) */
+/* Rider — only rendered when actually relevant (delivery orders, post-Ready) */
 .dw-rider-card {
     background: var(--info-light, #eff6ff); border: 1px solid #bfdbfe; border-radius: 12px;
     padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
@@ -7464,7 +7464,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .custom-checkbox.checked::after {
-    content: 'âœ“';
+    content: '✓';
     position: absolute;
     color: white;
     font-size: 12px;
@@ -7628,7 +7628,7 @@ body.pos-selection-mode .walkin-picker {
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(22px); }
 .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-/* Toggle Switch (Small â€” for dish cards) */
+/* Toggle Switch (Small — for dish cards) */
 .toggle-switch-sm {
     position: relative;
     width: 36px;
@@ -8417,7 +8417,7 @@ body.pos-selection-mode .walkin-picker {
 .promo-media-preview img { max-width:80px; max-height:80px; border-radius:6px; border:1px solid var(--border-color, #e5e7eb); }
 .promo-message-preview { white-space:pre-wrap; background:#0b1220; color:#e5e7eb; padding:12px; border-radius:8px; font-family:monospace; font-size:13px; }
 
-/* â”€â”€ Promotions Tab â€” Restructured Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Promotions Tab — Restructured Layout ─────────────────────────────── */
 .promo-status-bar { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
 .promo-status-right { display:flex; align-items:center; gap:16px; flex-shrink:0; }
 .promo-kill-widget { display:flex; align-items:center; gap:8px; background:var(--bg-card, #fff); border:1px solid var(--border-color, #e5e7eb); border-radius:8px; padding:6px 12px; cursor:pointer; }
@@ -8678,7 +8678,7 @@ body.pos-selection-mode .walkin-picker {
 .channel-manual   { background:#f1f5f9; color:#475569; }
 .channel-other    { background:#f1f5f9; color:#64748b; }
 
-/* Discount card â€” now clickable through to its usage detail */
+/* Discount card — now clickable through to its usage detail */
 .discount-card {
     cursor: pointer;
     transition: box-shadow .15s ease, border-color .15s ease;
@@ -8692,7 +8692,7 @@ body.pos-selection-mode .walkin-picker {
     cursor: pointer;
 }
 
-/* Discount usage detail â€” focused view of the reports modal for one discount */
+/* Discount usage detail — focused view of the reports modal for one discount */
 .discount-usage-kpis {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 10px; margin-bottom: 16px;
@@ -8819,7 +8819,7 @@ body.pos-selection-mode .walkin-picker {
     margin: 0 2px !important;
 }
 /* =============================
-   TABULATOR â€” BRAND COLOR THEME
+   TABULATOR — BRAND COLOR THEME
    Warm orange treatment matching the rest of the app's "food craving"
    identity, applied to ALL Tabulator instances across every tab.
    ============================= */
@@ -9292,7 +9292,7 @@ body.pos-selection-mode .walkin-picker {
 .drawer-order-actions .btn-action-orange,
 .drawer-order-actions .btn-action-green { color: #fff; }
 
-/* QR modal preview â€” matches the "food craving" gradient-bordered
+/* QR modal preview — matches the "food craving" gradient-bordered
    design used on the actual printed QR cards (see tables.js
    _qrCardMarkup / QR_CARD_CSS), so what admin previews here is what
    customers will see on the table. */
@@ -9449,7 +9449,7 @@ body.pos-selection-mode .walkin-picker {
 .danger-zone-card h4 { display: flex; align-items: center; gap: 8px; }
 
 /* ================================================================
-   DASHBOARD REDESIGN â€” CSS-ONLY PATCH
+   DASHBOARD REDESIGN — CSS-ONLY PATCH
    Append this entire block to the END of Admin/style.css
    (same convention as table-management.css).
 
@@ -9459,30 +9459,30 @@ body.pos-selection-mode .walkin-picker {
    (updateDashboardStats, renderPriorityOrders). This patch only
    restyles what's already there.
 
-   SCOPING â€” why nothing else breaks:
-     .kpi-card-v4 / .kpi-row  â†’ reused on 5 other tabs (POS, Analytics,
-        Payments, Inventory, RiderAnalytics â€” confirmed by grep).
+   SCOPING — why nothing else breaks:
+     .kpi-card-v4 / .kpi-row  → reused on 5 other tabs (POS, Analytics,
+        Payments, Inventory, RiderAnalytics — confirmed by grep).
         Every rule below is scoped under #tab-dashboard, so those
         other tabs are untouched. Same convention already used
         elsewhere in this file at `#tab-riderAnalytics .kpi-row`.
-     .priority-card-v4 / .priority-order-list â†’ style.css already has
+     .priority-card-v4 / .priority-order-list → style.css already has
         TWO conflicting `.priority-order-list` blocks (~line 3031 and
         ~line 4092, pre-existing duplicate, not introduced here) plus
         a `.priority-card-v4` block (~line 5794) with a 3-color side
         bar. Every rule below is scoped under the `#priorityOrderList`
-        ID, so it wins regardless of those blocks' file position â€”
+        ID, so it wins regardless of those blocks' file position —
         nothing needs to be deleted for this to take effect.
         (Optional cleanup, unrelated to this patch: the block at
         ~line 3031 is fully dead today since ~line 4092 already wins
-        on source order â€” safe to delete next time you're in there.)
+        on source order — safe to delete next time you're in there.)
    ================================================================ */
 
 
 /* ----------------------------------------------------------------
-   1) KPI STRIP â€” merges the 4 separate glowing .kpi-card-v4 tiles
+   1) KPI STRIP — merges the 4 separate glowing .kpi-card-v4 tiles
       into one unified strip with internal dividers. Same 4 stats,
       same element IDs (statOrders, statPending, statRevenue,
-      statRidersActive, badgePending, badgeRevenue, badgeRiders) â€”
+      statRidersActive, badgePending, badgeRevenue, badgeRiders) —
       only the container chrome changes.
    ---------------------------------------------------------------- */
 
@@ -9558,19 +9558,19 @@ body.pos-selection-mode .walkin-picker {
 
 
 /* ----------------------------------------------------------------
-   2) SERVICE RAIL â€” turns the existing #priorityOrderList container
+   2) SERVICE RAIL — turns the existing #priorityOrderList container
       (currently a wrapping grid) into a horizontal scrolling rail of
       ticket cards, and gives .priority-card-v4 a full-width top edge
       colored by urgency instead of the current 3-color side bar.
 
       Urgency mapping reuses the SAME priority weights already
-      computed in renderPriorityOrders() (placed=4 highest â€¦
-      ready=1 lowest) â€” just gives each tier a distinct, consistent
+      computed in renderPriorityOrders() (placed=4 highest …
+      ready=1 lowest) — just gives each tier a distinct, consistent
       color instead of the current placed=amber/confirmed=blue/
       ready=orange mapping:
-        placed / pending  â†’ hottest, needs acknowledgement  â†’ red
-        confirmed         â†’ warm, kitchen has it             â†’ amber
-        ready             â†’ done, waiting for pickup/serve   â†’ green
+        placed / pending  → hottest, needs acknowledgement  → red
+        confirmed         → warm, kitchen has it             → amber
+        ready             → done, waiting for pickup/serve   → green
    ---------------------------------------------------------------- */
 
 #priorityOrderList.priority-order-list {
@@ -9601,7 +9601,7 @@ body.pos-selection-mode .walkin-picker {
     transform: translateY(-2px);
 }
 
-/* Full-width top edge instead of the centered 40%-height side bar â€”
+/* Full-width top edge instead of the centered 40%-height side bar —
    reads more clearly as a "ticket" at this card width. */
 #priorityOrderList .priority-card-v4::after {
     left: 0; top: 0; transform: none;
@@ -9634,7 +9634,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 /* Loading skeletons + empty state also live inside #priorityOrderList
-   at different times â€” give them rail-appropriate sizing too so the
+   at different times — give them rail-appropriate sizing too so the
    loading state doesn't look broken once the container becomes flex. */
 #priorityOrderList .skeleton-rider-card,
 #priorityOrderList .loading-placeholder {
@@ -9655,7 +9655,7 @@ body.pos-selection-mode .walkin-picker {
 
 
 /* ----------------------------------------------------------------
-   3) RECENT ORDER HISTORY â€” compact layout so all data
+   3) RECENT ORDER HISTORY — compact layout so all data
       fits without truncation in the main column.
    ---------------------------------------------------------------- */
 
@@ -9763,7 +9763,7 @@ body.pos-selection-mode .walkin-picker {
 .premium-stat-row .value-chip { color: #c43e00; background: rgba(196,62,0,0.08); }
 
 /* ================================================================
-   MENU BROWSER â€” Sidebar + Grid Layout for Quick Menu Setup
+   MENU BROWSER — Sidebar + Grid Layout for Quick Menu Setup
    ================================================================ */
 
 .menu-browser-layout {
@@ -10201,7 +10201,7 @@ body.pos-selection-mode .walkin-picker {
     animation: fadeInUp 0.2s ease forwards;
 }
 
-/* Analytics sub-tabs â€” desktop (mobile-overrides.css covers â‰¤1024px) */
+/* Analytics sub-tabs — desktop (mobile-overrides.css covers ≤1024px) */
 #reportsMobileView {
     background: var(--card-bg, #fff);
     border-radius: 16px;
@@ -10254,7 +10254,7 @@ body.pos-selection-mode .walkin-picker {
 }
 
 /* =====================================================
-   BILL PAYMENT CENTER MODAL â€” two-column layout
+   BILL PAYMENT CENTER MODAL — two-column layout
    ===================================================== */
 .bill-payment-modal {
     max-width: 820px !important;

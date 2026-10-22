@@ -1,4 +1,4 @@
-/* FoodHubbie website â€” shared base. Page-specific styles stay inline.
+/* FoodHubbie website — shared base. Page-specific styles stay inline.
    <link> must come BEFORE the inline <style> so pages can override. */
 :root{
   --brand:#E84908; --brand-dark:#c23a05; --brand-darker:#a33204; --brand-light:#fff3e2;
@@ -102,7 +102,7 @@ h1{font-size:clamp(28px,5vw,40px);letter-spacing:-.025em;font-weight:800;margin-
 .faq summary{cursor:pointer;padding:18px 22px;font-weight:700;font-size:15px;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px}
 .faq summary::-webkit-details-marker{display:none}
 .faq summary::after{content:"+";color:var(--brand);font-weight:900;font-size:18px;flex-shrink:0}
-.faq details[open] summary::after{content:"â€“"}
+.faq details[open] summary::after{content:"–"}
 .faq details p{padding:0 22px 20px;color:var(--muted);font-size:14px;line-height:1.7}
 
 /* ---- Footer base (index keeps its .top/.col/.bottom extras inline) ---- */

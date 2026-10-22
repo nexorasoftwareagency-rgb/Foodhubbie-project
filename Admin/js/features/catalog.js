@@ -59,7 +59,7 @@ cats.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
                     <img src="${cat.image || 'https://placehold.co/100/orange/white?text=Category'}" class="identity-avatar-v4" style="width:40px; height:40px;">
                     <div class="identity-info-v4">
                         <span class="name" style="font-size:13px;">${escapeHtml(cat.name)}</span>
-                        <span class="sub" style="font-size:10px;">${subParts.join(' Â· ')}</span>
+                        <span class="sub" style="font-size:10px;">${subParts.join(' · ')}</span>
                     </div>
                 </div>
                 <div class="action-group-v4">
@@ -160,7 +160,7 @@ export async function addCategory() {
         const btn = document.getElementById('btnAddCategory');
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = 'ðŸš€ Add Category';
+            btn.innerHTML = '🚀 Add Category';
         }
     }
 }
@@ -247,7 +247,7 @@ dishes.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
                     ${Object.entries(d.sizes).map(([size, price]) => `
                         <div class="dish-price-row">
                             <span style="color:var(--text-main)">${escapeHtml(size)}</span>
-                            <span class="dish-price-val">â‚¹${escapeHtml(String(price))}</span>
+                            <span class="dish-price-val">₹${escapeHtml(String(price))}</span>
                         </div>
                     `).join("")}
                 </div>`;
@@ -255,7 +255,7 @@ dishes.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
                 sizesHtml = `
                 <div class="dish-pricing-box flex-between">
                     <span style="font-size:12px; color:var(--text-muted)">Standard</span>
-                    <span class="dish-price-val" style="font-size:15px;">â‚¹${escapeHtml(String(d.price || 0))}</span>
+                    <span class="dish-price-val" style="font-size:15px;">₹${escapeHtml(String(d.price || 0))}</span>
                 </div>`;
             }
 
@@ -711,7 +711,7 @@ export async function saveCategoryEdits() {
         const payload = { name, order, image: imageUrl };
         if (Object.keys(addons).length > 0) payload.addons = addons;
         await update(Outlet.ref(`categories/${id}`), payload);
-        logAudit('Category Edit', `Updated "${cat.name}" â†’ "${name}"`, 'Catalog');
+        logAudit('Category Edit', `Updated "${cat.name}" → "${name}"`, 'Catalog');
         await mirrorToMenuBank(db, ref, set, 'categories', { ...cat, ...payload }, _bankSource());
         showToast('Category updated!', 'success');
         document.getElementById('categoryEditorModal').classList.remove('active');
@@ -804,7 +804,7 @@ export async function runImageMigration() {
         if (!(await showConfirm("This will convert images to Base64 text. This process might take a minute. Proceed?", "Image Migration"))) return;
 
         try {
-            console.log("ðŸš€ Starting Image Migration...");
+            console.log("🚀 Starting Image Migration...");
             const updates = {};
 
             async function convertUrlToDataUri(url) {
