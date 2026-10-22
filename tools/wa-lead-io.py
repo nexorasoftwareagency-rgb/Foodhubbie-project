@@ -72,6 +72,7 @@ def main():
                 "fit": clean(rec["dine-in fit (tables)"]), "website": clean(rec["website"]),
                 "ownerName": clean(rec["owner name"]), "waKnown": clean(rec["whatsapp?"]),
                 "status": clean(rec["status"]), "attempts": rec["attempts"] or 0,
+                "source": clean(rec["source (query)"]),
                 "lastContact": dmy(rec["last contact"]), "notes": clean(rec["notes"]),
                 "lang": clean(rec["msg lang"]) if "msg lang" in rec else "",
                 "replySummary": clean(rec["replySummary"]) if "replySummary" in rec else clean(rec["reply summary"]),

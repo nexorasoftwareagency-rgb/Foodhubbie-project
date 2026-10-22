@@ -306,8 +306,11 @@ function pickTargets(n) {
   const dm3Due = leads.filter(l => (l.attempts || 0) === 2 && daysSince(l.lastContact) >= 7);
   const manual = leads.filter(l => l.status === "Resend" && (l.attempts || 0) > 0); // manual mark jumps the wait
   const fresh = leads.filter(l => l.status === "New");
+  // owner hand-picked numbers ("most potential") go before scraped lists
+  const freshOwner = fresh.filter(l => /owner list/i.test(l.source || ""));
+  const freshRest = fresh.filter(l => !/owner list/i.test(l.source || ""));
   // sequence-due follow-ups outrank cold starts
-  return [...pendingReply, ...dm2Due, ...dm3Due, ...manual, ...fresh].slice(0, n);
+  return [...pendingReply, ...dm2Due, ...dm3Due, ...manual, ...freshOwner, ...freshRest].slice(0, n);
 }
 function assertAllowlisted(phone, leads) {
   const want = String(phone).replace(/\D/g, "");
