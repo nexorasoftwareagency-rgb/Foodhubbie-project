@@ -107,19 +107,29 @@ function assertAllowlisted(phone, leads) {
 // ---------- engines ----------
 async function bootBaileys() {
   fs.mkdirSync(AUTH, {recursive: true});
-  const {state, saveCreds} = await useMultiFileAuthState(AUTH);
-  const {version} = await fetchLatestBaileysVersion();
-  const sock = makeWASocket({version, auth: state, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false});
-  await new Promise((res, rej) => {
-    const t = setTimeout(() => rej(new Error("connect timeout")), 60000);
-    sock.ev.on("connection.update", u => {
-      if (u.qr) { L("QR  WhatsApp  Devices  Link a device me scan karein:"); qrterm.generate(u.qr, {small: true}); }
-      if (u.connection === "open") { clearTimeout(t); res(); }
-      if (u.connection === "close") { clearTimeout(t); rej(new Error("closed: " + JSON.stringify(u.lastDisconnect?.error?.output?.statusCode))); }
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const {state, saveCreds} = await useMultiFileAuthState(AUTH);
+    const {version} = await fetchLatestBaileysVersion();
+    const sock = makeWASocket({version, auth: state, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false});
+    const ok = await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error("connect timeout — QR not scanned in 5 min")), 300000);
+      sock.ev.on("connection.update", u => {
+        if (u.qr) { L("QR — WhatsApp ▸ Devices ▸ Link a device me scan karein:"); qrterm.generate(u.qr, {small: true}); }
+        if (u.connection === "open") { clearTimeout(t); res(true); }
+        if (u.connection === "close") {
+          clearTimeout(t);
+          const code = u.lastDisconnect?.error?.output?.statusCode;
+          if (code === DisconnectReason.restartRequired || code === 515) { L("server restart after pairing (515) — reconnecting…"); setTimeout(() => res(false), 2000); }
+          else rej(new Error("closed: " + code + " (see https://baileys.wiki/connection-errors)"));
+        }
+      });
     });
-  });
-  sock.ev.on("creds.update", saveCreds);
-  return sock;
+    sock.ev.on("creds.update", saveCreds);
+    if (ok) return sock;
+    try { sock.end?.(new Error("retrying")); } catch {}
+    await sleep(2500);
+  }
+  throw new Error("could not stabilise after pairing");
 }
 async function baileySendDM(sock, phone, text) {
   const r = await sock.onWhatsApp(phone);
