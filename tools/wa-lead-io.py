@@ -3,7 +3,7 @@
 #   read   -> prints JSON rows of Leads sheet (with CRM IDs, auto-assigned and persisted)
 #   update -> argv[3] JSON: {"crm":"LD003","patch":{"status":"Replied","attempts":2,...}}
 # CRM ID lives in a dedicated "CRM ID" column; assigns LD### to new rows, keeps existing.
-import json, sys, re
+import json, os, sys, re
 from datetime import date, datetime
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill
@@ -75,12 +75,14 @@ def main():
                 "source": clean(rec["source (query)"]),
                 "lastContact": dmy(rec["last contact"]), "notes": clean(rec["notes"]),
                 "lang": clean(rec["msg lang"]) if "msg lang" in rec else "",
+                "instagram": clean(rec.get("instagram")),
                 "replySummary": clean(rec["replySummary"]) if "replySummary" in rec else clean(rec["reply summary"]),
                 "row": rec["_row"], "cols": rec["_col"],
             })
         print(json.dumps(out, ensure_ascii=True))
     elif mode == "update":
-        job = json.loads(sys.argv[3])
+        raw = sys.argv[3]
+        job = json.loads(open(raw, encoding="utf-8").read() if os.path.isfile(raw) else raw)
         hdrs2 = headers(ws)
         row = next(r["_row"] for r in rows if r.get("crm id") == job["crm"])
         for k, v in (job.get("patch") or {}).items():
