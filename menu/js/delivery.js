@@ -156,7 +156,7 @@ function renderMenuScreen(searchTerm) {
         const input = document.getElementById('dishSearchInput');
         if (input) input.value = '';
         renderMenuScreen();
-    });
+    }, M.combos.length > 0);
 
     const combosOnly = M.activeCategory === '__combos';
     _renderComboOffers();
@@ -267,14 +267,17 @@ function _renderComboOffers() {
         const combo = combos.find(c => c.id === card.getAttribute('data-combo-id'));
         if (!combo) return;
         const cd = _comboData(combo);
-                UI.showComboSheet({
-                    name: combo.name,
-                    discLabel: cd.disc,
-                    saving: cd.saving,
-                    price: cd.comboPrice,
-                    rows: cd.entries.map((e, i) => ({ dishId: e.dish.id, qty: e.qty, unitPrice: cd.prices[i] })),
-                    crossSell
-                }, () => _addComboToCart(combo.id));
+        const combo = combos.find(c => c.id === card.getAttribute('data-combo-id'));
+        if (!combo) return;
+        const cd = _comboData(combo);
+        UI.showComboSheet({
+            name: combo.name,
+            discLabel: cd.disc,
+            saving: cd.saving,
+            price: cd.comboPrice,
+            rows: cd.entries.map((e, i) => ({ dishId: e.dish.id, qty: e.qty, unitPrice: cd.prices[i] })),
+            crossSell
+        }, () => _addComboToCart(combo.id));
     }
 }
 

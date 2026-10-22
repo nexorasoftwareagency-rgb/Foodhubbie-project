@@ -507,7 +507,7 @@ async function loadMenu() {
 }
 
 function renderMenuScreen(searchTerm) {
-    UI.renderCategoryPills(M.categories, M.activeCategory, (catId) => {     M.activeCategory = catId; document.getElementById('dishSearchInput').value = ''; renderMenuScreen(); });
+    UI.renderCategoryPills(M.categories, M.activeCategory, (catId) => {     M.activeCategory = catId; document.getElementById('dishSearchInput').value = ''; renderMenuScreen(); }, M.combos.length > 0);
 
     const combosOnly = M.activeCategory === '__combos';
     _renderComboOffers();
