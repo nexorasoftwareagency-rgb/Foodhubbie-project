@@ -4,6 +4,7 @@
 #   update -> argv[3] JSON: {"crm":"LD003","patch":{"status":"Replied","attempts":2,...}}
 # CRM ID lives in a dedicated "CRM ID" column; assigns LD### to new rows, keeps existing.
 import json, sys, re
+from datetime import date, datetime
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill
 
@@ -51,7 +52,7 @@ def main():
         for k in ("crm id", "restaurant name", "city / area", "rating (maps)", "phone", "whatsapp?",
                   "website", "owner name", "outlet type", "dine-in fit (tables)", "source (query)",
                   "status", "channel used", "attempts", "first contact", "last contact",
-                  "reply summary", "est. ₹/month (own math)", "objections", "notes"):
+                  "reply summary", "est. ₹/month (own math)", "objections", "notes", "msg lang"):
             if k in hdrs:
                 rec[k] = ws.cell(row=r, column=hdrs[k]).value
         rec["_col"] = {k: hdrs[k] for k in hdrs}
@@ -62,6 +63,8 @@ def main():
         out = []
         for rec in rows:
             clean = lambda v, k="": ("" if v is None else str(v).replace("\ufffd", ""))
+            dmy = lambda v: ("" if v is None
+                             else (v.strftime("%d/%m/%Y") if hasattr(v, "strftime") else str(v).replace("\ufffd", "")))
             out.append({
                 "crm": clean(rec["crm id"]), "name": clean(rec["restaurant name"]),
                 "phone": clean(rec["phone"]).replace(" ", ""), "addr": clean(rec["city / area"]),
@@ -69,7 +72,8 @@ def main():
                 "fit": clean(rec["dine-in fit (tables)"]), "website": clean(rec["website"]),
                 "ownerName": clean(rec["owner name"]), "waKnown": clean(rec["whatsapp?"]),
                 "status": clean(rec["status"]), "attempts": rec["attempts"] or 0,
-                "lastContact": clean(rec["last contact"]), "notes": clean(rec["notes"]),
+                "lastContact": dmy(rec["last contact"]), "notes": clean(rec["notes"]),
+                "lang": clean(rec["msg lang"]) if "msg lang" in rec else "",
                 "replySummary": clean(rec["replySummary"]) if "replySummary" in rec else clean(rec["reply summary"]),
                 "row": rec["_row"], "cols": rec["_col"],
             })
@@ -80,6 +84,9 @@ def main():
         row = next(r["_row"] for r in rows if r.get("crm id") == job["crm"])
         for k, v in (job.get("patch") or {}).items():
             key = k.strip().lower()
+            # dd/mm/yyyy strings for contact columns become real Excel dates (formulas + date math)
+            if key in ("first contact", "last contact") and isinstance(v, str) and re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", v):
+                v = datetime.strptime(v, "%d/%m/%Y").date()
             if key in hdrs2:
                 ws.cell(row=row, column=hdrs2[key], value=v)
             else:

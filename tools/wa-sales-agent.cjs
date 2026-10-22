@@ -80,20 +80,32 @@ function sentToday() {
 }
 
 // ---------- messaging ----------
-// hooks: ONE tailored benefit per outlet type (outcome first, not a feature dump)
+// hooks: ONE tailored benefit per outlet type (outcome first, not a feature dump).
+// English = proper English body; greeting stays Hinglish (Namaste 🙏 … ji) per owner request.
+let LANG = "hi"; // default; --lang en switches the whole run
 const HOOKS = {
-  cafe: "guest QR scan karke order karta hai — kitchen tak seedha pahunch jaata hai, no waiter-runner",
-  bakery: "counter billing aur table order ek hi dashboard mein saath-saath chalte hain",
-  "fine dining": "table ka QR order aur counter ka bill ek hi dashboard mein live sync hote hain",
-  qsr: "counter billing sabse fast — 1 order = ₹1, table QR bhi included",
-  restaurant: "dine-in table orders aur counter billing ek hi screen par aate hain"
+  cafe:     {hi: "guest QR scan karke order karta hai — kitchen tak seedha pahunch jaata hai, no waiter-runner",
+             en: "guests scan a QR at the table and order — it lands straight in the kitchen, no waiter relay"},
+  bakery:   {hi: "counter billing aur table order ek hi dashboard mein saath-saath chalte hain",
+             en: "counter billing and table orders run side by side in one dashboard"},
+  "fine dining": {hi: "table ka QR order aur counter ka bill ek hi dashboard mein live sync hote hain",
+             en: "table QR orders and the counter bill stay in live sync on one dashboard"},
+  qsr:      {hi: "counter billing sabse fast — 1 order = ₹1, table QR bhi included",
+             en: "counter billing is as fast as it gets — ₹1 per order, table QR included"},
+  restaurant: {hi: "dine-in table orders aur counter billing ek hi screen par aate hain",
+             en: "dine-in table orders and counter billing arrive on one screen"}
 };
 const INTRO = {
-  cafe: "Café chalata hai to billing aur table orders ek jagah hona kaam bahut aasan karta hai.",
-  bakery: "Bakery ke counter billing aur table orders ek jagah manage ho to din aasan hota hai.",
-  "fine dining": "Fine dining mein table orders aur bill ek dashboard mein dekhna bahut aasan karta hai.",
-  qsr: "Fast service outlet mein speed hi sab kuch hai — billing aur orders simple hone chahiye.",
-  restaurant: "Restaurant ka poora order-flow ek dashboard mein — counter, table QR, WhatsApp aur kitchen."
+  cafe:     {hi: "Café chalata hai to billing aur table orders ek jagah hona kaam bahut aasan karta hai.",
+             en: "For a café, keeping billing and table orders in one place makes the day a lot easier."},
+  bakery:   {hi: "Bakery ke counter billing aur table orders ek jagah manage ho to din aasan hota hai.",
+             en: "For a bakery, managing counter billing and table orders together simplifies the day."},
+  "fine dining": {hi: "Fine dining mein table orders aur bill ek dashboard mein dekhna bahut aasan karta hai.",
+             en: "For fine dining, seeing table orders and bills on one dashboard changes the game."},
+  qsr:      {hi: "Fast service outlet mein speed hi sab kuch hai — billing aur orders simple hone chahiye.",
+             en: "In a fast-service outlet, speed is everything — billing and orders must stay simple."},
+  restaurant: {hi: "Restaurant ka poora order-flow ek dashboard mein — counter, table QR, WhatsApp aur kitchen.",
+             en: "The restaurant's entire order flow in one dashboard — counter, table QR, WhatsApp and kitchen."}
 };
 const greetFor = l => (l.ownerName ? l.ownerName + " ji" : "");
 function outletKeyOf(l) {
@@ -103,13 +115,21 @@ function outletKeyOf(l) {
       : t.includes("quick") ? "qsr" : "restaurant";
 }
 // 3-message sequence (attempts-aware): intro -> demo invite (day 3) -> final (day 7), then stop.
-// No "Manager sahab" — natural greeting; trial is always "pay after 10 days" so it stays consistent.
+// English bodies, Hinglish greetings; "MSG LANG" excel column overrides per lead.
 function compose(l) {
-  const hook = HOOKS[outletKeyOf(l)];
-  const intro = INTRO[outletKeyOf(l)];
+  const en = String(l.lang || LANG).toLowerCase().startsWith("en");
+  const hook = en ? HOOKS[outletKeyOf(l)].en : HOOKS[outletKeyOf(l)].hi;
+  const intro = en ? INTRO[outletKeyOf(l)].en : INTRO[outletKeyOf(l)].hi;
   const a = l.attempts || 0;
   if (a >= 2) {
-    return [
+    return en ? [
+      `Hi 🙏 Nilesh here from FoodHubbie — this is my final follow-up.`,
+      ``,
+      `If simplifying billing and orders is ever on your mind, the system is ready:`,
+      `🌐 ${SITE}`,
+      ``,
+      `I won't message you again after this. If interest comes up any time, just reply *"demo".`
+    ].join("\n") : [
       `Hi 🙏 Nilesh yahan — FoodHubbie se aakhri follow-up.`,
       ``,
       `Billing/ordering ko aasan karna kabhi zaroori ho to system ready hai:`,
@@ -119,7 +139,16 @@ function compose(l) {
     ].join("\n");
   }
   if (a >= 1) {
-    return [
+    return en ? [
+      `Hi 🙏 ${greetFor(l)}, Nilesh from FoodHubbie — following up on my last message.`,
+      ``,
+      `I can show billing, QR ordering and the kitchen running *together* — on your own menu, in about 10 minutes.`,
+      ``,
+      `Prefer a video first? 32 seconds:`,
+      `${VIDEO_URL}`,
+      ``,
+      `*Live demo* or *video* — whichever is easier for you, just let me know.`
+    ].join("\n") : [
       `Hi 🙏 ${greetFor(l)}, Nilesh — FoodHubbie wale, pichhle message pe follow-up.`,
       ``,
       `Ek chhota demo dikha doon — billing, QR orders aur kitchen sab *saath chalte hue*, aapke hi menu se. 10 min.`,
@@ -130,7 +159,27 @@ function compose(l) {
       `*Live demo* ya *video* — jo aapke liye aasan ho, bas bata dijiye.`
     ].join("\n");
   }
-  return [
+  return en ? [
+    `Namaste 🙏${greetFor(l) ? " " + greetFor(l) : ""}`,
+    ``,
+    `I'm Nilesh from *FoodHubbie*.`,
+    ``,
+    intro,
+    `For you, the straight talk: ${hook}.`,
+    ``,
+    `*Pay-per-order pricing:*`,
+    `• Counter billing — ₹1/order`,
+    `• Table QR — ₹2/order`,
+    `• WhatsApp ordering — ₹5/order`,
+    `• Kitchen screen + reports — included`,
+    ``,
+    `No monthly fee. ₹500 one-time setup, adjusted in your first bill.`,
+    `Cancelled orders are never charged.`,
+    ``,
+    `Open to a 10-minute demo on your own menu? Just reply *"yes"*.`,
+    ``,
+    `🌐 ${SITE}`
+  ].join("\n") : [
     `Namaste 🙏${greetFor(l) ? " " + greetFor(l) : ""}`,
     ``,
     `Main Nilesh, *FoodHubbie* se.`,
@@ -154,9 +203,21 @@ function compose(l) {
 }
 const OPTOUT = /(stop|band karo|nahi chahiye|not interested|mat bhejo|raha nahi|unsub)/i;
 const isOptOut = t => OPTOUT.test(t || "");
-const faqAnswer = t => {
+const faqAnswer = (t, lang) => {
+  const en = String(lang || LANG).toLowerCase().startsWith("en");
   if (/price|kitn(a|e)|charge|rate|monthly|fees/i.test(t))
-    return [
+    return en ? [
+      `Sure — here's the full pricing:`,
+      ``,
+      `• Counter billing — ₹1/order`,
+      `• Table QR — ₹2/order`,
+      `• WhatsApp ordering — ₹5/order`,
+      `• Monthly subscription — ₹0`,
+      `• One-time setup — ₹500 (adjusted in your first bill)`,
+      ``,
+      `Cancelled orders are never charged.`,
+      `Shall I give you a quick demo? Just reply "yes".`
+    ].join("\n") : [
       `Sure — puri pricing:`,
       ``,
       `• Counter billing — ₹1/order`,
@@ -169,23 +230,34 @@ const faqAnswer = t => {
       `Chhota demo de doon? "haan" likh dijiye.`
     ].join("\n");
   if (/demo|dikha/i.test(t))
-    return [
+    return en ? [
+      `Absolutely! 😊`,
+      ``,
+      `I'll walk you through FoodHubbie on your own restaurant's menu so you see the actual workflow. It takes around 10 minutes.`,
+      ``,
+      `What day and time would suit you?`
+    ].join("\n") : [
       `Absolutely! 😊`,
       ``,
       `Aapke hi restaurant ka menu use karke dikhata hoon — asli flow samajh aayega. Takreeban 10 min lagte hain.`,
       ``,
       `Kaunsa day aur time aapke liye aasan hai?`
     ].join("\n");
-  if (/k[aie]se|kaam karta|kya hai|video/i.test(t))
-    return [
-      `FoodHubbie billing, table QR ordering, WhatsApp orders, kitchen screen aur reports — sab ek dashboard mein laata hai.`,
-      ``,
-      `Website: ${SITE}`,
-      ``,
-      `32-sec video walkthrough: ${VIDEO_URL}`,
-      `Live demo bhi dikha sakta hoon.`
-    ].join("\n");
-  return null;
+  return en ? [
+    `FoodHubbie brings billing, table QR ordering, WhatsApp orders, kitchen order management and reports into one dashboard.`,
+    ``,
+    `Website: ${SITE}`,
+    ``,
+    `Here's a 32-second walkthrough: ${VIDEO_URL}`,
+    `I can also show you a live demo any time.`
+  ].join("\n") : [
+    `FoodHubbie billing, table QR ordering, WhatsApp orders, kitchen screen aur reports — sab ek dashboard mein laata hai.`,
+    ``,
+    `Website: ${SITE}`,
+    ``,
+    `32-sec video walkthrough: ${VIDEO_URL}`,
+    `Live demo bhi dikha sakta hoon.`
+  ].join("\n");
 };
 
 // ---------- allowlist guard + queue ----------
@@ -321,6 +393,7 @@ async function main(argv) {
   const cmd = argv[0];
   const n = argv.includes("--n") ? Math.max(1, parseInt(argv[argv.indexOf("--n") + 1], 10)) : 1;
   const webMode = argv.includes("--web");
+  if (argv.includes("--lang")) LANG = String(argv[argv.indexOf("--lang") + 1] || "hi"); // run-level default; "msg lang" column overrides per lead
   const idArg = argv.includes("--id") ? argv[argv.indexOf("--id") + 1] : null;
   const txtArg = argv.includes("--text") ? argv[argv.indexOf("--text") + 1] : null;
   const leads = leadRead();
@@ -351,12 +424,12 @@ async function main(argv) {
       appendLog({crm: l.crm, name: l.name, phone: l.phone, type: "reply-in", text: last, status: "logged"});
       did.push(l.crm + ":replied");
       if (isOptOut(last)) {
-        leadUpdate(l.crm, {"reply summary": last, "status": "Not interested", "outcome": "Not interested", "last contact": today()});
+        leadUpdate(l.crm, {"reply summary": last, "status": "Not interested", "last contact": today()});
         did.push(l.crm + ":OPTOUT");
         continue;
       }
       leadUpdate(l.crm, {"reply summary": last, "last contact": today()});
-      const ans = faqAnswer(last);
+      const ans = faqAnswer(last, l.lang);
       if (ans) {
         const okS = await needSock().then(async s => {
           await sleep(HUMAN_GAP());                       // 5-14s gap before this send
