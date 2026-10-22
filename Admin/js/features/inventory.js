@@ -404,7 +404,7 @@ export function initInventoryToggles() {
     hydrateToggles(toggleAvail, toggleStock).then(() => {
         updateInfoPanel(toggleAvail, availInfo);
         updateInfoPanel(toggleStock, stockInfo);
-        updateMenuVisibility();
+        updateMenuVisibility(false);
     });
 }
 
@@ -446,12 +446,15 @@ function updateInfoPanel(toggle, infoPanel) {
     infoPanel.style.display = toggle.checked ? 'none' : 'block';
 }
 
-function updateMenuVisibility() {
+// loadMenu=false at boot: the menu grid is only visible on the Inventory tab and
+// reading `dishes` pulls the whole catalog including inline base64 photos (657KB
+// for 22 dishes) — it was delaying the dashboard by seconds on a phone.
+function updateMenuVisibility(loadMenu = true) {
     const menuSection = document.getElementById('inventoryMenuSection');
     if (!menuSection) return;
     const anyEnabled = document.getElementById('toggleAvailability')?.checked || document.getElementById('toggleStockTracking')?.checked;
     menuSection.style.display = anyEnabled ? 'block' : 'none';
-    if (anyEnabled) loadInventoryMenu();
+    if (anyEnabled && loadMenu) loadInventoryMenu();
 }
 
 export async function loadInventoryMenu() {
