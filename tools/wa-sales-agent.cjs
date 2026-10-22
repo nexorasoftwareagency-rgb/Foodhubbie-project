@@ -93,12 +93,26 @@ function compose(l, resend) {
   const outletKey = (t.includes("cafe") || t.includes("bakery")) ? "cafe"
       : t.includes("fine") ? "fine dining"
       : t.includes("quick") ? "qsr" : "restaurant";
-  if (resend) return `Namaste 🙏 ${greet}, Nilesh — FoodHubbie se.\n\nLast message miss hua hoga? Koi baat nahi — ek 32-sec video hai, poora system chalte hue:\n${VIDEO_URL}\n\nPasand aaye to bas "demo" likh dijiye — 10 min mein aapke hi menu pe dikhata hoon. 10 din ka trial, no monthly fee.`;
-  return `Namaste 🙏 ${greet}, main Nilesh — FoodHubbie se.\n` +
-    `Aapke restaurant ke liye ek cheez dikhani thi: counter billing, table QR order, kitchen screen aur WhatsApp order — sab ek hi dashboard mein.\n` +
-    `Aapke case ke liye seedhi baat: ${HOOKS[outletKey]}.\n` +
-    `Charges per order hain, monthly nahi: counter ₹1, table QR ₹2, WhatsApp ₹5. Setup ₹500 one-time (first bill mein adjust). Cancelled order ka charge nahi — wo free hai.\n\n` +
-    `10-minute demo de doon? Aapke hi menu se. Site: ${SITE}`;
+  if (resend) return `Namaste 🙏 ${greet}, Nilesh — FoodHubbie se (fir se).\n\nShayad last message miss hua. Poora system *chalta hua* — 32 sec ka video:\n\n${VIDEO_URL}\n\nPasand aaye to bas *"demo"* likh dijiye.\n10 min mein aapke hi menu pe dikhata hoon.\n\n*10-din trial, no monthly fee.*`;
+  return [
+    `Namaste 🙏 ${greet}, main Nilesh — FoodHubbie se.`,
+    ``,
+    `Ek system aapke restaurant ke liye — ek hi dashboard mein:`,
+    `• Counter billing — ₹1/order`,
+    `• Table QR se order — ₹2/order`,
+    `• WhatsApp pe order — ₹5/order`,
+    `• Kitchen screen + reports — included`,
+    ``,
+    `Aapke case ke liye seedhi baat: ${HOOKS[outletKey]}.`,
+    ``,
+    `*Math simple hai:*`,
+    `— Monthly fee: *zero*`,
+    `— Setup: ₹500 one-time (first bill mein adjust)`,
+    `— Cancelled order: charge *zero*`,
+    ``,
+    `10-min demo? Aapke hi menu se, live.`,
+    `👉 ${SITE}`
+  ].join("\n");
 }
 const OPTOUT = /(stop|band karo|nahi chahiye|not interested|mat bhejo|raha nahi|unsub)/i;
 const isOptOut = t => OPTOUT.test(t || "");
