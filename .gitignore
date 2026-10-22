@@ -145,3 +145,7 @@ promo/leads/
 # business-contact workbook (scraped leads)
 Restaurant Lead Data/
 
+
+# WhatsApp sales agent session (device keys — never commit)
+.wa-sales-auth/
+

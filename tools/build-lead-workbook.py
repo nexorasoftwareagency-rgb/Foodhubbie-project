@@ -1,7 +1,7 @@
-﻿# builds "Restaurant Lead Data/restaurant-leads.xlsx" from promo/leads/*.csv
+# builds "Restaurant Lead Data/restaurant-leads.xlsx" from promo/leads/*.csv
 # re-run any time new scrape CSVs land:
 #   python tools/build-lead-workbook.py
-# PII: whole folder is gitignored â€” business contacts never committed.
+# PII: whole folder is gitignored � business contacts never committed.
 import csv, glob, os, sys
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -45,14 +45,14 @@ COLS = [
     ("Demo date", "outreach", 12, None),
     ("Trial start", "outreach", 12, None),
     ("Plan pitched", "outreach", 26, None),
-    ("Est. â‚¹/month (own math)", "outreach", 16, None),
+    ("Est. �/month (own math)", "outreach", 16, None),
     ("Objections", "outreach", 30, None),
     ("Next action", "outreach", 28, None),
     ("Next action date", "outreach", 14, None),
     ("Outcome", "outreach", 18, "outcome"),
     ("Notes", "outreach", 34, None),
 ]
-GROUP_HEADERS = ("LeadScout â€” fill these first", "NegotiationTracker â€” fill as you pitch")
+GROUP_HEADERS = ("LeadScout � fill these first", "NegotiationTracker � fill as you pitch")
 
 DV = {
     "wa": '"Yes,No,Unknown,WA link on Maps"',
@@ -89,16 +89,16 @@ def read_csv_rows():
 
 def sheet_readme(wb):
     ws = wb.create_sheet("READ ME")
-    ws["A1"] = "Restaurant Lead Data â€” negotiation tracker"
+    ws["A1"] = "Restaurant Lead Data � negotiation tracker"
     ws["A1"].font = Font(bold=True, size=14)
     lines = [
         "",
         "How to work a lead (always in this order):",
-        "1. Scout fill (columns B-N): name/area/phone/type/fit â€” fill Owner name + WhatsApp? by checking the website or calling once.",
+        "1. Scout fill (columns B-N): name/area/phone/type/fit � fill Owner name + WhatsApp? by checking the website or calling once.",
         "2. WhatsApp is the channel: send Pitch Kit DM #1. Set Status=Contacted, Channel used, First contact date.",
         "3. Each follow-up: attempts +1, Last contact updated, Reply summary one line.",
-        "4. Booked demo â†’ Demo date. Running trial â†’ Trial start. Where it ends â†’ Outcome.",
-        "5. Never cold-blast: this list is for individual founder-sent messages only â€” never the bot/promo transport.",
+        "4. Booked demo � Demo date. Running trial � Trial start. Where it ends � Outcome.",
+        "5. Never cold-blast: this list is for individual founder-sent messages only � never the bot/promo transport.",
         "",
         "Status meanings:",
         "  New            scraped, nothing sent yet",
@@ -107,22 +107,22 @@ def sheet_readme(wb):
         "  Demo scheduled demo booked with a date",
         "  Demo done      demo happened, waiting for decision",
         "  Trial          outlet running FoodHubbie free (log start date)",
-        "  Signed         paying â€” move numbers into TRACKER.md weekly KPIs",
-        "  Not interested said no (log objection verbatim â€” it feeds copy fixes)",
+        "  Signed         paying � move numbers into TRACKER.md weekly KPIs",
+        "  Not interested said no (log objection verbatim � it feeds copy fixes)",
         "  Unreachable    dead number / never opens",
         "",
-        "Weekly ritual (promo/TRACKER.md): qualified conversations â†’ demos â†’ signed; ",
-        "spend cap â‚¹5k/month total on outreach (calls/visits), stop rule applies.",
+        "Weekly ritual (promo/TRACKER.md): qualified conversations � demos � signed; ",
+        "spend cap �5k/month total on outreach (calls/visits), stop rule applies.",
         "",
         "Sourcing new batches (see tools/gmaps-lead-scraper.cjs):",
         '  node tools/gmaps-lead-scraper.cjs "cafes in <area> <city>" 15 1',
         "Then re-run this script to merge new CSVs, or paste rows manually.",
         "",
-        "Field guide â€” where each scout value comes from:",
+        "Field guide � where each scout value comes from:",
         "  Rating (Maps): listing page. Owner name: website Team/About page or first call.",
         "  WhatsApp?: 'WA link on Maps' if listing shows a wa.me button; else call and ask politely.",
-        "  Dine-in fit: photos of the listing (tables visible?) â€” this is the QR-ordering pitch anchor.",
-        "  On delivery apps: check Zomato/Swiggy search by name â€” matters for the delivery-billing pitch.",
+        "  Dine-in fit: photos of the listing (tables visible?) � this is the QR-ordering pitch anchor.",
+        "  On delivery apps: check Zomato/Swiggy search by name � matters for the delivery-billing pitch.",
     ]
     for i, t in enumerate(lines, start=2):
         ws.cell(row=i, column=1, value=t)
@@ -134,7 +134,7 @@ def sheet_leads(wb, rows):
     ws.freeze_panes = "C2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(COLS))}{len(rows)+1}"
     # group banners
-    group1 = ("LeadScout â€” fill these first", )
+    group1 = ("LeadScout � fill these first", )
     ws.cell(row=1, column=1, value=group1[0]).font = Font(bold=True, color="D97706", size=11)
     span1 = next(idx for idx, cb in enumerate(COLS, start=1) if cb[1] == "outreach") - 1
     ws.cell(row=1, column=span1 + 1, value=GROUP_HEADERS[1]).font = Font(bold=True, color="9A3412", size=11)
@@ -157,7 +157,7 @@ def sheet_leads(wb, rows):
             c.border = THIN
         k = len(vals) + 1
         status = "Duplicate" if r["dup"] else "New"
-        note = "same name in another batch — kept the first"
+        note = "same name in another batch  kept the first"
         for name_, default in (("status", status), ("channel", "WhatsApp"), ("attempts", 0)):
             j = next(idx for idx, cc in enumerate(COLS, start=1) if cc[0].lower().startswith(name_))
             ws.cell(row=i, column=j, value=default).border = THIN
@@ -170,47 +170,47 @@ def sheet_leads(wb, rows):
 def sheet_pitch(wb):
     ws = wb.create_sheet("Pitch Kit")
     ws.column_dimensions["A"].width = 120
-    txt = """PITCH KIT â€” Founder outreach (from promo/COPY.md)
+    txt = """PITCH KIT \u2014 Founder outreach (from promo/COPY.md)
 
 DM #1 (Hinglish, WhatsApp):
-"Namaste ðŸ™ [Owner name] ji, main Nilesh â€” FoodHubbie se.
-Aapke restaurant ke liye ek cheez dikhani thi: counter billing, table QR order, kitchen screen aur WhatsApp order â€” sab ek hi dashboard mein.
-Charges per order hain, monthly nahi: counter â‚¹1, table QR â‚¹2, WhatsApp â‚¹5. Setup â‚¹500 one-time. Cancel order ka charge nahi.
+"Namaste \U0001F64F [Owner name] ji, main Nilesh \u2014 FoodHubbie se.
+Aapke restaurant ke liye ek cheez dikhani thi: counter billing, table QR order, kitchen screen aur WhatsApp order \u2014 sab ek hi dashboard mein.
+Charges per order hain, monthly nahi: counter \u20b91, table QR \u20b92, WhatsApp \u20b95. Setup \u20b9500 one-time. Cancel order ka charge nahi.
 10 minute ka demo de doon? Aapke menu se hi dikha dunga."
 
 DM #1 (English):
 "Hi [Name], Nilesh here from FoodHubbie.
 Quick one: we put counter billing, table QR ordering, the kitchen screen and WhatsApp orders on one dashboard.
-You pay per order, not per month â€” â‚¹1 counter, â‚¹2 table QR, â‚¹5 WhatsApp. â‚¹500 one-time setup. Cancelled orders are never billed.
+You pay per order, not per month \u2014 \u20b91 counter, \u20b92 table QR, \u20b95 WhatsApp. \u20b9500 one-time setup. Cancelled orders are never billed.
 Can I show you a 10-minute demo using your own menu?"
 
 Personalise before sending (non-negotiable, else it's just spam):
-â€¢ [Owner name] â€” one look at the listing/photos first; if unknown, "Namaste ___ ji, manager sahab se baat ho sakti hai?"
-â€¢ One lead-specific hook from scout columns, e.g.:
-  - Dine-in fit 10+ tables â†’ "aapke tables par QR se order aayega to staff order daalne nahi bhagega"
-  - On Zomato/Swiggy â†’ "delivery orders bhi usi dashboard mein aate hain (â‚¹5/order)"
-  - No website â†’ "WhatsApp pe menu + order, store nahi banana padega"
+1. [Owner name] \u2014 one look at the listing/photos first; if unknown, "Namaste ___ ji, manager sahab se baat ho sakti hai?"
+2. One lead-specific hook from scout columns, e.g.:
+   - Dine-in fit 10+ tables  \u2192  "aapke tables par QR se order aayega to staff order daalne nahi bhagega"
+   - On Zomato/Swiggy \u2192 "delivery orders bhi usi dashboard mein aate hain (\u20b95/order)"
+   - No website \u2192 "WhatsApp pe menu + order, store nahi banana padega"
 
 Follow-up (24-48h later, one only):
-"Sir nahi dekh baithe? 32-second ka video hai â€” poora system chalte hue: kitchen tak, tables tak. Dekh lijiye, pasand aaye to 10 min demo."
+"Sir nahi dekh baithe? 32-second ka video hai \u2014 poora system chalte hue: kitchen tak, tables tak. Dekh lijiye, pasand aaye to 10 min demo."
 Attach: <repo>/website/assets/demo/demo-walkthrough-32s.mp4 (or hosted link)
 
 Phone script (30 seconds):
-"Namaste ji â€” Nilesh, FoodHubbie se. Ek quick sawaal: aapka table-order ka bill aur counter ka bill same jaggah par banta hai? â€¦Ji bilkul, hum wahi solve karte hain. 10 minute mein dikhata hoon, vidhroop ka typeâ€¦"
+"Namaste ji \u2014 Nilesh, FoodHubbie se. Ek quick sawaal: aapka table-order ka bill aur counter ka bill same jaggah par banta hai?  ... Ji bilkul, hum wahi solve karte hain. 10 minute mein dikhata hoon \u2014 aapke hi menu se."
 
 Numbers you may quote (exact, from billing policy):
-â€¢ â‚¹1 counter order â€¢ â‚¹2 table QR order â€¢ â‚¹5 WhatsApp order (ya 1% of that order â€” choice, not "whichever is lower")
-â€¢ â‚¹1 promo message (Meta conversation charge alag) â€¢ â‚¹500 one-time setup (first bill mein adjust)
-â€¢ No monthly fee, no minimum, no lock-in â€¢ cancelled/refunded orders never billed
+- \u20b91 counter order, \u20b92 table QR order, \u20b95 WhatsApp order (ya 1% of that order \u2014 choice, not "whichever is lower")
+- \u20b91 promo message (Meta conversation charge alag), \u20b9500 one-time setup (first bill mein adjust)
+- No monthly fee, no minimum, no lock-in \u2014 cancelled/refunded orders never billed
 
 Objection one-liners:
-â€¢ "new software seekhna mushkil"  â†’ "Ek dopahar. Staff ko sirf counter screen chahiye, baki sab system khud karta hai."
-â€¢ "abhi POS hai"                  â†’ "POS rakhiye â€” QR table aur WhatsApp orders usi dashboard mein aayenge. Dono ko chalana."
-â€¢ "WhatsApp mein order koi nahi karega" â†’ "Menu ka link + QR cards aate hain pehle 10 din. Jo table use kare wahi bhi â‚¹2 hi lagega â€” risk naam ka bhi nahi."
-â€¢ "price zyada"                   â†’ "Har order ke paise ke barabar. Agar din mein 50 order hain, poora system â‚¹150-250 mein chal gaya. Aapka waiter ko dijiye to â‚¹150 nahi dilwata."
+- "new software seekhna mushkil"  \u2192 "Ek dopahar. Staff ko sirf counter screen chahiye, baki sab system khud karta hai."
+- "abhi POS hai"                  \u2192 "POS rakhiye \u2014 QR table aur WhatsApp orders usi dashboard mein aayenge. Dono ko chalana."
+- "WhatsApp mein order koi nahi karega" \u2192 "Menu ka link + QR cards aate hain pehle 10 din. Jo table use kare wahi bhi \u20b92 hi lagega \u2014 risk naam ka bhi nahi."
+- "price zyada"                   \u2192 "Har order ke paise ke barabar. Agar din mein 50 order hain, poora system \u20b9150-250 mein chal gaya. Aapka waiter ko dijiye to \u20b9150 nahi dilwata."
 
-Demo flow (15 min): 1) unka menu + ek table QR live 2) unke phone se order karo 3) KDS confirm â†’ Ready dikhao 4) bill + â‚¹ breakdown 5) WhatsApp order demo 6) "live trial" â€” 10 din free trial offer, baad mein â‚¹500 setup.
-After demo â†’ follow-up email within 24h (promo/COPY.md). Ask for the Google review only after paying (Pitch Kit rule)."""
+Demo flow (15 min): 1) unka menu + ek table QR live 2) unke phone se order karo 3) KDS confirm \u2192 Ready dikhao 4) bill + \u20b9 breakdown 5) WhatsApp order demo 6) "live trial" \u2192 10 din free trial offer, baad mein \u20b9500 setup.
+After demo \u2192 follow-up email within 24h (promo/COPY.md). Ask for the Google review only after paying (Pitch Kit rule)."""
     for i, line in enumerate(txt.split("\n"), start=1):
         ws.cell(row=i, column=1, value=line)
     ws.sheet_view.showGridLines = False
