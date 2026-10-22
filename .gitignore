@@ -138,3 +138,6 @@ Promo-Campaign/footage/
 film/*/*.mp4
 film/*/*.webm
 film/*/sfx.wav
+
+# scraped lead files (business contacts, not for VCS)
+promo/leads/
