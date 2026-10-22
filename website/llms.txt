@@ -13,8 +13,10 @@
   request water/bill → pay. Delivery via WhatsApp webview link (single-use token, GPS fee).
 - Rider App: online/offline, assigned orders, pickup, OTP handoff, cash collection,
   wallet/settlements, delivery history.
-- WhatsApp: Baileys transport for chat/ordering; Meta Cloud API for promotional campaigns
-  (promos hard-blocked on Baileys). STOP opt-out honored; paced sends; emergency stop.
+- WhatsApp: per-outlet transport. WhatsApp Official plan = Meta Cloud API (WhatsApp Business
+  Platform) for ordering + promotional campaigns with Meta-approved templates; a QR-paired
+  (unofficial) connection can still take orders and transactional messages, but the software
+  hard-blocks promotional campaigns on it. STOP opt-out honored; sends paced; emergency stop.
 
 ## Marketing engine (verified capabilities)
 - Campaigns: ≤1500 chars, tokens {name} {phone} {lastOrderDate} {storeName} {couponCode},
@@ -48,6 +50,13 @@
 - https://foodhubbie-web.web.app/pos-billing — POS billing software
 - https://foodhubbie-web.web.app/kds — kitchen display system
 - https://foodhubbie-web.web.app/riders — rider delivery management
+- https://foodhubbie-web.web.app/whatsapp-ordering — WhatsApp ordering system (official Meta API)
+- https://foodhubbie-web.web.app/whatsapp-marketing — WhatsApp promo campaigns, coupons, combos
+- https://foodhubbie-web.web.app/table-management — tables, dine-in sessions, split bills
+- https://foodhubbie-web.web.app/inventory — stock, recipes, low-stock alerts
+- https://foodhubbie-web.web.app/customer-database — customer book, push notifications, reviews
+- https://foodhubbie-web.web.app/multi-outlet — several outlets under one login
+- https://foodhubbie-web.web.app/restaurant-analytics — sales, channel and item reports
 - https://foodhubbie-web.web.app/use-cases — use cases: cafes, family restaurants, cloud kitchens
 - https://foodhubbie-web.web.app/pricing — pricing (₹1–5 per order, ₹500 setup)
 - https://foodhubbie-web.web.app/compare — vs monthly-fee POS suites

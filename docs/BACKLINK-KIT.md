@@ -14,22 +14,22 @@ Do NOT spin up fake directory spam — one accurate profile per platform.
 
 ## Short description (Google Business Profile, ~750 chars)
 
-FoodHubbie ERP is restaurant management software for pizzerias and food outlets: QR table
+FoodHubbie ERP is restaurant management software for restaurants and cafes: QR table
 ordering, kitchen display system, POS counter billing, delivery dispatch with rider app and
 OTP handoff, WhatsApp ordering on the official Meta API, promotions and discount engine,
 inventory, analytics and multi-outlet reporting — in one realtime dashboard. Flat per-order
-pricing (QR ₹2, POS ₹1, WhatsApp Official ₹5 or 1%), no commission, no monthly lock-in.
-https://foodhubbie-web.web.app/
+pricing (QR ₹2, POS ₹1, WhatsApp Official ₹5 or 1%), ₹500 one-time setup, no monthly
+lock-in. https://foodhubbie-web.web.app/
 
 ## Long description (JustDial / IndiaMART)
 
-FoodHubbie ERP — run your pizzeria on autopilot. Customers scan a table QR and order from
+FoodHubbie ERP — run your restaurant on autopilot. Customers scan a table QR and order from
 their phone browser (no app download); the kitchen sees orders instantly on the KDS; riders
 are auto-assigned with live map tracking and OTP-secured handoff. Market with WhatsApp
 campaigns, coupons and combos from the same dashboard. Includes menu/catalog management,
 inventory with stock alerts, customer book, push notifications, feedback and reviews,
-payments reconciliation, expenses and per-channel costs. Pizza, cake and multiple outlets
-from one login. Free trial on WhatsApp: +91 97246 49971.
+payments reconciliation, expenses and per-channel costs. Cafes, restaurants and multiple
+outlets from one login. Free trial on WhatsApp: +91 97246 49971.
 
 ## Services to tick (where platforms allow)
 
