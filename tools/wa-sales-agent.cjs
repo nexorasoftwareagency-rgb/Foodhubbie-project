@@ -37,7 +37,7 @@ const LOG = path.join(DATA, "wa-log.csv");
 const AUTH = path.join(ROOT, ".wa-sales-auth");
 const SITE = "https://foodhubbie-web.web.app/";
 const VIDEO_URL = SITE + "assets/demo/demo-walkthrough-32s.mp4";
-const DAILY_CAP = 15;
+let DAILY_CAP = 15; // --cap N overrides for the run (owner's call)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // owner rule: 5-14s random gap between EVERY message send
 const HUMAN_GAP = () => 5000 + Math.random() * 9000;
@@ -83,6 +83,22 @@ function sentToday() {
 // hooks: ONE tailored benefit per outlet type (outcome first, not a feature dump).
 // English = proper English body; greeting stays Hinglish (Namaste 🙏 … ji) per owner request.
 let LANG = "hi"; // default; --lang en switches the whole run
+let OWNER_COPY = false; // --copy owner: owner's verbatim broadcast text + greet hook line
+const OWNER_HOOK_LINE = {
+  cafe: "For a café like yours, the QR + WhatsApp ordering piece usually pays for itself first.",
+  bakery: "For a bakery like yours, counter billing plus QR table orders together is where you'll feel it first.",
+  "fine dining": "For a fine-dining setup like yours, live table-order vs bill sync is the piece worth seeing first.",
+  qsr: "For a fast-service outlet like yours, the ₹1 counter billing speed is the piece worth trying first.",
+  restaurant: "For a restaurant like yours, dine-in QR + WhatsApp orders on one screen is the piece worth seeing first."
+};
+const OWNER_DM =
+  "Boost your restaurant's success with FoodHubbie! 🚀\n\n" +
+  "Discover our all-in-one management software, packed with features that will take your business to the next level:\n\n" +
+  "1. *QR Table Ordering*: Digital menus at customers' fingertips\n" +
+  "2. *WhatsApp Bot Ordering*: Seamless ordering experience for customers directly on WhatsApp\n" +
+  "3. *Rider App Deliveries*: Efficient order delivery system in place\n" +
+  "4. *Analytics and Reports*: Data-driven insights for informed decisions\n\n" +
+  "Experience increased customer returns & direct social media links.. Try it now: https://foodhubbie-web.web.app/";
 const HOOKS = {
   cafe:     {hi: "guest QR scan karke order karta hai — kitchen tak seedha pahunch jaata hai, no waiter-runner",
              en: "guests scan a QR at the table and order — it lands straight in the kitchen, no waiter relay"},
@@ -116,7 +132,12 @@ function outletKeyOf(l) {
 }
 // 3-message sequence (attempts-aware): intro -> demo invite (day 3) -> final (day 7), then stop.
 // English bodies, Hinglish greetings; "MSG LANG" excel column overrides per lead.
+// owner's broadcast copy (verbatim) wrapped in a personalized greeting + hook — not identical payloads
+const composeOwner = l =>
+  `Namaste 🙏${greetFor(l) ? " " + greetFor(l) : ""} — Nilesh, *FoodHubbie* se.\n\n` +
+  OWNER_HOOK_LINE[outletKeyOf(l)] + "\n\n" + OWNER_DM;
 function compose(l) {
+  if (OWNER_COPY) return composeOwner(l);
   const en = String(l.lang || LANG).toLowerCase().startsWith("en");
   const hook = en ? HOOKS[outletKeyOf(l)].en : HOOKS[outletKeyOf(l)].hi;
   const intro = en ? INTRO[outletKeyOf(l)].en : INTRO[outletKeyOf(l)].hi;
@@ -392,6 +413,8 @@ async function main(argv) {
   const cmd = argv[0];
   const n = argv.includes("--n") ? Math.max(1, parseInt(argv[argv.indexOf("--n") + 1], 10)) : 1;
   const webMode = argv.includes("--web");
+  if (argv.includes("--cap")) DAILY_CAP = parseInt(argv[argv.indexOf("--cap") + 1], 10) || 15; // owner override
+  if (argv.includes("--copy") && argv[argv.indexOf("--copy") + 1] === "owner") OWNER_COPY = true;
   if (argv.includes("--lang")) LANG = String(argv[argv.indexOf("--lang") + 1] || "hi"); // run-level default; "msg lang" column overrides per lead
   const idArg = argv.includes("--id") ? argv[argv.indexOf("--id") + 1] : null;
   const txtArg = argv.includes("--text") ? argv[argv.indexOf("--text") + 1] : null;
