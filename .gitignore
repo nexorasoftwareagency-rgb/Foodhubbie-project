@@ -149,3 +149,12 @@ Restaurant Lead Data/
 # WhatsApp sales agent session (device keys — never commit)
 .wa-sales-auth/
 
+# Playwright persistent browser profiles (cookies, device keys) - never commit
+wa-user-data/
+wa-user-data2/
+
+# scratch dumps and throwaway scripts (may carry FCM tokens / phone numbers)
+json
+/wa-*.js
+
+

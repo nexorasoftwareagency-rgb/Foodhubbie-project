@@ -55,7 +55,7 @@ export async function render() {
           </div>
           <div class="field-group">
             <label class="field-label" for="obw-outlet">Outlet name</label>
-            <input class="text-input" id="obw-outlet" name="outletName" placeholder="e.g. Sharma Pizza House — FC Road" />
+            <input class="text-input" id="obw-outlet" name="outletName" maxlength="80" placeholder="e.g. Sharma Pizza House — FC Road" />
           </div>
           <div class="obw-pair">
             <div class="field-group">
@@ -219,6 +219,9 @@ function validateStep(s = step) {
   if (s === 0) {
     if (!data.businessName?.trim()) return fail('Business name is required.', '#obw-business');
     if (!data.outletName?.trim()) return fail('Outlet name is required.', '#obw-outlet');
+    // outletIndex name is capped at 80 by the rules — a longer name would
+    // fail the whole creation (business + outlet + admin login).
+    if (data.outletName.trim().length > 80) return fail('Outlet name must be 80 characters or fewer.', '#obw-outlet');
     if (!data.contactPhone?.trim()) return fail('Contact phone is required.', '#obw-phone');
     if (data.contactEmail?.trim() && !EMAIL_RE.test(data.contactEmail.trim())) {
       return fail('Enter a valid contact email, or leave it blank.', '#obw-email');
@@ -392,6 +395,12 @@ async function handleSubmit(e) {
             settings: { ...(tplDefaults?.settings || {}), features: { ...(tplDefaults?.settings?.features || {}), discountApproval: false } },
           },
         },
+      },
+      // Rider-readable enumerization index (riders cannot read `businesses`).
+      [`outletIndex/${oid}`]: {
+        bid,
+        name: data.outletName.trim(),
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
       },
       ...bankUpdates,
     });

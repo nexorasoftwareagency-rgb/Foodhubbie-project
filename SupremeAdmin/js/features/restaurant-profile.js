@@ -1276,13 +1276,20 @@ registerAction('reactivate-outlet', async () => {
   if (!ok) return;
   try {
     const user = firebase.auth().currentUser;
-    await firebase.database().ref().update({
+    // outletIndex only accepts bid/name/disabled/createdAt ($other is false),
+    // and the node may not exist yet for older outlets — write the children so
+    // the index entry is complete instead of a half node.
+    const idxName = (name || '').slice(0, 80);
+    const updates = {
       [`businesses/${currentBid}/outlets/${currentOid}/disabled`]: false,
       [`businesses/${currentBid}/outlets/${currentOid}/reactivatedAt`]: firebase.database.ServerValue.TIMESTAMP,
       [`businesses/${currentBid}/outlets/${currentOid}/reactivatedBy`]: user?.uid || 'unknown',
       [`businesses/${currentBid}/outlets/${currentOid}/suspended`]: false, // allow the orchestrator to run the worker again
+      [`outletIndex/${currentOid}/bid`]: currentBid,
       [`outletIndex/${currentOid}/disabled`]: false,
-    });
+    };
+    if (idxName) updates[`outletIndex/${currentOid}/name`] = idxName;
+    await firebase.database().ref().update(updates);
     try {
       const token = await user.getIdToken();
       const res = await fetch(`${TUNNEL_URL}/api/bot/restart/${currentBid}/${currentOid}`, {

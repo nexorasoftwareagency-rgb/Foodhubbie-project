@@ -14,10 +14,15 @@ export type Rider = {
   aadharPhoto: string;
   qualification: string;
   phone: string;
+  /** Sign-in email. The DB order rules match a rider to an order by
+   *  riders/{uid}/email, so it must be written on registration. */
+  email?: string;
   address: string;
   profilePhoto: string;
   status: RiderStatus;
   lastSeen: number;
+  /** Record creation timestamp (written by the Admin and by self-registration). */
+  createdAt?: number;
   fcmToken: string;
   isAdmin: boolean;
   /** Outlet this rider is assigned to — used for order filtering and isolation. */

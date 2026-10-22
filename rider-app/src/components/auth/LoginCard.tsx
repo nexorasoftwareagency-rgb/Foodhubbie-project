@@ -1,7 +1,9 @@
 // === src/components/auth/LoginCard.tsx ===
+import { useLocation } from "wouter";
 import { LoginForm } from "@/components/auth/LoginForm";
 
 export function LoginCard() {
+  const [, navigate] = useLocation();
   return (
     <div className="relative z-[2] w-full max-w-[320px] rounded-[24px] bg-white/[0.06] border border-white/[0.12] backdrop-blur-xl p-7 shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
       <div className="mx-auto mb-4 flex size-[58px] items-center justify-center rounded-[18px] bg-gradient-to-br from-[#E84908] to-[#c43d00] shadow-[0_8px_24px_rgba(232,73,8,0.35)]">
@@ -20,6 +22,16 @@ export function LoginCard() {
         Sign in to start delivering
       </p>
       <LoginForm />
+      <div className="flex items-center justify-center gap-1.5 mt-4 text-[10.5px] font-medium text-white/35">
+        <span className="text-white/50">New rider?</span>
+        <button
+          type="button"
+          onClick={() => navigate("/register")}
+          className="text-[#3B82F6] font-semibold hover:underline"
+        >
+          Create account
+        </button>
+      </div>
     </div>
   );
 }

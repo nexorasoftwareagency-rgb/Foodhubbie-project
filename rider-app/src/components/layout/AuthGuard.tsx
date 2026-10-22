@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { LoginPage } from "@/components/auth/LoginPage";
+import { RegisterPage } from "@/pages/RegisterPage";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
@@ -27,7 +28,9 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   }
 
   if (!user) {
-    if (location === "/register") return <>{children}</>;
+    // Registration runs outside the rider app shell — the rider profile does
+    // not exist yet, so RiderProvider/AppLayout have nothing to load.
+    if (location === "/register") return <RegisterPage />;
     return <LoginPage />;
   }
 

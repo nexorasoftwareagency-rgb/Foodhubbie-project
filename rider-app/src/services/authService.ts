@@ -13,7 +13,7 @@ import {
   onAuthStateChanged,
 } from "@/lib/firebase";
 import type { User } from "firebase/auth";
-import { dbPaths, OUTLET_TO_BUSINESS, type OutletId } from "@/lib/constants";
+import { dbPaths, resolveBusinessIdForOutlet, type OutletId } from "@/lib/constants";
 import type { Rider } from "@/types";
 
 /** Riders authenticate with {10-digit phone}@rider.com, matching auth.js exactly. */
@@ -71,21 +71,34 @@ export async function registerRider(params: {
   const email = normalizeIdentifier(params.identifier);
   if (!email) throw new Error("Invalid email or phone number");
 
+  // The rules require name + phone to create a rider record, and the order
+  // rules match riders by their email — so both must be in the payload.
+  const digits = params.identifier.replace(/\D/g, "");
+  const phone = digits.length >= 10 ? digits.slice(-10) : "";
+  if (!phone) throw new Error("A 10-digit mobile number is required to register.");
+
   const cred = await createUserWithEmailAndPassword(auth, email, params.password);
   const { user } = cred;
 
-  // Resolve businessId from outlet (mirrors Admin/BUSINESS_BY_OUTLET mapping)
+  // Resolve businessId from outlet (outletIndex, platform-maintained).
+  // A static map would write the outlet id as the business id for every
+  // outlet it doesn't know, sending the rider record to a dead tree.
   const outletId = params.outlet;
-  const businessId = OUTLET_TO_BUSINESS[outletId] ?? outletId;
+  const businessId = await resolveBusinessIdForOutlet(outletId);
 
   const riderPayload: Partial<Rider> = {
     uid: user.uid,
     name: params.name || "",
+    phone,
+    email: user.email ?? email,
     outlet: outletId,
     businessId,
     status: "Offline",
     lastSeen: Date.now(),
-    isAdmin: false,
+    createdAt: Date.now(),
+    // NOTE: isAdmin is intentionally NOT written here. The rules validate it as
+    // "newData === data", and on create data is null — writing false would be
+    // rejected. The Admin sets it later.
   };
 
   try {

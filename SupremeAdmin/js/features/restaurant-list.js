@@ -225,11 +225,20 @@ registerAction('reactivate-outlet', async (btn) => {
   if (!ok) return;
   try {
     const user = firebase.auth().currentUser;
-    await firebase.database().ref(`businesses/${bid}/outlets/${oid}`).update({
-      disabled: false,
-      reactivatedAt: firebase.database.ServerValue.TIMESTAMP,
-      reactivatedBy: user?.uid || 'unknown',
-    });
+    // outletIndex only accepts bid/name/disabled/createdAt ($other is false),
+    // and the node may not exist yet for older outlets — write the children so
+    // the index entry is complete instead of a half node.
+    const idxName = (name || '').slice(0, 80);
+    const updates = {
+      [`businesses/${bid}/outlets/${oid}/disabled`]: false,
+      [`businesses/${bid}/outlets/${oid}/reactivatedAt`]: firebase.database.ServerValue.TIMESTAMP,
+      [`businesses/${bid}/outlets/${oid}/reactivatedBy`]: user?.uid || 'unknown',
+      [`businesses/${bid}/outlets/${oid}/suspended`]: false, // orchestrator.js gates on this — without it the bot stays stopped
+      [`outletIndex/${oid}/bid`]: bid,
+      [`outletIndex/${oid}/disabled`]: false,
+    };
+    if (idxName) updates[`outletIndex/${oid}/name`] = idxName;
+    await firebase.database().ref().update(updates);
     // Best-effort restart; a worker that never existed will be provisioned
     // on the next orchestrator pass. Failure doesn't undo the reactivation.
     try {
