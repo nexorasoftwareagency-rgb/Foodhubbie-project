@@ -58,7 +58,7 @@ firebase.messaging().onBackgroundMessage((payload) => {
 // stale-while-revalidate, so mixed old/new module pairs can serve until the
 // name changes force a clean re-cache (settings subtab race fix + boot preload
 // removal so settings.js evaluates post-auth: js/ui.js).
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.10.2';
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.10.3';
 const ASSETS_TO_CACHE = [
   './index.html',
   './style.css?v=5.4.6',
@@ -151,9 +151,12 @@ self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('securetoken.googleapis.com')) return;
 
   // Cache-First for immutable CDN assets (faster load, works offline)
+  // gstatic firebasejs is versioned in the URL (10.7.1), so caching is safe and
+  // saves re-downloading the ~240KB modular SDK on every load.
   const isCDN = event.request.url.includes('unpkg.com') ||
                 event.request.url.includes('cdn.jsdelivr.net') ||
-                event.request.url.includes('cdnjs.cloudflare.com');
+                event.request.url.includes('cdnjs.cloudflare.com') ||
+                event.request.url.includes('gstatic.com/firebasejs/');
 
   if (isCDN) {
     event.respondWith(

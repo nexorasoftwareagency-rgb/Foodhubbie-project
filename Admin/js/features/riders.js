@@ -12,7 +12,10 @@ let _statsUnsub = null;
 let _riderData = [];
 let _riderSortField = 'name', _riderSortDir = 'asc';
 
-export function loadRiders() {
+// withStats=false on boot / dashboard: riderStats is only rendered by the Riders
+// table (renderRiders). The dashboard needs names only, and the node is ~32KB —
+// the single largest remaining boot read.
+export function loadRiders({ withStats = true } = {}) {
     cleanupRiders();
     const ridersTbody = document.getElementById('riderDataTableBody');
     if (ridersTbody) ridersTbody.innerHTML = getSkeletonRows(5, 6);
@@ -20,10 +23,12 @@ export function loadRiders() {
     const ridersRef = ref(db, "riders");
     const statsRef = Outlet.ref("riderStats");
 
-    _statsUnsub = onValue(statsRef, s => {
-        state.riderStatsData = s.val() || {};
-        if (state.ridersList.length > 0) renderRiders();
-    });
+    if (withStats) {
+        _statsUnsub = onValue(statsRef, s => {
+            state.riderStatsData = s.val() || {};
+            if (state.ridersList.length > 0) renderRiders();
+        });
+    }
 
     _ridersUnsub = onValue(ridersRef, snapshot => {
         const data = snapshot.val();

@@ -461,7 +461,7 @@ export function initAuth() {
 
         // Start Features
         updateBranding();
-        loadRiders();
+        loadRiders({ withStats: false });
         initRealtimeListeners();
         setupCapacitorFCM(user.uid);
         setupAdminFCM(user.uid);

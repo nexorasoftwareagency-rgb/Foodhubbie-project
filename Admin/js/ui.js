@@ -274,7 +274,7 @@ export const switchTab = async (tabId, skipHistory = false) => {
                     const [{ loadRiders: lr }, { renderOrders }] = await Promise.all([
                         mod('riders'), mod('orders')
                     ]);
-                    lr();
+                    lr({ withStats: false });
                     renderOrders(state.lastOrdersSnap);
                     break;
                 }
@@ -412,6 +412,10 @@ export const switchTab = async (tabId, skipHistory = false) => {
 export const applyDataLabels = () => {
     const isMobile = window.innerWidth <= 768;
     document.querySelectorAll('table.premium-table-v4, table.mobile-card-table').forEach(table => {
+        // Tables in inactive tabs are invisible; labelling them is pure work and
+        // this runs on every DOM mutation. Modals live outside .tab-content, so
+        // they are still labelled.
+        if (table.closest('.tab-content.hidden')) return;
         const headers = [];
         table.querySelectorAll('thead th').forEach(th => {
             headers.push(th.textContent.trim());
