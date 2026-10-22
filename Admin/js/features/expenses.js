@@ -2,6 +2,7 @@ import { Outlet, get, query, orderByChild, push, set, update, remove } from '../
 import { escapeHtml, showToast, formatDate, getISTDateString } from '../utils.js';
 import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
 import { logger } from '../utils/logger.js';
+import { ensureXlsx } from '../xlsx.js';
 
 let _expenseData = [];
 let _sortField = 'date', _sortDir = 'desc';
@@ -540,7 +541,7 @@ export async function loadExpenses() {
     }
 }
 
-export function downloadExpenseExcel() {
+export async function downloadExpenseExcel() {
     if (_expenseData.length === 0) { showToast('No expense data to export.', 'info'); return; }
     showToast('Generating Excel...', 'info');
 
@@ -553,16 +554,20 @@ export function downloadExpenseExcel() {
         Status: e.status || ''
     }));
 
-    if (typeof XLSX !== 'undefined') {
-        setTimeout(() => {
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
-            XLSX.writeFile(wb, `Expenses_${getISTDateString()}.xlsx`);
-        }, 50);
-    } else {
-        showToast('Excel library not loaded.', 'error');
+    let XLSX;
+    try {
+        XLSX = await ensureXlsx();
+    } catch (e) {
+        showToast(e.message || 'Excel library not loaded.', 'error');
+        return;
     }
+
+    setTimeout(() => {
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
+        XLSX.writeFile(wb, `Expenses_${getISTDateString()}.xlsx`);
+    }, 50);
 }
 
 export async function downloadExpensePDF() {
@@ -652,10 +657,16 @@ export async function downloadExpensePDF() {
     doc.save(`Expenses_${getISTDateString()}.pdf`);
 }
 
-export function downloadReportExcel() {
+export async function downloadReportExcel() {
     const d = _buildReportData();
     if (!d.monthlyRows.length && !d.breakdownRows.length) { showToast('No expense data to export.', 'info'); return; }
-    if (typeof XLSX === 'undefined') { showToast('Excel library not loaded.', 'error'); return; }
+    let XLSX;
+    try {
+        XLSX = await ensureXlsx();
+    } catch (e) {
+        showToast(e.message || 'Excel library not loaded.', 'error');
+        return;
+    }
     showToast('Generating report...', 'info');
     setTimeout(() => {
         const wb = XLSX.utils.book_new();

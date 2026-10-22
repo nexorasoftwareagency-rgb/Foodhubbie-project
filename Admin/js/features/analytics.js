@@ -4,6 +4,7 @@ import { ui, getRoles } from '../ui.js';
 import { showToast, formatDate, getISTDateString, formatOrderId, _loadChartJS } from '../utils.js';
 import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
 import { initMobileAnalyticsUI, renderMobileAnalytics, cleanupMobileAnalytics } from './analytics-mobile.js';
+import { ensureXlsx } from '../xlsx.js';
 
 let salesData = [];
 let prevPeriodData = [];
@@ -163,7 +164,7 @@ export function cleanupReports() {
     _currentAnalyticsTab = 'revenue';
 }
 
-export function downloadExcel() {
+export async function downloadExcel() {
     const filtered = _filteredForExport();
     if (filtered.length === 0) { ui.showToast('No data to export.', 'info'); return; }
 
@@ -182,16 +183,20 @@ export function downloadExcel() {
         Items: o.itemsStr || ''
     }));
 
-    if (typeof XLSX !== 'undefined') {
-        setTimeout(() => {
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Sales Report');
-            XLSX.writeFile(wb, `Sales_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
-        }, 50);
-    } else {
-        ui.showToast('Excel library not loaded.', 'error');
+    let XLSX;
+    try {
+        XLSX = await ensureXlsx();
+    } catch (e) {
+        ui.showToast(e.message || 'Excel library not loaded.', 'error');
+        return;
     }
+
+    setTimeout(() => {
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sales Report');
+        XLSX.writeFile(wb, `Sales_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }, 50);
 }
 
 export async function downloadPDF() {

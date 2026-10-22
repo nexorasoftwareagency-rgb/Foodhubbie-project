@@ -7469,7 +7469,7 @@
 
                     <input type="number" id="roleLevel" class="form-input w-100" min="-1" max="4" value="0">
 
-                    <small class="text-muted-small">supreme 4 Â· super 3 Â· owner 2 Â· manager 1 Â· cashier 0 Â· waiter -1</small>
+                    <small class="text-muted-small">supreme 4 · super 3 · owner 2 · manager 1 · cashier 0 · waiter -1</small>
 
                 </div>
 
@@ -7514,7 +7514,8 @@
 
     <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous" defer></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous" defer></script>
+    <!-- xlsx is NOT loaded here any more: it is ~270KB and only five export
+         buttons need it. js/xlsx.js fetches it on first use. -->
 
     <script type="module" src="js/bot-status.js?v=5.4.5"></script>
 

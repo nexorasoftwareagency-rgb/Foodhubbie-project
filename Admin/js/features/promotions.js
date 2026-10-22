@@ -17,6 +17,7 @@ import { haptic, escapeHtml, formatDate } from '../utils.js';
 import { renderPromotionsGuide } from './promotions-guide.js';
 import { logger } from '../utils/logger.js';
 import { loadLucide } from '../ui.js';
+import { ensureXlsx } from '../xlsx.js';
 
 const PROMO_MAX_PER_CAMPAIGN = 300;
 const PHONE_HINTS = ['whatsapp', 'phone', 'mobile', 'number', 'cell', 'contact', 'tel', 'msisdn'];
@@ -90,8 +91,12 @@ async function _parseSpreadsheet(file) {
     if (ext !== 'xlsx' && ext !== 'xls') {
         throw new Error('Unsupported file type. Use .xlsx, .xls, or .csv');
     }
-    if (typeof window.XLSX === 'undefined') {
-        throw new Error('Excel library not loaded — check that xlsx.full.min.js is included');
+    // xlsx is loaded on demand now (it is ~270KB and only the export/upload
+    // paths need it), so fetch it here before reading the workbook.
+    try {
+        await ensureXlsx();
+    } catch (e) {
+        throw new Error(e.message || 'Excel library not loaded');
     }
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -950,12 +955,15 @@ function _downloadPromoCsv() {
     URL.revokeObjectURL(url);
 }
 
-function _downloadPromoXlsx() {
-    if (typeof window.XLSX === 'undefined') {
+async function _downloadPromoXlsx() {
+    let XLSX;
+    try {
+        XLSX = await ensureXlsx();
+    } catch (e) {
         showToast('Excel library not loaded — try downloading the CSV instead', 'warning');
         return;
     }
-    const wb = window.XLSX.utils.book_new();
+    const wb = XLSX.utils.book_new();
     const data = [
         ['Phone', 'Name'],
         ['9876543210', 'Aarav Sharma'],

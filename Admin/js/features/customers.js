@@ -2,6 +2,7 @@ import { Outlet, get } from '../firebase.js';
 import { escapeHtml, showToast } from '../utils.js';
 import { logger } from '../utils/logger.js';
 import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
+import { ensureXlsx } from '../xlsx.js';
 
 let _customerData = [];
 let _filteredData = [];
@@ -162,7 +163,7 @@ export function initCustomerTable() {
     });
 }
 
-export function downloadCustomerExcel() {
+export async function downloadCustomerExcel() {
     if (_filteredData.length === 0) { showToast('No customer data to export.', 'info'); return; }
     showToast('Generating Excel...', 'info');
 
@@ -174,16 +175,20 @@ export function downloadCustomerExcel() {
         'Total Value (₹)': c.ltv || 0
     }));
 
-    if (typeof XLSX !== 'undefined') {
-        setTimeout(() => {
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Customers');
-            XLSX.writeFile(wb, `Customers_${new Date().toISOString().split('T')[0]}.xlsx`);
-        }, 50);
-    } else {
-        showToast('Excel library not loaded.', 'error');
+    let XLSX;
+    try {
+        XLSX = await ensureXlsx();
+    } catch (e) {
+        showToast(e.message || 'Excel library not loaded.', 'error');
+        return;
     }
+
+    setTimeout(() => {
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+        XLSX.writeFile(wb, `Customers_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }, 50);
 }
 
 export async function downloadCustomerPDF() {

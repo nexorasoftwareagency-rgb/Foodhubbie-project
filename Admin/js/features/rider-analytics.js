@@ -8,6 +8,7 @@ import { state } from '../state.js';
 import { escapeHtml, showToast, formatDate, getISTDateString, getSkeletonDivs, formatOrderId, _loadChartJS } from '../utils.js';
 import { settleRiderWallet } from './riders.js';
 import { loadJSPDF } from './printing.js';
+import { ensureXlsx } from '../xlsx.js';
 
 let riderEarningsChart = null;
 let _reportRows = [];
@@ -328,7 +329,7 @@ async function _resolveAdminPhone() {
     }
 }
 
-function _exportExcel() {
+async function _exportExcel() {
     if (_reportRows.length === 0) { showToast('No data to export. Run Analyze first.', 'info'); return; }
     const data = _reportRows.map(o => ({
         Date: formatDate(o.createdAt),
@@ -339,15 +340,18 @@ function _exportExcel() {
         Total: o.total || 0,
         Status: o.status || ''
     }));
-    if (typeof XLSX !== 'undefined') {
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Rider Report');
-        XLSX.writeFile(wb, `Rider_Report_${_lastFrom}_to_${_lastTo}.xlsx`);
-        showToast('Excel downloaded.', 'success');
-    } else {
-        showToast('Excel library not loaded.', 'error');
+    let XLSX;
+    try {
+        XLSX = await ensureXlsx();
+    } catch (e) {
+        showToast(e.message || 'Excel library not loaded.', 'error');
+        return;
     }
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Rider Report');
+    XLSX.writeFile(wb, `Rider_Report_${_lastFrom}_to_${_lastTo}.xlsx`);
+    showToast('Excel downloaded.', 'success');
 }
 
 async function _exportPDF() {
