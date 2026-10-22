@@ -5,7 +5,7 @@
 //
 // Rails (do not remove):
 //   - ONE DM per run by default (--n N staggers, 2-5 min apart, daily cap 15)
-//   - human pacing: composing presence 4-9s before send; 2-5 min between staggered sends
+//   - human pacing: composing presence 4-9s before send; 5-14s RANDOM gap between every send
 //   - opt-out detector on any reply -> status "Not interested", lead frozen forever
 //   - FAQ auto-answer from replies; anything else stored needsHuman (I draft, next run sends)
 //   - modes: baileys (send engine; session persists in .wa-sales-auth  no rescan)
@@ -35,6 +35,8 @@ const SITE = "https://foodhubbie-web.web.app/";
 const VIDEO_URL = SITE + "assets/demo/demo-walkthrough-32s.mp4";
 const DAILY_CAP = 15;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// owner rule: 5-14s random gap between EVERY message send
+const HUMAN_GAP = () => 5000 + Math.random() * 9000;
 const L = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
 // ---------- io ----------
@@ -287,9 +289,9 @@ async function main(argv) {
       "last contact": new Date().toLocaleDateString("en-GB")
     });
     if (targets.length > 1) {
-      L("staggering next sends");
+      L("staggering next sends…");
       for (let i = 1; i < Math.min(targets.length, n); i++) {
-        await sleep(120000 + Math.random() * 180000); // 2-5 min
+        await sleep(HUMAN_GAP()); // 5-14s random gap (owner rule)
         const l2 = targets[i];
         assertAllowlisted(l2.phone, leads);
         const msg2 = compose(l2, false);
