@@ -107,6 +107,19 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261021-154243-d7cf] Embed demo video on homepage + tracker handoff
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-21 15:42 UTC
+- Verified: live: video readyState 4 / 32s / plays on click; no 404s; commits a1e8d10 + ac73a57
+- Confidence: HIGH
+- Ended: 2026-10-21 15:42 UTC
+
+### [20261021-154150-1b3d] Embed demo video on homepage + tracker handoff
+- TIER: 1 (low-risk)
+- STATUS: IN PROGRESS
+- Started: 2026-10-21 15:41 UTC
+
 ### [20261021-085158-8b2b] Promo workspace + launch assets
 - TIER: 1 (low-risk)
 - STATUS: DONE
