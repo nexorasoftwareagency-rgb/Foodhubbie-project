@@ -141,3 +141,7 @@ film/*/sfx.wav
 
 # scraped lead files (business contacts, not for VCS)
 promo/leads/
+
+# business-contact workbook (scraped leads)
+Restaurant Lead Data/
+
