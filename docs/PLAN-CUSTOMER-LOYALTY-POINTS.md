@@ -23,7 +23,7 @@ Source: QSR Magazine (2024/2026), NRN, BonusQR, Entrepreneur, Restaurant Velocit
 | # | Decision |
 |---|----------|
 | L1 | One loyalty program per outlet. Customers are loyal to a kitchen, not the platform. |
-| L2 | Earn: 1 loyalty point per ₹100 spent on non-cancelled, non-refunded orders. Integer floor. |
+| L2 | Earn: 5 loyalty points per ₹100 spent on non-cancelled, non-refunded orders. Integer floor. Rate is admin-configurable (`loyalty/config.earnRatePaisePerPoint`, default 2000 paise per point = 5 per ₹100). |
 | L3 | Points accrue only on orders with status Delivered/Served (final). Pending/Preparing/Ready do not award until final. |
 | L4 | Tiers (per outlet): Bronze (0–999 pts), Silver (1,000–4,999), Gold (5,000+). Configurable by Admin later (L9). |
 | L5 | Tier benefits: Bronze = 1× earn; Silver = 1.25× earn + birthday treat; Gold = 1.5× earn + priority seating + free item after N orders. |
@@ -38,31 +38,25 @@ Source: QSR Magazine (2024/2026), NRN, BonusQR, Entrepreneur, Restaurant Velocit
 ```
 businesses/{bid}/outlets/{oid}/
   loyalty/
-    config: { earnRatePaisePerPoint: 100000, tiers: { bronze: {min:0,label:'Bronze',multiplier:1}, silver:{min:1000,label:'Silver',multiplier:1.25}, gold:{min:5000,label:'Gold',multiplier:1.5} }, rewards: [...] }
-    customers/{phone}: {
-      phone, name, outlet, business,
-      lifetimePoints: <int>, totalSpent: <int>, orderCount: <int>,
-      tier: 'bronze'|'silver'|'gold', tierReachedAt: <ts>,
-      lastOrderAt: <ts>, lastVisitAt: <ts>,
-      rank: <int>, updatedAt: <ts>
-    }
-    rankings: { $phone: { points, totalSpent, tier, name, updatedAt } }  // mirrored for leaderboard queries
+    config: { earnRatePaisePerPoint: 2000, tiers: { bronze: {min:0,label:'Bronze',multiplier:1}, silver:{min:1000,label:'Silver',multiplier:1.25}, gold:{min:5000,label:'Gold',multiplier:1.5} }, rewards: [...] }
+    rankings: { $phone: { phone, outlet, business, lifetimePoints, totalSpent, tier, rank, updatedAt } }  // mirrored for leaderboard queries
   customers/{phone}/
-    loyalty: <ref to above>
+    loyalty: { phone, outlet, business, lifetimePoints, totalSpent, orderCount, tier, tierReachedAt, lastOrderAt, updatedAt }  // canonical record (plan L10)
     orders/{orderId}: { orderId, total, status, pointsEarned, placedAt, deliveredAt }
     ratings/{orderId}: { rating 1-5, comment, orderId, createdAt }
 ```
 
 ### Rules additions (`database.rules.json`)
-Under `businesses/{bid}/outlets/{oid}/loyalty`:
+Under `businesses/{bid}/outlets/{oid}`:
 
-- `customers/$phone`:
+- `customers/$phone/loyalty` (canonical record):
   - `.read`: `$phone.matches(/^[6-9][0-9]{9}$/)` (customer reads own phone; admin/rider read via auth)
-  - `.write`: phone-keyed self-write OR admin/outlet write
+  - `.write`: admin/outlet write (server writes it; the customer never writes points)
   - `.validate`: required fields phone/outlet/business/lifetimePoints/totalSpent/orderCount/tier/updatedAt; tier in [bronze,silver,gold]; lifetimePoints ≥ 0.
-- `rankings/$phone`:
-  - `.read`: true (leaderboard is public within outlet) — indexOn points
+- `loyalty/rankings/$phone`:
+  - `.read`: admin/outlet only — the leaderboard holds other customers' phones and spend, so customers do not read it. The bot stores each customer's `rank` in their own entry.
   - `.write`: admin/outlet only (server-maintained, customers never write rankings directly)
+  - `.indexOn`: lifetimePoints
 - `customers/{phone}/orders/$orderId`:
   - `.read`: `$phone.matches(...)` self; admin outlet read
   - `.write`: self-write with orderId match + outlet match + status/placedAt/total validation
@@ -105,15 +99,15 @@ Sections (after profile/prefs in `accountProfileCard`):
 
 In `bot/index.js` `notifyCustomerApp` / order status listener:
 - On order transition to `Delivered` or `Served`:
-  - Compute `pointsEarned = floor(total / 100) * tierMultiplier`
-  - Transaction on `businesses/{bid}/outlets/{oid}/loyalty/customers/{phone}`:
+  - Compute `pointsEarned = floor(total * 100 / earnRatePaisePerPoint) * tierMultiplier` (default 5 points per ₹100)
+  - Transaction on `businesses/{bid}/outlets/{oid}/customers/{phone}/loyalty`:
     - `lifetimePoints += pointsEarned`
     - `totalSpent += total`
     - `orderCount += 1`
     - `lastOrderAt = now`
     - recompute `tier` from thresholds; if tier changed, set `tierReachedAt`
   - Write `customers/{phone}/orders/{orderId}` with `pointsEarned`, `status`, `placedAt`, `deliveredAt`
-  - Update `rankings/{phone}` mirror
+  - Update `loyalty/rankings/{phone}` mirror (includes `rank`, computed server-side)
   - Send WhatsApp/FCM: "You earned N points! Total ₹X spent. Next reward at Silver tier."
 
 ## Rankings / leaderboard

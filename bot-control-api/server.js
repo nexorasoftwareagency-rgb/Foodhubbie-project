@@ -27,6 +27,7 @@ const { startStatusWatcher } = require('./status-watcher');
 const { startOrchestrator } = require('./orchestrator');
 const sharp = require('sharp');
 const { getBillingDefaults } = require('../shared/billing-defaults.cjs');
+const { prunePushInbox } = require('../shared/push-inbox.cjs');
 
 const PORT = process.env.BOT_CONTROL_PORT || 4000;
 
@@ -1029,18 +1030,19 @@ app.post('/tenant-api/notify', async (req, res) => {
     if (testMode !== true && testMode !== 'true' && data.testMode !== 'true') {
       for (const customerPhone of phoneSet) {
         try {
-          await admin.database()
-            .ref(`businesses/${req.businessId}/outlets/${req.outlet}/pushInbox/${customerPhone}`)
-            .push({
-              title: String(title).slice(0, 100),
-              body: String(body).slice(0, 300),
-              type: messageType,
-              sentAt: Date.now(),
-              ...(data.orderId ? { orderId: String(data.orderId).slice(0, 100) } : {}),
-              ...(data.status ? { status: String(data.status).slice(0, 40) } : {}),
-              url: link
+            const phoneInboxRef = admin.database()
+                .ref(`businesses/${req.businessId}/outlets/${req.outlet}/pushInbox/${customerPhone}`);
+            await phoneInboxRef.push({
+                title: String(title).slice(0, 100),
+                body: String(body).slice(0, 300),
+                type: messageType,
+                sentAt: Date.now(),
+                ...(data.orderId ? { orderId: String(data.orderId).slice(0, 100) } : {}),
+                ...(data.status ? { status: String(data.status).slice(0, 40) } : {}),
+                url: link
             });
-          inboxCount += 1;
+            await prunePushInbox(phoneInboxRef);
+            inboxCount += 1;
         } catch (e) {
           console.warn('inbox write failed', e.message);
         }

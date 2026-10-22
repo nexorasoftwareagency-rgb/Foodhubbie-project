@@ -84,6 +84,7 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         total: round2(l.unitPrice * l.qty),
         outlet: OUTLET,
         instructions: l.instructions || '',
+        ...(l.comboId ? { comboId: l.comboId, comboName: l.comboName, comboLineOriginal: l.comboLineOriginal } : {})
     }));
 
     const subtotal = round2(items.reduce((s, it) => s + it.total, 0));

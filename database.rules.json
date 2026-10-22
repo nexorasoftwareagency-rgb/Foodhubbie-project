@@ -233,6 +233,13 @@
                     ".validate": "newData.hasChildren(['rating','orderId','outlet','createdAt']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5 && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('createdAt').isNumber() && (!newData.hasChild('comment') || newData.child('comment').isString() && newData.child('comment').val().length <= 500) && (!newData.hasChild('business') || newData.child('business').isString())"
                   }
                 },
+                "rewards": {
+                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
+                  "$rewardId": {
+                    ".write": "$phone.matches(/^[6-9][0-9]{9}$/) && newData.exists() && newData.hasChildren(['rewardId','label','cost','code','status','redeemedAt','outlet','business']) && newData.child('rewardId').isString() && newData.child('rewardId').val().length >= 1 && newData.child('rewardId').val().length <= 50 && newData.child('label').isString() && newData.child('label').val().length >= 1 && newData.child('label').val().length <= 60 && newData.child('cost').isNumber() && newData.child('cost').val() >= 0 && newData.child('code').isString() && newData.child('code').val().length >= 1 && newData.child('code').val().length <= 30 && newData.child('status').isString() && newData.child('status').val() == 'active' && newData.child('redeemedAt').isNumber() && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString()",
+                    ".validate": "newData.hasChildren(['rewardId','label','cost','code','status','redeemedAt','outlet','business']) && newData.child('rewardId').isString() && newData.child('rewardId').val().length >= 1 && newData.child('rewardId').val().length <= 50 && newData.child('label').isString() && newData.child('label').val().length >= 1 && newData.child('label').val().length <= 60 && newData.child('cost').isNumber() && newData.child('cost').val() >= 0 && newData.child('code').isString() && newData.child('code').val().length >= 1 && newData.child('code').val().length <= 30 && newData.child('status').isString() && newData.child('status').val() == 'active' && newData.child('redeemedAt').isNumber() && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString()"
+                  }
+                },
                 "loyalty": {
                   ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
                   ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
@@ -389,7 +396,7 @@
               }
             },
             "uiConfig": {
-              ".read": "true",
+              ".read": "auth != null && root.child('admins').child(auth.uid).child('outlet').val() == $outletId",
               ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)"
             },
             "webviewTokens": {
@@ -564,7 +571,7 @@
       ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
       "$reqId": {
         ".write": "(!data.exists() && newData.child('source').val() == 'website') || (auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true))",
-        ".validate": "newData.hasChildren(['businessName','outletName','adminEmail','plan','source','status','createdAt']) && newData.child('source').val() == 'website' && (newData.child('status').val() == 'pending' || (auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true) && (newData.child('status').val() == 'approved' || newData.child('status').val() == 'rejected')))",
+        ".validate": "newData.hasChildren(['businessName','outletName','adminEmail','plan','source','status','createdAt','termsVersion','termsAcceptedAt']) && newData.child('source').val() == 'website' && (newData.child('status').val() == 'pending' || (auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true) && (newData.child('status').val() == 'approved' || newData.child('status').val() == 'rejected')))",
         "businessName": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 80" },
         "outletName": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 80" },
         "contactPhone": { ".validate": "newData.isString() && newData.val().length >= 10 && newData.val().length <= 15" },
@@ -583,6 +590,8 @@
         "bid": { ".validate": "newData.isString() && newData.val().length <= 64" },
         "oid": { ".validate": "newData.isString() && newData.val().length <= 64" },
         "createdAt": { ".validate": "newData.isNumber()" },
+        "termsVersion": { ".validate": "newData.isString() && newData.val().length <= 32" },
+        "termsAcceptedAt": { ".validate": "newData.isNumber()" },
         "$other": { ".validate": "false" }
       }
     },

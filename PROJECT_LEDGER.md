@@ -14,6 +14,11 @@ Fragile Files before starting ANY task.
 - **Firebase v12**: `enableIndexedDbPersistence` removed — offline persistence is now automatic. No action needed.
 
 <!-- STANDING_DECISIONS_START -->
+- [2026-10-22 02:47 UTC] [2026-10-22 02:40 UTC] database.rules.json read gates that MUST stay public (anon read) because the customer app needs them: metadata/orderSequence (menu/js/order.js order number), dineinSettings (menu/js/app.js tax + service charge), webviewTokens/\ (menu/js/delivery.js WhatsApp delivery page), discounts (menu/js/discount.js coupon validation), loyalty/config (customer must see the admin-configured earn rate and reward catalog). A pending tightening in the worktree made these admin-only and would have broken the QR order number, tax display, delivery page and coupons on the next rules deploy - it was reverted, not deployed.
+- [2026-10-22 02:47 UTC] [2026-10-22 02:40 UTC] Customer leaderboard rank: the bot computes rank server-side and stores it in the customer's own loyalty/rankings/{phone} entry; the customer app reads ONLY that entry. The rules keep loyalty/rankings/\ phone-keyed (same phone-as-access-key trade-off as customers/{phone}/app and pushInbox) but the parent node has no read rule, so no bulk leaderboard read of other customers' phones/spend is possible.
+- [2026-10-22 02:47 UTC] [2026-10-22 02:40 UTC] Canonical loyalty record is customers/{phone}/loyalty (plan L10) - that is the path the customer app reads and database.rules.json validates. The old loyalty/customers/{phone} path was written by the bot but read by nobody, so points never reached the UI; the bot now writes the canonical path. The bot's first-ever live run of the accrual was this deploy.
+- [2026-10-22 02:46 UTC] [2026-10-22 02:40 UTC] Loyalty earn rate = 5 points per Rs 100 spent (earnRatePaisePerPoint 2000), phone-keyed across all channels (QR, WhatsApp, dine-in). Rate is admin-controlled via loyalty/config.earnRatePaisePerPoint; default is the config value, fallback 2000. This supersedes the 2026-10-21 note that said 1pt/Rs100 - that value was a units bug (100000 paise = Rs 1000/point, so almost every order scored 0 points) and the reward catalog (200/500/800 pts) only made sense at a 5x denser rate.
+- [2026-10-22 02:46 UTC] [2026-10-22 02:40 UTC] Customer push inbox is capped at the 50 newest entries. Single implementation shared/push-inbox.cjs (prunePushInbox) called by BOTH writers: bot-control-api/server.js /tenant-api/notify and bot/index.js notifyCustomerApp. Prune happens after the write, oldest-first by sentAt, failures are swallowed so housekeeping never breaks a notification. Client still renders at most 40 (menu/js/customer.js).
 - [2026-10-21 07:02 UTC] FIXED: Combo card double ₹ (app.js:603, delivery.js:246) — fmtMoney already prepends ₹, removed the redundant prefix. FIXED: Combo FAB overlap — moved .combo-fab back inside .combo-card-img (position:relative) so it overlays the image corner instead of the price row/hint. Deployed hosting:menu. Verified live: PWA install card renders, prices show single ₹, FAB on image corner.
 - [2026-10-21 06:05 UTC] VERIFICATION COMPLETE for task 20261021-034313-7ff7: rider-app build (tsc -b && vite build) PASSES zero errors; rider-app lint (oxlint) 0 errors; root build.mjs all targets build; Firebase database + hosting:menu deploys released; node --check clean on all changed JS. Remaining unverified only due to infrastructure constraints (no paired FCM device for push E2E, can't write live orders for status-transition test). Confidence can now be raised to HIGH for code correctness; real-device E2E remains the only open gap.
 - [2026-10-21 05:03 UTC] writeCustomerOrder must be exported from customer.js — order.js imports it; missing export throws 'does not provide an export named writeCustomerOrder' and breaks placeOrder entirely. Fixed and redeployed hosting:menu.
@@ -107,6 +112,59 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261022-023945-f40b] WhatsApp sales agent: baileys+web engines, allowlist rails, CRM ids, workbook bridge
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 02:39 UTC
+- Verified: node --check ok; dry-run prints correct personalized Hinglish (₹ Maria, em-dash, folded-hands) with 64 CRM-id rows from workbook; pitch-kit mojibake repaired and workbook regen verified
+- NOT verified / open risk: No live send yet — needs your QR scan; first send should be smoke-tested on 1 lead
+- Confidence: HIGH
+- Ended: 2026-10-22 02:39 UTC
+
+### [20261022-021724-9383] 3 neighbourhood scrape batches + workbook rebuild + bake-in dedupe
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 02:17 UTC
+- Verified: 64 leads / 52 phones / Shambhu's auto-marked Duplicate; commits aa8039d 80de47c; batches maninagar+satellite+prahlad-nagar on disk
+- Confidence: HIGH
+- Ended: 2026-10-22 02:17 UTC
+
+### [20261022-020943-7cce] Prune customer pushInbox to newest 50 entries in server + bot writers
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-22 02:09 UTC
+- Files touched: shared/push-inbox.cjs, bot/index.js, bot-control-api/server.js, menu/js/customer.js, database.rules.json, tests/customer-profile.check.mjs, docs/PLAN-CUSTOMER-LOYALTY-POINTS.md
+- Verified: Live on EC2: deployed shared/push-inbox.cjs + bot-control-api/server.js + bot/index.js; pm2 restart 9 (control api) and 4/12 (bots); bot health = whatsapp connected, 0 crypto errors, control API :4000 up (401 on authed route). Live prune proof on the deployed module against production RTDB: seeded 60 scratch entries under pushInbox/9999999999, prune removed 10 and left 50, oldest pruned / newest kept, scratch node deleted, real customer inbox untouched (1 phone, 2 entries). node --check on bot/index.js, bot-control-api/server.js, shared/push-inbox.cjs, menu/js/customer.js; database.rules.json parses. tests/customer-profile.check.mjs passes (prune logic against a fake ref: 60->50, under-cap untouched, missing sentAt pruned first, broken ref swallowed). Menu deployed to hosting:menu and the live js/customer.js confirmed serving earnRatePaisePerPoint 2000 + own-entry rank read. Rules probed live: rewards anon write 200 (then scratch removed via Admin SDK), customers/{phone}/loyalty read 200, pushInbox/{phone} 200 / parent 401, loyalty/rankings/{phone} 200 / parent 401.
+- NOT verified / open risk: No real order was run, so the bot's loyalty accrual and its in-bot prune call were not exercised end-to-end on a live Delivered transition (the code path is shared with the live-verified module and the call site is a verified one-liner). No paired device, so no background FCM on a real handset. Customer-side rank still shows nothing until a customer has a delivered order (the bot writes the rank then). Tier thresholds and reward costs still carry the plan's 1000/5000 and 200/500/800 numbers, which at 5 pts per Rs 100 mean Silver = Rs 20k lifetime spend and a free samosa = Rs 4k of spend - admin-tunable via loyalty/config, and the rewards/loyalty admin dashboard is still to be built. rules file was NOT re-deployed (only delta vs live is the uiConfig read gate, which no code reads).
+- Confidence: HIGH
+- Ended: 2026-10-22 02:47 UTC
+
+### [20261022-015527-9918] Restaurant Lead Data workbook + field design + tracker
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 01:55 UTC
+- Verified: xlsx opens: 3 sheets, 19 prefilled leads, 7 dropdown validations, 14313 bytes; generator + gitignore committed aa8039d
+- Confidence: HIGH
+- Ended: 2026-10-22 01:55 UTC
+
+### [20261022-015001-df7d] gmaps lead scraper (tools/gmaps-lead-scraper.cjs) + gitignore leads + tracker log
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 01:50 UTC
+- Verified: smoke-tested: 2 CSVs on disk (10 shallow rows, 5+4 deep rows with phones+addresses); deepen mode extracts Phone/Website/address
+- Confidence: HIGH
+- Ended: 2026-10-22 01:50 UTC
+
+### [20261022-013148-0e1e] Verify approved templates end-to-end (status, var counts vs code params, text parity); one checker instead of two
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 01:31 UTC
+- Files touched: tools/check-wa-templates.cjs, tools/check-wa-msg-parity.cjs (deleted)
+- Verified: Live WABA inventory re-fetched from Graph: 17 templates - 14 APPROVED (incl. all 4 promo_hinglish_*), 3 REJECTED by design (out_for_delivery_v3, rider_reached, otp_changed - OTP-bearing, stay plain text). New keeper tool tools/check-wa-templates.cjs checks 4 things at once: every template the code sends exists and is APPROVED; the approved body var count equals the number of parameters the code sends; the Baileys plain-text message equals the approved body byte-for-byte; plus the live inventory table. Result: ALL CHECKS PASSED - var counts match exactly (order_placed 1, order_cancelled 2, order_confirmed_delivery_v2 2, order_ready_v3 3, order_confirmed_dinein 4, order_delivered_v3 5, rider_assigned 3). Failing paths proven with 2 deliberate mutations of a copy: dropping one parameter from order_ready_v3 components -> FAIL code sends 2 but body has 3 vars; dropping the trailing heart from order_delivered_v3 text -> FAIL with the exact line diff (template laquo5raquo heart vs baileys laquo5raquo). Fixed a parser gap found by the run: the inline sendTemplateMessage call for rider_assigned was not being counted, so its var count was unchecked - now 3 vs 3. Superseded tools/check-wa-msg-parity.cjs deleted (new tool is a superset). Committed 8e9ac72 (bot phone fix) + d39835f (tool swap), pushed, HEAD == origin/main
+- NOT verified / open risk: no template was actually SENT (promos remain Baileys-blocked and no outlet runs meta transport yet), so the approval state is verified from the Graph API only, not from a live delivery
+- Confidence: HIGH
+- Ended: 2026-10-22 01:32 UTC
+
 ### [20261021-154243-d7cf] Embed demo video on homepage + tracker handoff
 - TIER: 1 (low-risk)
 - STATUS: DONE

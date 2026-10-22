@@ -75,6 +75,7 @@ const promo = require('./promotions');
 const { sendDailyReport, sendMonthlyReport, sendWeeklyReport } = require('./reports');
 const riderNotify = require('./rider');
 const { logChatMessage } = require('./chat-log');
+const { prunePushInbox } = require('../shared/push-inbox.cjs');
 
 let sharpLib;
 try { sharpLib = require('sharp'); } catch (_) { console.warn('⚠️ sharp not installed — image format conversion disabled'); }
@@ -978,9 +979,11 @@ async function accrueLoyaltyPoints(orderId, order, status) {
         if (existing && existing.exists()) return;
 
         // Config: earn rate (paise per point) + tier table with multipliers.
+        // Default = 5 points per ₹100 spent (2000 paise per point). Admin
+        // controlled via loyalty/config.earnRatePaisePerPoint.
         const configSnap = await db.ref(resolvePath('loyalty/config', outlet)).once('value').catch(() => null);
         const config = configSnap && configSnap.val() ? configSnap.val() : {};
-        const earnRate = config.earnRatePaisePerPoint || 100000; // ₹100 per point
+        const earnRate = config.earnRatePaisePerPoint || 2000; // 5 points per ₹100
         const tiers = config.tiers || {
             bronze: { min: 0, multiplier: 1 },
             silver: { min: 1000, multiplier: 1.25 },
@@ -988,12 +991,15 @@ async function accrueLoyaltyPoints(orderId, order, status) {
         };
 
         // Base points = floor(total * 100 / earnRate). earnRate in paise:
-        // 100000 paise = ₹100 per point.
+        // 2000 paise per point = ₹20 per point = 5 points per ₹100 spent.
         const basePoints = Math.floor((total * 100) / earnRate);
         if (basePoints <= 0) return;
 
         // Read current loyalty to apply tier multiplier.
-        const loyaltyRef = db.ref(resolvePath(`loyalty/customers/${phone}`, outlet));
+        // Canonical path is customers/{phone}/loyalty (plan L10) — that is what
+        // the customer app reads and what the rules validate. The older
+        // loyalty/customers path is dead: nothing reads it.
+        const loyaltyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, outlet));
         const loyaltySnap = await loyaltyRef.once('value').catch(() => null);
         const current = loyaltySnap && loyaltySnap.val() ? loyaltySnap.val() : {};
         const currentTier = current.tier || 'bronze';
@@ -1044,7 +1050,12 @@ async function accrueLoyaltyPoints(orderId, order, status) {
             };
         });
 
-        // Mirror for the outlet leaderboard.
+        // Mirror for the outlet leaderboard. Rank is computed here (server-side)
+        // because customers may only read their own entry — the client cannot
+        // count the whole leaderboard.
+        const rankSnap = await db.ref(resolvePath('loyalty/rankings', outlet)).get().catch(() => null);
+        const rankPool = Object.values((rankSnap && rankSnap.val()) || {});
+        const rank = rankPool.filter(r => Number(r && r.lifetimePoints) > newLifetimePoints).length + 1;
         await db.ref(resolvePath(`loyalty/rankings/${phone}`, outlet)).set({
             phone,
             outlet,
@@ -1052,6 +1063,7 @@ async function accrueLoyaltyPoints(orderId, order, status) {
             lifetimePoints: newLifetimePoints,
             totalSpent: newTotalSpent,
             tier: newTier,
+            rank,
             updatedAt: now
         });
 
@@ -1115,6 +1127,8 @@ async function notifyCustomerApp(orderId, order, status) {
             sentAt: Date.now(),
             url
         }).catch(e => console.error('[FCM] Customer inbox write failed:', e.message));
+
+        await prunePushInbox(db.ref(resolvePath(`pushInbox/${phone}`, outlet)));
 
         const response = await admin.messaging().sendEachForMulticast({
             tokens: entries.map(([, sub]) => sub.token),

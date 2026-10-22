@@ -61,18 +61,19 @@ def main():
         wb.save(XLSX)
         out = []
         for rec in rows:
+            clean = lambda v, k="": ("" if v is None else str(v).replace("\ufffd", ""))
             out.append({
-                "crm": rec["crm id"], "name": rec["restaurant name"],
-                "phone": (rec["phone"] or ""), "addr": rec["city / area"] or "",
-                "rating": rec["rating (maps)"] or "", "outletType": rec["outlet type"] or "",
-                "fit": rec["dine-in fit (tables)"] or "", "website": rec["website"] or "",
-                "ownerName": rec["owner name"] or "", "waKnown": rec["whatsapp?"] or "",
-                "status": rec["status"] or "", "attempts": rec["attempts"] or 0,
-                "lastContact": rec["last contact"] or "", "notes": rec["notes"] or "",
-                "replySummary": rec["reply summary"] or "",
+                "crm": clean(rec["crm id"]), "name": clean(rec["restaurant name"]),
+                "phone": clean(rec["phone"]).replace(" ", ""), "addr": clean(rec["city / area"]),
+                "rating": clean(rec["rating (maps)"]), "outletType": clean(rec["outlet type"]),
+                "fit": clean(rec["dine-in fit (tables)"]), "website": clean(rec["website"]),
+                "ownerName": clean(rec["owner name"]), "waKnown": clean(rec["whatsapp?"]),
+                "status": clean(rec["status"]), "attempts": rec["attempts"] or 0,
+                "lastContact": clean(rec["last contact"]), "notes": clean(rec["notes"]),
+                "replySummary": clean(rec["replySummary"]) if "replySummary" in rec else clean(rec["reply summary"]),
                 "row": rec["_row"], "cols": rec["_col"],
             })
-        print(json.dumps(out, ensure_ascii=False))
+        print(json.dumps(out, ensure_ascii=True))
     elif mode == "update":
         job = json.loads(sys.argv[3])
         hdrs2 = headers(ws)

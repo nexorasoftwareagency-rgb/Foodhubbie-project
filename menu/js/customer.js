@@ -917,7 +917,9 @@ async function loadLoyaltyConfig() {
     }
     if (!_loyaltyConfig) {
         _loyaltyConfig = {
-            earnRatePaisePerPoint: 100000,
+            // Same default as the bot (bot/index.js): 2000 paise per point
+            // = 5 points per ₹100 spent. Admin can override via loyalty/config.
+            earnRatePaisePerPoint: 2000,
             tiers: {
                 bronze: { min: 0, label: 'Bronze', multiplier: 1 },
                 silver: { min: 1000, label: 'Silver', multiplier: 1.25 },
@@ -945,14 +947,12 @@ async function loadCustomerLoyalty() {
 async function computeCustomerRank() {
     if (!hasIdentity() || !_loyaltyConfig) { _customerRank = null; return; }
     try {
-        const snap = await get(outletRef('loyalty/rankings'));
-        const rankings = snap && snap.exists() ? snap.val() : {};
-        const entries = Object.entries(rankings)
-            .map(([phone, v]) => ({ phone, ...(v || {}) }))
-            .filter(v => v && typeof v.lifetimePoints === 'number')
-            .sort((a, b) => b.lifetimePoints - a.lifetimePoints);
-        const idx = entries.findIndex(e => e.phone === _profile.phone);
-        _customerRank = idx >= 0 ? idx + 1 : null;
+        // Read ONLY our own entry — the leaderboard holds other customers'
+        // phones and spend, so the rules never allow a bulk read. The bot
+        // stores our rank in our own record.
+        const snap = await get(outletRef(`loyalty/rankings/${_profile.phone}`));
+        const mine = snap && snap.exists() ? snap.val() : null;
+        _customerRank = mine && Number.isFinite(Number(mine.rank)) ? Number(mine.rank) : null;
     } catch (e) {
         _customerRank = null;
     }
