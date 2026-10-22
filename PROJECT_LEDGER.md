@@ -112,6 +112,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261022-030254-6d75] wa-sales-agent audit fix: 10 findings (self-reply guard, csv header, cap coverage, needsHuman flow, unreachable isolation, pino silent)
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 03:02 UTC
+- Files touched: tools/wa-sales-agent.cjs
+- Verified: node --check; dry run: LD011 queued, cafe hook, prices rendered; commit a7b0820
+- NOT verified / open risk: no live WhatsApp send yet (needs owner QR pairing + phone cleanup)
+- Confidence: HIGH
+- Ended: 2026-10-22 03:03 UTC
+
 ### [20261022-023945-f40b] WhatsApp sales agent: baileys+web engines, allowlist rails, CRM ids, workbook bridge
 - TIER: 2 (medium-risk)
 - STATUS: DONE
