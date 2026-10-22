@@ -300,12 +300,11 @@ async function bootBaileys() {
       logger: pino({level: "silent"})
     });
     sock.ev.on("creds.update", saveCreds); // BEFORE connection events, or pairing tokens are lost
-    if (attempt === 0) L(fs.existsSync(creds) && (()=>{try{return JSON.parse(fs.readFileSync(creds,"utf8")).registered}catch{return false}})()
-      ? "connecting with saved session…" : "waiting for QR scan…");
+    if (attempt === 0) L("connecting (saved session if valid — QR prints below only if WhatsApp asks…)");
     const ok = await new Promise((res, rej) => {
       const t = setTimeout(() => rej(new Error("connect timeout — QR not scanned in 5 min")), 300000);
       sock.ev.on("connection.update", u => {
-        if (u.qr && !fs.existsSync(creds)) { L("QR — WhatsApp ▸ Devices ▸ Link a device me scan karein:"); qrterm.generate(u.qr, {small: true}); }
+        if (u.qr) { L("\nQR NEEDED — WhatsApp ▸ Devices ▸ Link a device me scan karein:"); qrterm.generate(u.qr, {small: true}); }
         if (u.connection === "open") { clearTimeout(t); res(true); }
         if (u.connection === "close") {
           clearTimeout(t);
