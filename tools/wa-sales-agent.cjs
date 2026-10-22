@@ -15,11 +15,14 @@
 //
 // Commands (run from repo root):
 //   node tools/wa-sales-agent.cjs sync               # ensure CRM ids (LD001..) in workbook
+//   node tools/wa-sales-agent.cjs status             # daily snapshot: sent/cap, statuses, what is due
 //   node tools/wa-sales-agent.cjs dry                # queue + next message text, nothing sent
 //   node tools/wa-sales-agent.cjs send               # ONE DM (baileys)
 //   node tools/wa-sales-agent.cjs send --n 3         # 3 staggered DMs (5-14s apart)
 //   node tools/wa-sales-agent.cjs send --web         # send via WhatsApp Web instead
 //   node tools/wa-sales-agent.cjs check              # read replies (web), log + answer FAQs
+//   node tools/wa-sales-agent.cjs check-baileys --min 5   # read replies on the paired sales
+//                                                # session (no WhatsApp Web QR needed)
 //   node tools/wa-sales-agent.cjs reply --id LD007 --text "..." [--web]   # tracked manual reply
 // Every run updates the Excel tracker at the end ("Report Entry in Excel, then close").
 const {chromium} = require("../node_modules/playwright");
@@ -77,6 +80,13 @@ function sentToday() {
   if (!fs.existsSync(LOG)) return 0;
   const d = new Date().toISOString().slice(0, 10);
   return fs.readFileSync(LOG, "utf8").split("\n").filter(l => l.includes(d) && /dm[123]|dm-sent|resend-sent|reply-sent|auto-answer/.test(l)).length;
+}
+// log rows from today matching a type pattern (every field is quoted, so match the quoted token)
+function logToday(typeRe) {
+  if (!fs.existsSync(LOG)) return 0;
+  const d = new Date().toISOString().slice(0, 10);
+  return fs.readFileSync(LOG, "utf8").split("\n")
+    .filter(l => l.includes(d) && new RegExp('","(' + typeRe.source + ')","').test(l)).length;
 }
 
 // ---------- messaging ----------
@@ -290,7 +300,7 @@ const daysSince = dmy => {
 };
 function pickTargets(n) {
   const leads = leadRead().filter(l =>
-      l.phone && !/^Duplicate$/.test(l.status || "") && l.status !== "Not interested" && (l.attempts || 0) < 3);
+      l.phone && !/^(Duplicate|Not interested|Unreachable)/.test(l.status || "") && (l.attempts || 0) < 3);
   const pendingReply = leads.filter(l => (l.replySummary || "").startsWith("needsHuman"));
   const dm2Due = leads.filter(l => (l.attempts || 0) === 1 && daysSince(l.lastContact) >= 3);
   const dm3Due = leads.filter(l => (l.attempts || 0) === 2 && daysSince(l.lastContact) >= 7);
@@ -304,9 +314,9 @@ function assertAllowlisted(phone, leads) {
   if (!leads.some(l => String(l.phone || "").replace(/\D/g, "").endsWith(want)))
     throw new Error("REFUSED: number not in Restaurant Lead Data allowlist: " + phone);
 }
-function markUnreachable(crm) {
-  leadUpdate(crm, {"status": "Unreachable/Wrong no"});
-  appendLog({crm, type: "unreachable", status: "not-on-whatsapp"});
+function markUnreachable(lead) {
+  leadUpdate(lead.crm, {"status": "Unreachable/Wrong no", "attempts": Math.max(0, (lead.attempts || 0) - 1)});
+  appendLog({crm: lead.crm, name: lead.name, phone: lead.phone, type: "unreachable", status: "not-on-whatsapp"});
 }
 
 // ---------- baileys engine ----------
@@ -331,6 +341,8 @@ async function bootBaileys() {
           clearTimeout(t);
           const code = u.lastDisconnect?.error?.output?.statusCode;
           if (code === 515) { L("server restart after pairing (515) — reconnecting with saved session…"); setTimeout(() => res(false), 2500); }
+          else if (code === 408) { L("connection timed out (408) — retrying with saved session…"); setTimeout(() => res(false), 5000); }
+          else if (!code) { L("connection dropped (no code) — retrying with saved session…"); setTimeout(() => res(false), 6000); }
           else rej(new Error("closed: " + code + " (baileys.wiki/connection-errors)"));
         }
       });
@@ -356,7 +368,7 @@ async function sendTracked(sock, lead, text, kind) {
   try {
     await baileySendDM(sock, lead.phone, text);
   } catch (e) {
-    if (e.code === "NOT_ON_WA") { markUnreachable(lead.crm); return false; }
+    if (e.code === "NOT_ON_WA") { markUnreachable(lead); return false; }
     throw e;
   }
   appendLog({crm: lead.crm, name: lead.name, phone: lead.phone, type: kind, text, status: "ok"});
@@ -424,6 +436,25 @@ async function main(argv) {
 
   if (cmd === "sync") { did.push("crm: " + leads.filter(l => l.crm).length); return finishReport(did); }
 
+  if (cmd === "status") {
+    // Daily snapshot - no sends, no workbook writes beyond the usual report line.
+    const counts = {};
+    for (const l of leads) counts[l.status || "(blank)"] = (counts[l.status || "(blank)"] || 0) + 1;
+    const coldToday = logToday(/dm[123]|dm-sent|resend-sent/), replyToday = logToday(/reply-sent|auto-answer/);
+    L("outbound today: cold DMs", coldToday, "| replies to inbound", replyToday, "| cap", DAILY_CAP, "(counts every outbound)");
+    L("lead statuses:", JSON.stringify(counts));
+    const due = leads.filter(l => l.phone && !/^(Duplicate|Not interested|Unreachable)/.test(l.status || "") && (l.attempts || 0) < 3);
+    const pendingReply = due.filter(l => (l.replySummary || "").startsWith("needsHuman"));
+    const dm2 = due.filter(l => (l.attempts || 0) === 1 && daysSince(l.lastContact) >= 3);
+    const dm3 = due.filter(l => (l.attempts || 0) === 2 && daysSince(l.lastContact) >= 7);
+    const fresh = due.filter(l => l.status === "New");
+    L("due now -> needsHuman:", pendingReply.length, "| dm2 due:", dm2.length, "| dm3 due:", dm3.length, "| fresh:", fresh.length);
+    for (const l of pickTargets(3)) {
+      console.log("  next:", l.crm, "|", l.status, "|", String(l.name).slice(0, 30), "| attempts:", l.attempts || 0, "| last:", l.lastContact || "-");
+    }
+    return finishReport([]);
+  }
+
   if (cmd === "dry") {
     for (const l of leads.slice(0, 6)) console.log(" ", l.crm, l.status, String(l.name).slice(0, 34), l.phone);
     const t = pickTargets(n);
@@ -469,6 +500,78 @@ async function main(argv) {
     return finishReport(did);
   }
 
+  if (cmd === "check-baileys") {
+    // Reply reader on the SAME paired sales session we DM from - no WhatsApp Web QR needed.
+    // Rails unchanged: allowlist only, never answer our own echo, opt-out freezes the lead,
+    // FAQ auto-answer only after a human-shaped gap.
+    const mins = argv.includes("--min") ? Math.max(1, parseInt(argv[argv.indexOf("--min") + 1], 10)) : 3;
+    const sock = await bootBaileys();
+    const inbox = [];
+    const signals = {upsert: 0, echo: 0, read: 0, presence: 0};   // proof the socket is actually listening
+    sock.ev.on("messages.upsert", ({messages}) => {
+      signals.upsert += (messages || []).length;
+      for (const m of messages || []) {
+        const kind = Object.keys(m.message || {})[0] || "none";
+        if (m.key?.fromMe) { signals.echo++; L("inbound: echo (our own) from " + m.key.remoteJid); continue; }
+        const body = m.message?.conversation || m.message?.extendedTextMessage?.text || "";
+        L("inbound: " + m.key.remoteJid + " type=" + kind + " text=" + JSON.stringify(body.slice(0, 60)));
+        if (!body || !body.trim()) continue;                           // media/sticker - nothing to answer
+        inbox.push({jid: m.key.remoteJid, body: body.trim().slice(0, 220)});
+      }
+    });
+    sock.ev.on("messages.update", (updates) => {
+      for (const u of updates || []) if (u.update?.status === "read") signals.read++;
+    });
+    sock.ev.on("presence.update", () => { signals.presence++; });
+    L("listening for replies on the sales session for " + mins + " min…");
+    await sleep(mins * 60000);
+    did.push("inbound signals: upsert=" + signals.upsert + " echo=" + signals.echo + " read=" + signals.read + " presence=" + signals.presence);
+    const last10 = s => String(s || "").replace(/\D/g, "").slice(-10);
+    // WhatsApp routes some chats by LID (not phone). The session keeps phone->lid mappings,
+    // so build the reverse map for OUR leads only - an unknown LID stays unknown (ignored).
+    const leadByLid = new Map();
+    for (const l of leads) {
+      if (!l.phone) continue;
+      const local = String(l.phone).replace(/\D/g, "").replace(/^0/, "");
+      // session stores the mapping under the international form (91xxxxxxxxxx)
+      for (const key of [local, "91" + local]) {
+        try {
+          const lid = String(JSON.parse(fs.readFileSync(path.join(AUTH, "lid-mapping-" + key + ".json"), "utf8"))).replace(/\D/g, "");
+          if (lid) { leadByLid.set(lid, l); break; }
+        } catch {}
+      }
+    }
+    L("lid map built for", leadByLid.size, "of", leads.filter(l => l.phone).length, "allowlisted leads");
+    const handled = new Set();
+    for (const msg of inbox) {
+      const jid = String(msg.jid || "");
+      const digits = jid.replace(/\D/g, "");
+      const lead = jid.endsWith("@lid")
+        ? leadByLid.get(digits)
+        : leads.find(l => l.phone && last10(l.phone) === last10(digits) && last10(digits).length === 10);
+      if (!lead) { did.push("inbound-from-non-allowlist ignored"); continue; }  // allowlist is the gate
+      assertAllowlisted(lead.phone, leads);
+      if (handled.has(lead.crm)) { did.push(lead.crm + ":dup-in-window"); continue; }
+      handled.add(lead.crm);
+      if ((lead.replySummary || "") === msg.body) { did.push(lead.crm + ":same"); continue; }
+      appendLog({crm: lead.crm, name: lead.name, phone: lead.phone, type: "reply-in", text: msg.body, status: "logged"});
+      did.push(lead.crm + ":replied");
+      if (isOptOut(msg.body)) {
+        leadUpdate(lead.crm, {"reply summary": msg.body, "status": "Not interested", "last contact": today()});
+        did.push(lead.crm + ":OPTOUT");
+        continue;
+      }
+      leadUpdate(lead.crm, {"reply summary": msg.body, "last contact": today()});
+      const ans = faqAnswer(msg.body, lead.lang);
+      await sleep(HUMAN_GAP());                                       // 5-14s gap before this send
+      const okS = await sendTracked(sock, lead, ans, "auto-answer");
+      if (okS) { leadUpdate(lead.crm, {"status": "Replied", "attempts": (lead.attempts || 0)}); did.push(lead.crm + ":faq-answered"); }
+      else { leadUpdate(lead.crm, {"status": "Replied", "reply summary": "needsHuman: " + msg.body}); did.push(lead.crm + ":needsHuman"); }
+    }
+    await sock.end?.(new Error("done"));
+    return finishReport(did);
+  }
+
   if (cmd === "reply") {
     if (!idArg || !txtArg) throw new Error("reply needs --id LD### --text \"...\"");
     const l = leads.find(x => x.crm === idArg);
@@ -500,24 +603,27 @@ async function main(argv) {
     const msg = compose(lead);
     if (webMode) {
       const {ctx, p} = await bootWeb();
+      const stamp = {status: "Contacted", "attempts": (lead.attempts || 0) + 1, "first contact": lead.status === "New" ? today() : undefined, "last contact": today()};
+      leadUpdate(lead.crm, stamp); // mark FIRST so a mid-run crash can never re-DM the same lead
       await webSend(p, lead.phone.replace(/\D/g, ""), msg);
       await ctx.close();
       appendLog({crm: lead.crm, name: lead.name, phone: lead.phone, type: kind, text: msg, status: "ok"});
-      leadUpdate(lead.crm, {status: "Contacted", "attempts": (lead.attempts || 0) + 1, "first contact": lead.status === "New" ? today() : undefined, "last contact": today()});
       did.push(lead.crm + ":web");
     } else {
       const sock = await bootBaileys();
+      const stamp = {status: "Contacted", "attempts": (lead.attempts || 0) + 1, "first contact": lead.status === "New" ? today() : undefined, "last contact": today()};
+      leadUpdate(lead.crm, stamp); // mark FIRST so a mid-run crash can never re-DM the same lead
       const okS = await sendTracked(sock, lead, msg, kind);
-      if (okS) leadUpdate(lead.crm, {status: "Contacted", "attempts": (lead.attempts || 0) + 1, "first contact": lead.status === "New" ? today() : undefined, "last contact": today()});
       did.push(lead.crm + (okS ? ":baileys" : ":unreachable"));
       if (targets.length > 1) {
         L("staggering remaining sends…");
         for (let i = 1; i < Math.min(targets.length, n); i++) {
+          if (sentToday() >= DAILY_CAP) { L("Daily cap", DAILY_CAP, "reached mid-run — stopping here (no overshoot)."); break; }
           await sleep(HUMAN_GAP());                       // 5-14s random gap (owner rule) — EVERY send
           const l2 = targets[i];
           assertAllowlisted(l2.phone, leads);
+          leadUpdate(l2.crm, {status: "Contacted", "attempts": (l2.attempts || 0) + 1, "first contact": l2.status === "New" ? today() : undefined, "last contact": today()});
           const ok2 = await sendTracked(sock, l2, compose(l2), ["dm1", "dm2", "dm3"][l2.attempts || 0]);
-          if (ok2) leadUpdate(l2.crm, {status: "Contacted", "attempts": (l2.attempts || 0) + 1, "first contact": l2.status === "New" ? today() : undefined, "last contact": today()});
           did.push(l2.crm + (ok2 ? ":ok" : ":unreachable"));
         }
       }
