@@ -415,6 +415,8 @@ async function webSend(p, phone, text) {
   const box = p.locator('div[title="Type a message"]');
   await box.click();
   await p.keyboard.type(text, {delay: 40 + Math.random() * 30});
+  // typed-but-not-sent pause: lets WhatsApp fetch the link card so the preview shows
+  await p.waitForTimeout(2000 + Math.random() * 800);
   await p.keyboard.press("Enter");
   await p.waitForTimeout(2500);
 }
