@@ -9,6 +9,7 @@ const path = require('node:path');
 
 const { resolvePath: firebaseResolvePath, stripUndefined } = require('../firebase');
 const helpers = require('../helpers/outlet-resolution');
+const redeem = require('../redeem');
 
 test('resolvePath: shared (platform-root) nodes pass through unchanged', () => {
     for (const root of ['admins', 'riders', 'riderStats', 'migrationStatus', 'logs', 'settlements', 'phoneNumberIndex']) {
@@ -202,4 +203,12 @@ test('admin and rider FCM sends are data-only', () => {
     assert.ok(!adminFn.includes('notification:'), 'sendFCMToAdmins must not send a notification payload');
     assert.ok(riderFn.includes('data:'), 'sendFCMToRider sends a data payload');
     assert.ok(!riderFn.includes('notification:'), 'sendFCMToRider must not send a notification payload');
+});
+
+test('loyalty redemption: only an earned, unspent balance can pay', () => {
+    assert.strictEqual(redeem.canAfford(500, 0, 300), true);
+    assert.strictEqual(redeem.canAfford(500, 300, 300), false);
+    assert.strictEqual(redeem.canAfford(undefined, 0, 10), false);
+    assert.strictEqual(redeem.canAfford(500, 0, 0), false);
+    assert.strictEqual(redeem.canAfford(500, 0, NaN), false);
 });

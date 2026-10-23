@@ -245,11 +245,7 @@
                   }
                 },
                 "rewards": {
-                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
-                  "$rewardId": {
-                    ".write": "$phone.matches(/^[6-9][0-9]{9}$/) && newData.exists() && newData.hasChildren(['rewardId','label','cost','code','status','redeemedAt','outlet','business']) && newData.child('rewardId').isString() && newData.child('rewardId').val().length >= 1 && newData.child('rewardId').val().length <= 50 && newData.child('label').isString() && newData.child('label').val().length >= 1 && newData.child('label').val().length <= 60 && newData.child('cost').isNumber() && newData.child('cost').val() >= 0 && newData.child('code').isString() && newData.child('code').val().length >= 1 && newData.child('code').val().length <= 30 && newData.child('status').isString() && newData.child('status').val() == 'active' && newData.child('redeemedAt').isNumber() && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString()",
-                    ".validate": "newData.hasChildren(['rewardId','label','cost','code','status','redeemedAt','outlet','business']) && newData.child('rewardId').isString() && newData.child('rewardId').val().length >= 1 && newData.child('rewardId').val().length <= 50 && newData.child('label').isString() && newData.child('label').val().length >= 1 && newData.child('label').val().length <= 60 && newData.child('cost').isNumber() && newData.child('cost').val() >= 0 && newData.child('code').isString() && newData.child('code').val().length >= 1 && newData.child('code').val().length <= 30 && newData.child('status').isString() && newData.child('status').val() == 'active' && newData.child('redeemedAt').isNumber() && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString()"
-                  }
+                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)"
                 },
                 "loyalty": {
                   ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
@@ -505,6 +501,11 @@
               "commands": {
                 "$commandId": {
                   ".validate": "newData.hasChildren(['action']) && (newData.hasChild('phone') || newData.hasChild('campaignId'))"
+                }
+              },
+              "redeemQueue": {
+                "$reqId": {
+                  ".write": "newData.exists() && $reqId.matches(/^[A-Za-z0-9_-]{1,40}$/) && newData.hasChildren(['phone','rewardId','requestedAt','outlet']) && newData.child('phone').isString() && newData.child('phone').val().matches(/^[6-9][0-9]{9}$/) && newData.child('rewardId').isString() && newData.child('rewardId').val().length >= 1 && newData.child('rewardId').val().length <= 50 && newData.child('requestedAt').isNumber() && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId"
                 }
               },
               "status": {

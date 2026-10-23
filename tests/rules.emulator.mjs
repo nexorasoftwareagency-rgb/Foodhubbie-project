@@ -48,6 +48,8 @@ async function seed(data) {
 
 const ack = { settlementId: 'S1', acknowledged: true, acknowledgedAt: 123, riderUid: 'RIDER1' };
 const sos = { riderId: 'RIDER1', riderName: 'R', riderPhone: '9999999999', lat: 1, lng: 2, ts: 3, status: 'active' };
+const OUT = '/businesses/b1/outlets/pizza';
+const CUST = `${OUT}/customers/9876543210`;
 
 const cases = [
   ['rider acks own existing settlement', () => call('PUT', '/settlements/RIDER1/S1/riderAck', RIDER, ack), 200],
@@ -66,13 +68,29 @@ const cases = [
   ['SOS bad status value', () => call('PUT', '/sosAlerts/RIDER1/A5', RIDER, { ...sos, status: 'weird' }), 'deny'],
   ['non-admin writes rating', () => call('PUT', '/ratings/RIDER1/O1', OTHER, { riderId: 'RIDER1', rating: 5, createdAt: 1 }), 'deny'],
   ['admin writes rating', () => call('PUT', '/ratings/RIDER1/O2', ADMIN, { riderId: 'RIDER1', rating: 5, createdAt: 1 }), 200],
-  ['unauthenticated write control', () => call('PUT', '/settlements/RIDER1/S1/x', null, 1), 'deny']
+  ['unauthenticated write control', () => call('PUT', '/settlements/RIDER1/S1/x', null, 1), 'deny'],
+  ['redeem request accepted from the public', () => call('PUT', `${OUT}/bot/redeemQueue/req-1`, null, { phone: '9876543210', rewardId: 'free_fries', requestedAt: 1, outlet: 'pizza' }), 200],
+  ['redeem request with a bad phone', () => call('PUT', `${OUT}/bot/redeemQueue/req-2`, null, { phone: '123', rewardId: 'free_fries', requestedAt: 1, outlet: 'pizza' }), 'deny'],
+  ['redeem request for another outlet', () => call('PUT', `${OUT}/bot/redeemQueue/req-3`, null, { phone: '9876543210', rewardId: 'free_fries', requestedAt: 1, outlet: 'cake' }), 'deny'],
+  ['client deletes a redeem request', () => call('DELETE', `${OUT}/bot/redeemQueue/req-1`, null), 'deny'],
+  ['client forges a redemption record', () => call('PUT', `${CUST}/rewards/forged`, null, { rewardId: 'free_fries', label: 'Free Fries', cost: 0, code: 'LOYAL0000', status: 'active', redeemedAt: 1, outlet: 'pizza' }), 'deny'],
+  ['client reads its own redemptions', () => call('GET', `${CUST}/rewards`, null), 200]
 ];
 
 await seed({
   admins: { ADMIN1: { email: 'a@b.c', outlet: 'pizza' } },
   settlements: { RIDER1: { S1: { riderId: 'RIDER1', amountCollected: 5000, createdAt: 1 } } },
-  sosAlerts: { RIDER1: { A1: { riderId: 'RIDER1', riderName: 'R', lat: 1, lng: 2, ts: 3, status: 'active' } } }
+  sosAlerts: { RIDER1: { A1: { riderId: 'RIDER1', riderName: 'R', lat: 1, lng: 2, ts: 3, status: 'active' } } },
+  businesses: {
+    b1: {
+      outlets: {
+        pizza: {
+          loyalty: { config: { earnRatePaisePerPoint: 2000, tiers: { bronze: { min: 0 }, silver: { min: 500 }, gold: { min: 1000 } }, rewards: [{ id: 'free_fries', label: 'Free Fries', cost: 200 }] } },
+          customers: { 9876543210: { loyalty: { phone: '9876543210', outlet: 'pizza', business: 'b1', lifetimePoints: 500, pointsSpent: 100, totalSpent: 1, orderCount: 1, tier: 'silver', updatedAt: 1 } } }
+        }
+      }
+    }
+  }
 });
 
 let failed = 0;

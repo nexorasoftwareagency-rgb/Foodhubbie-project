@@ -39,6 +39,7 @@ const { getData, setData, updateData, db, resolvePath, getUserProfile, saveUserP
 const { resolveOutletId, resolveBusinessIdFor, initializeOutletBusinessIndex } = require('./helpers/outlet-resolution');
 const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
 const discountEngine = require('./discount-engine');
+const redeem = require('./redeem');
 
 // ── Suppress noisy libsignal session-state dumps ────────────────────────
 // Baileys' underlying libsignal fork writes raw `console.log("Closing
@@ -1851,6 +1852,7 @@ async function startBot() {
     }
 
     initCommandListener(sock);
+    redeem.initRedeemListener({ db, resolvePath, OUTLET });
 
     // Heartbeat & Cleanup & Report Scheduling
     if (reportInterval) clearInterval(reportInterval);

@@ -10,7 +10,7 @@
  * The FCM token itself is never stored in localStorage - it only lives in
  * the outlet's pushSubscriptions record (see pwa-install.js).
  */
-import { outletRef, get, set, OUTLET, BUSINESS_ID } from './firebase.js';
+import { outletRef, get, set, push, onValue, OUTLET, BUSINESS_ID } from './firebase.js';
 import * as UI from './ui.js';
 import { esc } from './ui.js';
 import {
@@ -860,9 +860,7 @@ function customerStats() {
     const orders = _orders || [];
     const valid = orders.filter(o => o && o.status !== 'Cancelled' && o.status !== 'Refunded');
     const totalSpent = valid.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-    const points = _loyalty && typeof _loyalty.lifetimePoints === 'number'
-        ? _loyalty.lifetimePoints
-        : Math.floor(totalSpent / 100);
+    const points = loyaltyPoints();
     const tier = _loyalty && _loyalty.tier ? _loyalty.tier : currentTier();
     return { orders: orders.length, totalSpent, points, tier };
 }
@@ -977,8 +975,10 @@ function currentTier() {
 }
 
 function loyaltyPoints() {
-    if (_loyalty && typeof _loyalty.lifetimePoints === 'number') return _loyalty.lifetimePoints;
-    return 0;
+    if (!_loyalty) return 0;
+    const lifetime = Number(_loyalty.lifetimePoints) || 0;
+    const spent = Number(_loyalty.pointsSpent) || 0;
+    return Math.max(0, lifetime - spent);
 }
 
 function pointsToNextTier() {
@@ -1061,6 +1061,24 @@ export async function writeCustomerOrder(order) {
     }
 }
 
+function waitForRedemption(phone, reqKey, ms = 15000) {
+    return new Promise((resolve, reject) => {
+        const r = outletRef(`customers/${phone}/rewards/${reqKey}`);
+        let stop = null;
+        const timer = setTimeout(() => { if (stop) stop(); reject(new Error('timeout')); }, ms);
+        stop = onValue(r, (snap) => {
+            if (!snap.exists()) return;
+            clearTimeout(timer);
+            if (stop) stop();
+            resolve(snap.val());
+        }, () => {
+            clearTimeout(timer);
+            if (stop) stop();
+            reject(new Error('read failed'));
+        });
+    });
+}
+
 function orderItemNames(order) {
     const items = order.itemsSummary || [];
     if (!items.length) return `${order.itemCount || 0} item${order.itemCount !== 1 ? 's' : ''}`;
@@ -1138,21 +1156,23 @@ function bindAccountRatings() {
             rewardBtn.disabled = true;
             rewardBtn.textContent = 'Redeeming…';
             try {
-                const code = 'LOYAL' + Math.floor(1000 + Math.random() * 9000);
-                await set(outletRef(`customers/${_profile.phone}/rewards/${rewardId}`), {
+                const reqRef = push(outletRef('bot/redeemQueue'));
+                await set(reqRef, {
+                    phone: _profile.phone,
                     rewardId,
-                    label: reward.label,
-                    cost: reward.cost,
-                    code,
-                    status: 'active',
-                    redeemedAt: Date.now(),
-                    outlet: OUTLET,
-                    business: BUSINESS_ID
+                    requestedAt: Date.now(),
+                    outlet: OUTLET
                 });
-                UI.showToast(`Redeemed: ${reward.label} — code ${code}`, 'success');
+                // The bot is the only writer of a redemption (server-minted code,
+                // points deducted); the reply lands on this request's own key.
+                const rec = await waitForRedemption(_profile.phone, reqRef.key);
+                await loadCustomerLoyalty();
                 renderAccount();
+                UI.showToast(`Redeemed: ${rec.label || reward.label} — code ${rec.code}`, 'success');
             } catch (e) {
-                UI.showToast('Redemption failed. Try again.', 'error');
+                UI.showToast(e && e.message === 'timeout'
+                    ? 'Still processing — check Account in a minute.'
+                    : 'Redemption failed. Try again.', 'error');
             } finally {
                 rewardBtn.disabled = false;
                 rewardBtn.textContent = 'Redeem';
