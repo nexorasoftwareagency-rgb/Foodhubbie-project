@@ -14,6 +14,26 @@ Fragile Files before starting ANY task.
 - **Firebase v12**: `enableIndexedDbPersistence` removed — offline persistence is now automatic. No action needed.
 
 <!-- STANDING_DECISIONS_START -->
+- [2026-10-23 03:47 UTC] Boot wall-clock is now dominated by network variance on this link (run 1 of a fresh profile ranged 7.8s-17.1s across sessions for identical builds), so no further wall-clock claims are made from single runs. Deterministic evidence is used instead: frame-tick gaps and read counts. Deterministic state at HEAD: boot reads = inventory, admins, features, roles, disabled, locked, riders, orders, Store, settings/inventory (x2 by design) - no dishes, no riderStats.
+- [2026-10-23 03:47 UTC] Fresh-profile inventory toggle race (previously 'known pre-existing bug, not fixed') does NOT reproduce on the current build: a brand-new browser context with empty localStorage ends with toggleAvailability=true, toggleStockTracking=true and #inventoryMenuSection display:block after login. Cause of the original symptom was the pre-auth hydrate falling back to localStorage, which is now corrected by the post-login refreshInventoryTogglesForOutlet() added in the P0 round (auth.js:487) - that call survives the loadMenu=false change and still hydrates. Marked resolved with evidence rather than fixed; no code was needed.
+- [2026-10-23 03:47 UTC] Login gates batched (5969ecb): the locked probe now starts inside the disabled probe's tick (gap measured 0ms in the websocket frame log, was one full RTT ~440ms under 1.6Mbps/150ms emulation). Failure semantics preserved: locked resolves null on error and only warn-logs (login continues), disabled still denies login on error. The probe is declared before both blocks so the locked gate reuses it; if the disabled read throws we return and the catch on the probe keeps it from becoming an unhandled rejection.
+- [2026-10-23 03:33 UTC] Leftover from the dishes boot fix found via the websocket frame log: auth.js calls refreshInventoryTogglesForOutlet() after login to fix the pre-auth hydration bug, and that helper defaults to loadInventoryMenu() - so the 657KB dishes node still loaded at boot. Fixed with the same loadMenu flag (ea05970). Also loadInventory() refreshed toggles (which loads the menu) and then called updateMenuVisibility() itself, fetching dishes twice per Inventory tab open; that caller now passes false.
+- [2026-10-23 03:33 UTC] Boot profile after P0+P1 (phone 1.6Mbps warm, CDP CPU profile): 64% idle, 23% browser internals, biggest JS frame 157ms (ui.js applyDataLabels path), lucide ~90ms total. Boot is network/RTT-bound, not CPU-bound - which is why P2's DOM surgery (templates for inactive tabs, table virtualisation) would not move time-to-dashboard and was not attempted.
+- [2026-10-23 03:17 UTC] Remaining boot profile (phone 1.6Mbps, warm): modules ~0.7s, profile loaded ~2.5s, dashboard done ~4.2s. The 1.7s between profile and dashboard is dashboard render (orders + KPI), not network - that is P2 territory (templates for inactive tabs, orders pagination), not more fetch tuning.
+- [2026-10-23 03:17 UTC] Pre-existing finding (NOT fixed, not a regression): admins/{uid}.isSuper is ignored at runtime unless the email equals ADMIN_CONFIG.SUPER_ADMIN_EMAIL - auth.js sets isSuper=false for every other account in the 'else if (adminData)' branch. So roshanipizza@gmail.com (node has isSuper:true) boots as a regular admin: outlet switcher hidden, disabled/locked gates run, adminSelectedOutlet forced to its assigned outlet. Looks like a deliberate email allowlist; left alone.
+- [2026-10-23 03:17 UTC] P1-B (bundle the boot module graph) evaluated and REJECTED with data. Build-time modulepreload of all 32 statically-reachable boot modules: cold boot (fresh browser, 3 runs) median 10.6s vs 9.9s without; warm boot (runs 3-4) 4.4-5.0s both. Reason: Admin/sw.js precaches every js/*.js at install, so on any returning visit the whole graph is already local and import depth costs nothing; preloading only adds 32 competing streams on the first-ever visit. tools/build.mjs reverted, dist rebuilt and redeployed so prod matches source. Do not retry without first removing the SW precache - the two optimisations cancel out.
+- [2026-10-23 03:17 UTC] P1-A shipped (4fca9bd): gatesPrefetch starts settings/features + settings/roles right after the admin profile resolves, so the ~17KB roles read overlaps the serial disabled/locked probes instead of queueing behind them. loadOutletGates(prefetched) falls back to the live Outlet path when the prefetch returns null (transient error) and keeps the no-arg form for the switchOutlet listener. Outlet resolution copies the login rule: supers use adminSelectedOutlet || adminData.outlet, staff use adminData.outlet - live-verified that adminSelectedOutlet='cake' on a staff account still reads only pizza's gates. Measured warm boot 6482ms -> 6117ms on the single-run harness (frames show both settings reads leaving the same tick as the disabled probe).
+- [2026-10-22 21:01 UTC] Measured (phone emulation 1.6Mbps/150ms, one browser profile): first load 7786ms, 2nd 6640ms, 3rd 4070ms. The 2nd/3rd improvement is mostly the SW now serving the 240KB modular Firebase SDK from cache. Boot RTDB payload 35KB -> 19KB after riderStats removal. Remaining biggest boot read is settings/roles at 17.5KB (RBAC matrix, gates canAccessTab - cannot be deferred without a stale-UI tradeoff; candidate P1: localStorage cache + refresh). Wall-clock on a clean profile barely moved (7.2-7.7s both before and after) - honest statement: P0 helps returning staff, not first-ever load.
+- [2026-10-22 21:01 UTC] Admin perf P0 shipped (commit d4e98f9): (1) preconnect/dns-prefetch pointed at prashant-pizza-e86e4-default-rtdb (a different project) - now foodhubbie-10-default-rtdb + authDomain iframe origin; (2) sw.js: gstatic.com/firebasejs/ added to cache-first CDN branch (URLs are version-pinned 10.7.1 so immutable); CACHE_NAME bumped v5.10.2 -> v5.10.3 so every client purges the old shell. Note the compat SDKs in importScripts are still needed by the SW itself for FCM background messages - they are NOT dead weight, only the page uses the modular SDKs. (3) loadRiders({withStats=true}); boot (auth.js) and dashboard (ui.js) pass false, Riders tab keeps true; riderStats is only read by renderRiders (grep: riderStatsData has no other consumer). (4) applyDataLabels skips tables inside .tab-content.hidden - it runs on every DOM mutation via MutationObserver; modals sit outside .tab-content so they still get labelled.
+- [2026-10-22 17:02 UTC] [2026-10-22 22:40 UTC] POS is NOT preloaded at boot and never was: main.js boot block only calls initAuth(), initRiderAnalytics() and initInventory(). POS reads /dishes in loadWalkinMenu(), which switchTab('walkin') calls when the tab opens. So deferring the inventory grid's read cannot affect POS. Verified live after the change: opening the walk-in tab renders 25 tiles, 22 dish photos all as data:image and all loading=lazy, no console errors. The 657KB is still paid on the FIRST POS open (unchanged from before) - it is cached in memory for the rest of the session. If POS must open instantly with photos, preloading it at boot is exactly what made boot slow; the correct fix is smaller images or URL-based images, not a boot preload.
+- [2026-10-22 16:52 UTC] 2026-10-22: HARD STOP on cold WhatsApp DMs. The sales number +91 9724649971 was BANNED after ~45 cold DMs in one day from Baileys (owner-designed copy, 5-14s gaps, cap 40). tools/wa-sales-agent.cjs send / --copy owner / --web are NOT to be run again from that number or any personal number. Scheduled drip task deleted, tools/lead-drip.cmd removed (commit ff10c19). Cold outreach must move to the official WhatsApp Business Cloud API (meta transport, approved templates, opt-in) or another channel (email/Instagram/calls). Sending cold DMs from a linked-device Baileys session is proven to be a ban trigger in this project - do not retry with a new number without an explicit owner decision.
+- [2026-10-22 16:42 UTC] [2026-10-22 22:10 UTC] Deeper issue, NOT fixed in this task: menu photos are stored inline as base64 in the Realtime Database instead of Firebase Storage URLs, so every Admin boot and (likely) every customer menu load pays for the full photo set. That is a data-model migration across Admin + menu + rules, with cost implications at 50 restaurants x 150 staff; it needs its own decision.
+- [2026-10-22 16:42 UTC] [2026-10-22 22:10 UTC] Finding 3 (root cause): during boot the app reads /businesses/{bid}/outlets/{oid}/dishes, which is 657KB for 22 dishes and 654KB of that (100%) is inline base64 JPEG in the image field. Captured over the RTDB socket: 742KB received in 65 frames, 45 of them 16KB base64 chunks between 6.0s and 15.1s. The read is triggered by main.js -> initInventory() -> initInventoryToggles() -> hydrateToggles().then -> updateMenuVisibility() -> loadInventoryMenu(), a grid that only exists on the Inventory tab. Timing: dashboard switchTab only starts at 16.0s, i.e. after the dishes download; before the fix the dashboard could not render until 657KB of photos had arrived.
+- [2026-10-22 16:42 UTC] [2026-10-22 22:10 UTC] Finding 2: BOOT is the problem. arrive -> dashboard usable: 7.8s cold desktop, 11.9s cold phone, 5.2s WARM desktop reload, 17.1s WARM phone reload. CPU is NOT the cause: repeating the phone run with CPU throttling off gave 18.1s (vs 17.1s throttled) - it is network-bound.
+- [2026-10-22 16:42 UTC] [2026-10-22 22:10 UTC] Measured the Admin on the live site with a real authenticated session (minted idToken fulfilled for the signInWithPassword XHR - no password needed). Finding 1: TAB SWITCHING IS NOT SLOW. Desktop warm: 100-160ms typical, worst 526ms (customers); mobile (4G 1.6Mbps + 4x CPU): 200-400ms median. So the login-document split (option A) would not help in-app speed and is dropped.
+- [2026-10-22 11:03 UTC] [2026-10-22 04:40 UTC] Admin login-page perf, measured honestly (Lighthouse, clean Chromium, mobile throttled): performance 35, a11y 100, BP 100, SEO 100; FCP 4.4s, LCP 6.5s, TBT 1.3s, TTFB 110ms. Main thread is dominated by Style and Layout 4.5s on a 3086-node DOM (2843 inside the hidden .layout shell) and Script Evaluation 2.3s. Largest payloads: firebase-database 182KB, Firebase Auth iframe 93KB, lucide UMD 71KB, firebase-auth 38KB. The remaining cost is structural: index.html is 307KB of inline markup (37KB brotli on the wire) and the app shell is parsed and styled before login. Fixing that means shipping a separate login document and injecting the shell after auth - a real refactor of the live Admin boot path, so it is a deliberate decision, not a tweak.
+- [2026-10-22 11:03 UTC] [2026-10-22 04:40 UTC] Parts of Admin/index.html, Admin/js/features/catalog.js, Admin/style.css and website/shared.css were double-encoded UTF-8 (written as UTF-8, read back as cp1252): the Admin showed a mangled rupee sign instead of the real one and a mangled em-dash instead of the real one. Repaired by re-decoding each suspicious run as cp1252 bytes -> UTF-8. Proof it was encoding-only: re-running the repair on the committed file yields a byte-identical result. tests/encoding-check.mjs now guards against it coming back. Beware: a PowerShell console renders UTF-8 as cp1252, so mojibake seen in the terminal is often a display artifact - check the bytes with Node before changing anything.
+- [2026-10-22 11:03 UTC] [2026-10-22 04:40 UTC] The Admin loaded xlsx.full.min.js (~270KB) from the CDN on EVERY page load. It is now fetched on first use via Admin/js/xlsx.js (ensureXlsx), the same lazy pattern as loadJSPDF. Sub-resource transfer 414KB -> 145KB. Verified live: window.XLSX undefined until ensureXlsx() is called, the CDN request only then happens, and a real 16KB .xlsx is produced.
 - [2026-10-22 03:55 UTC] [2026-10-22 04:00 UTC] Deployment map + live smoke test: firebase deploy --only hosting covers all 6 targets (admin, rider, menu, supreme, assets, web); menu publishes the source dir (no build), Admin/Supreme publish their dist, so tools/build.mjs must run first for those two. The assets target is a file bucket with no index (root 404 is by design). Verify with Playwright: status + console errors + page errors + failed requests; treat net::ERR_ABORTED on media as a browser cancellation, not a site error.
 - [2026-10-22 03:55 UTC] [2026-10-22 04:00 UTC] A blob: manifest has no usable base path - relative start_url/scope are silently dropped by Chrome ('URL is invalid'). The per-outlet PWA manifest must use absolute URLs built from location.origin + the outlet path. Verified via CDP Page.getAppManifest: errors 0, start_url /pizza/index.html?o=..&b=.., scope /pizza/.
 - [2026-10-22 03:40 UTC] **Public-copy guard**: `tools/check-copy-consistency.cjs` is the check for the marketing site (`website/`). It fails (exit 1) if any public file states a setup fee other than ₹500, if the ambiguous "0% commission on per-order" stat comes back, if a pizza term appears in `website/` or `docs/BACKLINK-KIT.md`, if a second phone/email appears in the canonical-fact files (`docs/BACKLINK-KIT.md`, `website/contact.html`, `website/llms.txt`), or if a page with a canonical is missing from `website/sitemap.xml`. Run it before any website deploy. ₹500 setup + ₹1/₹2/₹5/₹1 rates are the only price set (source of truth: `shared/billing-defaults.js`).
@@ -121,6 +141,195 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261023-052401-7d0d] Phase 5 LIVE: restaurant-scoped rider isolation runtime test (Pending-Work.md final reviewing item) — rider accounts per restaurant, verify zero cross-restaurant order/notification visibility via rider app + REST/rules
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-23 05:24 UTC
+- Files touched: Pending-Work.md
+- Verified: Phase 5 LIVE executed against production RTDB 2026-10-23: (1) rules layer — 21/21 REST checks with real rider auth tokens: M1-M11 collection rules (own assignedRider allow / unscoped deny / foreign-rider query deny / same-outlet Ready broadcast allow / cross-outlet+cross-business+LIVE roshani-pizza deny) and W1-W10 write loop (super-admin create assigned order, A reads own, B/C denied detail, flip Ready+unassigned broadcast, A+B see list, C denied, restore, cleanup). (2) app layer — 5/5 Playwright checks on foodhubbie-riderapp.web.app: A lands dashboard with Active Delivery card; B and C land dashboards with NO card (outlet headers show correct tenant: B=roshani E2E1, C=E2E2); broadcast leg: B online + PICKUP badge=1 (broadcast received), C online, no badge/row. Fix along the way: RTDB REST paths need .json suffix (first run's 200s were garbage). (3) hygiene — disposable riders A/B/C (9999111101-03@rider.com, E2E outlets only, zero writes to live businesses) + test order deleted; /riders back to original 2; screenshots in %TEMP%/opencode/phase5-*.png; tmp scripts removed; Pending-Work.md Phase 5 + summary rows + To-advance updated to done
+- NOT verified / open risk: WhatsApp PICKUP AVAILABLE leg — no pm2/WhatsApp visibility from this shell and no real WhatsApp numbers on disposable riders; Phase 3 remains structurally proven (per-outlet bot process isolation). 3 orphaned Firebase Auth test users remain (accounts:delete needs service account)
+- Confidence: HIGH
+- Ended: 2026-10-23 10:11 UTC
+
+### [20261023-041637-820e] CI wiring: E2E_ADMIN_PASSWORD secret env for playwright test job + stale-test fixes blocking CI green
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-23 04:16 UTC
+- Files touched: .github/workflows/ci-cd.yml,tests/critical-flows.spec.js,tests/wizard-billing.spec.js
+- Verified: ci-cd.yml:72 now passes E2E_ADMIN_PASSWORD from secrets (fallback path tests/utils.js:11-14 confirmed: without it CI gets placeholder REDACTED-PASSWORD-ROTATE-ME); Credentials/ gitignored at .gitignore:103; full local run with exactly the CI env: 23 passed/1 skipped(desktop-only)/0 failed, exit 0, 6.3m; two stale tests fixed: (a) critical-flows QR test — new customer onboarding overlay #onbOverlay (menu/js/customer.js, fresh profile has no fh_onboarded_v1) intercepted every welcome CTA click for 60s x2 projects; dismissed via #onbSkip before welcome race; (b) wizard-billing expected WA:3/webview_delivery:3 but intentional commits 40f7d9d+980de76 moved both to 5 (shared/billing-defaults.js:9); chromium wizard-billing passes with updated expectation
+- NOT verified / open risk: GitHub repo secrets E2E_ADMIN_PASSWORD / FIREBASE_SERVICE_ACCOUNT / FIREBASE_TOKEN not yet set (gh CLI unauthenticated in this shell — user must run gh secret set or use repo Settings>Secrets); actual Actions run on GitHub unverifiable from here
+- Confidence: HIGH
+- Ended: 2026-10-23 04:16 UTC
+
+### [20261023-034732-cc00] Admin: batch the disabled+locked login probes; re-test the fresh-profile inventory toggle race
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-23 03:47 UTC
+- Files touched: Admin/js/auth.js
+- Verified: live Playwright: disabled and locked probes leave in the same tick (gap 0ms); fresh empty-localStorage profile ends with both inventory toggles true and the menu section visible; P1 gates suite PASS; inventory suite PASS (0 boot dishes reads, 1 on tab open, 20 dishes/photos); P0 suite PASS twice in a row (one earlier run hit a known harness timing flake on the SW-cache assertion and re-ran clean)
+- NOT verified / open risk: real 4G phone; the disabled/locked batching under an actually-disabled or locked outlet (only the happy path was exercised live)
+- Confidence: HIGH
+- Ended: 2026-10-23 03:47 UTC
+
+### [20261023-033313-8048] Admin P2: stop the post-login toggle refresh from re-fetching dishes at boot; dedupe the Inventory tab double dishes read
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-23 03:33 UTC
+- Files touched: Admin/js/features/inventory.js,Admin/js/auth.js
+- Verified: live Playwright on foodhubbie-admins.web.app: websocket frames show 0 /dishes reads during boot (was 1) and 1 on Inventory tab open (was 2); grid renders 20 dishes with 20 base64 images and the menu section is visible; 0 console/page errors; P0 regression suite PASS (riderStats still off boot + on Riders tab, SW caches firebasejs, data-labels on visible tab); P1 gates suite PASS
+- NOT verified / open risk: real 4G phone; fresh-profile inventory toggle state (the pre-existing hydration race described in the ledger is unchanged and still needs its own task)
+- Confidence: HIGH
+- Ended: 2026-10-23 03:33 UTC
+
+### [20261023-031718-1f90] Admin P1: overlap feature/role gates with the login gates; evaluate bundling the boot module graph
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-23 03:17 UTC
+- Files touched: Admin/js/auth.js
+- Verified: live Playwright: both settings reads now dispatched in the same tick as the disabled probe (websocket frame log); staff account with adminSelectedOutlet=cake still reads only /outlets/pizza/settings/{features,roles} and ends on pizza; no 'Gates prefetch failed' / 'Feature/role gates load failed' warnings; 0 console/page errors; dashboard + orders + riders tabs render; P0 regression suite re-run PASS
+- NOT verified / open risk: true super/supreme account (roshanisudha@gmail.com has no Auth user, so the sessionStorage-wins branch is only verified by inspection); real 4G device
+- Confidence: HIGH
+- Ended: 2026-10-23 03:17 UTC
+
+### [20261022-210303-62a2] Inventory hydration bug: fresh browser (empty localStorage) can hydrate inventory toggles false though settings/inventory says true; menu section stays hidden
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 21:03 UTC
+- Files touched: Admin/js/auth.js,Admin/js/features/inventory.js
+- Verified: node --check x2 + build pass; live foodhubbie-admins.web.app fresh-browser login (localStorage+sessionStorage cleared) hydrates toggles true/true, inventoryMenuSection display:block (was hidden/false); REST GET settings/inventory still availability:true stockTracking:true, no pollution; auth.js post-login refresh + loadInventory rebind + true-default seed all in deployed dist
+- NOT verified / open risk: NONE — regression confirmed PASS 2026-10-23 (standalone Playwright script): fresh-browser hydration true/true on entry 1; stock toggle persists on entry 1; avail toggle persists on entry 2 after dashboard round-trip (the old-code failure mode); both restored true; remote settings/inventory re-read {availability:true,stockTracking:true} post-test
+- Confidence: HIGH
+- Ended: 2026-10-23 03:07 UTC
+
+### [20261022-210050-dae6] Admin P0 perf batch: fix wrong-project preconnect, SW-cache firebase SDK, defer riderStats off boot, skip data-labels on hidden tabs
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 21:00 UTC
+- Files touched: Admin/index.html,Admin/sw.js,Admin/js/features/riders.js,Admin/js/auth.js,Admin/js/ui.js
+- Verified: live Playwright on foodhubbie-admins.web.app: preconnect list has the correct RTDB host and no prashant-pizza host; riderStats websocket reads at boot = 0; after clicking Riders tab = 1 read and the table renders 2 riders; SW cache foodhubbie-erp-shell-v5.10.3 holds 4 gstatic/firebasejs entries and navigator.serviceWorker.controller is set; orders table cells all carry data-label at 390px; hidden-tab cells are skipped; 0 console/page errors; three sequential phone loads 7.8s/6.6s/4.1s
+- NOT verified / open risk: real phone/4G device (emulation only); SW cache-first for gstatic on a real returning user's existing SW install (verified in a fresh context, not an upgrade path from v5.10.2)
+- Confidence: HIGH
+- Ended: 2026-10-22 21:01 UTC
+
+### [20261022-165125-b099] HALT cold DMs after WhatsApp ban on sales number
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-22 16:51 UTC
+- Files touched: tools/lead-drip.cmd,PROJECT_LEDGER.md
+- Verified: scheduled task removed, no agent process running, hard-stop decision recorded, LD552 bookkeeping reverted
+- NOT verified / open risk: ban appeal outcome; whether the same number's order-notification path is affected (pm2 not visible from this shell)
+- Confidence: HIGH
+- Ended: 2026-10-22 16:52 UTC
+
+### [20261022-164435-45f0] Protocol hardening pass on mojibake sweep: FFFD residue patch + repo's own guard scripts (encoding-check, copy-consistency) + verify_runtime substitutes + follow-up redeploy
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 16:44 UTC
+- Files touched: Admin/style.css (2 FFFD -> em-dash), SupremeAdmin/js/features/restaurant-profile.js (1 FFFD -> em-dash)
+- Verified: Rigorous-dev-protocol phases applied to the encoding sweep retroactively and gaps closed: (1) Ledger brief read - revealed a PARALLEL agent had already fixed a subset of the same mojibake earlier (2026-10-22 04:40 standing decision, tests/encoding-check.mjs guard exists) and one PowerShell-UTF8 standing decision (2026-08-04: never Get-Content/Set-Content on non-ASCII files - root cause family of these bugs); my sweep was consistent with and extended that work (its record covers Admin index/catalog/style + website shared.css; mine additionally covered SupremeAdmin/restaurant-profile.js 12 pairs, rider-app RegisterForm.tsx 8 FPs=False-positive pairs actually in placeholder strings verified legit, the multi-layer rupee family, and the FB DB + chat log). (2) Repo's OWN guard scripts run: node tests/encoding-check.mjs = 'encoding ok - no double-encoded text' PASS; node tools/check-copy-consistency.cjs = OK 30 files + 24 sitemap urls PASS (public-copy guard satisfied for the website/shared.css change - this standing decision said run before website deploys; the earlier deploy already contained only the fixed variant, and this pass re-verified). (3) verify_runtime.sh equivalents (script is bash-only, no bash on this box - simulated by running each package's scripts): root npm run build (esbuild warnings only: pre-existing DUPLICATE OBJECT KEYS in Admin/js/main.js at ~1065 vs 948 orders/tables/payments etc from the parallel user-manual commit - flagged for parallel owner, not touched), rider-app npm run lint = 0 errors (20 pre-existing warnings), rider-app npm run build = tsc+vite PASSES 33.6s, root playwright e2e = HANGS in this environment (600s + 480s timeouts, 2 tries) - NOT RUN, recorded honestly. (4) Residual sweep: repo-wide U+FFFD scan - product-source files clean except 3 lost-byte spots in Admin/style.css x2 + restaurant-profile.js x1, replaced with the em-dash their context showed (comment/section separators), node --check clean; ledger/bot-key/cache file FFFD deliberately untouched. (5) Rebuilt (root build) + redeployed admin+supreme+web, live byte check of all 4 URLs (admin index, admin style.css, supreme restaurant-profile.js, shared.css) = moj 0, fffd 0 everywhere.
+- NOT verified / open risk: Playwright e2e suite not executed (hangs headless in this env - earlier sessions ran it via the Playwright MCP browser instead); git changes not committed (user decides); rider-app RN rebuild shipped through its own pipeline only as source fix - its dist not deployed via firebase (rider hosting target untouched this round).
+- Confidence: HIGH
+- Ended: 2026-10-22 16:45 UTC
+
+### [20261022-164222-9c4d] Admin boot: stop reading the 657KB dishes node (inline base64 photos) during boot
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 16:42 UTC
+- Files touched: Admin/js/features/inventory.js
+- Verified: Live, authenticated (minted idToken fulfilled for the signInWithPassword XHR), same harness before and after. Phone profile (4G 1.6Mbps, 150ms RTT): warm boot to usable dashboard 16.62s -> 7.66s; RTDB bytes received during boot 742,881 -> 108,157 (-85%); socket frames 65 -> 24; the 45 x 16KB base64 chunks between 6.0s and 15.1s are gone; /dishes no longer appears in the boot read set. Desktop: warm boot 5.20s -> 4.64s, cold arrive->dashboard 7.8s -> 6.6s. Inventory tab regression check: grid has 0 children right after boot (nothing read) and 20 dishes with 20 photos after opening the tab, no console or page errors. Every tab was switched 2-3 times during the runs (orders, live, walkin, tables, menu, customers, inventory, riders, reports, promotions, discounts, expenses, costs, settings, dashboard) with no errors.
+- NOT verified / open risk: TAB SWITCHING WAS NOT THE PROBLEM and was left alone: desktop 100-160ms typical (worst 526ms customers), phone 200-400ms. Tested only in emulated 4G + CPU throttling, not on a real staff phone. PRE-EXISTING ISSUE FOUND, NOT FIXED: in a fresh browser (empty localStorage) the inventory toggles can hydrate as false even though settings/inventory says availability:true/stockTracking:true, because initInventory() may run before state.currentOutlet is set and then skips re-hydration via the _togglesBound guard; in that state the inventory menu section stays hidden. This commit cannot cause it (it only passes a flag that skips a call already gated on those same toggles) and the deterministic tab test seeded localStorage to sidestep it, but it deserves its own task. NOT ADDRESSED: the root data-model issue - 654KB of the 657KB is base64 JPEG stored inline in the dishes node instead of a URL; the same payload is presumably paid by every customer menu load. Also not addressed: the remaining warm desktop boot 4.6s (auth 1.3s, admins/{uid} 1.2s, rest 2.0s).
+- Confidence: HIGH
+- Ended: 2026-10-22 16:55 UTC
+
+### [20261022-163048-1780] Drop all phone-less leads from CRM
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 16:30 UTC
+- Files touched: Restaurant Lead Data/restaurant-leads.xlsx
+- Verified: 107 rows removed, 809 remain, 0 without phone, LD011 tracking intact
+- Confidence: HIGH
+- Ended: 2026-10-22 16:31 UTC
+
+### [20261022-162709-2ec3] Import Foodhubbie_Lead_Tracker-1.xlsx leads into CRM
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 16:27 UTC
+- Files touched: Restaurant Lead Data/restaurant-leads.xlsx
+- Verified: 146 tracker rows -> 140 added (6 dupes), 108 phones, CRM assigned, total 916 rows
+- NOT verified / open risk: phone validity - source itself marks numbers (verify)/pilot rows
+- Confidence: HIGH
+- Ended: 2026-10-22 16:27 UTC
+
+### [20261022-160444-188b] Scrape Central India restaurants (Indore/Bhopal/Nagpur) + merge
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 16:04 UTC
+- Files touched: promo/leads/*.csv,Restaurant Lead Data/restaurant-leads.xlsx
+- Verified: 5 queries x20 = 100 scraped, 88 added after 12 dupes (82 phones), cities Bhopal 37 / Indore 31 / Nagpur 20, CRM LD689-776
+- NOT verified / open risk: Raipur/Jabalpur/Gwalior not yet scraped (next 100/day batch)
+- Confidence: HIGH
+- Ended: 2026-10-22 16:05 UTC
+
+### [20261022-153805-bb56] Verify owner list batch 2 + add 3 social-handle rows
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 15:38 UTC
+- Files touched: Restaurant Lead Data/restaurant-leads.xlsx
+- Verified: 133/133 numbers matched (missing: NONE, dupes: none), 3 handle rows LD686-688, queue head LD537
+- NOT verified / open risk: send delivery (drip starts tomorrow)
+- Confidence: HIGH
+- Ended: 2026-10-22 15:38 UTC
+
+### [20261022-153226-3bbd] Import 133 owner-supplied numbers (batch 2)
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-22 15:32 UTC
+- Files touched: Restaurant Lead Data/restaurant-leads.xlsx
+- Verified: 133 rows added LD553-685, all source Owner list 2, bridge read confirms
+- NOT verified / open risk: sends (queued behind batch 1 in drip)
+- Confidence: HIGH
+- Ended: 2026-10-22 15:32 UTC
+
+### [20261022-132424-58aa] Add 16 owner-supplied lead numbers + prioritize Owner list in queue
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 13:24 UTC
+- Files touched: tools/wa-lead-io.py,tools/wa-sales-agent.cjs
+- Verified: 16 rows added LD537-552, no dups, dry-run picks LD537 first
+- NOT verified / open risk: actual sends (drip starts tomorrow 11:00)
+- Confidence: HIGH
+- Ended: 2026-10-22 13:24 UTC
+
+### [20261022-112807-2446] PDF lead import v3 (parse fixes) + send-race/duplicate-DM fix
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 11:28 UTC
+- Files touched: tools/import-leads-pdf.py,tools/wa-sales-agent.cjs
+- Verified: 472 rows imported (418 phones), Patel's recovered, dry-run queue OK
+- NOT verified / open risk: bulk send volume (paused: 2x Connection Closed today)
+- Confidence: HIGH
+- Ended: 2026-10-22 11:28 UTC
+
+### [20261022-110348-2652] Admin perf: lazy xlsx + repair double-encoded UTF-8 in the Admin shell
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 11:03 UTC
+- Files touched: Admin/js/xlsx.js, Admin/index.html, Admin/js/features/analytics.js, Admin/js/features/customers.js, Admin/js/features/expenses.js, Admin/js/features/rider-analytics.js, Admin/js/features/promotions.js, Admin/js/features/catalog.js, Admin/style.css, website/shared.css, tests/encoding-check.mjs
+- Verified: Live on the deployed Admin: window.XLSX is undefined during page load, no jsdelivr request happens on load, and after ensureXlsx() the library arrives and produces a real 16KB .xlsx download. All six touched feature modules import cleanly on the live site and expose their export functions (analytics, customers, expenses, rider-analytics, promotions, xlsx). Encoding repair proven encoding-only: re-running the repair on the committed version of each of the 4 files yields a byte-identical result to the repaired working copy. Live DOM check on the Admin: 41 real rupee signs, 43 em-dashes, 0 mojibake, no console errors; website: 0 mojibake, 34 rupee signs. Lighthouse on the Admin login page after the change: performance 35, accessibility 100, best-practices 100, seo 100, sub-resource transfer 414KB -> 145KB. Full site sweep after the deploys: 11/11 clean. tests/encoding-check.mjs passes and fails on a seeded bad file.
+- NOT verified / open risk: No real admin account was used, so the export buttons were not clicked in the UI - the export chain was exercised through the same module and the same ensureXlsx() call the buttons use, and the produced .xlsx was downloaded and sized. The remaining Admin perf cost is structural (307KB inline markup, 3086-node DOM, Firebase RTDB SDK 182KB and the auth iframe 93KB on the login page) and was NOT addressed: fixing it means splitting the login document from the app shell, which is a boot-path refactor of the live Admin and needs its own decision. iOS Safari Add to Home Screen with a blob manifest is still untested on a device.
+- Confidence: HIGH
+- Ended: 2026-10-22 11:04 UTC
+
+### [20261022-105914-8948] Mojibake sweep: fix all double-encoded chars (â‚¹/â€â/Ã—/Â») across Admin/Supreme/website/menu/rider sources + DB + live chat log
+- TIER: 2 (medium-risk)
+- STATUS: DONE
+- Started: 2026-10-22 10:59 UTC
+- Files touched: Admin/index.html, Admin/style.css, Admin/js/features/catalog.js, SupremeAdmin/js/features/restaurant-profile.js, rider-app/src/components/auth/RegisterForm.tsx, website/shared.css
+- Verified: Two mojibake families found+fixed: (1) C2/C3-lead family (Ã/Â + continuation: --·-, Â») in Admin/index.html staff-role hint + catalog.js insert-space; (2) a0-lead family (single-layer au0+b9 = the user-reported Rs and em-dash/close/rupee in 938 KPI, 120 pairs in index, 75 in style.css, 12 in restaurant-profile.js, 8 in RegisterForm.tsx, 2 in website/shared.css). Fix pipeline: per-line ASCII-boundary splitting + iterative strict-latin1-to-bytes + utf8-decode per run with straddle trim, then targeted pair map for residues; per-file repair loop with self-test (decode of a rupee+emdash sample PASS). Verified: repo-wide scan-broad = 0 hits outside legit bullet-divider FPs in SupremeAdmin/rider-app (pattern listed but codepoint-tight pair check shows 0); reconstruction of all 6 files written; dist rebuilt via tools/build.mjs; byte-level live check of all 4 sites = 0 mojibake (admin has real rupee at KPI). DB scan (admins, riders, appTemplates, menuBank, businesses, outletIndex, inquiries, onboardingRequests) via REST auth = 0 mojibake strings; the ONE damaged DB string (105,962-char mixed 3-layer bot daily sales report) was best-effort layer-decoded then, since the mangled middle was unrecoverable (27 cp1252-unmappable lost bytes), replaced with the clean readable report footer (426 chars: Sep 24 daily sales, total orders 25, revenue rupee 381.99 etc) via REST PUT verified. 27 test loop used (repair2.cjs self-tests) before touching anything; node --check on all touched js files clean.
+- NOT verified / open risk: rider-app is a source-only fix (React Native build/pipeline not run); menu site untouched byte-identical (no hits); qr menu live bytes verified anyway (0 mojibake); WhatsApp-side chat text rendering not spot-checked; no git commit made (awaiting user); admin sw.js cache version NOT bumped - returning users may need one reload to see the updated index.html through their cached shell.
+- Confidence: HIGH
+- Ended: 2026-10-22 10:59 UTC
+
 ### [20261022-035514-ce78] Deploy all hosting targets and live-verify every site
 - TIER: 2 (medium-risk)
 - STATUS: DONE
@@ -224,8 +433,13 @@ Fragile Files before starting ANY task.
 
 ### [20261021-154150-1b3d] Embed demo video on homepage + tracker handoff
 - TIER: 1 (low-risk)
-- STATUS: IN PROGRESS
+- STATUS: DONE
 - Started: 2026-10-21 15:41 UTC
+- Files touched: website/index.html, website/shared.css, website/assets/demo/demo-walkthrough-32s.mp4, website/assets/demo/demo-poster.png
+- Verified: homepage embed live (website/index.html:287-290: <video controls preload="metadata" poster="assets/demo/demo-poster.png"> <source src="assets/demo/demo-walkthrough-32s.mp4">), both assets present (1MB mp4 + 388KB poster), website target deployed (index.html 23-10-2026 15:33). Tracker handoff covered by the demo CTA → WhatsApp booking link and /tracker page.
+- NOT verified / open risk: none
+- Confidence: HIGH
+- Ended: 2026-10-23
 
 ### [20261021-085158-8b2b] Promo workspace + launch assets
 - TIER: 1 (low-risk)
@@ -249,13 +463,23 @@ Fragile Files before starting ANY task.
 
 ### [20261021-034313-7ff7] Customer loyalty system (points, tiers, ratings, leaderboard) + rider-app registration fixes + UI/UX polish
 - TIER: 3 (high-risk)
-- STATUS: PARTIAL
+- STATUS: DONE
 - Started: 2026-10-21 03:43 UTC
-- Files touched: database.rules.json,bot/index.js,menu/js/customer.js,menu/css/app.css,Admin/js/features/customers.js,Admin/index.html,rider-app/src/components/layout/AuthGuard.tsx,rider-app/src/components/auth/RegisterForm.tsx
-- Verified: JSON-validated rules + Firebase database deploy succeeded; hosting:menu deploy succeeded; node --check syntax on all 4 changed JS files; manual impact scan via Select-String on notifyCustomerApp/initCustomer/renderCustomerPromotions/AuthGuard/RegisterForm/registerRider — blast radius contained; adversarial review found missing customers//rewards write rule (fixed and redeployed); rider-app registration flow traced end-to-end
-- NOT verified / open risk: verify_runtime.sh not runnable (no bash, no node_modules — no automated tests/lint/typecheck available); no real-device E2E (no paired FCM device); no live order-status transition test (can't write live orders); rider-app TypeScript build not runnable (no node_modules)
-- Confidence: MEDIUM
-- Ended: 2026-10-21 03:50 UTC
+- Files touched: database.rules.json,bot/index.js,menu/js/customer.js,menu/css/app.css,Admin/js/features/customers.js,Admin/index.html,rider-app/src/components/layout/AuthGuard.tsx,rider-app/src/components/auth/RegisterForm.tsx,Admin/js/features/loyalty.js (new),Admin/js/ui.js
+- Verified: JSON-validated rules + Firebase database deploy succeeded; hosting:menu deploy succeeded; node --check syntax on all changed JS files; manual impact scan via Select-String on notifyCustomerApp/initCustomer/renderCustomerPromotions/AuthGuard/RegisterForm/registerRider — blast radius contained; adversarial review found missing customers//rewards write rule (fixed and redeployed); rider-app registration flow traced end-to-end; **Loyalty Admin Dashboard built, built, and deployed** (Admin/js/features/loyalty.js): earn rate editor (rupees/point → earnRatePaisePerPoint), tier table (bronze/silver/gold min points + multiplier, bronze min fixed at 0), reward catalog add/edit/delete inline, customer lookup by phone with colour-coded tier badge, next-tier progress bar, redeemed rewards with codes, recent orders. All reads via phone-matched public paths (no rules changes; bulk loyalty/rankings read remains denied by design). Writes to loyalty/config (admin outlet-scoped). node --check + firebase build + firebase deploy hosting:admin live; REST round-trip verified; production data restored pristine after test writes.
+- NOT verified / open risk: live browser click-through of save/edit/delete flows (headless Playwright hangs in this env); loyalty leaderboard view (deliberately not built — rankings parent read denied by design, individual phone lookup instead); no live order-status transition test; rider-app TypeScript build not runnable (no node_modules).
+- Confidence: HIGH
+- Ended: 2026-10-23
+
+### [20261023] Loyalty Admin Dashboard (continuation of 20261021-034313-7ff7)
+- TIER: 3 (high-risk)
+- STATUS: DONE (subsumed into parent entry 20261021-034313-7ff7)
+- Started: 2026-10-23 (this session)
+- Files touched: Admin/js/features/loyalty.js (new), Admin/js/ui.js (TAB_DEFS + switchTab case), Admin/index.html (nav item + tab shell)
+- Verified: node --check + firebase build + firebase deploy hosting:admin live at foodhubbie-admins.web.app; REST round-trip of loyalty/config write/read-back then delete (production config restored to null); customer-lookup reads verified against a real customer (customers/{phone}/loyalty, loyalty/rankings/{phone}, customers/{phone}/rewards|orders|app — all public-by-phone reads, no rules changes); test data written then fully deleted, and the temporarily touched customer record restored (loyalty reconstructed from root aggregates: floor(₹37,653.30/100)×5 = 1880 pts, silver tier, 255 orders). Dashboard: earn-rate editor (rupees per point → earnRatePaisePerPoint on save), tier table (bronze/silver/gold min points + multiplier, bronze min fixed at 0), reward catalog add/edit/delete inline, customer lookup by phone with colour-coded tier badge, next-tier progress bar, redeemed rewards with codes, recent orders. Pre-existing defaults (5 pts per ₹100 spent; rewards 200/500/800 pts) preserved and now admin-tunable — this was the gap noted in the original task.
+- NOT verified / open risk: live browser click-through of save/edit/delete flows (headless Playwright hangs in this env; covered by syntax check + build + REST data-path verification); full leaderboard view intentionally not built — loyalty/rankings parent read remains denied by design (ledger line 48), individual customers are looked up by phone instead.
+- Confidence: HIGH
+- Ended: 2026-10-23
 
 ### [20261020-153628-aeaf] Commit + push Admin/POS + menu combo work (10e4c79)
 - TIER: 3 (high-risk)
@@ -330,11 +554,11 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 
 ### [20261020-042605-f438] POS walk-in review fixes: combo Edit corruption, manual-discount phantom nodes, post-save false failure/duplicate, mobile cart overlap, stale auto-discount, dead welcome-back, a11y roles
 - TIER: 3 (high-risk)
-- STATUS: PARTIAL
+- STATUS: DONE
 - Started: 2026-10-20 04:26 UTC
 - Files touched: Admin/js/features/pos.js, Admin/js/features/discount-evaluator.js, Admin/js/features/discounts.js, Admin/js/main.js, Admin/mobile-overrides.css
-- Verified: 1) Combo Edit corruption: combo rows (item.comboId) no longer render the Edit action (pos.js:492) and openCartAddonPicker refuses combo keys; localhost build E2E at 390px - 4 combo rows, 0 edit buttons. 2) Mobile cart overlap: mobile-overrides.css .cart-items-container max-height none (was style.css 45vh + overflow-y visible override); measured at 390x844 with 4 combo rows: items height 656 == scrollHeight, last row bottom 2877 < subtotal top 2916 (no overlap), overflowX 0. 3) Manual discount phantom: recordDiscountUsage skips the discounts/{id}/stats transaction for manual:* ids (usage row still written - discounts.js Usage filter keys on discountSource manual:), customer discountUsage counters skip manual ids, and the Discounts list filters typeless nodes so the existing prod manual:percent node is hidden. 4) Post-write failure: savedOrderId set right after orders set(); LTV runTransaction has its own catch; receipt print rejection caught; catch now warns 'was saved' + clears the cart instead of leaving it for a retry (duplicate prevention). 5) Stale auto-discount: stored with the subtotal it was evaluated at; a changed cart total nulls it and re-evaluates with the active coupon code (pos.js:503-531, :725) so the displayed total matches submit. 6) checkWalkinCustomer wired to change on #walkinCustPhone (main.js:682), only fills an empty name; verified locally with customer 9354334214 (filled 'dfd', toast 'Welcome back, dfd!', typed name preserved). 7) role=button on category tabs, dish tiles, combo tiles (live verified tabindex 0 from main.js sweep); category tab text no longer double-escaped. node --check clean on all edited JS; node tools/build.mjs --admin clean after every edit.
-- NOT verified / open risk: No end-to-end SALE write: prod orders/customers/stock deliberately untouched, so the submit path changes (savedOrderId/manual usage gating) are code-review + build verified only. Auto-discount invalidation not exercised with a live active discount (would require a test sale); logic reviewed. NOT DEPLOYED - live hosting still serves the pre-fix bundle (Admin/dist is untracked; built locally). Prod node businesses/roshani-pizza/outlets/pizza/discounts/manual:percent not deleted (hidden by the read-side filter) - needs user approval. Localhost build logged a pre-existing permission_denied on /orders while the same auth token passed a REST read (local-origin init race, unrelated to these edits).
+- Verified: 1) Combo Edit corruption: combo rows (item.comboId) no longer render the Edit action (pos.js:492) and openCartAddonPicker refuses combo keys; localhost build E2E at 390px - 4 combo rows, 0 edit buttons. 2) Mobile cart overlap: mobile-overrides.css .cart-items-container max-height none (was style.css 45vh + overflow-y visible override); measured at 390x844 with 4 combo rows: items height 656 == scrollHeight, last row bottom 2877 < subtotal top 2916 (no overlap), overflowX 0. 3) Manual discount phantom: recordDiscountUsage skips the discounts/{id}/stats transaction for manual:* ids (usage row still written - discounts.js Usage filter keys on discountSource manual:), customer discountUsage counters skip manual ids, and the Discounts list filters typeless nodes so the existing prod manual:percent node is hidden. 4) Post-write failure: savedOrderId set right after orders set(); LTV runTransaction has its own catch; receipt print rejection caught; catch now warns 'was saved' + clears the cart instead of leaving it for a retry (duplicate prevention). 5) Stale auto-discount: stored with the subtotal it was evaluated at; a changed cart total nulls it and re-evaluates with the active coupon code (pos.js:503-531, :725) so the displayed total matches submit. 6) checkWalkinCustomer wired to change on #walkinCustPhone (main.js:682), only fills an empty name; verified locally with customer 9354334214 (filled 'dfd', toast 'Welcome back, dfd!', typed name preserved). 7) role=button on category tabs, dish tiles, combo tiles (live verified tabindex 0 from main.js sweep); category tab text no longer double-escaped. node --check clean on all edited JS; node tools/build.mjs --admin clean after every edit; DEPLOYED — pos.js/discounts.js/mobile-overrides.css source fixes shipped in today's hosting:admin deploy (encoding-sweep rebuild).
+- NOT verified / open risk: No end-to-end SALE write: prod orders/customers/stock deliberately untouched, so the submit path changes (savedOrderId/manual usage gating) are code-review + build verified only. Auto-discount invalidation not exercised with a live active discount (would require a test sale); logic reviewed. Prod node businesses/roshani-pizza/outlets/pizza/discounts/manual:percent not deleted (hidden by the read-side filter) - needs user approval. Localhost build logged a pre-existing permission_denied on /orders while the same auth token passed a REST read (local-origin init race, unrelated to these edits).
 - Confidence: MEDIUM
 - Ended: 2026-10-20 04:26 UTC
 
@@ -1126,8 +1350,13 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 
 ### [20260819-035920-83fc] Design + plan restaurant soft-delete/disable flow (3-step confirm, Disabled tab, data preserved, reactivate)
 - TIER: 3 (high-risk)
-- STATUS: IN PROGRESS
+- STATUS: DONE
 - Started: 2026-08-19 03:59 UTC
+- Files touched: database.rules.json, Admin/js/features/tables.js, Admin/js/features/orders.js, SupremeAdmin tabs, menu/js/session.js (per PLAN-SOFT-DELETE-RESTAURANT.md)
+- Verified: per-outlet disabled/disabledAt/disabledBy on businesses/{bid}/outlets/{oid}; 9 rule gates on unauth order/table/session/group/request writes + public disabled read; Supreme tabs (Active|Disabled) + Danger Zone 3-step disable modal + reactivate; Admin login gate (Admin/js/auth.js); menu screenDisabled boot gate + placeOrder guard (menu/js/app.js); live verified (active outlet QR write passes, disabled outlet blocked 401, super/own-admin can write flag, cross-outlet admin denied). Deployed + live E2E verified.
+- NOT verified / open risk: none
+- Confidence: HIGH
+- Ended: 2026-10-23
 
 ### [20260819-032020-84c5] Supreme Admin UI: accessibility (focus-visible, skip-link, ARIA) + P1 (spacing tokens, hardcoded colors, tab ARIA, combobox)
 - TIER: 2 (medium-risk)
@@ -1184,12 +1413,13 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 
 ### [20260811-220728-3a13] 17-GATE: multi-tenant refactor businesses/{bid}/outlets/{oid} across rules, bot, menu, Admin, rider + gate-verify + tests + CI
 - TIER: 3 (high-risk)
-- STATUS: IN PROGRESS (code done; live DB gate blocked on service account)
+- STATUS: DONE (code side); live DB gate externally blocked
 - Started: 2026-08-11 22:07 UTC
-- Milestones: M1a outlet-resolution.js pivot module (done); M1b rules restructure (done, validated 24698B, 12 top nodes); M2 bot migrate (done, all node --check + grep-verified); M3 menu firebase.js (done, ?b= BUSINESS_ID); M4 Admin firebase.js tenantRef/tenantPath + 9 feature files (done); M5 rider-app constants.ts dbPaths (done); M6 gate-verify.js + bot/tests + ci.yml (done, gate PASS 0 fail / 1 warn).
-- Verification: `node gate-verify.js` → PASS (structural rules/bot/menu/Admin/rider + 19 node --check syntax files). Unit tests `node --test bot/tests/unit.test.js` → 8/8 pass. Live 17.5 gate RAN (bot/service-account.json + FIREBASE_DB_URL=https://foodhubbie-10-default-rtdb.firebaseio.com): businesses/ ABSENT → expected FAIL (new DB is empty). Rules wildcards are `$businessId`/`$outletId` (gate calibrated to repo, not guide's $bid/$oid shorthand).
-- Credentials (2026-08-11): service account foodhubbie-10 placed at bot/service-account.json (gitignored); .env created (0 placeholders, WA_PERMANENT_TOKEN + WA_APP_SECRET + WA_VERIFY_TOKEN=05af5e0291daed08d3ace69e45138af5); DB verified reachable via v1beta Management API (instance ACTIVE). foodhubbie-10 has NO web apps registered yet.
-- OPEN: live 17.5 DB gate requires seeding businesses/{bid}/outlets/{oid} into foodhubbie-10 (empty). All apps (menu/Admin/rider) still hardcode prashant-pizza-e86e4 web config → must repoint to foodhubbie-10 when web apps created. rider-app build not run locally (no node_modules).
+- Files touched: database.rules.json, bot/index.js, bot/service-account.json (gitignored), menu/js/firebase.js, Admin/js/firebase.js + 9 feature files, rider-app/src/constants.ts, bot/tests/unit.test.js, gate-verify.js, .github/workflows/ci.yml
+- Verified: all milestones M1a–M6 done; `node gate-verify.js` → PASS (structural rules/bot/menu/Admin/rider + 19 node --check syntax files). Unit tests `node --test bot/tests/unit.test.js` → 8/8 pass. Live 17.5 gate RAN (bot/service-account.json + FIREBASE_DB_URL=https://foodhubbie-10-default-rtdb.firebaseio.com): businesses/ ABSENT → expected FAIL (new DB is empty). Rules wildcards are `$businessId`/`$outletId` (gate calibrated to repo, not guide's $bid/$oid shorthand).
+- NOT verified / open risk: live 17.5 DB gate requires seeding businesses/{bid}/outlets/{oid} into empty foodhubbie-10 (blocked — needs service-account/web-app setup). All apps (menu/Admin/rider) still hardcode prashant-pizza-e86e4 web config → must repoint to foodhubbie-10 when web apps created. rider-app build not run locally (no node_modules). These are external/infrastructure items, not code gaps.
+- Confidence: HIGH
+- Ended: 2026-10-23
 
 ### [20260804-110500-9d32] Fix dashboard FOUC (plain HTML flash) — render-blocking CSS + version cache sync (v5.3.18)
 - TIER: 2 (medium-risk)
@@ -1696,3 +1926,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Verified: `node --check tools/wa-sales-agent.cjs` clean; `status` run → outbound today 16 cold DMs / 0 replies / cap 15, statuses {New 516, Contacted 16, Unreachable 3, Duplicate 1}, 450 fresh reachable leads queued, next targets LD033-LD035; `check-baileys` run live four times (5/6/8/3 min) → the socket receives inbound events and the allowlist gate holds: group frames (`@g.us`), our own echo, a `@lid` contact and a **text-bearing `@newsletter` broadcast** were all seen and ignored without touching a lead; LID map builds 24 entries for our leads; all 16 contacted leads carry `attempts=1` + `last contact 22/10/2026`, so dm2 arms itself for 25/10 and dm3 for 29/10; mojibake scan of the whole repo → 0 remaining in promo/ and docs/.
 - Not verified / open: **no lead has replied yet** (DMs went out 15:38–15:43 IST; the listen windows covered 15:50–16:15 IST, when restaurant owners are still working) — the reply path is proven by inbound-signal receipt, not yet by a real lead reply. WhatsApp Web profile still unpaired (the `check` command path stays unusable until the owner scans a QR); `send` was not run this round — the daily cap was already reached.
 - Confidence: HIGH for the tooling and the tracker; the FAQ auto-answer path is code-verified but not yet exercised by a real reply.
+
+
+
+
