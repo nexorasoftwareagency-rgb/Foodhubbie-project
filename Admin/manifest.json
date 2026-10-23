@@ -18,7 +18,7 @@
   ],
   "icons": [
     {
-      "src": "icon-erp-logo.jpeg",
+      "src": "icon-erp-logo.png",
       "sizes": "512x512",
       "type": "image/jpeg",
       "purpose": "any maskable"
@@ -30,7 +30,7 @@
       "url": "./index.html#dashboard",
       "icons": [
         {
-          "src": "icon-erp-logo.jpeg",
+          "src": "icon-erp-logo.png",
           "sizes": "192x192"
         }
       ]
@@ -40,7 +40,7 @@
       "url": "./index.html#orders",
       "icons": [
         {
-          "src": "icon-erp-logo.jpeg",
+          "src": "icon-erp-logo.png",
           "sizes": "192x192"
         }
       ]
