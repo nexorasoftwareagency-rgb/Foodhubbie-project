@@ -61,7 +61,18 @@
     "settlements": {
       "$riderId": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || auth.uid == $riderId)",
-        ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || auth.uid == $riderId)"
+        ".write": "auth != null && root.child('admins').child(auth.uid).exists()",
+        "$settlementId": {
+          "riderAck": {
+            ".write": "auth != null && auth.uid == $riderId && data.parent().exists()",
+            ".validate": "newData.hasChildren(['settlementId','acknowledged','acknowledgedAt','riderUid'])",
+            "settlementId": { ".validate": "newData.val() == $settlementId" },
+            "acknowledged": { ".validate": "newData.val() == true" },
+            "acknowledgedAt": { ".validate": "newData.isNumber()" },
+            "riderUid": { ".validate": "newData.val() == $riderId" },
+            "$other": { ".validate": false }
+          }
+        }
       }
     },
     "migrationStatus": {
@@ -609,7 +620,7 @@
         ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || auth.uid == $riderId)",
         ".write": "auth != null && (root.child('admins').child(auth.uid).exists() || auth.uid == $riderId)",
         "$alertId": {
-          ".validate": "newData.hasChildren(['riderId','riderName','lat','lng','ts','status'])"
+          ".validate": "newData.hasChildren(['riderId','riderName','lat','lng','ts','status']) && newData.child('riderId').val() == $riderId && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('ts').isNumber() && (newData.child('status').val() == 'active' || newData.child('status').val() == 'resolved')"
         }
       }
     },
@@ -617,7 +628,7 @@
       "$riderId": {
         ".read": "auth != null && (root.child('admins').child(auth.uid).exists() || auth.uid == $riderId)",
         "$orderId": {
-          ".write": "auth != null && newData.hasChildren(['rating','createdAt']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5",
+          ".write": "auth != null && root.child('admins').child(auth.uid).exists() && newData.hasChildren(['rating','createdAt']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5",
           ".validate": "newData.hasChildren(['riderId','rating','createdAt'])"
         }
       }
