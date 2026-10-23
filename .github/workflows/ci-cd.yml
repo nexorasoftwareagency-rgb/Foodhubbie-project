@@ -144,18 +144,11 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
         run: |
-          set +e
-          echo "node $(node --version) | sa-bytes $(wc -c < "$GOOGLE_APPLICATION_CREDENTIALS")" > /tmp/diag
-          npx -y firebase-tools deploy --only database --project ${{ env.FIREBASE_PROJECT }} --non-interactive > /tmp/rules.log 2>&1
-          rc=$?
-          if [ $rc -ne 0 ]; then
-            echo "cli $(npx -y firebase-tools --version 2>&1)" >> /tmp/diag
-            tail -6 /tmp/rules.log >> /tmp/diag
-            msg=$(tr '\n' '|' < /tmp/diag | sed 's/%/%25/g')
-            echo "::error title=rules-deploy::$msg"
-            exit $rc
+          if [ ! -s "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+            echo "::error title=missing-secret::FIREBASE_SERVICE_ACCOUNT is empty. Settings > Secrets and variables > Actions > New repository secret: the service-account JSON with Firebase Hosting Admin + Firebase Rules Admin + Realtime Database Admin. Rules stay undeployed until it exists."
+            exit 1
           fi
-          tail -4 /tmp/rules.log
+          npx -y firebase-tools deploy --only database --project ${{ env.FIREBASE_PROJECT }} --non-interactive
 
       - name: Deploy to Firebase Production
         uses: FirebaseExtended/action-hosting-deploy@v0
