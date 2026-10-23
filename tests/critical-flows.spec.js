@@ -59,6 +59,12 @@ test.describe('FoodHubbie ERP - Critical Flows', () => {
   test('QR Menu: Place order from customer', async ({ page }) => {
     await page.goto(TEST_URLS.qrMenu);
 
+    // Fresh test profile has no fh_onboarded_v1 — the customer onboarding
+    // overlay opens over the welcome screen and intercepts every CTA click.
+    const onbSkip = page.locator('#onbSkip');
+    await onbSkip.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    if (await onbSkip.isVisible().catch(() => false)) await onbSkip.click();
+
     // Boot may show welcome OR group-choice if another guest joined mid-reset
     const welcomeBtn = page.locator('#btnStartOrdering');
     const ownGroupBtn = page.locator('#btnStartOwnGroup');

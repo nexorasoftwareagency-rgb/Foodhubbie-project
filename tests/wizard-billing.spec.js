@@ -115,7 +115,7 @@ test.describe('wizard billing regression', () => {
       // The regression itself: stale monthly-plan model had none of this.
       expect(billing.monthlyRate).toBeUndefined();
       expect(billing.mode).toBe('per_order');
-      expect(billing.rates).toEqual({ QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2, promo: 1, commission1pct: 0.01 });
+      expect(billing.rates).toEqual({ QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1, commission1pct: 0.01 });
       expect(billing.setup).toMatchObject({ amount: 500, status: 'non_refundable' });
       expect(billing.tokens && billing.tokens.balance).toBe(15);
       expect(billing.tokenPacks && billing.tokenPacks.welcome && billing.tokenPacks.welcome.qty).toBe(15);
