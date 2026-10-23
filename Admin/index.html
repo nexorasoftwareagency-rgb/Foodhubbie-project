@@ -185,9 +185,9 @@
 
     <link rel="manifest" href="manifest.json?v=3">
 
-    <link rel="icon" type="image/jpeg" href="icon-erp-logo.jpeg">
+    <link rel="icon" type="image/png" href="icon-erp-logo.png">
 
-    <link rel="apple-touch-icon" href="icon-erp-logo.jpeg">
+    <link rel="apple-touch-icon" href="icon-erp-logo.png">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
 
@@ -282,7 +282,7 @@
 
                     <div class="login-logo-v4">
 
-                        <i data-lucide="shield-check" class="icon-32"></i>
+                        <img src="icon-erp-logo.png" alt="FoodHubbie" width="48" height="48" style="border-radius: 12px;">
 
                     </div>
 
@@ -416,13 +416,7 @@
 
                     <div class="brand-logo-svg" aria-label="FoodHubbie">
 
-                        <svg width="40" height="40" viewBox="0 0 40 40">
-
-                            <rect width="40" height="40" rx="12" fill="var(--primary)"/>
-
-                            <text x="20" y="26" text-anchor="middle" font-size="18" font-weight="800" fill="white" font-family="Inter,sans-serif">R</text>
-
-                        </svg>
+                        <img src="icon-erp-logo.png" alt="FoodHubbie" width="40" height="40" style="border-radius: 12px;">
 
                     </div>
 
@@ -602,6 +596,12 @@
 
                     </button>
 
+                </li>
+
+                <li id="menu-loyalty" title="Configure loyalty points, tiers and rewards">
+                    <button data-action="switchTab" data-tab="loyalty" class="nav-btn">
+                        <i data-lucide="award"></i> <span>Loyalty</span>
+                    </button>
                 </li>
 
                 <li id="menu-chat" title="WhatsApp Conversations with Customers">
@@ -3358,6 +3358,12 @@
 
             </div>
 
+
+
+            <!-- LOYALTY TAB -->
+            <div id="tab-loyalty" class="tab-content hidden">
+                <div id="loyaltyApp"></div>
+            </div>
 
 
             <!-- CHAT TAB -->

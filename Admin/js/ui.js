@@ -58,7 +58,7 @@ export const TAB_DEFS = [
     ['discounts', 'Discounts'], ['menu', 'Menu'], ['categories', 'Categories'],
     ['combos', 'Combos'],
     ['menu-browser', 'Menu Browser'], ['inventory', 'Inventory'], ['riders', 'Riders'],
-    ['customers', 'Customers'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
+    ['customers', 'Customers'], ['loyalty', 'Loyalty'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
     ['riderAnalytics', 'Rider Analytics'], ['feedback', 'Feedback'], ['liveTracker', 'Live Tracker'],
     ['payments', 'Payments'], ['expenses', 'Expenses'], ['notifications', 'Notifications'],
     ['costs', 'Costs'], ['settings', 'Settings']
@@ -319,6 +319,11 @@ export const switchTab = async (tabId, skipHistory = false) => {
                 case 'feedback': {
                     const { loadFeedbacks } = await mod('feedback');
                     loadFeedbacks();
+                    break;
+                }
+                case 'loyalty': {
+                    const { loadLoyalty } = await mod('loyalty');
+                    loadLoyalty();
                     break;
                 }
                 case 'walkin': {
