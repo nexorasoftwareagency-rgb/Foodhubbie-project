@@ -134,15 +134,17 @@ jobs:
       - name: Build
         run: node tools/build.mjs
 
+      # Rules first: they are the security surface and never depend on hosting.
+      - name: Deploy Database Rules
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npx firebase deploy --only database --project ${{ env.FIREBASE_PROJECT }}
+
       - name: Deploy to Firebase Production
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: ${{ env.FIREBASE_PROJECT }}
+          target: admin
           entryPoint: ./Admin/dist
-
-      - name: Deploy Database Rules
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: npx firebase deploy --only database --project ${{ env.FIREBASE_PROJECT }}
