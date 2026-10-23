@@ -48,6 +48,9 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    # Live-prod E2E (real login, real orders): report, never gate a deploy. A
+    # flaky run here used to silently skip deploy-production for days.
+    continue-on-error: true
     needs: lint
     steps:
       - name: Checkout
@@ -69,6 +72,7 @@ jobs:
         run: npx playwright test --reporter=github
         env:
           PLAYWRIGHT_BASE_URL: https://foodhubbie-admins.web.app
+          E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
 
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   # DEPLOY TO FIREBASE PREVIEW (PRs)
@@ -109,7 +113,9 @@ jobs:
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    # Gate on lint only: the E2E job below drives a live prod site and must not
+    # decide whether the rules/hosting deploy happens.
+    needs: [lint]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
     steps:
