@@ -231,6 +231,22 @@ export function initAuth() {
         }
 
         // --- Disabled-outlet gate ---
+        // Start the feature/role gates read BEFORE the disabled/locked checks:
+        // settings/roles is the largest boot read (~17KB) and used to queue
+        // behind them as two more serial websocket round trips.
+        const gatesPrefetch = (() => {
+            // Same outlet resolution as `window.currentOutlet` below: supers may
+            // have picked an outlet, staff are pinned to their assigned one.
+            const oid = String(((adminData.isSuper || adminData.isSupreme)
+                ? (sessionStorage.getItem('adminSelectedOutlet') || adminData.outlet)
+                : adminData.outlet) || '').toLowerCase();
+            const bid = adminData.businessId || BUSINESS_BY_OUTLET[oid];
+            if (!bid) return null;
+            const base = `businesses/${bid}/outlets/${oid}/settings`;
+            return Promise.all([get(ref(db, `${base}/features`)), get(ref(db, `${base}/roles`))])
+                .catch(e => { console.warn('[Auth] Gates prefetch failed:', e?.message || e); return null; });
+        })();
+
         // Staff (non-super/non-supreme) of a disabled outlet are denied
         // login. Super/Supreme admins stay allowed so they can reactivate.
         if (!adminData.isSuper && !adminData.isSupreme && adminData.outlet) {
@@ -443,12 +459,17 @@ export function initAuth() {
         // Load per-outlet gates at boot — feature flags (gated nav, discount
         // PIN) and the role→tab matrix. Re-run on outlet switch so neither
         // goes stale when a super admin changes outlet.
-        const loadOutletGates = async () => {
+        const loadOutletGates = async (prefetched) => {
             try {
-                const [featSnap, rolesSnap] = await Promise.all([
+                const [featSnap, rolesSnap] = await (prefetched || Promise.all([
                     get(Outlet.ref('settings/features')),
                     get(Outlet.ref('settings/roles'))
-                ]);
+                ]));
+                // Prefetch resolves null on failure: retry against the live outlet
+                // path so a transient error can't silently drop the role matrix.
+                if (prefetched && (!featSnap || !rolesSnap)) {
+                    return loadOutletGates();
+                }
                 const f = featSnap.val() || {};
                 state.features.discountApproval = f.discountApproval === true;
                 state.features.expense = f.expense === true;
@@ -457,7 +478,14 @@ export function initAuth() {
                 console.warn('[Auth] Feature/role gates load failed:', e);
             }
         };
-        await loadOutletGates();
+        await loadOutletGates(gatesPrefetch);
+
+        // Inventory toggles hydrate at boot pre-auth (read throws
+        // permission-denied -> localStorage fallback -> false on fresh
+        // browsers, hiding the menu section). Re-hydrate from real
+        // settings/inventory now that auth + outlet are live.
+        const { refreshInventoryTogglesForOutlet } = await import('./features/inventory.js');
+        refreshInventoryTogglesForOutlet();
 
         // Start Features
         updateBranding();
