@@ -143,7 +143,19 @@ jobs:
       - name: Deploy Database Rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-        run: npx firebase deploy --only database --project ${{ env.FIREBASE_PROJECT }} --non-interactive
+        run: |
+          set +e
+          echo "node $(node --version) | sa-bytes $(wc -c < "$GOOGLE_APPLICATION_CREDENTIALS")" > /tmp/diag
+          npx -y firebase-tools deploy --only database --project ${{ env.FIREBASE_PROJECT }} --non-interactive > /tmp/rules.log 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "cli $(npx -y firebase-tools --version 2>&1)" >> /tmp/diag
+            tail -6 /tmp/rules.log >> /tmp/diag
+            msg=$(tr '\n' '|' < /tmp/diag | sed 's/%/%25/g')
+            echo "::error title=rules-deploy::$msg"
+            exit $rc
+          fi
+          tail -4 /tmp/rules.log
 
       - name: Deploy to Firebase Production
         uses: FirebaseExtended/action-hosting-deploy@v0
