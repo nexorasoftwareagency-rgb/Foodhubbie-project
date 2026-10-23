@@ -135,10 +135,15 @@ jobs:
         run: node tools/build.mjs
 
       # Rules first: they are the security surface and never depend on hosting.
+      # Auth via the service account already used by the hosting deploy; legacy
+      # FIREBASE_TOKEN (firebase login:ci) is no longer accepted by Firebase.
+      - name: Write service account key
+        run: printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/firebase-sa.json"
+
       - name: Deploy Database Rules
         env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: npx firebase deploy --only database --project ${{ env.FIREBASE_PROJECT }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: npx firebase deploy --only database --project ${{ env.FIREBASE_PROJECT }} --non-interactive
 
       - name: Deploy to Firebase Production
         uses: FirebaseExtended/action-hosting-deploy@v0
