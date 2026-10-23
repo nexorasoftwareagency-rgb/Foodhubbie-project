@@ -33,11 +33,16 @@ export function initInventory() {
 export function loadInventory() {
     if (!state.currentOutlet) return;
     cleanupInventory();
+    // cleanupInventory unbinds toggle change listeners; re-bind each visit
+    // (the _togglesBound guard makes this idempotent).
+    initInventoryToggles();
 
     const tbody = document.getElementById('inventoryTableBody');
     if (tbody) tbody.innerHTML = getSkeletonRows(5, 5);
 
-    if (_togglesBound && _togglesOutlet !== state.currentOutlet) refreshInventoryTogglesForOutlet();
+    // loadMenu=false: updateMenuVisibility() at the end of this function already
+    // loads it; both ran loadInventoryMenu() and fetched `dishes` twice.
+    if (_togglesBound && _togglesOutlet !== state.currentOutlet) refreshInventoryTogglesForOutlet(false);
     _togglesOutlet = state.currentOutlet;
 
     const invRef = Outlet.ref('inventory');
@@ -52,7 +57,7 @@ export function loadInventory() {
     updateMenuVisibility();
 }
 
-export function refreshInventoryTogglesForOutlet() {
+export function refreshInventoryTogglesForOutlet(loadMenu = true) {
     const toggleAvail = document.getElementById('toggleAvailability');
     const toggleStock = document.getElementById('toggleStockTracking');
     const availInfo = document.getElementById('availabilityInfo');
@@ -61,7 +66,7 @@ export function refreshInventoryTogglesForOutlet() {
     hydrateToggles(toggleAvail, toggleStock).then(() => {
         updateInfoPanel(toggleAvail, availInfo);
         updateInfoPanel(toggleStock, stockInfo);
-        updateMenuVisibility();
+        updateMenuVisibility(loadMenu);
     });
 }
 
@@ -423,8 +428,12 @@ async function hydrateToggles(toggleAvail, toggleStock) {
             localStorage.setItem('inv_availability', toggleAvail.checked);
             localStorage.setItem('inv_stockTracking', toggleStock.checked);
         } else {
-            toggleAvail.checked = localStorage.getItem('inv_availability') === 'true';
-            toggleStock.checked = localStorage.getItem('inv_stockTracking') === 'true';
+            const availLS = localStorage.getItem('inv_availability');
+            const stockLS = localStorage.getItem('inv_stockTracking');
+            // Fresh browser + no remote settings: default ON (matches live
+            // settings/inventory true/true) instead of seeding false.
+            toggleAvail.checked = availLS === null ? true : availLS === 'true';
+            toggleStock.checked = stockLS === null ? true : stockLS === 'true';
             await set(Outlet.ref('settings/inventory'), { availability: toggleAvail.checked, stockTracking: toggleStock.checked });
         }
     } catch (e) {

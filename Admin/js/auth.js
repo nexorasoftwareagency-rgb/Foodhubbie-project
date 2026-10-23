@@ -485,7 +485,7 @@ export function initAuth() {
         // browsers, hiding the menu section). Re-hydrate from real
         // settings/inventory now that auth + outlet are live.
         const { refreshInventoryTogglesForOutlet } = await import('./features/inventory.js');
-        refreshInventoryTogglesForOutlet();
+        refreshInventoryTogglesForOutlet(false);
 
         // Start Features
         updateBranding();
