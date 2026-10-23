@@ -249,6 +249,7 @@ export function initAuth() {
 
         // Staff (non-super/non-supreme) of a disabled outlet are denied
         // login. Super/Supreme admins stay allowed so they can reactivate.
+        let lockedProbe = null;
         if (!adminData.isSuper && !adminData.isSupreme && adminData.outlet) {
             const oid = String(adminData.outlet).toLowerCase();
             const bid = adminData.businessId || BUSINESS_BY_OUTLET[oid];
@@ -259,6 +260,12 @@ export function initAuth() {
                 return;
             }
             try {
+                // Probe `locked` in the same round trip as `disabled` instead of
+                // after it (the two sequential reads cost ~0.8s on a phone).
+                lockedProbe = Promise.race([
+                    get(ref(db, `businesses/${bid}/outlets/${oid}/locked`)),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
+                ]).catch(e => { console.warn("[Auth] Locked check failed:", e?.message || e); return null; });
                 const disabledSnap = await Promise.race([
                     get(ref(db, `businesses/${bid}/outlets/${oid}/disabled`)),
                     new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
@@ -285,11 +292,11 @@ export function initAuth() {
             const bid = adminData.businessId || BUSINESS_BY_OUTLET[oid];
             if (bid) {
                 try {
-                    const lockedSnap = await Promise.race([
+                    const lockedSnap = await (lockedProbe || Promise.race([
                         get(ref(db, `businesses/${bid}/outlets/${oid}/locked`)),
                         new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
-                    ]);
-                    if (lockedSnap.exists() && lockedSnap.val() === true) {
+                    ]));
+                    if (lockedSnap && lockedSnap.exists() && lockedSnap.val() === true) {
                         state.locked = true;
                         import('./ui.js').then(u => u.showLockedScreen());
                     }
