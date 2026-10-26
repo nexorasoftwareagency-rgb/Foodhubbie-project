@@ -64,7 +64,8 @@ Fragile Files before starting ANY task.
 - [2026-09-30 01:14 UTC] Bot ban-proofing state lives in bot/utils.js (in-memory Maps): paceOutboundTo (4-8s random per-chat gap) is wired into ALL 3 send wrappers in bot/index.js; freeze (3 continuous non-intent strikes in AWAITING/WEBVIEW -> 30-min silence) is enforced ONLY at the message handler + marketing gates (sendPromotionalMessage, SEND_GENERIC). Transactional order-status notices are DELIBERATELY never frozen (utility templates are ban-safe; dropping them would mark real orders sent-but-not-delivered). Admins never accumulate strikes (isAuthorized gate) or they would lose reports/alerts. Extend in utils.js, never re-add freeze-drop to the generic send wrappers.
 - [2026-08-12 02:20 UTC] **DUAL-TRANSPORT WHATSAPP BOT (per restaurant)**: each restaurant/business supports BOTH Meta Cloud API (`BOT_TRANSPORT=meta`) and Baileys (`BOT_TRANSPORT=baileys`). ONLY ONE is active per restaurant at a time. Transport is controlled remotely from **Supreme Admin → Restaurants Profiles → WhatsApp Baileys section** (Scan QR button → shows QR + live status), mirrored on the WhatsApp second dashboard. Meta API is the default/primary; Baileys used when a restaurant wants a real number via QR. Bot reads transport mode from Firebase `bot/{outlet}/transport` (or env default), switchable at runtime.
 - [2026-08-12 02:20 UTC] **STATIC IMAGES FOR FIREBASE HOSTING**: brand/menu images may be placed directly in the project directory (e.g. `menu/images/`, `assets/`) and deployed with Firebase Hosting, referenced via relative URLs like `/images/logo.png`. No Firebase Storage upload needed for static brand assets.
-- [2026-08-04 10:00 UTC] PowerShell version-bump/edits on files with non-ASCII (emoji, ₹, typography) MUST use the UTF-8-safe pattern: `[System.IO.File]::ReadAllText(path, UTF8)` + `WriteAllText(path, content, UTF8Encoding($false))`. NEVER `Get-Content`/`Set-Content` — the 5.3.16 bump corrupted every emoji in Admin/index.html + sw.js (mojibake "ðŸ�½ï¸�"). Signature of corruption = C1 control chars U+0080–U+009F.
+- [2026-08-04 10:00 UTC] PowerShell version-bump/edits on files with non-ASCII (emoji, ₹, typography) MUST use the UTF-8-safe pattern: `[System.IO.File]::ReadAllText(path, UTF8)` + `WriteAllText(path, content, UTF8Encoding($false))`. NEVER `Get-Content`/`Set-Content` — the 5.3.16 bump corrupted every emoji in Admin/index.html + sw.js (mojibake "ðŸ…"). Signature of corruption = C1 control chars U+0080–U+009F.
+- [2026-10-26] Doc repair: the 27 `U+FFFD` replacement chars in this file (unrepresentable cp1252 bytes left behind by old PowerShell writes) were replaced with the intended `—`; line 67's quoted mojibake example is truncated to `"ðŸ…"` because its tail bytes are unrecoverable. Docs only — no code affected. The 14 in `Fixes-and-Changes/foodhubbie-pwa-build-progress/menu/delivery.html` were recovered exactly from the live `menu/delivery.html`.
 - [2026-08-04 10:00 UTC] ALL tables now use `mob-data-table` (payments, feedback, inventory, lost-sales). Tabulator CDN + `Admin/js/tabulator-setup.js` removed. New/rewritten tables must reuse the mob-data-table pattern, never reintroduce Tabulator.
 - [2026-08-03 19:39 UTC] Runtime-composed CSS classes (built as \mob-badge-pay-*\/\mob-badge-status-*\ in JS) MUST be safelisted in tools/build.mjs PurgeCSS config, or PurgeCSS strips them from dist. Root cause of invisible payment badges. Add any new runtime-composed class family to the /^mob-/ (or matching) safelist regex.
 - [2026-09-25] **LOST SALES FEATURE REMOVED** — Complete removal of "Lost Sales" tab from Admin Dashboard. Deleted `Admin/js/features/lost-sales.js`, removed sidebar nav (`data-tab="lostSales"`), tab content (`#tab-lostSales`), `loadLostSales()` call in `ui.js`, `btnClearLostSales` listener in `main.js`, mobile CSS styles, DB rules (`logs/lostSales` + `outlets/$oid/lostSales`), page guide entries, and documentation references. Feature no longer exists in codebase.
@@ -91,11 +92,11 @@ Fragile Files before starting ANY task.
 <!-- FRAGILE_FILES_START -->
 - `bot/index.js` — accrueLoyaltyPoints added to notifyCustomerApp flow — uses Firebase Admin SDK (bypasses security rules), idempotent via accruals/{orderId} lock. Edit here touches every order-status notification path. (flagged 2026-10-21 04:21 UTC)
 - `database.rules.json` — Loyalty rules added under customers//{orders,ratings,rewards,loyalty} and outlet/loyalty/{config,rankings}. Customer app writes rewards redemptions directly — rewards sub-node write rule is required or redemptions are silently denied. Any edit must be JSON-validated and cross-checked against menu app reads. (flagged 2026-10-21 04:21 UTC)
-- `tests/utils.js` � Shared by critical-flows + walkout-retest specs. Encodes 4 non-obvious contracts added 2026-10-13: (1) login() restores cached firebase:authUser via addInitScript after first real sign-in - repeated signInWithPassword throttles Identity Toolkit and hangs the form; (2) all KDS selectors scoped #tab-tables because KDS renders in BOTH #tab-live and #tab-tables (hidden-first match timeouts); (3) tab-switch clicks need :visible because desktop sidebar nav-btn matches first but is hidden on mobile; (4) critical-flows orderId is persisted to os.tmpdir()/foodhubbie-e2e-order-id and hydrated in beforeEach - changing any of these silently re-breaks the chain without an obvious local error. (flagged 2026-10-13 17:29 UTC)
-- `bot/utils.js` � Hosts the shared ban-proofing module (paceOutboundTo/recordWrongMessage/isJidFrozen/clearWrongStrikes, module-level Maps) exported to index.js + promotions.js, plus maskJid/RateLimiter/OutboundTracker used across the bot. Behavior changes here hit every send path and every outlet; covered by bot/tests/unit.test.js ban-proofing test - keep it green. (flagged 2026-09-30 01:14 UTC)
-- `bot/index.js` � Send wrappers carry 4 stacked concerns (chat-log, G5 quota counter, per-chat pacing, conversation logs) and the status-notification send block chooses template-vs-text by transport; the ban-proofing freeze gates live in the message handler (isAuthorized hoisted). Any edit here needs impact_scan first - breaking a wrapper silently loses chat history or quota counts. (flagged 2026-09-30 01:14 UTC)
+- `tests/utils.js` — Shared by critical-flows + walkout-retest specs. Encodes 4 non-obvious contracts added 2026-10-13: (1) login() restores cached firebase:authUser via addInitScript after first real sign-in - repeated signInWithPassword throttles Identity Toolkit and hangs the form; (2) all KDS selectors scoped #tab-tables because KDS renders in BOTH #tab-live and #tab-tables (hidden-first match timeouts); (3) tab-switch clicks need :visible because desktop sidebar nav-btn matches first but is hidden on mobile; (4) critical-flows orderId is persisted to os.tmpdir()/foodhubbie-e2e-order-id and hydrated in beforeEach - changing any of these silently re-breaks the chain without an obvious local error. (flagged 2026-10-13 17:29 UTC)
+- `bot/utils.js` — Hosts the shared ban-proofing module (paceOutboundTo/recordWrongMessage/isJidFrozen/clearWrongStrikes, module-level Maps) exported to index.js + promotions.js, plus maskJid/RateLimiter/OutboundTracker used across the bot. Behavior changes here hit every send path and every outlet; covered by bot/tests/unit.test.js ban-proofing test - keep it green. (flagged 2026-09-30 01:14 UTC)
+- `bot/index.js` — Send wrappers carry 4 stacked concerns (chat-log, G5 quota counter, per-chat pacing, conversation logs) and the status-notification send block chooses template-vs-text by transport; the ban-proofing freeze gates live in the message handler (isAuthorized hoisted). Any edit here needs impact_scan first - breaking a wrapper silently loses chat history or quota counts. (flagged 2026-09-30 01:14 UTC)
 - `Admin/index.html` & `Admin/sw.js` — contain emoji/₹/typography; any version bump/edit MUST use the UTF-8-safe PowerShell pattern (Standing Decision 2026-08-04) or all non-ASCII corrupts
-- `tools/build.mjs` � PurgeCSS safelist (runtime-composed classes) � any new dynamically-built CSS class family must be added here or it gets purged from dist (flagged 2026-08-03 19:39 UTC)
+- `tools/build.mjs` — PurgeCSS safelist (runtime-composed classes) — any new dynamically-built CSS class family must be added here or it gets purged from dist (flagged 2026-08-03 19:39 UTC)
 - database.rules.json — multi-role complex rules
 - Admin/js/features/orders.js — STATUS_SEQUENCES alignment
 - firebase.json — 3-target hosting, CSP divergence
@@ -749,7 +750,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - STATUS: DONE
 - Started: 2026-10-15 14:45 UTC
 - Files touched: Admin/js/utils.js, Admin/js/features/orders.js
-- Verified: node --check both; full build; optimistic-ui-check 8/8; hosting:admin deployed � live orders.js contains syncAppBadge boot-seed call; EC2 pm2-ubuntu.service is-enabled=true + pm2 save dump written (bots resurrect on reboot); tunnel keep-alive cron covers cloudflared (ledger b57e)
+- Verified: node --check both; full build; optimistic-ui-check 8/8; hosting:admin deployed — live orders.js contains syncAppBadge boot-seed call; EC2 pm2-ubuntu.service is-enabled=true + pm2 save dump written (bots resurrect on reboot); tunnel keep-alive cron covers cloudflared (ledger b57e)
 - NOT verified / open risk: actual badge count on a real installed device after reload (requires install + manual Placed order); full EC2 reboot cycle end-to-end (unit enabled + dump saved is the standard contract, not reboot-tested live)
 - Confidence: HIGH
 - Ended: 2026-10-15 14:46 UTC
@@ -760,7 +761,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Started: 2026-10-15 01:16 UTC
 - Files touched: tools/tunnel-keepalive.sh, tools/sync-tunnel-url-ec2.cjs
 - Verified: cron watchdog fired unattended (killed both tunnels 01:21, cron restarted :4000 at 01:22, new trycloudflare URL synced to RTDB); live RTDB config/tunnelUrl == algorithm-charlie-california-default.trycloudflare.com; tunnel serves HTTP 401 on /tenant-api/notify (middleware alive); crontab installed */2
-- NOT verified / open risk: full EC2 reboot (would drop pm2 bots + need manual cloudflared � out of scope; watchdog covers process-death, not reboot-without-cron). Note: reboot now brings tunnels back via cron within 2min, but pm2 bots still need pm2 resurrect
+- NOT verified / open risk: full EC2 reboot (would drop pm2 bots + need manual cloudflared — out of scope; watchdog covers process-death, not reboot-without-cron). Note: reboot now brings tunnels back via cron within 2min, but pm2 bots still need pm2 resurrect
 - Confidence: HIGH
 - Ended: 2026-10-15 01:27 UTC
 
@@ -800,7 +801,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Started: 2026-10-14 23:32 UTC
 - Files touched: bot/index.js, Admin/sw.js, Admin/badge.png, Admin/js/features/notifications.js, Admin/js/features/promotions.js, Admin/js/auth.js
 - Verified: bot 15/15; optimistic-ui-check 8/8 on rebuilt dist; node --check bot+sw; live send via tunnel with new payload shape sent:1; bot deployed to EC2 (pm2 4+12 restarted, Baileys reconnected)
-- NOT verified / open risk: device rendering of color/image/actions (needs new SW to activate on a real device after hosting deploy � cache v5.6.0); Mark Confirmed action click-through on live order
+- NOT verified / open risk: device rendering of color/image/actions (needs new SW to activate on a real device after hosting deploy — cache v5.6.0); Mark Confirmed action click-through on live order
 - Confidence: HIGH
 - Ended: 2026-10-14 23:47 UTC
 
@@ -970,8 +971,8 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-09-30 04:24 UTC
-- Verified: build green; role-chip-check 8/8 (auth boot regression) + tests/attribution-check.mjs 11/11: F3 resolver record-driven (null/undefined uid -> '', owner uid -> 'Owner � pizza' via admins fallback, unresolvable -> ''), F1a POS entry re-signs stale uid overwritten, F1b logout clears + login re-signs current uid immediately + POS re-entry correct (caught live: re-login while walkin tab active never re-ran loadWalkinMenu � fixed by auth-boundary sign-in), endShift clears + toast without PIN wording + no dead check, 0 pageErrors
-- NOT verified / open risk: multi-agent cross-review (3 explore agents failed: opencode.ai DNS) � verified by single-agent deep read with file:line evidence; Manager/Cashier/Waiter ceiling paths (same gate code, owner-only creds); deleted verifyCounterPin (zero refs after promptCounterPinSignIn removal, grep-proven)
+- Verified: build green; role-chip-check 8/8 (auth boot regression) + tests/attribution-check.mjs 11/11: F3 resolver record-driven (null/undefined uid -> '', owner uid -> 'Owner — pizza' via admins fallback, unresolvable -> ''), F1a POS entry re-signs stale uid overwritten, F1b logout clears + login re-signs current uid immediately + POS re-entry correct (caught live: re-login while walkin tab active never re-ran loadWalkinMenu — fixed by auth-boundary sign-in), endShift clears + toast without PIN wording + no dead check, 0 pageErrors
+- NOT verified / open risk: multi-agent cross-review (3 explore agents failed: opencode.ai DNS) — verified by single-agent deep read with file:line evidence; Manager/Cashier/Waiter ceiling paths (same gate code, owner-only creds); deleted verifyCounterPin (zero refs after promptCounterPinSignIn removal, grep-proven)
 - Confidence: HIGH
 - Ended: 2026-09-30 04:31 UTC
 
@@ -989,8 +990,8 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - TIER: 1 (low-risk)
 - STATUS: DONE
 - Started: 2026-09-30 02:56 UTC
-- Verified: build green; 8/8 playwright (tests/role-chip-check.mjs: local dist + SA-minted custom-token sign-in as owner uid � no password needed): desktop chip 'Owner � pizza' (bold role, em-dash name) visible in topbar, email kept; mobile chip visible under Dashboard title at 390px, desktop-only topbar chip hidden; 0 pageErrors; screenshots role-chip-desktop.png (1440x900) + role-chip-mobile.png (390x844) visually confirmed (orange bold 'Owner' pill + mobile line)
-- NOT verified / open risk: Manager/Cashier/Waiter logins (same DEFAULT_ROLES mapping path as Owner, only owner account exists); staff-login name source; renamed outlet-gate custom role labels (fill runs before loadOutletGates with DEFAULT_ROLES � standard labels match)
+- Verified: build green; 8/8 playwright (tests/role-chip-check.mjs: local dist + SA-minted custom-token sign-in as owner uid — no password needed): desktop chip 'Owner — pizza' (bold role, em-dash name) visible in topbar, email kept; mobile chip visible under Dashboard title at 390px, desktop-only topbar chip hidden; 0 pageErrors; screenshots role-chip-desktop.png (1440x900) + role-chip-mobile.png (390x844) visually confirmed (orange bold 'Owner' pill + mobile line)
+- NOT verified / open risk: Manager/Cashier/Waiter logins (same DEFAULT_ROLES mapping path as Owner, only owner account exists); staff-login name source; renamed outlet-gate custom role labels (fill runs before loadOutletGates with DEFAULT_ROLES — standard labels match)
 - Confidence: HIGH
 - Ended: 2026-09-30 03:30 UTC
 - Deployed: commit 27a1d9e pushed; hosting:admin released (this chip + claim task 023514 both live) — post-deploy live E2E: role-chip-check 8/8 + POS no-PIN/reports-claim spot-check 5/5 on foodhubbie-admins.web.app, 0 pageErrors
@@ -1006,8 +1007,8 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-09-30 02:35 UTC
-- Verified: build green; 9/9 playwright (dist==working tree): POS opens with NO PIN prompt + counterStaffUid auto-signed + menu rendered + no access-denied; resolveOperatorClaim returns '{Role} � {Name}'; receipt template shows claim + omits when empty; reports screen claim textContent 'By Owner � pizza'; reports PDF export generated Sales_Report_2026-09-01_to_2026-09-30.pdf (30D range); 0 pageErrors; claim-pos/claim-reports screenshots pixel-verified on disk
-- NOT verified / open risk: real placed-order print E2E (resolver + template tested standalone instead); PDF bytes not scanned for claim text (shared _claimText verified on screen); read tool served shuffled screenshot bytes � verified via pixel sampling instead
+- Verified: build green; 9/9 playwright (dist==working tree): POS opens with NO PIN prompt + counterStaffUid auto-signed + menu rendered + no access-denied; resolveOperatorClaim returns '{Role} — {Name}'; receipt template shows claim + omits when empty; reports screen claim textContent 'By Owner — pizza'; reports PDF export generated Sales_Report_2026-09-01_to_2026-09-30.pdf (30D range); 0 pageErrors; claim-pos/claim-reports screenshots pixel-verified on disk
+- NOT verified / open risk: real placed-order print E2E (resolver + template tested standalone instead); PDF bytes not scanned for claim text (shared _claimText verified on screen); read tool served shuffled screenshot bytes — verified via pixel sampling instead
 - Confidence: HIGH
 - Ended: 2026-09-30 02:52 UTC
 
@@ -1052,7 +1053,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - STATUS: DONE
 - Started: 2026-09-30 01:33 UTC
 - Verified: 8/8 playwright checks iPhone13 390px (dist :8124), 0 pageErrors; screenshots sm-mobile-{staff,staff-scrolled,roles}.png reviewed; root fix [data-settings-section=staff-management]{min-width:0} style.css:2406 (grid item min-width:auto propagated table min-content 937px, masked by body overflow-x hidden); build green
-- NOT verified / open risk: not deployed (min-width fix pending commit decision � style.css entangled with parallel uncommitted WIP); desktop re-run of 9-check suite not repeated after CSS change (CSS scoped to one attribute selector)
+- NOT verified / open risk: not deployed (min-width fix pending commit decision — style.css entangled with parallel uncommitted WIP); desktop re-run of 9-check suite not repeated after CSS change (CSS scoped to one attribute selector)
 - Confidence: HIGH
 - Ended: 2026-09-30 01:33 UTC
 
@@ -1215,7 +1216,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Started: 2026-09-27 08:47 UTC
 - Files touched: Admin/js/features/expenses.js, Admin/js/features/settings.js, Admin/js/ui.js
 - Verified: node --check clean on expenses.js, settings.js, ui.js; Admin build passes; rider-app build passes; database.rules.json valid JSON; dist assertions confirm BUSINESS_ID, EmailAuthProvider, reauthenticateWithCredential, auth all present
-- NOT verified / open risk: No live E2E test against production RTDB � these ReferenceErrors would only crash at runtime in the browser, not in node --check or esbuild
+- NOT verified / open risk: No live E2E test against production RTDB — these ReferenceErrors would only crash at runtime in the browser, not in node --check or esbuild
 - Confidence: HIGH
 - Ended: 2026-09-27 08:50 UTC
 
@@ -1359,7 +1360,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Confidence: HIGH
 - Ended: 2026-09-25 13:45 UTC
 
-### [20260819-105729-174e] Fix rider FCM push notifications (functions dead path) � move rider push into bot + repoint functions triggers
+### [20260819-105729-174e] Fix rider FCM push notifications (functions dead path) — move rider push into bot + repoint functions triggers
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-08-19 10:57 UTC
@@ -1509,7 +1510,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Confidence: HIGH
 - Ended: 2026-07-15 03:20 UTC
 
-### [20260715-030542-9761] Verify all fixes live � dropdown, PWA offline, isTerminal, code dedup
+### [20260715-030542-9761] Verify all fixes live — dropdown, PWA offline, isTerminal, code dedup
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-07-15 03:05 UTC
@@ -1517,7 +1518,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Verification: 4 parallel Playwright agents — admin (0 console errors, login loads), menu (SW registered, manifest link, offline banner, 0 errors), rider (correct title, CSS, form, 0 errors). Live curl confirmed `isBody` fix in main.js, `isTerminal` includes `'Served'`, `_retryBoot`/`offlineBanner` in menu app.js, `sw.js` HTTP 200
 - Confidence: HIGH
 
-### [20260715-025004-e40a] Fix menu app PWA offline � add service worker, manifest.json, registration for offline support
+### [20260715-025004-e40a] Fix menu app PWA offline — add service worker, manifest.json, registration for offline support
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-07-15 02:50 UTC
@@ -1525,7 +1526,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Verification: Service worker (`menu/sw.js`) registered with cache-first strategy + stale-while-revalidate. Manifest (`menu/manifest.json`) has `display: standalone`, inline SVG icon. 1.5s boot timeout in `app.js` with offline banner + auto-reconnect. Deployed to Firebase hosting, confirmed HTTP 200
 - Confidence: HIGH
 
-### [20260715-024132-7ada] Formal verification of all completed fixes � drawer redesign migration, STATUS_SEQUENCES alignment, ISO createdAt fixes, rider filter, dead code removal, CSS fixes
+### [20260715-024132-7ada] Formal verification of all completed fixes — drawer redesign migration, STATUS_SEQUENCES alignment, ISO createdAt fixes, rider filter, dead code removal, CSS fixes
 - TIER: 2 (medium-risk)
 - STATUS: DONE
 - Started: 2026-07-15 02:41 UTC
@@ -1830,7 +1831,7 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
   4. Adjacent bug fixed: combos bulk action bar called undefined `_bulkDeleteCombos`/`_bulkToggleCombos` (console ReferenceError on every admin page; duplicate helper definitions removed, listeners now call the window helpers).
  - Files: `menu/js/order.js`, `menu/js/ui.js`, `menu/js/app.js`, `menu/index.html`, `menu/css/app.css`, `Admin/js/features/pos.js`, `Admin/js/state.js`, `Admin/js/features/tables.js`, `Admin/receipt-templates.js`, `Admin/index.html`, `Admin/js/features/catalog.js`, `menu/sw.js` (v16->v18), `Admin/sw.js` (v5.7.0->v5.9.0), `Admin/index.html` receipt script `?v=5.4.7`, `tools/test-receipt.cjs`.
  - Verify (post-revert, redeployed): `tools/test-receipt.cjs` against source AND download-live `receipt-templates.js` 10/10 PASS; `node --check` all touched JS; live menu `updateCartTotals(478, 5% GST, -110 discount, SC 2%)` => GST 18.40, SC 9.56 (2% of gross, policy unchanged), total 395.96; live strings confirm no `cartSCOptIn`/`walkinSC`/voluntary note; admin SW v5.9.0 + menu SW v18 live.
-- Caveats / NOT changed: (a) settle-time BILL-level manual/coupon discount in Tables still reduces a tax-inclusive total without re-proportioning GST � recalculation would touch stored order totals, session totals, KPI/CSV and the reconciliation identity, so it was left for a dedicated change; (b) delivery webview orders still carry no GST (pricing/business decision, was already the case); (c) no live order was placed (would write a real table session) � the order-creation path is code-verified only.
+- Caveats / NOT changed: (a) settle-time BILL-level manual/coupon discount in Tables still reduces a tax-inclusive total without re-proportioning GST — recalculation would touch stored order totals, session totals, KPI/CSV and the reconciliation identity, so it was left for a dedicated change; (b) delivery webview orders still carry no GST (pricing/business decision, was already the case); (c) no live order was placed (would write a real table session) — the order-creation path is code-verified only.
 - Confidence: HIGH
 ### [20261020-145500-8e1f] Rider app: rider-only outlet scope + rules guard; catalog.js combo fix; database.rules.json rider-onboarding-secrets rules
 - TIER: 3 (high-risk)

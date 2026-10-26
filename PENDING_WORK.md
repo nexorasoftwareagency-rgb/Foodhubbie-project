@@ -425,41 +425,17 @@
 |-------|--------|
 | **Status** | ✅ DONE |
 | **Files Changed** | `bot/rider.js` |
-| **Fix Applied** | Added `notifyCustomerArrived(sock, order)` function that sends ARRIVED WhatsApp template to customer when order status changes to "Reached Drop Location". Bot's main order status listener should call this on status change. |
+| **Fix Applied** | **Not a rider.js fix.** The arrival notification is sent by the bot's order-status listener — `bot/index.js:1418` (`reached drop location` branch) with the push-notification copy at `bot/index.js:948`. A `notifyCustomerArrived()` helper had been added to `bot/rider.js` but was never called from anywhere; it also called `sock.sendMessage` directly, bypassing the ban-proofing send wrappers, so it was deleted on 2026-10-26 rather than wired (wiring it would have double-messaged the customer). |
 
 ---
 
-## 🔴 P0 — CRITICAL — RIDER/DELIVERY SYSTEM (Must Fix Before Next Deploy)
+## ✅ P0 — RIDER/DELIVERY SYSTEM (all three fixed — details above)
 
-### P0-R1: `tenantPath()` sync race — invalid Firebase paths on first render
-| Field | Detail |
-|-------|--------|
-| **Priority** | P0 — Critical |
-| **Problem** | `tenantPath()` in `rider-app/src/lib/constants.ts:49-52` reads `getBusinessIdForOutlet()` which returns `""` if cache is empty (first render before `RiderContext` effect populates it). Produces malformed paths like `businesses//outlets/pizza/orders` → Firebase reads/writes fail silently. |
-| **Files** | `rider-app/src/lib/constants.ts:49-52` (sync `tenantPath`), `rider-app/src/context/RiderContext.tsx:43-52` (async cache population), `rider-app/src/services/orderService.ts` (calls `dbPaths.orders()` on mount) |
-| **Root Cause** | `tenantPath()` is synchronous but depends on async `RiderContext` cache. `subscribeAvailableOrders` fires immediately on mount before cache is ready. |
-| **Impact** | First few seconds after login: all order queries (Available, Active, History) fail → empty lists, "no orders" shown incorrectly. |
-| **Fix Required** | Remove synchronous `tenantPath()` entirely. Only `tenantPathAsync()` (which awaits cache) should exist. Update all callers to use async version or guard with `outletsLoading` state. |
+P0-R1 (`tenantPath()` sync race), P0-R2 (N+1 reads in `loadOutlets()`) and P0-R3 (no "arrived" customer notification) were this P0 set. The long-form sections that used to sit here restated the *problem* with no status field, so they read as open criticals. Re-verified in code 2026-10-26:
 
-### P0-R2: N+1 reads in `loadOutlets()` — 2 round-trips per outlet
-| Field | Detail |
-|-------|--------|
-| **Priority** | P0 — Critical |
-| **Problem** | `loadOutlets()` in `rider-app/src/services/orderService.ts:75-109` does sequential `Promise.all` per outlet (Store + Delivery settings). With N outlets = 2N round-trips. |
-| **Files** | `rider-app/src/services/orderService.ts:75-109` |
-| **Root Cause** | Loop is sequential; inner `Promise.all` only batches per-outlet, not across all outlets. |
-| **Impact** | 10 outlets = 20 round-trips = 2-5s delay on rider login. Blocks outlet list, businessId cache, and downstream order subscriptions. |
-| **Fix Required** | Batch ALL settings reads with single `Promise.all` across all outlets: collect all outlet refs first, then `await Promise.all(allRefs.map(get))`, then process in memory. |
-
-### P0-R3: `markReachedDrop` sends NO customer notification — bot has no handler
-| Field | Detail |
-|-------|--------|
-| **Priority** | P0 — Critical |
-| **Problem** | `markReachedDrop` in `orderService.ts:378-392` updates order status to "Reached Drop Location" but comment claims bot sends ARRIVED message. `bot/rider.js` has **no listener for "Reached Drop Location"**. Customer never gets "I've arrived" notification. |
-| **Files** | `rider-app/src/services/orderService.ts:378-392`, `bot/rider.js` (missing status handler) |
-| **Root Cause** | Bot only handles: pickup, assignment, broadcast. "Reached Drop Location" status transition was added to rider app but bot notification never implemented. |
-| **Impact** | Customer never receives arrival notification with OTP. Rider arrives, customer unaware. |
-| **Fix Required** | Option A: Add handler in `bot/rider.js` for `Reached Drop Location` → send ARRIVED WhatsApp template with OTP. Option B: Call `whatsappService.sendArrived()` directly from `markReachedDrop` (as commented code suggests was removed). |
+- **P0-R1** — `getBusinessIdForOutletSync()` (`rider-app/src/lib/constants.ts:46`) now **throws** on cache miss instead of emitting `businesses//outlets/…`; `RiderContext` pre-populates the cache at boot.
+- **P0-R2** — `loadOutlets()` reads **only the rider's own outlet** in one `Promise.all` (deliberately no cross-restaurant enumeration; the ≥10-outlet N+1 case no longer exists).
+- **P0-R3** — arrival notification lives in `bot/index.js:1418`, push copy at `bot/index.js:948`. The dead `notifyCustomerArrived()` helper in `bot/rider.js` was deleted 2026-10-26 (zero callers; bypassed the send wrappers).
 
 ---
 

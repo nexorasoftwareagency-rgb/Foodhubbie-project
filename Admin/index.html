@@ -4716,8 +4716,8 @@
                 <div class="promo-action-bar">
                     <div class="promo-action-left">
                         <div class="promo-mode-switcher" role="tablist">
-                            <button class="promo-mode-pill active" role="tab" data-mode="now">Send Now</button>
-                            <button class="promo-mode-pill" role="tab" data-mode="schedule">Schedule</button>
+                            <button class="promo-mode-pill active" role="tab" aria-selected="true" data-mode="now">Send Now</button>
+                            <button class="promo-mode-pill" role="tab" aria-selected="false" aria-controls="promoScheduleBox" data-mode="schedule">Schedule</button>
                         </div>
                         <button class="btn-primary" id="btnPromoLaunch" disabled>
                             <i data-lucide="send"></i> <span data-i18n="promo.actions.launch">Launch campaign</span>
@@ -4737,9 +4737,9 @@
                 <div class="promo-campaigns-section">
                     <div class="promo-campaigns-header">
                         <div class="promo-campaigns-tabs" role="tablist">
-                            <button class="promo-campaign-tab active" data-panel="active">Active</button>
-                            <button class="promo-campaign-tab" data-panel="history">History</button>
-                            <button class="promo-campaign-tab" data-panel="notifications">App Notifications</button>
+                            <button class="promo-campaign-tab active" role="tab" aria-selected="true" aria-controls="promoActivePane" data-panel="active">Active</button>
+                            <button class="promo-campaign-tab" role="tab" aria-selected="false" aria-controls="promoHistoryPane" data-panel="history">History</button>
+                            <button class="promo-campaign-tab" role="tab" aria-selected="false" aria-controls="promoNotificationsPane" data-panel="notifications">App Notifications</button>
                         </div>
                         <div class="promo-campaigns-actions">
                             <button class="btn-danger btn-sm" id="btnPromoKillAll" disabled>
@@ -4751,7 +4751,7 @@
                         </div>
                     </div>
 
-                    <div id="promoActivePane" class="promo-campaign-panel">
+                    <div id="promoActivePane" class="promo-campaign-panel" role="tabpanel">
                         <div id="promoCampaignList" class="promo-campaign-list">
                             <div class="promo-empty-state">
                                 <i data-lucide="megaphone" class="promo-empty-icon"></i>
@@ -4760,7 +4760,7 @@
                         </div>
                     </div>
 
-                    <div id="promoHistoryPane" class="promo-campaign-panel hidden">
+                    <div id="promoHistoryPane" class="promo-campaign-panel hidden" role="tabpanel">
                         <div id="promoHistoryList" class="promo-campaign-list">
                             <div class="promo-empty-state">
                                 <i data-lucide="archive" class="promo-empty-icon"></i>
@@ -4769,7 +4769,7 @@
                         </div>
                     </div>
 
-                    <div id="promoNotificationsPane" class="promo-campaign-panel hidden">
+                    <div id="promoNotificationsPane" class="promo-campaign-panel hidden" role="tabpanel">
                         <div class="promo-notifications-header">
                             <h3>Push Notifications to App Users</h3>
                             <p class="text-muted-small">Send instant push notifications to customers who installed your restaurant's app and enabled notifications.</p>

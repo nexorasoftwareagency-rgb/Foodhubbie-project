@@ -164,11 +164,11 @@ This rule applies to:
 - **Stage:** `ok`
 - **Verified:** `npm run build:supreme` produces `SupremeAdmin/dist/` with 246KB → 170KB (31% reduction) + CSS purged 26%; `firebase.json` supreme target now serves from `SupremeAdmin/dist/`; `SupremeAdmin/dist/` added to `.gitignore`; npm scripts `build:admin`, `build:supreme`, `deploy:admin`, `deploy:supreme` added
 - **Review:** Refactored `tools/build.mjs` to support `--admin` / `--supreme` CLI args via `TARGETS` map; `Promise.all` builds targets separately; shared/ directory handling conditional (only for Admin, which imports `../../shared/*`)
-- **Commit:** `pending` (ready for `git add` + `git commit`)
+- **Commit:** `4ca91cf` (`build: add SupremeAdmin esbuild minification support`)
 
 ---
 
-### 🚧 WORK IN PROGRESS: Build system commit
+### ✅ Build system commit
 - **File:** `tools/build.mjs`, `package.json`, `firebase.json`, `.gitignore`
 - **Stage:** `ok` (git pushed + deployed)
 - **Verified:** `npm run build:supreme` works correctly; all modified files pass `node --check`; `.gitignore` updated; scripts added; git push successful; **Firebase deploy successful**
@@ -229,7 +229,7 @@ This rule applies to:
 - **Stage:** `ok`
 - **Verified:** `npm run build:supreme` produces `SupremeAdmin/dist/` with 246KB → 170KB (31% reduction) + CSS purged 26%; `firebase.json` supreme target now serves from `SupremeAdmin/dist/`; `SupremeAdmin/dist/` added to `.gitignore`; npm scripts `build:admin`, `build:supreme`, `deploy:admin`, `deploy:supreme` added
 - **Review:** Refactored `tools/build.mjs` to support `--admin` / `--supreme` CLI args via `TARGETS` map; `Promise.all` builds targets separately; shared/ directory handling conditional (only for Admin, which imports `../../shared/*`)
-- **Commit:** pending (ready for `git add` + `git commit`)
+- **Commit:** `4ca91cf` (same build-system commit as the entry above)
 
 ### ✅ Temp file cleanup
 - **File:** `SupremeAdmin/js/utils.js.tmp`, `SupremeAdmin/js/features/bot-fleet-overview-temp.js`
@@ -454,19 +454,19 @@ These are **real, actionable items** in THIS repo based on the audits.
 
 **Context:** Baileys (unofficial WhatsApp Web API) is ban-prone at high volume. A restaurant with 800 orders/10hrs generates ~3,200 outbound messages/day (order notifications + rider broadcasts + promos). Meta flags accounts at 500+/day. These three items add detection, pacing, and visibility.
 
-### B1: Baileys-Specific Send Delay (2-5s Jitter)
+### ✅ B1: Baileys-Specific Send Delay (2-5s Jitter)
 - **Files:** `bot/utils.js`, `bot/index.js`
 - **Stage:** `done`
 - **Verified:** `node --check bot/utils.js` + `node --check bot/index.js` pass; deployed to EC2; `pm2 restart all` — all 4 processes online
 - **Done:** SCP + restart — `BaileysSendTracker` class in utils.js, wired into `sendImage()` in index.js. 2-5s jitter between distinct recipients, no delay for same-recipient sends. Skipped for Meta transport.
-- **Commit:** pending
+- **Commit:** `a936f48` (`feat: Baileys send tracker + ban detection + promo badge fix + message preview CSS`)
 
-### B2: Ban Detection + Admin Alert
+### ✅ B2: Ban Detection + Admin Alert
 - **Files:** `bot/index.js`
 - **Stage:** `done`
 - **Verified:** `node --check bot/index.js` pass; deployed to EC2; `pm2 restart all` — all 4 processes online. Ban detection immediately triggered on restart (pizza bot was already in `logged_out` state) — wrote alert to `bot/alerts/pizza/`, auto-paused promotions.
 - **Done:** SCP + restart — consecutive send failure tracking (10 failures in 5min = warning alert), session expiry detection (QR after open = banned), `loggedOut` disconnect = critical alert + auto-pause promos. Alerts written to `bot/alerts/{outlet}` in Firebase.
-- **Commit:** pending
+- **Commit:** `bb92b87` (`fix(bot): 5 critical reliability fixes from log analysis patch`)
 
 ### ✅ B3: Volume Dashboard (Daily Outbound Tracking)
 - **Files:** `bot/index.js`, `bot/utils.js`, `bot/rider.js`, `bot/promotions.js`
@@ -479,7 +479,7 @@ These are **real, actionable items** in THIS repo based on the audits.
   4. **`bot/promotions.js`** — Tracker initialized; tracking added to `sendPromotionalMessage()` (promo) and extra menu image send; outlet param threaded through `sendWithRetry()` → `sendPromotionalMessage()`
 - **Verified:** `node --check` passes for all 4 files; bot restarted successfully on EC2, online and processing messages
 - **Deployed:** SCP'd all files to EC2 `/var/www/foodhubbie/bot/`; `pm2 restart bot-roshani-pizza-pizza` — confirmed online with `outboundTracker` initialized
-- **Commit:** pending
+- **Commit:** `a936f48` (tracker class) + `7a918fb` (`feat(bot): wire OutboundTracker into all send paths for daily usage analytics`)
 
 ---
 
@@ -566,7 +566,7 @@ To mark a new item:
 - **Files:** `bot/promotions.js`
 - **Stage:** `done`
 - **Verified:** `node --check` passes, deployed to EC2
-- **OK:** delayMs now used in send loop when provided; falls back to 8-15s hardcoded when not
+- **OK:** Resolved the other way — the field and its `delayMs` plumbing were **removed** (0 occurrences in `Admin/index.html` and `bot/promotions.js`). The send loop always paces from the bot's own constants. No config surface left to go stale.
 - **Done:** ✅ SCP + `pm2 restart bot-roshani-pizza-pizza`
 
 **Issue:** `promoDelay` input (1-30s, default 2) is read, sent as `delayMs` in `SEND_PROMOTION` command, destructured in `runPromotionCampaign()` — and never used. The send loop always uses hardcoded `PROMO_MIN_DELAY_MS` (8000) / `PROMO_MAX_DELAY_MS` (15000).
@@ -580,7 +580,7 @@ To mark a new item:
 - **Files:** `Admin/index.html`
 - **Stage:** `done`
 - **Verified:** deployed
-- **OK:** hint now says "Per-message delay in seconds. A 60-120s pause happens automatically every 30 sends."
+- **OK:** The hint died with the field (see P3) — no stale numbers left in the UI. Authoritative pacing, if it ever needs re-surfacing: `PROMO_MIN_DELAY_MS=8000` / `PROMO_MAX_DELAY_MS=15000` per message, `BATCH_MIN_PAUSE_MS=60000` / `BATCH_MAX_PAUSE_MS=120000` pause every 30 sends (`bot/promotions.js`).
 - **Done:** ✅ `firebase deploy --only hosting:admin`
 
 **Issue:** `Admin/index.html:4337` says "Default 2s. A 30s pause happens automatically every 50 sends." Actual: per-message delay is random 8-15s, batch pause is 60-120s every 30 sends. Three numbers, all wrong. The guide modal (`promotions-guide.js`) has the correct numbers.
@@ -650,7 +650,7 @@ To mark a new item:
 - **Files:** `Admin/js/features/promotions.js`
 - **Stage:** `done`
 - **Verified:** `node --check` passes, deployed
-- **OK:** `_switchMode()` now toggles `aria-selected` on all tabs
+- **OK:** Implemented 2026-10-26 (an earlier pass had marked this done while `aria-selected` was still missing). `_switchMode()` and `_switchCampaignPanel()` now write `aria-selected` on every `.promo-mode-pill` / `.promo-campaign-tab`; markup carries `aria-selected="true|false"`, `aria-controls` on the campaign tabs + the Schedule pill, and `role="tabpanel"` on the three campaign panes.
 - **Done:** ✅ deployed
 
 **Issue:** Mode switcher uses `role="tablist"` / `role="tab"` but `aria-selected` is never toggled in `_switchMode()`, no `role="tabpanel"` / `aria-controls` pairing.

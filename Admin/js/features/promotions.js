@@ -741,7 +741,9 @@ async function _exportCsv(id) {
 async function _switchMode(mode) {
     _activeMode = mode;
     document.querySelectorAll('.promo-mode-pill').forEach(t => {
-        t.classList.toggle('active', t.dataset.mode === mode);
+        const on = t.dataset.mode === mode;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     document.getElementById('promoScheduleBox')?.classList.toggle('hidden', mode !== 'schedule');
     const btn = document.getElementById('btnPromoLaunch');
@@ -757,7 +759,9 @@ async function _switchMode(mode) {
 function _switchCampaignPanel(panel) {
     _activeCampaignPanel = panel;
     document.querySelectorAll('.promo-campaign-tab').forEach(t => {
-        t.classList.toggle('active', t.dataset.panel === panel);
+        const on = t.dataset.panel === panel;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     document.getElementById('promoActivePane')?.classList.toggle('hidden', panel !== 'active');
     document.getElementById('promoHistoryPane')?.classList.toggle('hidden', panel !== 'history');

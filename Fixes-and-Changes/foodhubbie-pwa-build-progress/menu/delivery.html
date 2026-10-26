@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Open Graph / WhatsApp Link Preview -->
-<meta property="og:title" content="FoodHubbie � Order for Delivery">
+<meta property="og:title" content="FoodHubbie — Order for Delivery">
 <meta property="og:description" content="Browse our menu, customize your order, and get it delivered hot! Fresh food delivered to your door.">
 <meta property="og:image" content="https://foodhubbie-qrmenu.web.app/assets/og-banner.jpg">
 <meta property="og:image:width" content="1200">
@@ -15,16 +15,16 @@
 <meta property="og:site_name" content="FoodHubbie">
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="FoodHubbie � Order for Delivery">
+<meta name="twitter:title" content="FoodHubbie — Order for Delivery">
 <meta name="twitter:description" content="Browse our menu, customize your order, and get it delivered hot!">
 <meta name="twitter:image" content="https://foodhubbie-qrmenu.web.app/assets/og-banner.jpg">
-<title>FoodHubbie � Order for Delivery</title>
+<title>FoodHubbie — Order for Delivery</title>
 <meta name="theme-color" content="#E84908">
 <link rel="manifest" href="manifest.json">
 <script src="js/dynamic-manifest.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<!-- SAME stylesheet as the dine-in QR app (menu/index.html) � every dish
+<!-- SAME stylesheet as the dine-in QR app (menu/index.html) — every dish
      card, button, color, and font below comes from this file, unmodified,
      so this page looks identical to the existing menu app. -->
 <link rel="stylesheet" href="css/app.css">
@@ -55,16 +55,16 @@
 <body>
 
 <a href="#screenMenu" class="skip-link">Skip to main content</a>
-<h1 class="sr-only">FoodHubbie � Delivery Menu</h1>
+<h1 class="sr-only">FoodHubbie — Delivery Menu</h1>
 
 <div id="app">
 
     <div id="loadingOverlay" class="loading-overlay">
         <div class="spinner"></div>
-        <p style="font-size:13px;color:var(--text-sub);">Loading menu�</p>
+        <p style="font-size:13px;color:var(--text-sub);">Loading menu…</p>
     </div>
     <div id="offlineBanner" class="offline-banner">
-        Connection trouble �
+        Connection trouble —
         <button id="btnRetryConnection" type="button" style="background:none;border:none;color:#fff;text-decoration:underline;font:inherit;font-weight:800;cursor:pointer;padding:0;margin-left:4px;">Tap to retry</button>
     </div>
 
@@ -89,7 +89,7 @@
         <div class="search-row">
             <div class="search-input-wrap">
                 <svg class="icon" style="width:16px;height:16px;color:var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="text" id="dishSearchInput" placeholder="Search for dishes�">
+                <input type="text" id="dishSearchInput" placeholder="Search for dishes…">
             </div>
         </div>
 
@@ -102,7 +102,7 @@
             <button id="btnViewCartBar">
                 <span id="menuCartBarCount">0 items</span>
                 <span id="menuCartBarTotal">?0</span>
-                <span>View Cart �</span>
+                <span>View Cart →</span>
             </button>
         </div>
     </div>
@@ -140,7 +140,7 @@
                 </div>
 
                 <div class="custom-section-label">Special Instructions (Optional)</div>
-                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicy�"></textarea>
+                <textarea class="special-instructions" id="specialInstructions" placeholder="e.g. No onion, less spicy…"></textarea>
             </div>
         </div>
         <div class="custom-footer">
@@ -156,7 +156,7 @@
         </div>
     </div>
 
-    <!-- ============== SCREEN: CART � same as QR app's cart, minus the
+    <!-- ============== SCREEN: CART — same as QR app's cart, minus the
          table-only "Guests" stepper, plus Address + Location. Discount
          code entry point is IDENTICAL (menu/js/discount.js, unmodified). ============== -->
     <div id="screenCart" class="screen">
@@ -185,7 +185,7 @@
             </div>
             <div class="form-group-mini">
                 <label>Special Note (Optional)</label>
-                <textarea id="checkoutNote" placeholder="e.g. Ring the bell, extra spicy�" rows="2" maxlength="200"></textarea>
+                <textarea id="checkoutNote" placeholder="e.g. Ring the bell, extra spicy…" rows="2" maxlength="200"></textarea>
             </div>
             <div class="form-group-mini discount-input-wrap" id="discountInputWrap">
                 <label>Discount Code (Optional)</label>
@@ -254,9 +254,9 @@
         <div id="promotionsLinksContainer" class="promotions-links"></div>
     </div>
 
-    <!-- ============== BOTTOM NAVIGATION � Menu / Cart / Promos only.
+    <!-- ============== BOTTOM NAVIGATION — Menu / Cart / Promos only.
          Tracking, History, and table-only actions (Call Waiter / Other
-         Request) are intentionally NOT included � there's no table
+         Request) are intentionally NOT included — there's no table
          session and no order-tracking screen for delivery. ============== -->
     <nav id="bottomNav" class="bottom-nav hidden">
         <button class="bottom-nav-item active" data-bottom-tab="screenMenu">
