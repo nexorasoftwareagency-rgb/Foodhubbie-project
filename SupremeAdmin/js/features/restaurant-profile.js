@@ -2,6 +2,12 @@ import { registerAction, navigate } from '/js/main.js';
 import { subscribe, isReadOnly } from '/js/data-store.js';
 import { refreshIcons, escapeHtml, statusPillHtml, statusLabel, formatDate, formatAge, formatUptime, renderOnboardingStepper, formatMemory, transportLabel, renderUptimeSparkline, showToast, showConfirm } from '/js/utils.js';
 import { scopeStats, inr, currentYm, monthLabel, recordPaymentModal, printReceipt } from '/js/billing-shared.js';
+import { renderBotUsage } from './templates/bot-usage.js';
+import { renderBillingCard } from './templates/billing-card.js';
+import { detailValues, renderDetailView, renderDetailForm } from './templates/details.js';
+import { renderAdminCreds, renderAdminForm } from './templates/admin-creds.js';
+import { loadWaTemplates, registerWaTemplateView, waTemplatesLoadedFor, waTemplatesHtml, waLibrary } from './templates/wa-templates.js';
+import { loadQuota } from './templates/quota.js';
 
 const mainEl = document.getElementById('app-main');
 let currentBid = null;
@@ -31,88 +37,6 @@ function reRenderProfile() {
   const biz = lastRaw?.[currentBid];
   const outlet = biz?.outlets?.[currentOid];
   if (biz && outlet) renderProfile(currentBid, currentOid, biz, outlet);
-}
-
-// ---------------------------------------------------------------------
-// WhatsApp Bot Usage — renders today's count + 7-day trend bar chart
-// ---------------------------------------------------------------------
-function _istDate(ts) {
-  if (!ts) return '';
-  return new Date(ts + 5.5 * 3600000).toISOString().split('T')[0];
-}
-
-function _dayLabelShort(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00+05:30');
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-}
-
-function _renderBotUsage(usage, transport) {
-  if (!usage || typeof usage !== 'object') {
-    return '<div style="color:var(--text-tertiary);padding:8px 0">No outbound data yet. Data appears after the bot starts sending messages.</div>';
-  }
-
-  // Build 7-day series (oldest → newest)
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400000 + 5.5 * 3600000);
-    days.push(d.toISOString().split('T')[0]);
-  }
-  const series = days.map(d => ({ date: d, count: usage[d]?.total || 0 }));
-  const maxCount = Math.max(1, ...series.map(d => d.count));
-
-  // Today's breakdown
-  const today = _istDate(Date.now());
-  const todayData = usage[today] || {};
-  const todayTotal = todayData.total || 0;
-
-  // Warning level
-  let warnColor = '';
-  let warnLabel = '';
-  if (todayTotal >= 500) { warnColor = '#ef4444'; warnLabel = 'Approaching Baileys ban threshold'; }
-  else if (todayTotal >= 400) { warnColor = '#f59e0b'; warnLabel = 'Nearing daily limit'; }
-
-  const barChartHtml = series.map(s => {
-    const h = maxCount > 0 ? Math.max(2, (s.count / maxCount) * 60) : 2;
-    const color = s.count >= 500 ? '#ef4444' : s.count >= 400 ? '#f59e0b' : 'var(--accent, #25D366)';
-    return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0">
-      <div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px;font-variant-numeric:tabular-nums">${s.count || ''}</div>
-      <div style="width:100%;max-width:28px;height:${h}px;background:${color};border-radius:3px 3px 0 0;min-height:2px;transition:height .3s"></div>
-      <div style="font-size:9px;color:var(--text-tertiary);margin-top:3px;white-space:nowrap">${_dayLabelShort(s.date)}</div>
-    </div>`;
-  }).join('');
-
-  return `
-    <div style="padding:4px 0">
-      ${warnLabel ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;padding:8px 10px;background:${warnColor}18;border:1px solid ${warnColor}44;border-radius:8px;font-size:12.5px;color:${warnColor}">
-        <svg data-lucide="alert-triangle" style="width:14px;height:14px;flex:none"></svg> ${warnLabel} (${todayTotal}/500)
-      </div>` : ''}
-
-      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-        <div style="flex:1;min-width:100px;padding:10px 12px;background:rgba(var(--accent-rgb,37,211,102),.06);border-radius:8px;text-align:center">
-          <div style="font-size:22px;font-weight:700;color:var(--accent,#25D366);line-height:1.2;font-variant-numeric:tabular-nums">${todayTotal}</div>
-          <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px">Sent Today</div>
-        </div>
-        <div style="flex:1;min-width:80px;padding:10px 12px;background:rgba(34,197,94,.04);border-radius:8px;text-align:center">
-          <div style="font-size:16px;font-weight:600;color:var(--text-primary,#111);line-height:1.2;font-variant-numeric:tabular-nums">${todayData.order_notification || 0}</div>
-          <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px">Orders</div>
-        </div>
-        <div style="flex:1;min-width:80px;padding:10px 12px;background:rgba(34,197,94,.04);border-radius:8px;text-align:center">
-          <div style="font-size:16px;font-weight:600;color:var(--text-primary,#111);line-height:1.2;font-variant-numeric:tabular-nums">${todayData.rider_broadcast || 0}</div>
-          <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px">Riders</div>
-        </div>
-        <div style="flex:1;min-width:80px;padding:10px 12px;background:rgba(34,197,94,.04);border-radius:8px;text-align:center">
-          <div style="font-size:16px;font-weight:600;color:var(--text-primary,#111);line-height:1.2;font-variant-numeric:tabular-nums">${todayData.promo || 0}</div>
-          <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px">Promos</div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:4px;font-size:11px;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:.5px">7-Day Trend</div>
-      <div style="display:flex;align-items:flex-end;gap:4px;height:90px;padding:6px 0;border-bottom:1px solid var(--glass-border,#2a2f3a)">${barChartHtml}</div>
-
-      <div style="margin-top:12px;font-size:11.5px;color:var(--text-tertiary);line-height:1.6">
-        Baileys soft limit: 500 messages/day · Threshold: <span style="color:#f59e0b">400</span>/<span style="color:#ef4444">500</span> · Transport: <span class="mono">${escapeHtml(transport === 'meta' ? 'Official API' : 'WhatsApp Web')}</span>
-      </div>
-    </div>`;
 }
 
 export function render(bid, oid, tab) {
@@ -242,7 +166,7 @@ function renderProfile(bid, oid, biz, outlet) {
       </div>
     </div>
 
-    ${renderBillingCard(outlet, readOnly, bid, oid, biz)}
+    ${renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSections, billingDraft)}
 
     <div class="glass-card" style="font-size:13px;margin-bottom:16px;border:1px solid ${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--glass-border,#2a2f3a)'}">
       <strong style="display:block;margin-bottom:6px;color:${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--status-offline,#f87171)'}">
@@ -329,7 +253,7 @@ function renderProfile(bid, oid, biz, outlet) {
           <svg data-lucide="chevron-down" class="chevron-icon" style="width:14px;height:14px;color:var(--accent)"></svg>
         </div>
         <div class="collapsible-body${collapsedSections.has('wa-usage-body') ? ' collapsed' : ''}" id="wa-usage-body">
-          <div id="wa-usage-content" style="color:var(--text-secondary);font-size:13px">${_renderBotUsage(outlet.bot?.usage, transport)}</div>
+          <div id="wa-usage-content" style="color:var(--text-secondary);font-size:13px">${renderBotUsage(outlet.bot?.usage, transport)}</div>
         </div>
       </div>
 
@@ -417,255 +341,7 @@ function renderProfile(bid, oid, biz, outlet) {
   if (connected) loadWaTemplates(bid, oid);
 }
 
-// ---- Billing & promo tokens (Supreme-side management) ---------------------
-// Reads/writes businesses/{bid}/outlets/{oid}/billing — the same node the
-// Admin Costs tab displays and tools/seed-billing-defaults.cjs seeds.
-// Grants go through a transaction on tokens/balance so concurrent grants
-// can't lose an increment, then record the pack for the history list.
-function renderBillingCard(outlet, readOnly, bid, oid, biz) {
-  const b = outlet.billing || null;
-  const collapsed = collapsedSections.has('billing-body');
-  const ro = readOnly ? 'disabled' : '';
-  const roTitle = readOnly ? 'View-only account' : '';
-  const header = `
-    <div class="collapsible-header${collapsed ? ' collapsed' : ''}" data-action="toggle-section" data-target="billing-body" role="button" tabindex="0" aria-expanded="${!collapsed}" aria-controls="billing-body" style="margin-bottom:10px">
-      <strong style="display:block"><svg data-lucide="wallet" style="width:14px;height:14px;vertical-align:-2px"></svg> Billing &amp; promo tokens</strong>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="font-size:12px;color:var(--text-secondary)">${b ? `${b.tokens?.balance ?? 0} tokens` : 'Not seeded'}</span>
-        <svg data-lucide="chevron-down" class="chevron-icon" style="width:14px;height:14px;color:var(--text-tertiary)"></svg>
-      </div>
-    </div>`;
-
-  if (!b) {
-    return `<div class="glass-card" style="font-size:13px;margin-bottom:16px">${header}
-      <div class="collapsible-body${collapsed ? ' collapsed' : ''}" id="billing-body" style="color:var(--text-secondary)">Billing not set up yet — run <span class="mono">tools/seed-billing-defaults.cjs</span>.</div>
-    </div>`;
-  }
-
-  const mode = b.mode === 'commission_1pct' ? 'commission_1pct' : 'per_order';
-  const rates = b.rates || {};
-  const bal = b.tokens?.balance ?? 0;
-  const setupStatus = billingDraft?.setup ?? b.setup?.status ?? 'non_refundable';
-  const w = b.tokenPacks?.welcome;
-  // Money strip — the same billing-shared math the Payment Management tab
-  // uses, so the profile and the tab can never disagree on a ₹ figure.
-  const ym = currentYm();
-  const month = scopeStats(outlet, { k: 'month', ym });
-  const all = scopeStats(outlet, { k: 'all' });
-
-  return `<div class="glass-card" style="font-size:13px;margin-bottom:16px">
-    ${header}
-    <div class="collapsible-body${collapsed ? ' collapsed' : ''}" id="billing-body">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">
-        <div class="detail-cell"><div class="detail-label">Pricing mode</div><div class="detail-value">${mode === 'commission_1pct' ? '1% of sales' : 'Per order'}</div></div>
-        <div class="detail-cell"><div class="detail-label">Setup fee</div><div class="detail-value">₹${b.setup?.amount ?? 500} · ${escapeHtml(String(b.setup?.status || '—'))}</div></div>
-        <div class="detail-cell"><div class="detail-label">Promo token balance</div><div class="detail-value mono">${bal}</div></div>
-      </div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
-        Rates: QR ₹${rates.QR ?? 2} · POS ₹${rates.POS ?? 1} · Delivery ₹${rates.webview_delivery ?? 3} · WhatsApp ₹${rates.WA ?? 3} · other ₹${rates.other ?? 2} · promo ₹${rates.promo ?? 1}/token${w ? ` · welcome pack: ${w.qty} free` : ''}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;padding:10px 12px;background:var(--bg-elevated-2,#eef2f7);border:1px solid var(--glass-border,rgba(15,23,42,.10));border-radius:10px">
-        <div class="detail-cell"><div class="detail-label">Usage · ${monthLabel(ym)}</div><div class="detail-value">${inr(month.usage)} <span style="font-size:11px;color:var(--text-tertiary)">${month.orders} orders</span></div></div>
-        <div class="detail-cell"><div class="detail-label">Received · ${monthLabel(ym)}</div><div class="detail-value">${inr(month.paid)}</div></div>
-        <div class="detail-cell"><div class="detail-label">All-time due</div><div class="detail-value" style="font-weight:800;color:${all.due > 0.009 ? 'var(--status-offline,#dc2626)' : 'var(--status-online,#16a34a)'}">${all.due > 0.009 ? inr(all.due) : 'Settled'}</div></div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-ghost btn-sm" data-action="navigate" data-href="payments/${escapeHtml(bid)}/${escapeHtml(oid)}">Payment record →</button>
-        ${readOnly ? '' : `<button class="btn btn-primary btn-sm" data-action="profile-record-payment" title="${roTitle}">
-          <svg data-lucide="indian-rupee" style="width:13px;height:13px"></svg> Record payment
-        </button>`}
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
-        <button class="btn btn-ghost btn-sm" data-action="billing-toggle-mode" ${ro} title="${mode === 'per_order' ? 'Charge WhatsApp delivery orders at 1% of order value instead of the flat rate' : 'Go back to flat per-order rates'}">
-          ${mode === 'per_order' ? 'Switch to 1% of sales' : 'Switch to per-order'}
-        </button>
-        <select id="billingSetupStatus" class="text-input" style="width:auto" data-billing-draft="setup" ${ro}>
-          ${['non_refundable', 'refundable', 'paid', 'adjusted', 'refunded'].map((s) => `<option value="${s}" ${setupStatus === s ? 'selected' : ''}>Setup: ${s}</option>`).join('')}
-        </select>
-        <button class="btn btn-ghost btn-sm" data-action="billing-save-setup" ${ro} title="${roTitle}">Save setup</button>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
-        <input id="billingGrantQty" type="number" min="1" max="10000" class="text-input" style="width:110px" placeholder="Tokens" value="${escapeHtml(billingDraft?.qty ?? '')}" data-billing-draft="qty" ${ro}>
-        <input id="billingGrantPrice" type="number" min="0" step="0.01" class="text-input" style="width:130px" placeholder="₹ received (0 = free)" value="${escapeHtml(billingDraft?.priceRs ?? '')}" data-billing-draft="priceRs" ${ro}>
-        <button class="btn btn-primary btn-sm" data-action="billing-grant-tokens" ${ro} title="${roTitle}">
-          <svg data-lucide="gift" style="width:13px;height:13px"></svg> Grant tokens
-        </button>
-        <span style="font-size:11.5px;color:var(--text-tertiary)">List value ₹${rates.promo ?? 1} each — charged to campaigns on send.</span>
-      </div>
-    </div>
-  </div>`;
-}
-
-// ---- Business & store details (read + inline edit) ----------------------
-// Reads/writes the exact same paths the Restaurant Admin app's settings page
-// uses (settings/Store, settings/Delivery), so edits from the Owner profile
-// land in the live store, not a shadow copy. Business-level fields
-// (name/plan/contact) live directly under businesses/{bid}.
-function detailValues(bid, oid, biz, outlet) {
-  const store = (outlet.settings && outlet.settings.Store) || {};
-  const del = (outlet.settings && outlet.settings.Delivery) || {};
-  return {
-    businessName: biz.name || store.entityName || '',
-    contactPhone: outlet.contactPhone || biz.contactPhone || store.whatsappNumber || '',
-    contactEmail: biz.contactEmail || '',
-    plan: biz.plan || 'starter',
-    outletName: outlet.name || store.storeName || '',
-    storeName: store.storeName || '',
-    entityName: store.entityName || '',
-    address: store.address || '',
-    gstin: store.gstin || '',
-    fssai: store.fssai || '',
-    tagline: store.tagline || '',
-    shopOpenTime: store.shopOpenTime || '10:00',
-    shopCloseTime: store.shopCloseTime || '23:00',
-    instagram: store.instagram || '',
-    facebook: store.facebook || '',
-    googleReviewLink: store.googleReviewLink || store.reviewUrl || '',
-    notifyPhone: del.notifyPhone || store.developerPhone || '',
-  };
-}
-
-function renderDetailView(bid, oid, biz, outlet) {
-  const v = detailValues(bid, oid, biz, outlet);
-  const isUrl = (s) => /^https?:\/\//i.test(s);
-  const cell = (label, value, { mono = false, span = false } = {}) => {
-    if (!value) return '';
-    const display = isUrl(value)
-      ? `<a href="${escapeHtml(value)}" target="_blank" rel="noopener" title="${escapeHtml(value)}">${escapeHtml(value.length > 52 ? value.slice(0, 49) + '…' : value)}</a>`
-      : `<span${mono ? ' class="mono"' : ''}>${escapeHtml(value)}</span>`;
-    return `<div class="detail-cell${span ? ' span-2' : ''}"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${display}</div></div>`;
-  };
-  const section = (title, cellsHtml) => cellsHtml
-    ? `<div class="detail-section-title">${escapeHtml(title)}</div><div class="detail-grid">${cellsHtml}</div>`
-    : '';
-  const hours = v.shopOpenTime && v.shopCloseTime ? `${v.shopOpenTime} – ${v.shopCloseTime}` : '';
-  const plan = v.plan ? v.plan[0].toUpperCase() + v.plan.slice(1) : '';
-  const html = [
-    section('Business',
-      cell('Business name', v.businessName) +
-      cell('Contact phone', v.contactPhone, { mono: true }) +
-      cell('Contact email', v.contactEmail) +
-      cell('Plan / tier', plan)),
-    section('Store',
-      cell('Outlet name', v.outletName) +
-      cell('Store name', v.storeName) +
-      cell('Entity name', v.entityName) +
-      cell('Address', v.address, { span: true })),
-    section('Registration & hours',
-      cell('GSTIN', v.gstin, { mono: true }) +
-      cell('FSSAI', v.fssai, { mono: true }) +
-      cell('Opening hours', hours) +
-      cell('Tagline', v.tagline)),
-    section('Online presence',
-      cell('Instagram', v.instagram) +
-      cell('Facebook', v.facebook) +
-      cell('Google review link', v.googleReviewLink, { span: true })),
-    section('Delivery',
-      cell('Delivery notify phone', v.notifyPhone, { mono: true, span: true })),
-  ].join('');
-  return (html || '<div style="color:var(--text-secondary)">No details stored yet.</div>')
-    + '<div style="margin-top:14px;font-size:12px;color:var(--text-secondary)">Store-staff can also edit the full settings (delivery slabs, bot images, QR, dine-in) in the Restaurant Admin app.</div>';
-}
-
-function renderDetailForm(state) {
-  const field = (label, name, placeholder, type = 'text') => `
-    <label class="field-label">${escapeHtml(label)}</label>
-    <input type="${type}" name="${name}" data-detail="${name}" class="text-input" value="${escapeHtml(state[name] || '')}" placeholder="${escapeHtml(placeholder || '')}" ${type === 'time' ? '' : ''} />`;
-  return `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div>${field('Business name', 'businessName', 'e.g. My Restaurant')}</div>
-      <div>${field('Outlet name', 'outletName', 'e.g. Boring Road')}</div>
-      <div>${field('Contact phone', 'contactPhone', '+91…')}</div>
-      <div>${field('Contact email', 'contactEmail', 'owner@restaurant.com', 'email')}</div>
-      <div>
-        <label class="field-label">Plan / tier</label>
-        <select name="plan" data-detail="plan" class="text-input">
-          ${['starter', 'growth', 'enterprise'].map((p) => `<option value="${p}" ${state.plan === p ? 'selected' : ''}>${p[0].toUpperCase() + p.slice(1)}</option>`).join('')}
-        </select>
-      </div>
-      <div>${field('Store name', 'storeName', 'e.g. My Restaurant')}</div>
-      <div>${field('Entity name', 'entityName', 'e.g. My Restaurant Pvt Ltd')}</div>
-      <div>${field('Address', 'address', 'Shop address')}</div>
-      <div>${field('GSTIN', 'gstin', '15-char GSTIN')}</div>
-      <div>${field('FSSAI', 'fssai', '14-digit FSSAI')}</div>
-      <div>${field('Tagline', 'tagline', 'e.g. Jai Hind')}</div>
-      <div>
-        <label class="field-label">Opening / closing time</label>
-        <div style="display:flex;gap:6px">
-          <input type="time" name="shopOpenTime" data-detail="shopOpenTime" class="text-input" value="${escapeHtml(state.shopOpenTime || '')}" />
-          <input type="time" name="shopCloseTime" data-detail="shopCloseTime" class="text-input" value="${escapeHtml(state.shopCloseTime || '')}" />
-        </div>
-      </div>
-      <div>${field('Instagram', 'instagram', '@handle or URL')}</div>
-      <div>${field('Facebook', 'facebook', 'URL')}</div>
-      <div>${field('Google review link', 'googleReviewLink', 'URL')}</div>
-      <div>${field('Delivery notify phone', 'notifyPhone', 'Rider-order notifications')}</div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn btn-primary btn-sm" data-action="save-detail">Save changes</button>
-      <span style="font-size:12px;color:var(--text-secondary);align-self:center">Saved live to the restaurant's Firebase record.</span>
-    </div>`;
-}
-
 // Message-template library lives at appTemplates/whatsappTemplates/templates
-// (seeded by tools/seed-templates.cjs). Render the list once per profile
-// visit; each row has an Install button that POSTs to the Bot Control API
-// to create the template on the outlet's WABA. Marked ⬅ if it already exists
-// on the WABA (matched by name).
-let waTemplatesLoadedFor = null;
-let waTemplatesHtml = null;
-let waLibrary = {};
-async function loadWaTemplates(bid, oid) {
-  const el = document.getElementById('wa-templates-content');
-  if (!el) return;
-  if (waTemplatesLoadedFor === `${bid}/${oid}`) {
-    // Re-render tick already loaded this outlet's templates — re-inject the
-    // cached HTML instead of refetching (a fetch could also 501 without a
-    // META_SYSTEM_USER_TOKEN, and flipping between states on every 30s tick
-    // is flickery).
-    if (waTemplatesHtml) el.innerHTML = waTemplatesHtml;
-    return;
-  }
-  waTemplatesLoadedFor = `${bid}/${oid}`;
-  try {
-    const snap = await firebase.database().ref('appTemplates/whatsappTemplates/templates').once('value');
-    const library = snap.val() || {};
-    waLibrary = library;
-    const token = await firebase.auth().currentUser.getIdToken();
-    const res = await fetch(`${TUNNEL_URL}/api/whatsapp/templates/${bid}/${oid}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const existing = new Set();
-    if (res.status === 501) {
-      el.innerHTML = 'Connect the Meta System User Token on the server to manage templates.';
-      waTemplatesHtml = el.innerHTML;
-      return;
-    }
-    if (res.ok) {
-      const { templates } = await res.json();
-      (templates || []).forEach((t) => existing.add(t.name));
-    }
-    const rows = Object.entries(library).map(([key, tpl]) => {
-      const installed = existing.has(tpl.name);
-      return `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border,#2a2f3a)">
-          <div style="cursor:pointer" data-action="view-wa-template" data-key="${escapeHtml(key)}" title="View template details">
-            <div style="color:var(--text-primary)"><span class="mono">${escapeHtml(tpl.name)}</span> <span style="font-size:11px;color:var(--text-secondary)">(${escapeHtml(tpl.category)} · ${escapeHtml(tpl.language)})</span></div>
-            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escapeHtml(tpl.body)}</div>
-          </div>
-          ${installed
-            ? `<span style="font-size:12px;color:var(--success,#22c55e)">Installed</span>`
-            : `<button class="btn btn-ghost btn-sm" data-action="install-wa-template" data-key="${escapeHtml(key)}" data-name="${escapeHtml(tpl.name)}" data-category="${escapeHtml(tpl.category)}" data-language="${escapeHtml(tpl.language || 'en')}" data-body="${escapeHtml(tpl.body)}" ${isReadOnly() ? 'disabled' : ''} title="${isReadOnly() ? 'View-only account' : 'Create this template on the outlet\'s WABA'}">Install</button>`}
-        </div>`;
-    }).join('');
-    el.innerHTML = rows || `<div style="color:var(--text-secondary)">No templates in the library yet — seed with tools/seed-templates.cjs.</div>`;
-    waTemplatesHtml = el.innerHTML;
-  } catch (err) {
-    console.error('load message templates failed', err);
-    el.innerHTML = `<div style="color:var(--text-secondary)">Could not load the template library.</div>`;
-    waTemplatesHtml = el.innerHTML;
-  }
-}
 
 registerAction('install-wa-template', async (btn) => {
   const { key, name, category, language } = btn.dataset;
@@ -691,134 +367,14 @@ registerAction('install-wa-template', async (btn) => {
   }
 });
 
-// Clicking a template name/body opens a detail panel: all stored fields, the
-// real message text with a sample-filled WhatsApp preview, explanation, and
-// use cases. Pure render — reads the already-fetched library from state.
-registerAction('view-wa-template', (btn) => {
-  const tpl = waLibrary[btn.dataset.key];
-  if (!tpl) return showToast('Template not found.', 'error');
-  const sample = (label) => `<span style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:4px">${escapeHtml(label)}</span>`;
-  const fill = (body, vars) => (body || '').replace(/\{\{(\d+)\}\}/g, (_, n) => {
-    const label = (vars || {})[`{{${n}}}`] || `value ${n}`;
-    return sample(label);
-  });
-  const vars = tpl.variables || {};
-  const varRows = Object.entries(vars).map(([k, label]) => `
-      <tr>
-        <td class="mono" style="padding:4px 8px;color:var(--text-secondary)">${escapeHtml(k)}</td>
-        <td style="padding:4px 8px">${escapeHtml(label)}</td>
-      </tr>`).join('');
-  const root = document.getElementById('modal-root');
-  root.innerHTML = `
-    <div class="modal open" id="wa-template-modal">
-      <div class="modal-content" style="max-width:480px">
-        <div class="confirm-title">Template: <span class="mono">${escapeHtml(tpl.name)}</span></div>
-        <div class="confirm-body">
-          <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;margin-bottom:14px">
-            <span style="color:var(--text-secondary)">Category</span><span>${escapeHtml(tpl.category)}</span>
-            <span style="color:var(--text-secondary)">Language</span><span class="mono">${escapeHtml(tpl.language || 'en')}</span>
-          </div>
-
-          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">What it says</div>
-          <div style="background:var(--surface,#1b1f27);border:1px solid var(--border,#2a2f3a);border-radius:8px;padding:10px;font-size:13px;line-height:1.5;margin-bottom:6px">${escapeHtml(tpl.body)}</div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">Preview (with sample values)</div>
-          <div style="background:#e5ddd5;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5;color:#111;max-width:320px">${fill(tpl.body, vars)}</div>
-
-          ${varRows ? `
-            <div style="font-size:12px;color:var(--text-secondary);margin:14px 0 6px">Variables</div>
-            <table style="border-collapse:collapse;width:100%;font-size:12px"><tbody>${varRows}</tbody></table>` : ''}
-
-          ${tpl.explanation ? `<div style="font-size:12px;color:var(--text-secondary);margin:14px 0 6px">What it's for</div><div style="font-size:13px;line-height:1.5">${escapeHtml(tpl.explanation)}</div>` : ''}
-          ${tpl.useCase ? `<div style="font-size:12px;color:var(--text-secondary);margin:14px 0 6px">When to send it</div><div style="font-size:13px;line-height:1.5">${escapeHtml(tpl.useCase)}</div>` : ''}
-        </div>
-        <div class="confirm-actions">
-          <button class="btn btn-ghost" id="wa-template-close">Close</button>
-        </div>
-      </div>
-    </div>`;
-  document.getElementById('wa-template-close').addEventListener('click', () => {
-    const modal = document.getElementById('wa-template-modal');
-    if (!modal) return;
-    modal.classList.remove('open');
-    setTimeout(() => { document.getElementById('modal-root').innerHTML = ''; }, 180);
-  });
-});
-
-
 const ADMIN_APP_URL = 'https://foodhubbie-admins.web.app';
 
-function renderAdminCreds(creds) {
-  if (!creds.email && !creds.password) {
-    return `<div style="color:var(--text-secondary)">No admin login stored yet — this restaurant's staff sign in to the Restaurant Admin panel with email + password. Add it here so it's on record.</div>
-      <div style="margin-top:6px"><span style="color:var(--text-secondary)">Admin app:</span> <a href="${ADMIN_APP_URL}" target="_blank" rel="noopener">${ADMIN_APP_URL}</a></div>`;
-  }
-  const copyBtn = (text, label) => `<button class="btn btn-ghost btn-sm" data-action="copy-credential" data-copy="${escapeHtml(text)}" title="Copy ${label}" aria-label="Copy ${label}" style="padding:3px 6px;min-width:0"><svg data-lucide="copy" style="width:12px;height:12px"></svg></button>`;
-  const eyeToggle = `<button class="btn btn-ghost btn-sm" data-action="toggle-password-visibility" title="Show / hide password" aria-label="Show / hide password" style="padding:3px 6px;min-width:0"><svg data-lucide="eye" style="width:12px;height:12px"></svg></button>`;
-  const rows = [];
-  if (creds.email) rows.push(`<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--text-secondary)">Username:</span> <span class="mono">${escapeHtml(creds.email)}</span>${copyBtn(creds.email, 'username')}</div>`);
-  if (creds.password) rows.push(`<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--text-secondary)">Password:</span> <span class="mono admin-pass-masked" data-raw="${escapeHtml(creds.password)}" style="letter-spacing:2px">••••••••</span>${eyeToggle}${copyBtn(creds.password, 'password')}</div>`);
-  rows.push(`<div><span style="color:var(--text-secondary)">Admin app:</span> <a href="${ADMIN_APP_URL}" target="_blank" rel="noopener">${ADMIN_APP_URL}</a></div>`);
-  if (!rows.length) return '';
-  return `<div style="color:var(--text-primary);line-height:2">${rows.join('')}</div>`;
-}
 
-function renderAdminForm(state) {
-  return `
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div style="font-size:12px;color:var(--text-secondary)">This updates the real Firebase Auth password for the restaurant's admin account — the same credentials staff use to sign in at the Admin app. Username stays as stored.</div>
-      <input type="text" id="admin-email-input" class="text-input" placeholder="Username / email" value="${escapeHtml(state.email || '')}" autocomplete="off" disabled style="opacity:0.6" />
-      <input type="password" id="admin-pass-input" class="text-input" placeholder="New password" autocomplete="new-password" value="${escapeHtml(state.pass || '')}" />
-      <input type="password" id="admin-pass-confirm-input" class="text-input" placeholder="Confirm new password" autocomplete="new-password" value="${escapeHtml(state.confirm || '')}" />
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary btn-sm" data-action="save-admin-login">Update password</button>
-        <span style="font-size:12px;color:var(--text-secondary);align-self:center">Applied to Firebase Auth, not just stored text.</span>
-      </div>
-      <div style="font-size:12px;color:var(--text-secondary)">Staff sign in at <a href="${ADMIN_APP_URL}" target="_blank" rel="noopener">${ADMIN_APP_URL}</a></div>
-    </div>`;
-}
 
 // Quota is not part of the realtime `businesses` tree (Meta doesn't push
 // it to us), so it's a one-off REST call to the Bot Control API rather
 // than something the live listener covers. Safe to fail quietly — this
 // is a nice-to-have panel, not core status.
-async function loadQuota(bid, oid) {
-  // No WhatsApp linked → nothing to query, and the API 501s without a
-  // META_SYSTEM_USER_TOKEN anyway. Skip the call entirely so the console
-  // stays clean; the card already explains the state.
-  if (quotaFetchedFor === `${bid}/${oid}`) return;
-  const rawOutlet = lastRaw?.[bid]?.outlets?.[oid];
-  if (rawOutlet?.whatsapp?.status !== 'active') return;
-  quotaFetchedFor = `${bid}/${oid}`;
-  try {
-    const token = await firebase.auth().currentUser.getIdToken();
-    const res = await fetch(`${TUNNEL_URL}/api/whatsapp/quota/${bid}/${oid}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const el = document.getElementById('quota-content');
-    if (!el) return; // navigated away before this resolved
-    if (res.status === 501) {
-      // Feature isn't wired up server-side yet — show a helpful message
-      // instead of removing the card, so the owner knows what's needed.
-      quotaHtml = 'Connect the Meta System User Token on the server to view messaging quota.';
-      el.innerHTML = quotaHtml;
-      return;
-    }
-    if (!res.ok) throw new Error(String(res.status));
-    const { tier, used, limit } = await res.json();
-    const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-    const bar = pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : '';
-    quotaHtml = `
-      <div style="display:flex;justify-content:space-between"><span>${escapeHtml(tier || 'Tier')}</span><span class="mono">${used.toLocaleString('en-IN')} / ${limit.toLocaleString('en-IN')}</span></div>
-      <div class="quota-gauge-track"><div class="quota-gauge-fill ${bar}" style="width:${pct}%"></div></div>
-      <div style="margin-top:6px;font-size:11px;color:var(--text-secondary);opacity:.7">Counts messages accepted by WhatsApp today (delivery not guaranteed until an approved template is used for proactive sends).</div>
-    `;
-    el.innerHTML = quotaHtml;
-  } catch (err) {
-    console.error('loadQuota failed', err);
-    const el = document.getElementById('quota-content');
-    if (el) el.textContent = 'Could not load quota right now.';
-  }
-}
 
 async function callBotControlApi(action, bid, oid) {
   const res = await callBotControlApiRaw(action, bid, oid);
@@ -1506,7 +1062,7 @@ registerAction('billing-grant-tokens', async () => {
 });
 
 // ---- Payment Management (profile side) ------------------------------------
-// Same modal + receipt as the Payment Management tab and record page � all
+// Same modal + receipt as the Payment Management tab and record page — all
 // three write businesses/{bid}/outlets/{oid}/billing/payments, so a payment
 // recorded here shows up on the tab immediately (one data-store listener).
 registerAction('profile-record-payment', async () => {
