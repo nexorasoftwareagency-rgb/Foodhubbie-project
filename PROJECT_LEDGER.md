@@ -142,6 +142,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261026-112356-1cb4] Prevent mojibake recurrence: BOM strip, guard hardening, CI wiring, live tenant-id audit
+- TIER: 1 (low-risk)
+- STATUS: DONE
+- Started: 2026-10-26 11:23 UTC
+- Files touched: tests/encoding-check.mjs, .github/workflows/ci.yml, package.json, shared/billing-defaults.cjs, AGENTS.md, EXPENSES_EXAMPLES.md, GUIDEs/SERVER-ACCESS-GUIDE.md
+- Verified: Audited the live RTDB (bot/service-account.json + firebase-admin): businesses are 'roshani-pizza' (Roshani Pizza, transport baileys) and 'roshani-cake' only - there is NO Foodhubbie-pizza node, and outletIndex maps pizza/cake -> roshani-*. So the brand sweep's roshani-pizza->Foodhubbie-pizza edits were a real regression for Admin/menu fallbacks and bot/helpers/outlet-resolution defaults; HEAD (restored) is correct and internally consistent (bot tests assert roshani-pizza). No brand rename is appropriate: 'Foodhubbie' is the platform brand, 'roshani-*' are live tenant ids - documented as a standing decision in AGENTS.md. BOM strip: 21 tracked files had a committed BOM, 1 was pure-BOM (shared/billing-defaults.cjs, committed); the other 8 carry in-flight work from other sessions so the strip stays uncommitted rather than dragging that work into this commit. Guard hardened (bot/ + bot-control-api/ roots, BOM + C1 control detection) and wired into .github/workflows/ci.yml + npm run test:encoding; guard PASSES. Repaired untracked docs that were corrupted (EXPENSES_EXAMPLES.md 123 lines, GUIDEs/SERVER-ACCESS-GUIDE.md 6, 'Supreme Admin Claude' copies 44+6) - verified no U+FFFD and readable output; PROJECT_LEDGER.md's 4 remaining mojibake lines are deliberate (they document the corruption). Post-change: npm run build all targets exit 0, encoding guard PASSES, playwright supreme-profile-sections + wizard-billing 2/2 PASS, discount-rules sync check OK, bot unit/billing tests exit 0 earlier this session.
+- NOT verified / open risk: Could not confirm the GitHub Actions run for b0d76a6 (gh CLI unauthenticated here) - the new CI step is verified locally via npm run test:encoding but not yet observed green in Actions. AGENTS.md edits (encoding-guard bullet + live-tenant-id decision) are in the working tree but intentionally NOT committed: that file already carries another session's uncommitted rewrite (brand header + tool/skills section), so committing it would mix authors. 8 files still carry a stripped-but-uncommitted BOM alongside other pending work; their next commit will pick the strip up.
+- Confidence: HIGH
+- Ended: 2026-10-26 11:24 UTC
+
 ### [20261026-110638-41f9] Verification + encoding repair: Supreme Admin template refactor runtime fixes; repo-wide mojibake from uncommitted rebrand sweep
 - TIER: 2 (medium-risk)
 - STATUS: DONE
