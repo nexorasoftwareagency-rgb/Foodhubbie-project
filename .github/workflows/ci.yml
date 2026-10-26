@@ -17,6 +17,9 @@ jobs:
           cache: npm
           cache-dependency-path: bot/package-lock.json
 
+      - name: Encoding guard (no mojibake / BOM / C1 controls)
+        run: node tests/encoding-check.mjs
+
       - name: Install bot dependencies
         working-directory: bot
         run: npm ci

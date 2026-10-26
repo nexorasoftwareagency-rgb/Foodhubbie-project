@@ -1,4 +1,4 @@
-﻿// Single source of truth for billing defaults (CommonJS for bot-control-api)
+// Single source of truth for billing defaults (CommonJS for bot-control-api)
 // Used by: SupremeAdmin onboarding wizard, bot-control-api onboarding endpoint
 
 function getBillingDefaults() {

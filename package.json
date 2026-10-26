@@ -6,6 +6,8 @@
     "deploy:admin": "npm run build:admin && firebase deploy --only hosting:admin",
     "deploy:supreme": "npm run build:supreme && firebase deploy --only hosting:supreme",
     "test": "playwright test",
+    "test:encoding": "node tests/encoding-check.mjs",
+    "seo:check-domain": "node tools/check-domain-migration.cjs",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:debug": "playwright test --debug",
