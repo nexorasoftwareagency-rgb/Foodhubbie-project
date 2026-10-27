@@ -25,8 +25,7 @@ import { outletRef, set, get, OUTLET } from './firebase.js';
 import { generateOrderId } from './order.js';
 import { assertOutletEnabled } from './session.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
-
-function round2(n) { return Math.round(n * 100) / 100; }
+import { round2, computeOrderTotals } from '../../shared/money-math.js';
 
 /**
  * @param {Object} opts
@@ -37,12 +36,15 @@ function round2(n) { return Math.round(n * 100) / 100; }
  * @param {{lat:number,lng:number}} opts.location
  * @param {string} [opts.note]
  * @param {Object|null} [opts.discount] - result of validateCoupon(), or null
+ * @param {{key:string, code:string}|null} [opts.rewardCode] - claimed loyalty
+ *        reward code (R2 tender). The client sends ONLY the claim — the bot
+ *        validates + burns the code and writes loyaltyTender/totalDue.
  * @param {string} [opts.sessionId] - Firebase session ID from URL params
  * @param {string} [opts.source] - 'wa' for WhatsApp, 'qr' for QR code, 'direct' for direct
  * @param {string} [opts.botPhone] - Bot phone number for wa.me return link
  * @returns {Promise<{orderId:string, total:number, deliveryFee:number}>}
  */
-export async function placeDeliveryOrder({ cartLines, customerName, customerPhone, address, location, note = '', discount = null, sessionId = '', source = 'webview_delivery', botPhone = '', webviewToken = '' }) {
+export async function placeDeliveryOrder({ cartLines, customerName, customerPhone, address, location, note = '', discount = null, rewardCode = null, sessionId = '', source = 'webview_delivery', botPhone = '', webviewToken = '' }) {
     if (!cartLines || cartLines.length === 0) throw new Error('Cart is empty');
     if (!customerName) throw new Error('Name is required');
     if (!customerPhone || customerPhone.length !== 10) throw new Error('A valid 10-digit phone number is required');
@@ -61,11 +63,13 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
     const feeP = Promise.all([
         get(outletRef('settings/Delivery/slabs')),
         get(outletRef('settings/Store')),
+        get(outletRef('dineinSettings')),  // same tax settings the dine-in checkout uses
     ]);
     const orderIdP = (async () => { await assertOutletEnabled(); return generateOrderId(); })();
-    const [orderId, [delSnap, storeSnap]] = await Promise.all([orderIdP, feeP]);
+    const [orderId, [delSnap, storeSnap, dineSnap]] = await Promise.all([orderIdP, feeP]);
     const delSettings = delSnap.val() || [];
     const storeSettings = storeSnap.val() || {};
+    const dineSettings = dineSnap.val() || {};
     const outletCoords = {
         lat: parseFloat(storeSettings.lat ?? (OUTLET === 'cake' ? 25.887472 : 25.887944)),
         lng: parseFloat(storeSettings.lng ?? (OUTLET === 'cake' ? 85.026861 : 85.026194)),
@@ -88,8 +92,23 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
     }));
 
     const subtotal = round2(items.reduce((s, it) => s + it.total, 0));
-    const discountAmount = discount && discount.amount > 0 ? Math.min(round2(discount.amount), subtotal + deliveryFee) : 0;
-    const total = round2(subtotal + deliveryFee - discountAmount);
+    // Delivery uses the SAME tax model as dine-in (owner decision 2026-10-26):
+    // GST on the net taxable value, delivery fee outside it. Service charge is
+    // dine-in-only and never applies here. Same shared math as order.js/POS/bot.
+    const taxEnabled = dineSettings.taxEnabled !== false;
+    const rates = (dineSettings.taxRates && Array.isArray(dineSettings.taxRates) && dineSettings.taxRates.length > 0)
+        ? dineSettings.taxRates
+        : (taxEnabled ? [{ name: dineSettings.taxName || 'GST', rate: typeof dineSettings.taxPercent === 'number' ? dineSettings.taxPercent : 5 }] : []);
+    const totals = computeOrderTotals({
+        subtotal,
+        discount: discount && discount.amount > 0 ? discount.amount : 0,
+        taxRates: rates,
+        serviceChargeEnabled: false,
+        deliveryFee,
+    });
+    const { tax, taxItems, total } = totals;
+    const discountAmount = totals.discount;
+    const taxName = rates.map(r => r.name).join(' + ');
 
     const orderPayload = {
         orderId,
@@ -104,7 +123,7 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         address,
         lat: location.lat, lng: location.lng,
         distanceKm: round2(dist),
-        subtotal, deliveryFee, total,
+        subtotal, deliveryFee, tax, taxItems, taxName, total,
         status: 'Placed',
         paymentMethod: 'COD', paymentStatus: 'Pending',
         createdAt: new Date().toISOString(),
@@ -125,6 +144,11 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         orderPayload.discountMode = discount.mode || 'fixed';
         orderPayload.discountValue = discount.value || 0;
         orderPayload.discountGlobalLimit = discount.maxCap || 0;
+    }
+    // R2: claim only — the bot's verifyRewardTender computes + burns the
+    // tender server-side. The client never writes loyaltyTender/totalDue.
+    if (rewardCode && rewardCode.key && rewardCode.code) {
+        orderPayload.rewardCode = { key: String(rewardCode.key), code: String(rewardCode.code) };
     }
 
     await set(outletRef(`orders/${orderId}`), orderPayload);

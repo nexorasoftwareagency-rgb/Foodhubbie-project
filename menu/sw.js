@@ -1,4 +1,4 @@
-const CACHE_NAME = 'menu-shell-v24';
+const CACHE_NAME = 'menu-shell-v27';
 const ASSETS = [
   './index.html',
   './delivery.html',
@@ -17,6 +17,8 @@ const ASSETS = [
   './js/pwa-install.js',
   './shared/combo-math.js',
   './shared/format-order-id.js',
+  './shared/discount-rules.js',
+  './shared/money-math.js',
   './shared/config/vapid.js',
   './manifest.json',
   './sw.js'

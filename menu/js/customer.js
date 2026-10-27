@@ -1009,6 +1009,39 @@ export function getLoyalty() {
     };
 }
 
+// ── Reward-code redemption (R2, delivery checkout tender) ───────────────
+// The customer app can READ its own issued codes (rules: read by phone) but
+// can never write them — the bot validates + burns the code server-side when
+// the order lands. This only gates the UI: finds an ACTIVE code matching the
+// typed text and returns what the checkout needs. Null = not usable.
+export async function validateRewardCode(code, phone) {
+    const clean = String(code || '').trim().toUpperCase();
+    const p = String(phone || '').replace(/\D/g, '').slice(-10);
+    if (!clean || !/^[6-9]\d{9}$/.test(p)) return null;
+    try {
+        const snap = await get(outletRef(`customers/${p}/rewards`));
+        const rewards = (snap && snap.exists() && snap.val()) || {};
+        for (const [key, r] of Object.entries(rewards)) {
+            if (r && r.status === 'active' && String(r.code || '').toUpperCase() === clean) {
+                return { key, rewardId: r.rewardId || '', label: r.label || '', cost: Number(r.cost) || 0, code: r.code };
+            }
+        }
+    } catch (e) { /* read failure → treat as no code; bot re-validates anyway */ }
+    return null;
+}
+
+// Configured redemption value of one point, in PAISE (R2). Same default the
+// bot applies when loyalty/config lacks the field: ₹1 per point.
+export function redeemValuePaisePerPoint() {
+    const v = Number(_loyaltyConfig && _loyaltyConfig.redeemValuePaisePerPoint);
+    return Number.isFinite(v) && v > 0 ? v : 100;
+}
+
+// R9: minimum spend AFTER redemption (₹) — 0 disables the floor.
+export function minSpendAfterRedemptionRs() {
+    return Number(_loyaltyConfig && _loyaltyConfig.minSpendAfterRedemption) || 0;
+}
+
 export async function saveOrderRating(orderId, rating, comment = '') {
     if (!hasIdentity() || !orderId) return false;
     const cleanRating = Number(rating);

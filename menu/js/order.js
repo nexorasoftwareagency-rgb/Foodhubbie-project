@@ -26,8 +26,7 @@ import { outletRef, OUTLET, BUSINESS_ID, set, update, get, runTransaction } from
 import { Session, attachOrderToSession, ensureSession, assertOutletEnabled } from './session.js';
 import { writeCustomerOrder } from './customer.js';
 import { Cart, clearCart, subtotal as cartSubtotal, getQRStorageKey } from './cart.js';
-
-function round2(n) { return Math.round(n * 100) / 100; }
+import { computeOrderTotals } from '../../shared/money-math.js';
 
 import { formatOrderId } from '../../shared/format-order-id.js';
 export { formatOrderId };
@@ -97,16 +96,19 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
         };
     });
 
-    const subtotal = round2(cartSubtotal());
-    // GST must be charged on the net taxable value: trade discounts recorded on
-    // the invoice are excluded from the taxable value (CGST Sec 15(3)(a)).
-    const discountAmount = discount && discount.amount > 0 ? Math.min(round2(discount.amount), subtotal) : 0;
-    const taxable = round2(subtotal - discountAmount);
     const rates = (taxRates && Array.isArray(taxRates) && taxRates.length > 0) ? taxRates : (taxEnabled ? [{ name: 'Tax', rate: taxPercent }] : []);
-    const taxItems = rates.map(r => ({ name: r.name, rate: r.rate, amount: round2(taxable * (r.rate / 100)) }));
-    const tax = taxItems.reduce((s, t) => s + t.amount, 0);
-    const serviceCharge = serviceChargeEnabled ? round2(subtotal * (serviceChargeRate / 100)) : 0;
-    const total = round2(taxable + tax + serviceCharge);
+    // Shared money-math — GST on the net taxable value (CGST Sec 15(3)(a)),
+    // service charge on the full subtotal. Identical to Admin POS and the
+    // bot's server-side re-verification by construction.
+    const totals = computeOrderTotals({
+        subtotal: cartSubtotal(),
+        discount: discount && discount.amount > 0 ? discount.amount : 0,
+        taxRates: rates,
+        serviceChargeEnabled,
+        serviceChargeRate,
+    });
+    const { subtotal, tax, taxItems, serviceCharge, total } = totals;
+    const discountAmount = totals.discount;
     const taxName = rates.map(r => r.name).join(' + ');
 
     const orderPayload = {

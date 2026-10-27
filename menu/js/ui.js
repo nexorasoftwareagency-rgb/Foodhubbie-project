@@ -4,6 +4,7 @@
  * functions and wires their button events.
  */
 import { formatOrderId } from './order.js';
+import { computeOrderTotals, round2 } from '../shared/money-math.js';
 
 export function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -313,7 +314,7 @@ export function renderCartList(lines, { onStep }) {
     });
 }
 
-export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serviceChargeEnabled, serviceChargeName, serviceChargeRate, discount = null, taxRates, deliveryFee = 0) {
+export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serviceChargeEnabled, serviceChargeName, serviceChargeRate, discount = null, taxRates, deliveryFee = 0, tender = null) {
     const fee = typeof deliveryFee === 'number' && deliveryFee > 0 ? deliveryFee : 0;
     // Delivery fee row (delivery webview only; dine-in has no such row)
     const deliveryRow = document.getElementById('cartDeliveryRow');
@@ -322,14 +323,23 @@ export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serv
     if (deliveryFeeEl) deliveryFeeEl.textContent = fmtMoney(fee);
 
     const rates = (taxRates && Array.isArray(taxRates) && taxRates.length > 0) ? taxRates : (taxEnabled !== false ? [{ name: taxName || 'Tax', rate: taxPercent || 5 }] : []);
-    // Discount first, then tax on the net taxable value (CGST Sec 15(3)(a)).
-    const discountAmount = discount && discount.amount > 0 ? Math.min(discount.amount, subtotal) : 0;
-    const taxable = Math.max(0, subtotal - discountAmount);
-    const taxItems = rates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(taxable * (r.rate / 100) * 100) / 100 }));
-    const tax = taxItems.reduce((s, t) => s + t.amount, 0);
+    // Shared money-math — the SAME computation placeOrder charges by, so the
+    // cart display can never drift from the invoice (GST on net taxable value,
+    // CGST Sec 15(3)(a); SC on full subtotal; delivery fee outside taxable).
+    const totals = computeOrderTotals({
+        subtotal,
+        discount: discount && discount.amount > 0 ? discount.amount : 0,
+        taxRates: rates,
+        serviceChargeEnabled: serviceChargeEnabled === true,
+        serviceChargeRate,
+        deliveryFee: fee,
+    });
+    const taxItems = totals.taxItems;
+    const tax = totals.tax;
     const scEnabled = serviceChargeEnabled === true;
     const scRate = typeof serviceChargeRate === 'number' ? serviceChargeRate : 0;
-    const sc = scEnabled ? Math.round(subtotal * (scRate / 100) * 100) / 100 : 0;
+    const sc = totals.serviceCharge;
+    const discountAmount = totals.discount;
 
     const el = (id) => document.getElementById(id);
     if (el('cartSubtotal')) el('cartSubtotal').textContent = fmtMoney(subtotal);
@@ -357,9 +367,20 @@ export function updateCartTotals(subtotal, taxPercent, taxName, taxEnabled, serv
     }
     if (el('cartDiscount')) el('cartDiscount').textContent = '-' + fmtMoney(discountAmount);
 
-    const total = taxable + tax + sc + fee;
-    if (el('cartTotal')) el('cartTotal').textContent = fmtMoney(total);
-    return { tax, serviceCharge: sc, discount: discountAmount, deliveryFee: fee, total };
+    // Loyalty reward tender (delivery webview only — element-guarded, the QR
+    // app has no cartTenderRow). A REDEMPTION is a payment, not a discount:
+    // it never changes the taxable value, it only reduces the amount payable.
+    const tenderAmt = tender && Number(tender.amount) > 0 ? round2(Number(tender.amount)) : 0;
+    const tenderRow = document.getElementById('cartTenderRow');
+    if (tenderRow) {
+        tenderRow.classList.toggle('hidden', tenderAmt <= 0);
+        if (el('cartTenderLabel')) el('cartTenderLabel').textContent = (tender && tender.label) || 'Loyalty points';
+        if (el('cartTender')) el('cartTender').textContent = '-' + fmtMoney(tenderAmt);
+    }
+    const payable = Math.max(0, round2(totals.total - tenderAmt));
+
+    if (el('cartTotal')) el('cartTotal').textContent = fmtMoney(payable);
+    return { tax, serviceCharge: sc, discount: discountAmount, deliveryFee: fee, total: totals.total, payable };
 }
 
 export function updateSessionNoteInCart(session, groupOrders, groupTotal) {
@@ -754,6 +775,15 @@ export function showAppliedDiscount(label, amount, mode, value) {
     if (input) { input.disabled = true; input.value = label; }
     const pctInfo = mode === 'percent' && value ? ` (${value}% off)` : '';
     showDiscountMsg(`✓ ${label} applied — ${fmtMoney(amount)} off${pctInfo}`, 'success');
+}
+
+// R2: loyalty reward applied as payment tender (delivery webview only).
+export function showAppliedReward(label, amount, points) {
+    const btn = document.getElementById('btnApplyDiscount');
+    const input = document.getElementById('discountCodeInput');
+    if (btn) { btn.textContent = 'Remove'; btn.classList.add('discount-applied'); }
+    if (input) { input.disabled = true; input.value = label; }
+    showDiscountMsg(`✓ ${label} applied — ${fmtMoney(amount)} via ${points} points`, 'success');
 }
 
 export function resetDiscountInput() {
