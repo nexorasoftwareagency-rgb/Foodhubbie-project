@@ -3,6 +3,7 @@ import { BUSINESS_ID, db, Outlet, ref, get, set, update, push, remove, onValue, 
 import { auth, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail, getSecondaryAuth } from '../firebase.js';
 import { logAudit, showToast, showConfirm, hashPin, hashEmail, escapeHtml, showPinModal, capitalize, formatRelativeTime, logStaffChange, showPinPrompt } from '../utils.js';
 import { loadLucide, getRoles, roleLevel, TAB_DEFS, DEFAULT_ROLES } from '../ui.js';
+import { computePayroll, round2 as payRound2 } from '../../shared/payroll-math.js';
 
 // --- STATE ---
 let _staffListCache = [];
@@ -18,6 +19,7 @@ export function setStaffTableState(state) {
 window.staffManagementRetry = () => loadStaffList();
 
 // Two-page layout inside the section: Staff | Roles & Access
+// (Phase 3 added: attendance / shifts / leave / payroll pages)
 function showSmPage(page) {
     document.querySelectorAll('[data-sm-pane]').forEach(el => { el.style.display = el.dataset.smPane === page ? '' : 'none'; });
     document.querySelectorAll('.sm-subtab').forEach(b => {
@@ -25,6 +27,11 @@ function showSmPage(page) {
         b.classList.toggle('active', on);
         b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    // Lazy-load page data on first visit (idempotent)
+    if (page === 'attendance') initAttendancePage();
+    if (page === 'shifts') initShiftsPage();
+    if (page === 'leave') initLeavePage();
+    if (page === 'payroll') initPayrollPage();
 }
 document.querySelectorAll('.sm-subtab').forEach(b => { b.onclick = () => showSmPage(b.dataset.smPage); });
 
@@ -54,6 +61,9 @@ export async function loadStaffList() {
         }
         _staffListCache = staff.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
         setStaffTableState('ready');
+        // Phase 3 pages render from this cache — refresh any that are on screen
+        // so they don't stay stuck on "No staff yet" when the list lands late.
+        refreshStaffPagesIfVisible();
         return _staffListCache;
     } catch (e) {
         console.error('[StaffManagement] Load failed:', e);
@@ -63,7 +73,7 @@ export async function loadStaffList() {
     }
 }
 
-export async function createStaffAccount({ email, displayName, role, initialPassword }) {
+export async function createStaffAccount({ email, displayName, role, initialPassword, payType, rate }) {
     console.log('[StaffManagement] Creating staff account:', email, role);
     
     // Validate role against this outlet's role definitions
@@ -128,6 +138,8 @@ export async function createStaffAccount({ email, displayName, role, initialPass
         role,
         isActive: true,
         discountCeilingPct: 0, // 0 = inherit outlet ceiling
+        payType: payType || 'MONTHLY',
+        rate: rate ?? null, // null = excluded from payroll until a rate is set
         counterPinHash: null,
         createdAt: new Date().toISOString(),
         createdBy: state.adminData?.uid,
@@ -565,6 +577,8 @@ export function openAddModal() {
         document.getElementById('staffEmail').disabled = false;
         document.getElementById('staffInitialPasswordGroup').style.display = '';
         document.getElementById('staffCeilingGroup').style.display = 'none'; // Ceiling set after creation
+        document.getElementById('staffPayType').value = 'MONTHLY';
+        document.getElementById('staffRate').value = '';
         title.innerText = 'Add Staff Member';
         document.getElementById('staffSubmitBtn').innerText = 'Create Account';
         
@@ -599,6 +613,8 @@ export function openEditModal(uid) {
         document.getElementById('staffCeilingPct').value = staff.discountCeilingPct || 0;
         document.getElementById('staffInitialPasswordGroup').style.display = 'none'; // No password change here
         document.getElementById('staffCeilingGroup').style.display = staff.role === 'waiter' ? 'none' : '';
+        document.getElementById('staffPayType').value = staff.payType || 'MONTHLY';
+        document.getElementById('staffRate').value = staff.rate ?? '';
         title.innerText = 'Edit Staff Member';
         document.getElementById('staffSubmitBtn').innerText = 'Save Changes';
         
@@ -842,6 +858,9 @@ document.addEventListener('submit', async (e) => {
     const role = document.getElementById('staffRole').value;
     const ceilingPct = parseInt(document.getElementById('staffCeilingPct').value) || 0;
     const initialPassword = document.getElementById('staffInitialPassword').value;
+    const payType = document.getElementById('staffPayType').value === 'HOURLY' ? 'HOURLY' : 'MONTHLY';
+    const rateRaw = parseFloat(document.getElementById('staffRate').value);
+    const rate = (!isNaN(rateRaw) && rateRaw > 0) ? rateRaw : null; // blank/0 = not on payroll
     
     if (!displayName) return showToast('Name is required', 'warning');
     if (!email) return showToast('Email is required', 'warning');
@@ -857,11 +876,11 @@ document.addEventListener('submit', async (e) => {
     try {
         if (uid) {
             // Edit existing
-            await updateStaff(uid, { displayName, role, discountCeilingPct: ceilingPct });
+            await updateStaff(uid, { displayName, role, discountCeilingPct: ceilingPct, payType, rate });
             showToast('Staff updated', 'success');
         } else {
             // Create new
-            const result = await createStaffAccount({ email, displayName, role, initialPassword });
+            const result = await createStaffAccount({ email, displayName, role, initialPassword, payType, rate });
             showToast(`Account created! Temporary password: ${result.tempPassword}`, 'success', 8000);
         }
         closeStaffModal();
@@ -921,3 +940,529 @@ document.addEventListener('click', (e) => {
     const addBtn = e.target.closest('#btnAddStaff');
     if (addBtn) openAddModal();
 });
+
+// ============================================================
+// PHASE 3: ATTENDANCE / SHIFTS / LEAVE / PAYROLL
+// Data model (all under the outlet):
+//   attendance/{YYYY-MM-DD}/{uid} = { inAt, outAt?, minutes? }
+//   shifts/{YYYY-Www}             = { uid: [{day 0=Mon..6=Sun, startMinute, endMinute, station?}] }
+//   leave/{requestId}             = { uid, from, to, paid, status: pending|approved|rejected }
+//   payrollRuns/{periodId}        = { periodStart, periodEnd, tipPool, lines, closedAt, closedBy }
+// Payroll math lives in shared/payroll-math.js (pure, self-checked).
+// ============================================================
+
+const DAY_MS = 86400000;
+// LOCAL calendar day → 'YYYY-MM-DD' (attendance days are business-local)
+const ymdLocal = (d) => {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const fmtRs = (n) => `₹${payRound2(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const fmtHM = (iso) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
+const fmtHrs = (mins) => mins == null ? '—' : `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+const staffName = (uid) => _staffListCache.find(s => s.uid === uid)?.displayName || uid.slice(0, 8);
+const payrollStaff = () => _staffListCache.filter(s => s.isActive !== false && s.payType && Number(s.rate) > 0)
+    .map(s => ({ uid: s.uid, payType: s.payType, rate: Number(s.rate) }));
+
+// Re-render Phase 3 pages that are currently on screen (cache landed late)
+function refreshStaffPagesIfVisible() {
+    const paneVisible = (name) => {
+        const el = document.querySelector(`[data-sm-pane="${name}"]`);
+        return el && el.style.display !== 'none';
+    };
+    if (paneVisible('attendance')) { renderAttendanceToday(); loadAttendanceHistory(); }
+    if (paneVisible('shifts')) loadShiftWeek();
+}
+
+// '2026-W44' → UTC ms of that ISO week's Monday (Jan 4 is always in W01)
+function weekStartMs(weekId) {
+    const m = /^(\d{4})-W(\d{1,2})$/.exec(weekId || '');
+    if (!m) return null;
+    const jan4 = new Date(Date.UTC(+m[1], 0, 4));
+    const dow = jan4.getUTCDay() || 7; // Mon=1..Sun=7
+    const mondayW1 = Date.UTC(+m[1], 0, 4 - dow + 1);
+    return mondayW1 + ((+m[2] - 1) * 7 * DAY_MS);
+}
+const hmToMinutes = (hm) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(hm || '');
+    if (!m) return null;
+    const v = (+m[1]) * 60 + (+m[2]);
+    return (v >= 0 && v < 1440) ? v : null;
+};
+
+// --- ATTENDANCE ------------------------------------------------------------
+let _attInitialized = false;
+
+function initAttendancePage() {
+    document.getElementById('attDateLabel').textContent =
+        `Today — ${new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}`;
+    document.getElementById('btnAttRefresh').onclick = () => { renderAttendanceToday(); loadAttendanceHistory(); };
+    if (!_attInitialized) {
+        _attInitialized = true;
+        renderAttendanceToday();
+        loadAttendanceHistory();
+    }
+}
+
+async function renderAttendanceToday() {
+    const list = document.getElementById('attTodayList');
+    const today = ymdLocal(new Date());
+    let att = {};
+    try {
+        const snap = await get(Outlet.ref(`attendance/${today}`));
+        att = snap.val() || {};
+    } catch (e) { console.warn('[Staff] attendance read failed', e); }
+
+    const staff = _staffListCache.filter(s => s.isActive !== false);
+    if (!staff.length) { list.innerHTML = '<p class="text-muted-small p-20 text-center">No staff yet.</p>'; return; }
+    list.innerHTML = staff.map(s => {
+        const a = att[s.uid] || {};
+        const status = a.inAt && a.outAt
+            ? `<span class="text-muted-small">Out ${fmtHM(a.outAt)} · ${fmtHrs(a.minutes)}</span>`
+            : a.inAt
+                ? '<span style="color:var(--success,#16a34a);font-weight:600;">● Clocked in ' + fmtHM(a.inAt) + '</span>'
+                : '<span class="text-muted-small">Not clocked in</span>';
+        const btn = !a.inAt
+            ? `<button class="btn-primary" data-att="in" data-uid="${escapeHtml(s.uid)}"><i data-lucide="log-in" class="icon-14"></i> Clock In</button>`
+            : !a.outAt
+                ? `<button class="btn-primary" data-att="out" data-uid="${escapeHtml(s.uid)}"><i data-lucide="log-out" class="icon-14"></i> Clock Out</button>`
+                : `<button class="btn-secondary" data-att="in" data-uid="${escapeHtml(s.uid)}" disabled>Done</button>`;
+        return `<div class="glass-card p-12 mb-8" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div><strong>${escapeHtml(s.displayName)}</strong> <span class="text-muted-small">(${escapeHtml(capitalize(s.role || ''))})</span><br>${status}</div>
+            <div>${btn}</div>
+        </div>`;
+    }).join('');
+    refreshIcons(list);
+
+    list.querySelectorAll('[data-att]').forEach(btn => {
+        btn.onclick = async () => {
+            const uid = btn.dataset.uid, dir = btn.dataset.att;
+            const path = Outlet.ref(`attendance/${today}/${uid}`);
+            try {
+                if (dir === 'in') {
+                    await set(path, { inAt: new Date().toISOString(), outAt: null, minutes: null });
+                    showToast(`${staffName(uid)} clocked in`, 'success');
+                } else {
+                    const snap = await get(path);
+                    const a = snap.val() || {};
+                    if (!a.inAt) return showToast('No clock-in recorded for today', 'error');
+                    const outAt = new Date().toISOString();
+                    const minutes = Math.max(0, Math.round((new Date(outAt) - new Date(a.inAt)) / 60000));
+                    await update(path, { outAt, minutes });
+                    showToast(`${staffName(uid)} clocked out — ${fmtHrs(minutes)}`, 'success');
+                }
+                renderAttendanceToday();
+                loadAttendanceHistory();
+            } catch (e) {
+                showToast(e.message || 'Attendance write failed', 'error');
+            }
+        };
+    });
+}
+
+async function loadAttendanceHistory() {
+    const body = document.getElementById('attHistoryBody');
+    const today = new Date();
+    const dates = Array.from({ length: 7 }, (_, i) => ymdLocal(new Date(today.getTime() - i * DAY_MS)));
+    const snaps = await Promise.all(dates.map(d => get(Outlet.ref(`attendance/${d}`)).catch(() => null)));
+    const rows = [];
+    dates.forEach((d, i) => {
+        const dayAtt = (snaps[i] && snaps[i].val()) || {};
+        for (const [uid, a] of Object.entries(dayAtt)) {
+            rows.push({ d, uid, a });
+        }
+    });
+    rows.sort((x, y) => y.d.localeCompare(x.d) || String(x.uid).localeCompare(String(y.uid)));
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-20">No attendance in the last 7 days.</td></tr>'; return; }
+    body.innerHTML = rows.map(r => `<tr>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);">${escapeHtml(staffName(r.uid))}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);white-space:nowrap;">${escapeHtml(r.d)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:center;">${fmtHM(r.a.inAt)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:center;">${fmtHM(r.a.outAt)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:center;">${fmtHrs(r.a.minutes)}</td>
+    </tr>`).join('');
+}
+
+// --- SHIFTS ----------------------------------------------------------------
+const SHIFT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+let _shiftsInitialized = false;
+
+function initShiftsPage() {
+    const weekInput = document.getElementById('shiftWeek');
+    if (!weekInput.value) {
+        // Default: current ISO week (input type=week value format 'YYYY-Www')
+        const now = new Date();
+        const jan4 = new Date(now.getFullYear(), 0, 4);
+        const dow = jan4.getDay() || 7;
+        const week = Math.ceil((((now - jan4) / DAY_MS) + dow) / 7);
+        weekInput.value = `${now.getFullYear()}-W${String(week).padStart(2, '0')}`;
+    }
+    weekInput.onchange = loadShiftWeek;
+    document.getElementById('btnShiftSave').onclick = saveShiftWeek;
+    if (!_shiftsInitialized) { _shiftsInitialized = true; loadShiftWeek(); }
+}
+
+function renderShiftGrid(weekData) {
+    const head = document.getElementById('shiftGridHead');
+    const body = document.getElementById('shiftGridBody');
+    const startMs = weekStartMs(weekInputValue());
+    head.innerHTML = `<th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);">Staff</th>` +
+        SHIFT_DAYS.map((d, i) => {
+            const dt = startMs != null ? new Date(startMs + i * DAY_MS) : null;
+            const label = dt ? `${d} ${dt.getUTCDate()}/${dt.getUTCMonth() + 1}` : d;
+            return `<th style="padding:10px 6px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">${label}</th>`;
+        }).join('');
+
+    const staff = _staffListCache.filter(s => s.isActive !== false);
+    if (!staff.length) { body.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-20">No staff yet.</td></tr>'; return; }
+    const t = (mins) => mins == null ? '' : `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+    const pairHtml = (uid, day, sh) => `<div style="margin-bottom:4px;white-space:nowrap;">
+        <input type="time" data-shift-uid="${escapeHtml(uid)}" data-shift-day="${day}" data-shift-field="start" value="${escapeHtml(t(sh.startMinute))}" style="width:84px;" aria-label="start">
+        <input type="time" data-shift-uid="${escapeHtml(uid)}" data-shift-day="${day}" data-shift-field="end" value="${escapeHtml(t(sh.endMinute))}" style="width:84px;" aria-label="end">
+    </div>`;
+    body.innerHTML = staff.map(s => {
+        const cells = SHIFT_DAYS.map((_, day) => {
+            const shifts = (weekData[s.uid] || []).filter(x => x && x.day === day);
+            // Always render ≥1 editable pair — an empty cell must still be
+            // fillable, and "+" stacks up to 3 shifts/day (clash check needs 2+).
+            const shown = shifts.length ? shifts.slice(0, 3) : [{}];
+            return `<td style="padding:6px 4px;border-bottom:1px solid var(--border-color);text-align:center;" data-cell-uid="${escapeHtml(s.uid)}" data-cell-day="${day}">
+                ${shown.map(sh => pairHtml(s.uid, day, sh)).join('')}
+                ${shifts.length < 3 ? `<button type="button" class="btn-secondary" data-shift-add data-uid="${escapeHtml(s.uid)}" data-day="${day}" style="padding:2px 8px;font-size:12px;" title="Add another shift">+</button>` : ''}
+            </td>`;
+        }).join('');
+        return `<tr><td style="padding:10px 14px;border-bottom:1px solid var(--border-color);white-space:nowrap;">${escapeHtml(s.displayName)}</td>${cells}</tr>`;
+    }).join('');
+    // "+" appends another (empty) shift pair to that cell — makes double-booking
+    // possible so the clash check has something to catch.
+    body.querySelectorAll('[data-shift-add]').forEach(btn => {
+        btn.onclick = () => {
+            const cell = btn.closest('td');
+            if (cell.querySelectorAll('[data-shift-field="start"]').length >= 3) return;
+            btn.insertAdjacentHTML('beforebegin', pairHtml(btn.dataset.uid, btn.dataset.day, {}));
+        };
+    });
+}
+
+const weekInputValue = () => document.getElementById('shiftWeek').value;
+
+async function loadShiftWeek() {
+    const body = document.getElementById('shiftGridBody');
+    body.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-20">Loading...</td></tr>';
+    try {
+        const snap = await get(Outlet.ref(`shifts/${weekInputValue()}`));
+        renderShiftGrid(snap.val() || {});
+    } catch (e) {
+        body.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-20">Could not load shifts.</td></tr>';
+    }
+}
+
+async function saveShiftWeek() {
+    const weekId = weekInputValue();
+    if (!weekStartMs(weekId)) return showToast('Pick a valid week', 'error');
+    // Collect inputs in DOM order → per-uid/day list of {start,end} pairs.
+    // Each 'start' input begins a new pair; its 'end' attaches to it.
+    const perUid = {};
+    document.querySelectorAll('[data-shift-uid]').forEach(inp => {
+        const uid = inp.dataset.shiftUid, day = +inp.dataset.shiftDay;
+        perUid[uid] = perUid[uid] || {};
+        perUid[uid][day] = perUid[uid][day] || [];
+        const pairs = perUid[uid][day];
+        if (inp.dataset.shiftField === 'start') {
+            pairs.push({ start: hmToMinutes(inp.value), end: null });
+        } else if (pairs.length && pairs[pairs.length - 1].end == null) {
+            pairs[pairs.length - 1].end = hmToMinutes(inp.value);
+        }
+    });
+    const out = {};
+    for (const [uid, days] of Object.entries(perUid)) {
+        const arr = [];
+        for (const [day, pairs] of Object.entries(days)) {
+            for (const f of pairs) {
+                const both = f.start != null && f.end != null;
+                if (!both && (f.start != null || f.end != null)) {
+                    return showToast(`${staffName(uid)} ${SHIFT_DAYS[day]}: fill both start and end (or leave both blank)`, 'error');
+                }
+                if (both) {
+                    if (f.end <= f.start) return showToast(`${staffName(uid)} ${SHIFT_DAYS[day]}: end must be after start`, 'error');
+                    arr.push({ day: +day, startMinute: f.start, endMinute: f.end });
+                }
+            }
+        }
+        if (arr.length) out[uid] = arr;
+    }
+    // Clash check: same uid, same day, overlapping [start, end) ranges
+    for (const [uid, arr] of Object.entries(out)) {
+        for (const d of new Set(arr.map(s => s.day))) {
+            const same = arr.filter(s => s.day === d).sort((a, b) => a.startMinute - b.startMinute);
+            for (let i = 1; i < same.length; i++) {
+                if (same[i].startMinute < same[i - 1].endMinute) {
+                    return showToast(`Clash: ${staffName(uid)} is double-booked on ${SHIFT_DAYS[d]}`, 'error');
+                }
+            }
+        }
+    }
+    try {
+        await set(Outlet.ref(`shifts/${weekId}`), out);
+        showToast('Shift week saved', 'success');
+    } catch (e) {
+        showToast(e.message || 'Shift save failed', 'error');
+    }
+}
+
+// --- LEAVE -----------------------------------------------------------------
+let _leaveUnsub = null;
+let _leaveCache = {};
+let _leaveInitialized = false;
+
+function initLeavePage() {
+    document.getElementById('btnLeaveAdd').onclick = () => {
+        const form = document.getElementById('leaveAddForm');
+        const show = form.style.display === 'none';
+        form.style.display = show ? '' : 'none';
+        if (show) {
+            const sel = document.getElementById('leaveStaff');
+            sel.innerHTML = _staffListCache.filter(s => s.isActive !== false)
+                .map(s => `<option value="${escapeHtml(s.uid)}">${escapeHtml(s.displayName)}</option>`).join('');
+            document.getElementById('leaveFrom').value = ymdLocal(new Date());
+            document.getElementById('leaveTo').value = ymdLocal(new Date());
+        }
+    };
+    document.getElementById('btnLeaveSubmit').onclick = submitLeaveRequest;
+    if (!_leaveInitialized) {
+        _leaveInitialized = true;
+        _leaveUnsub = onValue(Outlet.ref('leave'), (snap) => {
+            _leaveCache = snap.val() || {};
+            renderLeaveTable();
+        }, (e) => {
+            console.warn('[Staff] leave listener failed', e);
+            document.getElementById('leaveTableBody').innerHTML = '<tr><td colspan="6" class="text-center text-muted p-20">Could not load leave requests.</td></tr>';
+        });
+    }
+}
+
+function renderLeaveTable() {
+    const body = document.getElementById('leaveTableBody');
+    const rows = Object.entries(_leaveCache).sort((a, b) => String(b[1].from || '').localeCompare(String(a[1].from || '')));
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="text-center text-muted p-20">No leave requests.</td></tr>'; return; }
+    const badge = (status) => status === 'approved' ? '<span style="color:var(--success,#16a34a);font-weight:600;">approved</span>'
+        : status === 'rejected' ? '<span style="color:var(--danger,#dc2626);font-weight:600;">rejected</span>'
+        : '<span style="color:var(--warning,#d97706);font-weight:600;">pending</span>';
+    body.innerHTML = rows.map(([id, l]) => `<tr>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);">${escapeHtml(staffName(l.uid))}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);white-space:nowrap;">${escapeHtml(l.from)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);white-space:nowrap;">${escapeHtml(l.to)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:center;">${l.paid ? 'Paid' : 'Unpaid'}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:center;">${badge(l.status)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:center;white-space:nowrap;">
+            ${l.status === 'pending' ? `
+            <button class="btn-primary" data-leave-approve="${escapeHtml(id)}" style="padding:6px 10px;">Approve</button>
+            <button class="btn-secondary" data-leave-reject="${escapeHtml(id)}" style="padding:6px 10px;">Reject</button>` : '—'}
+        </td>
+    </tr>`).join('');
+    refreshIcons(body);
+
+    body.querySelectorAll('[data-leave-approve]').forEach(b => { b.onclick = () => setLeaveStatus(b.dataset.leaveApprove, 'approved'); });
+    body.querySelectorAll('[data-leave-reject]').forEach(b => { b.onclick = () => setLeaveStatus(b.dataset.leaveReject, 'rejected'); });
+}
+
+async function setLeaveStatus(id, status) {
+    try {
+        await update(Outlet.ref(`leave/${id}`), { status, decidedAt: new Date().toISOString(), decidedBy: state.adminData?.uid });
+        showToast(`Leave ${status}`, 'success');
+    } catch (e) {
+        showToast(e.message || 'Leave update failed', 'error');
+    }
+}
+
+async function submitLeaveRequest() {
+    const uid = document.getElementById('leaveStaff').value;
+    const from = document.getElementById('leaveFrom').value;
+    const to = document.getElementById('leaveTo').value;
+    const paid = document.getElementById('leavePaid').checked;
+    if (!uid) return showToast('Pick a staff member', 'error');
+    if (!from || !to) return showToast('Pick from/to dates', 'error');
+    if (to < from) return showToast('"To" must be on or after "From"', 'error');
+    try {
+        await push(Outlet.ref('leave'), {
+            uid, from, to, paid, status: 'pending',
+            createdAt: new Date().toISOString(),
+            createdBy: state.adminData?.uid,
+        });
+        document.getElementById('leaveAddForm').style.display = 'none';
+        showToast('Leave request saved', 'success');
+    } catch (e) {
+        showToast(e.message || 'Leave save failed', 'error');
+    }
+}
+
+// Approved UNPAID leave days overlapping [periodStart, periodEnd] → { uid: days }
+async function unpaidLeaveDaysInPeriod(periodStart, periodEnd) {
+    const out = {};
+    for (const l of Object.values(_leaveCache)) {
+        if (l.status !== 'approved' || l.paid) continue;
+        const from = l.from > periodStart ? l.from : periodStart;
+        const to = l.to < periodEnd ? l.to : periodEnd;
+        if (to < from) continue; // no overlap with the period
+        const days = daysInclusiveLocal(from, to);
+        out[l.uid] = (out[l.uid] || 0) + days;
+    }
+    return out;
+}
+
+// Local inclusive day count for YYYY-MM-DD strings (mirror of payroll-math daysInclusive)
+function daysInclusiveLocal(start, end) {
+    const p = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; };
+    const a = p(start), b = p(end);
+    if (a == null || b == null) return 0;
+    return Math.max(0, Math.round((b - a) / DAY_MS) + 1);
+}
+
+// --- PAYROLL ---------------------------------------------------------------
+let _payPreview = null; // last previewed { periodStart, periodEnd, tipPool, lines }
+let _payRunsInitialized = false;
+
+function initPayrollPage() {
+    const startInp = document.getElementById('payPeriodStart');
+    const endInp = document.getElementById('payPeriodEnd');
+    if (!startInp.value) {
+        const now = new Date();
+        startInp.value = ymdLocal(new Date(now.getFullYear(), now.getMonth(), 1));
+        endInp.value = ymdLocal(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    }
+    document.getElementById('btnPayPreview').onclick = previewPayroll;
+    document.getElementById('btnPayClose').onclick = closePayrollRun;
+    document.getElementById('btnPayCsv').onclick = exportPayrollCsv;
+    if (!_payRunsInitialized) {
+        _payRunsInitialized = true;
+        onValue(Outlet.ref('payrollRuns'), (snap) => renderPayrollRuns(snap.val() || {}), (e) => {
+            console.warn('[Staff] payrollRuns listener failed', e);
+        });
+    }
+}
+
+async function previewPayroll() {
+    const periodStart = document.getElementById('payPeriodStart').value;
+    const periodEnd = document.getElementById('payPeriodEnd').value;
+    const tipPool = parseFloat(document.getElementById('payTipPool').value) || 0;
+    if (!periodStart || !periodEnd) return showToast('Pick both period dates', 'error');
+    if (periodEnd < periodStart) return showToast('Period end must be on or after start', 'error');
+    const staff = payrollStaff();
+    if (!staff.length) {
+        document.getElementById('payPreviewBody').innerHTML = '<tr><td colspan="7" class="text-center text-muted p-20">No staff configured for payroll — set Pay Type + Rate in each staff profile.</td></tr>';
+        document.getElementById('payPreviewNote').textContent = '';
+        _payPreview = null;
+        return;
+    }
+    // Clocked minutes per uid across the period (one get per day — parallel)
+    const dates = [];
+    for (let t = new Date(periodStart + 'T00:00:00'); t <= new Date(periodEnd + 'T00:00:00'); t = new Date(t.getTime() + DAY_MS)) {
+        dates.push(ymdLocal(t));
+    }
+    const snaps = await Promise.all(dates.map(d => get(Outlet.ref(`attendance/${d}`)).catch(() => null)));
+    const minutesByUid = {};
+    snaps.forEach((s, i) => {
+        const dayAtt = (s && s.val()) || {};
+        for (const [uid, a] of Object.entries(dayAtt)) {
+            if (a && a.minutes != null) minutesByUid[uid] = (minutesByUid[uid] || 0) + a.minutes;
+        }
+    });
+    const unpaidDays = await unpaidLeaveDaysInPeriod(periodStart, periodEnd);
+    const lines = computePayroll({ periodStart, periodEnd, tipPool, staff, minutesByUid, unpaidLeaveDaysByUid: unpaidDays });
+    _payPreview = { periodStart, periodEnd, tipPool, lines };
+
+    const nameOf = (uid) => staffName(uid);
+    document.getElementById('payPreviewBody').innerHTML = lines.map(l => `<tr>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);">${escapeHtml(nameOf(l.userId))}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:center;">${l.payType === 'HOURLY' ? 'Hourly' : 'Monthly'}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:center;">${l.hoursWorked.toFixed(2)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:right;">${fmtRs(l.basePay)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:right;">${fmtRs(l.tipShare)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:right;">${l.unpaidLeaveDeduction ? '−' + fmtRs(l.unpaidLeaveDeduction) : '—'}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border-color);text-align:right;font-weight:700;">${fmtRs(l.netPay)}</td>
+    </tr>`).join('');
+    const unconfigured = _staffListCache.filter(s => s.isActive !== false && !(s.payType && Number(s.rate) > 0)).length;
+    document.getElementById('payPreviewNote').textContent =
+        `${dates.length} days · ${lines.length} staff on payroll` + (unconfigured ? ` · ${unconfigured} staff without pay config excluded` : '');
+    document.getElementById('btnPayClose').style.display = '';
+    document.getElementById('btnPayCsv').style.display = '';
+    refreshIcons(document.getElementById('payPreviewBody'));
+}
+
+async function closePayrollRun() {
+    if (!_payPreview) return;
+    const periodId = `${_payPreview.periodStart}__${_payPreview.periodEnd}`;
+    // Client-side immutability guard. The rules-level guard (closedAt write
+    // gate) cannot bind business admins — the businesses/$bid .write grant
+    // cascades over deeper denies (verified live 2026-10-27) — so the UI
+    // refuses to touch an existing run itself.
+    try {
+        const existing = await get(Outlet.ref(`payrollRuns/${periodId}`));
+        if (existing.exists()) {
+            return showToast('This period already has a closed run — closed runs are immutable.', 'error');
+        }
+    } catch (e) { /* read failure → let the write attempt surface any problem */ }
+    const ok = await showConfirm(`Close payroll run ${_payPreview.periodStart} → ${_payPreview.periodEnd}? A closed run is an immutable snapshot.`);
+    if (!ok) return;
+    try {
+        await set(Outlet.ref(`payrollRuns/${periodId}`), {
+            periodStart: _payPreview.periodStart,
+            periodEnd: _payPreview.periodEnd,
+            tipPool: _payPreview.tipPool,
+            lines: _payPreview.lines,
+            closedAt: new Date().toISOString(),
+            closedBy: state.adminData?.uid,
+        });
+        showToast('Payroll run closed (immutable snapshot)', 'success');
+        _payPreview = null;
+        document.getElementById('btnPayClose').style.display = 'none';
+        document.getElementById('btnPayCsv').style.display = 'none';
+    } catch (e) {
+        showToast(e.message?.includes('Permission') ? 'Run already closed (immutable)' : (e.message || 'Close failed'), 'error');
+    }
+}
+
+function payrollCsv(run) {
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const head = ['Staff', 'PayType', 'HoursWorked', 'BasePay', 'TipShare', 'UnpaidLeaveDeduction', 'NetPay'].join(',');
+    const rows = Object.values(run.lines || {}).map(l =>
+        [esc(staffName(l.userId)), l.payType, l.hoursWorked, l.basePay, l.tipShare, l.unpaidLeaveDeduction, l.netPay].join(','));
+    return [head, ...rows].join('\n');
+}
+
+function downloadCsv(filename, csv) {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function exportPayrollCsv() {
+    if (!_payPreview) return;
+    downloadCsv(`payroll-${_payPreview.periodStart}_${_payPreview.periodEnd}.csv`, payrollCsv(_payPreview));
+}
+
+function renderPayrollRuns(runs) {
+    const list = document.getElementById('payRunsList');
+    const entries = Object.entries(runs).sort((a, b) => String(b[1].closedAt || '').localeCompare(String(a[1].closedAt || '')));
+    if (!entries.length) { list.innerHTML = 'No closed runs yet.'; return; }
+    list.innerHTML = entries.map(([id, r]) => {
+        const lines = Object.values(r.lines || {});
+        const totalNet = lines.reduce((s, l) => s + (l.netPay || 0), 0);
+        return `<div class="glass-card p-12 mb-8" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div><strong>${escapeHtml(r.periodStart)} → ${escapeHtml(r.periodEnd)}</strong>
+            <span class="text-muted-small">· ${lines.length} staff · tips ${fmtRs(r.tipPool || 0)} · closed ${r.closedAt ? new Date(r.closedAt).toLocaleDateString('en-IN') : '—'}</span><br>
+            <strong>Total net: ${fmtRs(totalNet)}</strong></div>
+            <button class="btn-secondary" data-run-csv="${escapeHtml(id)}"><i data-lucide="download" class="icon-14"></i> CSV</button>
+        </div>`;
+    }).join('');
+    refreshIcons(list);
+    list.querySelectorAll('[data-run-csv]').forEach(b => {
+        b.onclick = () => {
+            const r = runs[b.dataset.runCsv];
+            downloadCsv(`payroll-${r.periodStart}_${r.periodEnd}.csv`, payrollCsv(r));
+        };
+    });
+}

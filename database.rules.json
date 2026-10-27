@@ -382,7 +382,39 @@
                 "email": { ".validate": "newData.isString() && newData.val().matches(/@.*\\..*/)" },
                 "counterPinHash": { ".validate": "newData.isString() || !newData.exists()" },
                 "discountCeilingPct": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
-                "isActive": { ".validate": "newData.isBoolean()" }
+                "isActive": { ".validate": "newData.isBoolean()" },
+                "payType": { ".validate": "!newData.exists() || newData.val() == 'MONTHLY' || newData.val() == 'HOURLY'" },
+                "rate": { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)" }
+              }
+            },
+            "attendance": {
+              "$date": {
+                ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || ((root.child('admins').child(auth.uid).child('role').val() == 'owner' || root.child('admins').child(auth.uid).child('role').val() == 'manager') && root.child('admins').child(auth.uid).child('outlet').val() == $outletId))",
+                "$uid": {
+                  ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || ((root.child('admins').child(auth.uid).child('role').val() == 'owner' || root.child('admins').child(auth.uid).child('role').val() == 'manager') && root.child('admins').child(auth.uid).child('outlet').val() == $outletId))",
+                  ".validate": "$date.matches(/^\\d{4}-\\d{2}-\\d{2}$/) && newData.hasChildren(['inAt']) && newData.child('inAt').isString() && (!newData.hasChild('outAt') || newData.child('outAt').isString()) && (!newData.hasChild('minutes') || newData.child('minutes').isNumber())"
+                }
+              }
+            },
+            "shifts": {
+              "$weekId": {
+                ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || ((root.child('admins').child(auth.uid).child('role').val() == 'owner' || root.child('admins').child(auth.uid).child('role').val() == 'manager') && root.child('admins').child(auth.uid).child('outlet').val() == $outletId))",
+                ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || ((root.child('admins').child(auth.uid).child('role').val() == 'owner' || root.child('admins').child(auth.uid).child('role').val() == 'manager') && root.child('admins').child(auth.uid).child('outlet').val() == $outletId))",
+                ".validate": "$weekId.matches(/^\\d{4}-W\\d{2}$/)"
+              }
+            },
+            "leave": {
+              "$requestId": {
+                ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || ((root.child('admins').child(auth.uid).child('role').val() == 'owner' || root.child('admins').child(auth.uid).child('role').val() == 'manager') && root.child('admins').child(auth.uid).child('outlet').val() == $outletId))",
+                ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || ((root.child('admins').child(auth.uid).child('role').val() == 'owner' || root.child('admins').child(auth.uid).child('role').val() == 'manager') && root.child('admins').child(auth.uid).child('outlet').val() == $outletId))",
+                ".validate": "newData.hasChildren(['uid','from','to','paid','status']) && newData.child('uid').isString() && newData.child('from').isString() && newData.child('to').isString() && newData.child('paid').isBoolean() && (newData.child('status').val() == 'pending' || newData.child('status').val() == 'approved' || newData.child('status').val() == 'rejected')"
+              }
+            },
+            "payrollRuns": {
+              "$periodId": {
+                ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || ((root.child('admins').child(auth.uid).child('role').val() == 'owner' || root.child('admins').child(auth.uid).child('role').val() == 'manager') && root.child('admins').child(auth.uid).child('outlet').val() == $outletId))",
+                ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || ((root.child('admins').child(auth.uid).child('role').val() == 'owner' || root.child('admins').child(auth.uid).child('role').val() == 'manager') && root.child('admins').child(auth.uid).child('outlet').val() == $outletId)) && !data.child('closedAt').exists()",
+                ".validate": "newData.hasChildren(['periodStart','periodEnd','lines']) && newData.child('periodStart').isString() && newData.child('periodEnd').isString() && (!newData.hasChild('closedAt') || newData.child('closedAt').isString())"
               }
             },
             "emailIndex": {

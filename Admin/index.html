@@ -2258,6 +2258,14 @@
 
                                 <button type="button" class="sm-subtab" data-sm-page="roles" role="tab" aria-selected="false">Roles &amp; Access</button>
 
+                                <button type="button" class="sm-subtab" data-sm-page="attendance" role="tab" aria-selected="false">Attendance</button>
+
+                                <button type="button" class="sm-subtab" data-sm-page="shifts" role="tab" aria-selected="false">Shifts</button>
+
+                                <button type="button" class="sm-subtab" data-sm-page="leave" role="tab" aria-selected="false">Leave</button>
+
+                                <button type="button" class="sm-subtab" data-sm-page="payroll" role="tab" aria-selected="false">Payroll</button>
+
                             </div>
 
                             <!-- Page 1: Staff accounts -->
@@ -2325,6 +2333,218 @@
                                 </div>
 
                                 <div id="rolesList"></div>
+
+                            </div>
+
+                            <!-- Page 3: Attendance (clock in/out) -->
+
+                            <div data-sm-pane="attendance" style="display:none;">
+
+                                <div class="flex-between mb-16" style="flex-wrap:wrap;gap:10px;align-items:center;">
+
+                                    <span id="attDateLabel" class="text-muted-small"></span>
+
+                                    <button id="btnAttRefresh" class="btn-secondary"><i data-lucide="refresh-cw" class="icon-14"></i> Refresh</button>
+
+                                </div>
+
+                                <div id="attTodayList"></div>
+
+                                <h4 class="mb-8" style="margin-top:20px;"><i data-lucide="history" class="icon-16"></i> Last 7 days</h4>
+
+                                <div class="table-container" style="overflow-x:auto;">
+
+                                    <table class="staff-table" style="width:100%;border-collapse:collapse;">
+
+                                        <thead>
+
+                                            <tr style="background:var(--bg-subtle);">
+
+                                                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Staff</th>
+
+                                                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Date</th>
+
+                                                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">In</th>
+
+                                                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Out</th>
+
+                                                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Hours</th>
+
+                                            </tr>
+
+                                        </thead>
+
+                                        <tbody id="attHistoryBody">
+
+                                            <tr><td colspan="5" class="text-center text-muted p-20">Loading...</td></tr>
+
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                            </div>
+
+                            <!-- Page 4: Shift planner (weekly grid + clash check) -->
+
+                            <div data-sm-pane="shifts" style="display:none;">
+
+                                <div class="flex-between mb-16" style="flex-wrap:wrap;gap:10px;align-items:center;">
+
+                                    <input type="week" id="shiftWeek" class="form-input" style="width:auto;" aria-label="Shift week">
+
+                                    <button id="btnShiftSave" class="btn-primary"><i data-lucide="save" class="icon-14"></i> Save Week</button>
+
+                                </div>
+
+                                <div class="table-container" style="overflow-x:auto;">
+
+                                    <table class="staff-table" style="width:100%;border-collapse:collapse;">
+
+                                        <thead>
+
+                                            <tr style="background:var(--bg-subtle);" id="shiftGridHead"></tr>
+
+                                        </thead>
+
+                                        <tbody id="shiftGridBody"></tbody>
+
+                                    </table>
+
+                                </div>
+
+                                <small class="text-muted-small">24h times. Same staff overlapping on the same day is blocked on save. Leave both times blank for a day off.</small>
+
+                            </div>
+
+                            <!-- Page 5: Leave requests -->
+
+                            <div data-sm-pane="leave" style="display:none;">
+
+                                <div class="flex-between mb-16" style="flex-wrap:wrap;gap:10px;align-items:center;">
+
+                                    <span class="text-muted-small">Approved UNPAID days feed payroll deductions.</span>
+
+                                    <button id="btnLeaveAdd" class="btn-primary"><i data-lucide="plus" class="icon-14"></i> Request Leave</button>
+
+                                </div>
+
+                                <div id="leaveAddForm" class="glass-card p-16 mb-16" style="display:none;">
+
+                                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+
+                                        <div class="form-group-mini"><label class="form-label-small">Staff</label><select id="leaveStaff" class="form-input"></select></div>
+
+                                        <div class="form-group-mini"><label class="form-label-small">From</label><input type="date" id="leaveFrom" class="form-input"></div>
+
+                                        <div class="form-group-mini"><label class="form-label-small">To</label><input type="date" id="leaveTo" class="form-input"></div>
+
+                                        <div class="form-group-mini"><label class="form-label-small" style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="leavePaid"> Paid</label></div>
+
+                                        <button id="btnLeaveSubmit" class="btn-primary">Save Request</button>
+
+                                    </div>
+
+                                </div>
+
+                                <div class="table-container" style="overflow-x:auto;">
+
+                                    <table class="staff-table" style="width:100%;border-collapse:collapse;">
+
+                                        <thead>
+
+                                            <tr style="background:var(--bg-subtle);">
+
+                                                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Staff</th>
+
+                                                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">From</th>
+
+                                                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">To</th>
+
+                                                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Paid</th>
+
+                                                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Status</th>
+
+                                                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Actions</th>
+
+                                            </tr>
+
+                                        </thead>
+
+                                        <tbody id="leaveTableBody">
+
+                                            <tr><td colspan="6" class="text-center text-muted p-20">Loading...</td></tr>
+
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                            </div>
+
+                            <!-- Page 6: Payroll run -->
+
+                            <div data-sm-pane="payroll" style="display:none;">
+
+                                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;" class="mb-16">
+
+                                    <div class="form-group-mini"><label class="form-label-small">Period start</label><input type="date" id="payPeriodStart" class="form-input"></div>
+
+                                    <div class="form-group-mini"><label class="form-label-small">Period end</label><input type="date" id="payPeriodEnd" class="form-input"></div>
+
+                                    <div class="form-group-mini"><label class="form-label-small">Tip pool (&#8377;)</label><input type="number" id="payTipPool" class="form-input" min="0" step="0.01" placeholder="0"></div>
+
+                                    <button id="btnPayPreview" class="btn-primary"><i data-lucide="calculator" class="icon-14"></i> Preview</button>
+
+                                    <button id="btnPayClose" class="btn-primary" style="display:none;"><i data-lucide="lock" class="icon-14"></i> Close Run</button>
+
+                                    <button id="btnPayCsv" class="btn-secondary" style="display:none;"><i data-lucide="download" class="icon-14"></i> CSV</button>
+
+                                </div>
+
+                                <div class="table-container" style="overflow-x:auto;">
+
+                                    <table class="staff-table" style="width:100%;border-collapse:collapse;">
+
+                                        <thead>
+
+                                            <tr style="background:var(--bg-subtle);">
+
+                                                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Staff</th>
+
+                                                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Type</th>
+
+                                                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Hours</th>
+
+                                                <th style="padding:10px 14px;text-align:right;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Base Pay</th>
+
+                                                <th style="padding:10px 14px;text-align:right;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Tips</th>
+
+                                                <th style="padding:10px 14px;text-align:right;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Unpaid Leave</th>
+
+                                                <th style="padding:10px 14px;text-align:right;font-weight:600;color:var(--text-secondary);border-bottom:1px solid var(--border-color);white-space:nowrap;">Net Pay</th>
+
+                                            </tr>
+
+                                        </thead>
+
+                                        <tbody id="payPreviewBody">
+
+                                            <tr><td colspan="7" class="text-center text-muted p-20">Pick a period and preview.</td></tr>
+
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                                <small id="payPreviewNote" class="text-muted-small"></small>
+
+                                <h4 class="mb-8" style="margin-top:20px;"><i data-lucide="lock" class="icon-16"></i> Closed runs</h4>
+
+                                <div id="payRunsList" class="text-muted-small">Loading...</div>
 
                             </div>
 
@@ -7420,6 +7640,26 @@
                         <input type="number" id="staffCeilingPct" class="form-input w-100" min="0" max="100" step="1" placeholder="0">
 
                         <small class="text-muted-small">Maximum discount % this staff can apply without manager approval. Waiters inherit outlet ceiling.</small>
+
+                    </div>
+
+                    <div id="staffPayGroup" class="form-group-mini">
+
+                        <label class="form-label-small">Pay Type</label>
+
+                        <select id="staffPayType" class="form-input w-100">
+
+                            <option value="MONTHLY">Monthly salary</option>
+
+                            <option value="HOURLY">Hourly wage</option>
+
+                        </select>
+
+                        <label class="form-label-small" style="margin-top:8px;">Pay Rate (&#8377; per month / per hour)</label>
+
+                        <input type="number" id="staffRate" class="form-input w-100" min="0" step="0.01" placeholder="0">
+
+                        <small class="text-muted-small">Used by Attendance &rarr; Payroll runs. Leave the rate blank to exclude this staff from payroll.</small>
 
                     </div>
 
