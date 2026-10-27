@@ -62,7 +62,9 @@ function _windowLine(d) {
     if (d.type === 'firstOrder') return '<em>Always on for new customers</em>';
     const s = d.startsAt ? formatDate(d.startsAt) : 'now';
     const e = (!d.endsAt || d.endsAt === 0) ? 'no end' : formatDate(d.endsAt);
-    return `${s} → ${e}`;
+    const sched = (Array.isArray(d.daysOfWeek) && d.daysOfWeek.length) || d.startTime || d.endTime;
+    const schedTxt = sched ? ` · Happy hour: ${_schedLabel(d.daysOfWeek, d.startTime || '', d.endTime || '')}` : '';
+    return `${s} → ${e}${schedTxt}`;
 }
 
 function _renderCard(d) {
@@ -375,6 +377,12 @@ function _openEditor(id) {
     el('discStartsAt', _toLocalInputValue(d?.startsAt));
     el('discEndsAt', _toLocalInputValue(d?.endsAt || 0));
     document.getElementById('discNoEnd').checked = !d?.endsAt;
+    // Happy-hour weekly window (Phase 6): daysOfWeek 0=Sun..6=Sat + HH:MM IST
+    document.querySelectorAll('.disc-sched-day').forEach(cb => {
+        cb.checked = Array.isArray(d?.daysOfWeek) && d.daysOfWeek.includes(Number(cb.value));
+    });
+    el('discSchedStart', d?.startTime || '');
+    el('discSchedEnd', d?.endTime || '');
     el('discMinSubtotal', d?.minSubtotal ?? '');
     el('discExclusiveGroup', d?.exclusiveGroup || '');
     el('discPerCustomerLimit', d?.perCustomerLimit ?? 0);
@@ -456,6 +464,7 @@ function _renderReview() {
         (v('discCouponCode') || '').trim() ? ['Coupon code', (v('discCouponCode') || '').toUpperCase()] : null,
         type === 'category' ? ['Categories', cats] : null,
         ['Window', windowLine],
+        _schedState().scheduled ? ['Happy hour', _schedLabel(_schedState().days, _schedState().start, _schedState().end)] : null,
         ['Channel', channelSel?.selectedOptions[0]?.textContent || 'All channels'],
         Number(v('discMinSubtotal')) ? ['Min subtotal', `₹${Number(v('discMinSubtotal'))}`] : null,
         v('discExclusiveGroup') ? ['Exclusive group', v('discExclusiveGroup')] : null,
@@ -466,6 +475,21 @@ function _renderReview() {
     ].filter(Boolean);
     head.innerHTML = `<strong>${escapeHtml(v('discName') || 'Untitled')}</strong> · ${escapeHtml(valueLine)}`;
     el.innerHTML = rows.map(([k, val]) => `<div class="disc-review-row"><span>${escapeHtml(String(k))}</span><strong>${escapeHtml(String(val))}</strong></div>`).join('');
+}
+
+function _schedState() {
+    const days = Array.from(document.querySelectorAll('.disc-sched-day')).filter(cb => cb.checked).map(cb => Number(cb.value));
+    const start = document.getElementById('discSchedStart')?.value || '';
+    const end = document.getElementById('discSchedEnd')?.value || '';
+    return { days, start, end, scheduled: days.length > 0 || !!start || !!end };
+}
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function _schedLabel(days, start, end) {
+    const dayTxt = (!days || !days.length) ? 'Every day'
+        : days.slice().sort((a, b) => a - b).map(d => DAY_NAMES[d]).join(', ');
+    return `${dayTxt} ${start}–${end} IST`;
 }
 
 async function _save() {
@@ -486,6 +510,16 @@ async function _save() {
     const categoryIds = Array.from(document.querySelectorAll('#discCategoryList .disc-cat-chip.selected')).map(c => c.dataset.catId);
     if (type === 'category' && categoryIds.length === 0) { showToast('Pick at least one category', 'warning'); return; }
 
+    // Happy-hour weekly window (Phase 6): optional; when anything is set,
+    // a valid start→end time pair is required (days omitted = every day).
+    const sched = _schedState();
+    if (sched.scheduled) {
+        if (!sched.start || !sched.end) { showToast('Happy-hour window needs both a start and an end time', 'warning'); return; }
+        const sm = Number(sched.start.split(':')[0]) * 60 + Number(sched.start.split(':')[1] || 0);
+        const em = Number(sched.end.split(':')[0]) * 60 + Number(sched.end.split(':')[1] || 0);
+        if (!(em > sm)) { showToast('Happy-hour end time must be after the start time', 'warning'); return; }
+    }
+
     const id = _editingId || `disc_${Date.now().toString(36)}`;
     const doc = {
         name, type, mode, value,
@@ -499,6 +533,9 @@ async function _save() {
         globalLimit: Number(document.getElementById('discGlobalLimit')?.value) || 0,
         startsAt: startsAt || 0,
         endsAt: endsAt || 0,
+        daysOfWeek: sched.scheduled && sched.days.length ? sched.days : null,
+        startTime: sched.scheduled ? sched.start : null,
+        endTime: sched.scheduled ? sched.end : null,
         enabled,
         channel: (document.getElementById('discChannel')?.value || 'all'),
         engineVersion: 1,

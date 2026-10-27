@@ -123,6 +123,7 @@ export function evaluateDiscounts(discounts, ctx = {}) {
             (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit
             // For table channel, also check separate table counter
             && (channel !== 'table' || (customer?.discountUsage?.table?.[d.id] || 0) < d.perCustomerLimit))
+        && inSchedule(d, now)
     );
 
     const applicable = candidates.filter(d => {
@@ -173,6 +174,7 @@ export function couponStatus(d, now = Date.now()) {
     if (d.enabled === false) return 'disabled';
     if (d.startsAt && now < d.startsAt) return 'not_started';
     if (d.endsAt && d.endsAt > 0 && now > d.endsAt) return 'expired';
+    if (!inSchedule(d, now)) return 'not_in_window';
     return 'valid';
 }
 
@@ -181,7 +183,25 @@ export const COUPON_STATUS_TEXT = {
     disabled: 'This coupon is currently disabled',
     not_started: 'This coupon is not active yet — please try again later',
     expired: 'This coupon has expired',
+    not_in_window: 'This coupon is not valid at this time — check its scheduled hours',
 };
+
+/**
+ * Weekly schedule (happy hour) check for a discount doc. Absent/empty
+ * schedule = valid at any time. Days follow JS getDay() (0 = Sunday …
+ * 6 = Saturday); times are outlet-local "HH:MM" (IST). Delegates to
+ * promotionActive so the editor-stored fields and this check can never
+ * drift apart.
+ */
+export function inSchedule(d, now = Date.now()) {
+    if (!d) return true;
+    const scheduled = (Array.isArray(d.daysOfWeek) && d.daysOfWeek.length > 0)
+        || d.startTime || d.endTime
+        || Number.isFinite(d.startMinute) || Number.isFinite(d.endMinute);
+    if (!scheduled) return true;
+    const ist = new Date(Number(now) + 19800000); // IST = UTC+5:30, matches the report buckets
+    return promotionActive(d, ist.getUTCDay(), ist.getUTCHours() * 60 + ist.getUTCMinutes());
+}
 
 /**
  * Happy-hour windows (day-of-week + time-of-day automatic discounts).
@@ -282,6 +302,21 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('discount-rule
         assert.strictEqual(promotionActive({ daysOfWeek: [5], startTime: '18:00', endTime: '20:00' }, 6, toMinutes('19:00')), false, 'wrong day');
         assert.strictEqual(promotionActive({ startTime: '18:00', endTime: '20:00', isActive: false }, 5, toMinutes('19:00')), false);
         assert.strictEqual(promotionActive({ startTime: '20:00', endTime: '18:00' }, 5, toMinutes('19:00')), false, 'malformed window');
+        // weekly schedule on discounts (Phase 6 happy-hour): IST wall-clock from a fixed now
+        // Date.UTC(2026, 9, 27, 10, 30) = 10:30Z → IST 16:00 on Tuesday 2026-10-27
+        const t = Date.UTC(2026, 9, 27, 10, 30) - 19800000;
+        assert.strictEqual(inSchedule({}, t), true, 'unscheduled = always');
+        assert.strictEqual(inSchedule(null, t), true);
+        assert.strictEqual(inSchedule({ daysOfWeek: [1, 2, 3, 4, 5], startTime: '09:00', endTime: '18:00' }, t), true, 'Tue 16:00 inside 09-18 weekdays');
+        assert.strictEqual(inSchedule({ daysOfWeek: [1, 2, 3, 4, 5], startTime: '16:30', endTime: '18:00' }, t), false, 'after end');
+        assert.strictEqual(inSchedule({ daysOfWeek: [0, 6], startTime: '09:00', endTime: '18:00' }, t), false, 'weekend only');
+        assert.strictEqual(inSchedule({ startTime: '20:00', endTime: '18:00' }, t), false, 'malformed window never matches');
+        assert.strictEqual(couponStatus({ daysOfWeek: [0, 6], startTime: '09:00', endTime: '18:00' }, t), 'not_in_window');
+        assert.strictEqual(couponStatus({ daysOfWeek: [1, 2, 3, 4, 5], startTime: '09:00', endTime: '18:00' }, t), 'valid');
+        assert.ok(COUPON_STATUS_TEXT.not_in_window.length > 5);
+        // schedule gates the pricing path itself
+        assert.strictEqual(evaluateDiscounts([{ id: 'hh', type: 'global', mode: 'percent', value: 10, daysOfWeek: [0, 6], startTime: '09:00', endTime: '18:00' }], { subtotal: 500, now: t }), null, 'outside window → no discount');
+        assert.strictEqual(evaluateDiscounts([{ id: 'hh', type: 'global', mode: 'percent', value: 10, daysOfWeek: [1, 2, 3, 4, 5], startTime: '09:00', endTime: '18:00' }], { subtotal: 500, now: t }).amount, 50, 'inside window → applies');
         // manual-discount PIN ceiling
         assert.strictEqual(needsPinApproval(151, 1000, 15), true);
         assert.strictEqual(needsPinApproval(150, 1000, 15), false);

@@ -6875,6 +6875,42 @@
 
                 </div>
 
+                <div class="form-group" style="margin-top:14px;">
+
+                    <label data-i18n="discount.editor.weeklyWindow">Happy-hour window (optional, IST)</label>
+
+                    <div id="discSchedDays" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+
+                        <label class="checkbox-label" style="gap:4px;"><input type="checkbox" class="disc-sched-day" value="0"> Sun</label>
+
+                        <label class="checkbox-label" style="gap:4px;"><input type="checkbox" class="disc-sched-day" value="1"> Mon</label>
+
+                        <label class="checkbox-label" style="gap:4px;"><input type="checkbox" class="disc-sched-day" value="2"> Tue</label>
+
+                        <label class="checkbox-label" style="gap:4px;"><input type="checkbox" class="disc-sched-day" value="3"> Wed</label>
+
+                        <label class="checkbox-label" style="gap:4px;"><input type="checkbox" class="disc-sched-day" value="4"> Thu</label>
+
+                        <label class="checkbox-label" style="gap:4px;"><input type="checkbox" class="disc-sched-day" value="5"> Fri</label>
+
+                        <label class="checkbox-label" style="gap:4px;"><input type="checkbox" class="disc-sched-day" value="6"> Sat</label>
+
+                    </div>
+
+                    <div style="display:flex; gap:8px; align-items:center;">
+
+                        <input type="time" id="discSchedStart" class="search-input-group" style="max-width:130px;">
+
+                        <span>→</span>
+
+                        <input type="time" id="discSchedEnd" class="search-input-group" style="max-width:130px;">
+
+                    </div>
+
+                    <small class="text-muted-small">Leave empty for discounts valid at any time. The window is end-exclusive: 18:00–20:00 ends at 20:00.</small>
+
+                </div>
+
                 </fieldset>
 
 

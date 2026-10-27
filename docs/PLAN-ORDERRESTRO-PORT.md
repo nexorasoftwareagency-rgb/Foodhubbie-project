@@ -279,6 +279,13 @@ Foodhubbie has **no server** for Admin (Firebase Hosting static, Spark free tier
 
 **Verification**: `test_discount-rules.mjs` (caps, expiry, usage limit, min order, window edges); Playwright: apply valid/invalid coupon in POS → reason toast; happy-hour window toggles discount on/off; opted-out customer absent from campaign preview.
 
+### Phase 6 — AS BUILT (2026-10-27, ledger 20261027153446-phase6-marketing)
+
+- **Review verdict**: §6.2 was already ~5/7 shipped before this phase ran (P2-9 discount engine + Feature 1 CRM + the bot’s consent model). Caps, windows, usage counters, human reasons, and opt-out enforcement all verified present; see ledger for the map. The opt-out model is STRICTER than the spec: explicit `promotionalConsent === true` required (opt-IN), plus `bot/promotions/optout` keys, enforced per-recipient in the bot send loop and the Admin audience build.
+- **The one gap — happy-hour windows — adopted with a deviation from §6.3**: NO separate `promotions/{id}` node. Any discount on the existing `discounts` node can now carry `daysOfWeek` ([0=Sun…6=Sat]) + `startTime`/`endTime` ('HH:MM', IST); new pure `inSchedule(d, now)` delegates to the existing `promotionActive`, gates `evaluateDiscounts` candidates, and `couponStatus` returns `not_in_window` (+ human reason) outside the window. Bot order flow, Admin POS preview, and menu webview coupon validation honor windows by construction — one engine, no second pricing path.
+- **Admin editor**: step 2 of the discount wizard gained the weekly window (day checkboxes + time range, end-exclusive hint), with validation (both times, end>start), review row, card display, and nulls on clear.
+- **Verification (live, e2e outlet)**: E2E 11/11 — engine test through the real `bot/discount-engine.js` (inside applies / outside excluded / coupon reason / unscheduled regression; time-of-day-safe window math) + Playwright authoring round-trip (save → DB exact, card display, repopulate, clear → nulls, end≤start blocked). Twins 5/5, menu SW v29, Admin SW v5.11.5, bot tests 17/17.
+
 ---
 
 ## 7. Delivery Order & Dependencies
