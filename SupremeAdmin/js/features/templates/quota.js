@@ -7,6 +7,9 @@ export async function loadQuota(bid, oid) {
   if (!el) return;
   try {
     const token = await firebase.auth().currentUser.getIdToken();
+    // This loads during first render — wait for the tunnel URL bootstrap,
+    // otherwise the fetch goes to the stale fallback host.
+    if (window.TUNNEL_READY) await window.TUNNEL_READY;
     const res = await fetch(`${window.TUNNEL_URL}/api/whatsapp/quota/${bid}/${oid}`, {
       headers: { Authorization: `Bearer ${token}` },
     });

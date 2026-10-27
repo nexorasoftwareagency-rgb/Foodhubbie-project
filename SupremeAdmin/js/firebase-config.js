@@ -26,11 +26,31 @@ window.TUNNEL_URL = TUNNEL_URL;
 firebase.initializeApp(FIREBASE_CONFIG);
 
 // Auto-update TUNNEL_URL from Firebase if EC2 cron has written a newer one.
-// Falls back to the hardcoded value above if the read fails or the path doesn't exist.
-firebase.database().ref('config/tunnelUrl').once('value').then((snap) => {
-  const url = snap.val();
-  if (url && typeof url === 'string' && url.startsWith('https://')) {
-    TUNNEL_URL = url;
-    window.TUNNEL_URL = url;
-  }
-}).catch(() => { console.warn('TUNNEL_URL: failed to read config/tunnelUrl, using fallback'); });
+//
+// config/tunnelUrl is readable only by a signed-in admin (database.rules.json), so a
+// read at boot — before login — ALWAYS failed and left the hardcoded (stale, rotated)
+// Quick Tunnel host in place; every tunnel-backed panel then died with
+// ERR_NAME_NOT_RESOLVED. Resolve on the first signed-in state instead and keep
+// `window.TUNNEL_READY` pending until then, so features that fetch on first render
+// await it rather than racing the fallback.
+const resolveTunnelUrl = () => firebase.database().ref('config/tunnelUrl').once('value')
+  .then((snap) => {
+    const url = snap.val();
+    if (url && typeof url === 'string' && url.startsWith('https://')) {
+      TUNNEL_URL = url;
+      window.TUNNEL_URL = url;
+    }
+    return TUNNEL_URL;
+  })
+  .catch(() => {
+    console.warn('TUNNEL_URL: failed to read config/tunnelUrl, using fallback');
+    return TUNNEL_URL;
+  });
+
+window.TUNNEL_READY = new Promise((resolve) => {
+  const unsub = firebase.auth().onAuthStateChanged((user) => {
+    if (!user) return;
+    unsub();
+    resolve(resolveTunnelUrl());
+  });
+});

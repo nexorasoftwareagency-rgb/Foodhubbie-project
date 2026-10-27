@@ -14,7 +14,10 @@ export let waTemplatesLoadedFor = null;
 export let waTemplatesHtml = null;
 export let waLibrary = {};
 
-const TUNNEL_URL = 'https://bot-control-api.foodhubbie.com';
+// The Bot Control API lives behind a rotating Cloudflare Quick Tunnel; the URL is
+// resolved at boot in firebase-config.js (window.TUNNEL_URL / window.TUNNEL_READY).
+// This used to be a hardcoded `https://bot-control-api.foodhubbie.com`, a host that
+// does not resolve — so the templates panel always failed with ERR_NAME_NOT_RESOLVED.
 
 export async function loadWaTemplates(bid, oid) {
   const el = document.getElementById('wa-templates-content');
@@ -33,7 +36,8 @@ export async function loadWaTemplates(bid, oid) {
     const library = snap.val() || {};
     waLibrary = library;
     const token = await firebase.auth().currentUser.getIdToken();
-    const res = await fetch(`${TUNNEL_URL}/api/whatsapp/templates/${bid}/${oid}`, {
+    if (window.TUNNEL_READY) await window.TUNNEL_READY;
+    const res = await fetch(`${window.TUNNEL_URL}/api/whatsapp/templates/${bid}/${oid}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const existing = new Set();
