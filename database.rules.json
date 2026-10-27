@@ -2,7 +2,7 @@
   "rules": {
     "config": {
       "tunnelUrl": {
-        ".read": "auth != null"
+        ".read": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous'"
       }
     },
     "admins": {
@@ -126,7 +126,7 @@
           "$outletId": {
             "disabled": { ".read": "true" },
             "locked": {
-              ".read": "auth != null",
+              ".read": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous'",
               ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)"
             },
             "outletNo": { ".read": "true" },
@@ -409,7 +409,7 @@
             "webviewTokens": {
               "$tokenId": {
                 ".read": "true",
-                ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
+                ".write": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)) || (auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && !data.exists() && newData.child('phone').val() == 'anonymous' && newData.child('used').val() == false && newData.child('anonUid').val() == auth.uid && newData.hasChildren(['phone','createdAt','used','anonUid']))",
                 ".validate": "newData.hasChildren(['phone','createdAt','used']) && newData.child('phone').isString() && newData.child('createdAt').isString() && newData.child('used').isBoolean()",
                 "used": {
                   ".write": "newData.val() == true && data.val() == false"
@@ -552,7 +552,7 @@
       }
       },
     "outletIndex": {
-      ".read": "auth != null",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous'",
       "$oid": {
         ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
         "bid": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 64" },

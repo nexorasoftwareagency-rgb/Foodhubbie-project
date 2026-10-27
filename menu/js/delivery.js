@@ -5,7 +5,7 @@
  * delivery-specific fields (address + location) and a direct order write
  * (menu/js/delivery-order.js) instead of a table-session attach.
  */
-import { outletRef, get, set as fbSet, OUTLET, update, runTransaction } from './firebase.js';
+import { outletRef, get, set as fbSet, OUTLET, update, runTransaction, mintAnonWebviewToken } from './firebase.js';
 import { Session } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getWebviewStorageKey } from './cart.js';
 import * as UI from './ui.js';
@@ -908,6 +908,21 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
     if (phone.length !== 10) { UI.showToast('Please enter a valid 10-digit mobile number', 'error'); return; }
     if (!address) { UI.showToast('Please enter your delivery address', 'error'); return; }
 
+    // Direct mode (bare URL, no bot-issued token): mint an anonymous one-time
+    // token now — the orders rule requires webviewTokens/{token}/used == false.
+    // Lazy (checkout-time, not boot) so only real orderers sign in anonymously.
+    const cartKey = getWebviewStorageKey(M.token); // captured BEFORE mint — cart was restored under this key
+    if (!M.token) {
+        try {
+            M.token = await mintAnonWebviewToken();
+            M._tokenValid = true;
+        } catch (err) {
+            console.error('anon webview token mint failed', err);
+            UI.showToast('Could not start your order — please try again', 'error');
+            return;
+        }
+    }
+
     M._placing = true;
     rememberIdentity(name, phone);
     // ponytail: invalidate token IMMEDIATELY on click to prevent double-submit race
@@ -934,9 +949,9 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
             webviewToken: M.token,
         });
 
-        // Clear cart scoped to this webview token
-        const webviewKey = getWebviewStorageKey(M.token);
-        clearCart(webviewKey);
+        // Clear cart scoped to the token key it was restored under (pre-mint
+        // key for direct mode — the mint swapped M.token after restore)
+        clearCart(cartKey);
         M.appliedDiscount = null;
         M.appliedReward = null;
         haptic([10, 30, 10]);

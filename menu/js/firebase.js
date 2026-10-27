@@ -9,14 +9,21 @@
  *   - orders: create-only (no update/delete from this client — staff-only)
  *   - tableRequests: create-only
  *
- * This file intentionally does NOT use Firebase Auth. Access control is
- * enforced entirely by Realtime Database Security Rules, not by a login
- * wall, since customers must never need to sign in to order food.
+ * This file intentionally does NOT use Firebase Auth for the QR dine-in app.
+ * Access control is enforced entirely by Realtime Database Security Rules,
+ * not by a login wall, since customers must never need to sign in to order food.
+ *
+ * ONE scoped exception: delivery direct mode (bare delivery.html URL with no
+ * bot-issued webview token) mints its own one-time token via Firebase
+ * ANONYMOUS Auth at checkout — see mintAnonWebviewToken() below. This is the
+ * "trusted path" that lets the orders security rule verify a fresh, unused
+ * token without exposing token creation to arbitrary unauthenticated writes.
  */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
     getDatabase, ref, get, onValue, set, push, update, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // Paste the SAME config values used in Admin/firebase-config.js.
 // This is safe to expose publicly — Firebase config is not a secret,
@@ -68,6 +75,31 @@ export const BUSINESS_ID = new URLSearchParams(window.location.search).get('b') 
 
 export function outletRef(path) {
     return ref(db, `businesses/${BUSINESS_ID}/outlets/${OUTLET}/${path}`);
+}
+
+// ---------------------------------------------------------------
+// Anonymous webview-token mint — delivery DIRECT mode only.
+// A bare delivery.html URL (no ?token= from the bot) cannot pass the
+// orders rule gate (webviewTokens/{token}/used == false), so at checkout
+// we sign in anonymously and create our own one-time token. The rules
+// only allow this exact shape, create-only, tied to the signer's uid:
+//   phone == 'anonymous', used == false, anonUid == auth.uid
+// Bot-issued tokens (real customer phone) are unaffected — they are
+// created by the admin-SDK bot, which bypasses rules.
+// Minting happens lazily at checkout (not at boot) so the token is
+// always fresh and only actual orderers hit Anonymous Auth.
+// ---------------------------------------------------------------
+export async function mintAnonWebviewToken() {
+    const auth = getAuth(app);
+    const cred = await signInAnonymously(auth);
+    const token = 'anon' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    await set(outletRef(`webviewTokens/${token}`), {
+        phone: 'anonymous',
+        createdAt: new Date().toISOString(),
+        used: false,
+        anonUid: cred.user.uid,
+    });
+    return token;
 }
 
 export { ref, get, onValue, set, push, update, runTransaction };
