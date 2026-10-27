@@ -57,6 +57,15 @@ This rule applies to:
 
 ---
 
+### ✅ Supreme Tunnel URL Resolved After Login (was dead on every load)
+- **Files:** `SupremeAdmin/js/firebase-config.js`, `SupremeAdmin/js/features/templates/quota.js`, `SupremeAdmin/js/features/templates/wa-templates.js`
+- **Stage:** `done`
+- **Verified:** `window.TUNNEL_URL` is now the live tunnel on a signed-in load; `page.on('requestfailed')` records **zero** failures (was `ERR_NAME_NOT_RESOLVED` + `loadQuota failed` + `load message templates failed` on every Supreme page load); supreme hosting 43/43 files byte-identical to `SupremeAdmin/dist`; `tests/supreme-profile-sections.spec.js` passes on chromium + mobile-chrome.
+- **OK:** root cause — `config/tunnelUrl` is readable only by a signed-in admin (`database.rules.json`), so `firebase-config.js`'s boot-time read always failed and left a hardcoded, rotated Quick Tunnel host in place. `wa-templates.js` additionally hardcoded `https://bot-control-api.foodhubbie.com`, a host that never resolved, so the templates panel could never load at all. The rule stays as-is; the client now resolves on the first signed-in auth state.
+- **Done:** deployed to `foodhubbie-supremeadmin` (commit `852c39a`). `window.TUNNEL_READY` is a promise the two first-render panels await; the other 17 call sites are click-driven and inherit the resolved URL.
+
+---
+
 ### ✅ Restaurant-Scoped Rider Notification Isolation
 - **Requirement:** Riders of Restaurant 1 must **never** see/pop/pop-up any notification (Order available on Rider App, WhatsApp message) from Restaurant 2, and vice versa. Complete isolation.
 - **Stage:** `done`
