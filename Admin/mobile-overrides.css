@@ -3769,3 +3769,21 @@
     #rrTable th { border-bottom: 1.5pt solid #000 !important; background: transparent !important; color: #000 !important; }
     #rrTable td { color: #000 !important; border-bottom: 0.5pt solid #999 !important; }
 }
+
+/* ======================================================================
+   REPORT PRINT VIEW (Phase 5) — #reportPrintArea is filled by
+   report-export.js and shown only while body.printing-report prints.
+   Hidden on screen at all times; the @page rule itself is injected
+   per-print by report-export.js (landscape only for wide tables).
+   ====================================================================== */
+#reportPrintArea { display: none; }
+@media print {
+    body.printing-report > *:not(#reportPrintArea) { display: none !important; }
+    body.printing-report #reportPrintArea { display: block !important; }
+    #reportPrintArea h1 { font-size: 16pt; margin: 0 0 2mm; color: #000; }
+    #reportPrintArea .rp-meta { font-size: 9pt; color: #666; margin: 0 0 6mm; }
+    #reportPrintArea table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+    #reportPrintArea th { text-align: left; padding: 2mm 1.5mm; border-bottom: 1pt solid #E84908; color: #000; }
+    #reportPrintArea td { padding: 1.8mm 1.5mm; border-bottom: 0.5pt solid #ddd; color: #000; }
+    #reportPrintArea td.rp-num, #reportPrintArea td.rp-money { text-align: right; font-variant-numeric: tabular-nums; }
+}

@@ -190,6 +190,16 @@ Foodhubbie has **no server** for Admin (Firebase Hosting static, Spark free tier
 
 **Verification**: generate each format for a small dataset; open XLSX (widths, frozen header, no formula execution on a `=cmd` cell), print-preview PDF (header repeats, landscape on wide report), CSV opens clean in Excel.
 
+### Phase 5 — AS BUILT (2026-10-27, ledger 20261027092137-phase5-export)
+
+- **Option A as planned** — browser-side, zero server. ONE entry: `renderReport(result, format, meta)` in `Admin/js/features/report-export.js`; meta = `{key, title, from, to, subtitle?}` (subtitle defaults to "{n} rows · from → to").
+- **Pure core** `shared/report-export.js` (self-check `node shared/report-export.js`): `guardSpreadsheetCell` (`'` prefix on strings starting `= + - @ \t \r`), `toCsvMatrix` (RFC-4180, CRLF, BOM left to the caller), `autoWidths` (max(header, widest of first 200 rows)+2, clamp 10…48; numbers measured by en-IN 2dp display +1 for ₹), `needsLandscape` (>6 cols). Admin-only — no menu twin.
+- **XLSX** = exceljs@4.4.0 lazy CDN (`ensureExcelJS()`, same pattern as `Admin/js/xlsx.js` — untouched): sheet name sanitized + `slice(0,31)`; title bold 14 / subtitle grey 666666 / blank spacer / header bold white on **FFE84908** (Foodhubbie brand); data from row 5, strings guarded, raw numbers, money cols `numFmt '#,##0.00'` (exceljs writes built-in numFmtId=4); auto widths; `views [{state:'frozen', ySplit:4}]`; `writeBuffer()` → Blob → `${key}_${from}_${to}.xlsx`.
+- **PDF** = styled print view (spec's PDFKit design mapped to CSS): fills `#reportPrintArea` (direct child of body), A4 via per-print injected `@page` (landscape iff >6 cols, margin 12mm), title 16pt + subtitle 9pt grey, 8.5pt table, `thead` repeats on page breaks natively, hairline 0.5pt row rules, header rule 1pt brand; `body.printing-report` + `window.print()`, cleanup on `afterprint` + 5s fallback. Old runner print CSS kept as the manual Ctrl+P fallback.
+- **CSV** = shared `toCsvMatrix` + BOM; guard applies to CSV AND XLSX strings alike.
+- **Wiring**: runner gained `#btnRrXlsx` (same roleLevel≥1 gate; CSV/Print rerouted through renderReport); `analytics.js downloadExcel` rewritten onto the pipeline (same 10 columns, key `sales-report`) — **fixes a live spreadsheet-injection hole** in the old `json_to_sheet` path; `downloadPDF` (jsPDF+autotable) intentionally kept.
+- **Verification (live, e2e outlet)**: E2E 52/52 (`%TEMP%/opencode/e2e-reports.js`) — XLSX zip inspected (frozen ySplit=4, FFE84908, guarded `'=E2E_INJECT` seeded dish), CSV guard, print view in print-media emulation (portrait for 6 cols; `needsLandscape` covered by the pure self-check, 6→false / 7→true — no catalog report exceeds 6 columns), analytics XLSX via the same pipeline, permission gate still hides all exports from level-0. SW v5.11.4, css ?v=5.4.10, PurgeCSS +`/^rp-/`.
+
 ---
 
 ## 5. Feature 4 — Report UI

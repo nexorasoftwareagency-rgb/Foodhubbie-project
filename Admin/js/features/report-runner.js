@@ -19,6 +19,7 @@ import { state } from '../state.js';
 import { showToast, getISTDateString } from '../utils.js';
 import { roleLevel } from '../ui.js';
 import { REPORT_CATALOG, REPORT_GROUPS, getReport, runReport } from '../../shared/report-catalog.js';
+import { renderReport } from './report-export.js';
 
 let _bound = false;
 let _autoRan = false;
@@ -68,6 +69,7 @@ export function unmount() { /* kept mounted: state survives tab flips */ }
 function _bind() {
     _el('btnRrGenerate')?.addEventListener('click', _generate);
     _el('btnRrCsv')?.addEventListener('click', _exportCsv);
+    _el('btnRrXlsx')?.addEventListener('click', _exportXlsx);
     _el('btnRrPrint')?.addEventListener('click', _print);
     _el('btnRrRetry')?.addEventListener('click', _generate);
 }
@@ -201,6 +203,7 @@ function _renderResult(report, result, from, to) {
     // Export buttons follow the same gate as revenue groups (manager+).
     const can = _canRevenue();
     _el('btnRrCsv').style.display = can ? '' : 'none';
+    _el('btnRrXlsx').style.display = can ? '' : 'none';
     _el('btnRrPrint').style.display = can ? '' : 'none';
 
     _el('rrSkeleton').style.display = 'none';
@@ -221,24 +224,38 @@ function _showError(msg) {
     _el('rrResult').style.display = 'none';
 }
 
-function _exportCsv() {
-    if (!_lastRun) { showToast('Generate a report first', 'warning'); return; }
+function _exportMeta() {
     const { key, from, to, result } = _lastRun;
-    const cell = (v) => {
-        const s = v == null ? '' : String(v);
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const lines = [result.columns.map(cell).join(','), ...result.rows.map(r => r.map(cell).join(','))];
-    // BOM so Excel opens ₹ correctly
-    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${key}_${from}_${to}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const report = getReport(key);
+    return { key, from, to, title: report?.title || key, result };
+}
+
+async function _exportCsv() {
+    if (!_lastRun) { showToast('Generate a report first', 'warning'); return; }
+    const { key, from, to, result, title } = _exportMeta();
+    try {
+        await renderReport(result, 'csv', { key, from, to, title });
+    } catch (e) {
+        console.error('[ReportRunner] CSV export failed:', e);
+        showToast(e?.message || 'CSV export failed.', 'error');
+    }
+}
+
+async function _exportXlsx() {
+    if (!_lastRun) { showToast('Generate a report first', 'warning'); return; }
+    const { key, from, to, result, title } = _exportMeta();
+    showToast('Generating Excel...', 'info');
+    try {
+        await renderReport(result, 'xlsx', { key, from, to, title });
+    } catch (e) {
+        console.error('[ReportRunner] Excel export failed:', e);
+        showToast(e?.message || 'Excel export failed.', 'error');
+    }
 }
 
 function _print() {
     if (!_lastRun) { showToast('Generate a report first', 'warning'); return; }
-    window.print(); // @media print CSS strips the chrome; the table is the page
+    const { key, from, to, result, title } = _exportMeta();
+    renderReport(result, 'pdf', { key, from, to, title })
+        .catch(e => { console.error('[ReportRunner] Print failed:', e); showToast(e?.message || 'Print failed.', 'error'); });
 }

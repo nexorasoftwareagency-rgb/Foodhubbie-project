@@ -4,7 +4,7 @@ import { ui, getRoles } from '../ui.js';
 import { showToast, formatDate, getISTDateString, formatOrderId, _loadChartJS } from '../utils.js';
 import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
 import { initMobileAnalyticsUI, renderMobileAnalytics, cleanupMobileAnalytics } from './analytics-mobile.js';
-import { ensureXlsx } from '../xlsx.js';
+import { renderReport } from './report-export.js';
 
 let salesData = [];
 let prevPeriodData = [];
@@ -171,33 +171,31 @@ export async function downloadExcel() {
 
     showToast('Generating Excel...', 'info');
 
-    const data = filtered.map(o => ({
-        Date: formatDate(o.createdAt),
-        'Order ID': formatOrderId(o.orderId || o.id),
-        Customer: o.customerName || 'Guest',
-        Phone: o.phone || '',
-        Outlet: (o.outlet || 'pizza').toUpperCase(),
-        'Order Type': o.type || o.orderType || 'Online',
-        Payment: o.paymentMethod || 'COD',
-        Total: o.total || 0,
-        Status: o.status,
-        Items: o.itemsStr || ''
-    }));
+    // Same 10 columns as before, now as a matrix through the Phase 5 pipeline:
+    // styled exceljs workbook + spreadsheet-injection guard on every string cell.
+    const columns = ['Date', 'Order ID', 'Customer', 'Phone', 'Outlet', 'Order Type', 'Payment', 'Total', 'Status', 'Items'];
+    const rows = filtered.map(o => ([
+        formatDate(o.createdAt),
+        formatOrderId(o.orderId || o.id),
+        o.customerName || 'Guest',
+        o.phone || '',
+        (o.outlet || 'pizza').toUpperCase(),
+        o.type || o.orderType || 'Online',
+        o.paymentMethod || 'COD',
+        o.total || 0,
+        o.status,
+        o.itemsStr || ''
+    ]));
+    const colTypes = columns.map(c => c === 'Total' ? 'money' : 'text');
 
-    let XLSX;
+    const from = document.getElementById('reportFrom')?.value || '';
+    const to = document.getElementById('reportTo')?.value || '';
+
     try {
-        XLSX = await ensureXlsx();
+        await renderReport({ columns, rows, colTypes }, 'xlsx', { key: 'sales-report', title: 'Sales Report', from, to });
     } catch (e) {
-        ui.showToast(e.message || 'Excel library not loaded.', 'error');
-        return;
+        ui.showToast(e?.message || 'Excel export failed.', 'error');
     }
-
-    setTimeout(() => {
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Sales Report');
-        XLSX.writeFile(wb, `Sales_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
-    }, 50);
 }
 
 export async function downloadPDF() {

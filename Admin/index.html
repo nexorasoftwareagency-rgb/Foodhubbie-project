@@ -179,7 +179,7 @@
 
     <link rel="stylesheet" href="style.css?v=5.4.6">
 
-    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.9">
+    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.10">
 
     <link rel="stylesheet" href="chat.css?v=5.3.32">
 
@@ -3908,6 +3908,7 @@
                 </div>
                 <button id="btnRrGenerate" class="btn-primary"><i data-lucide="play" class="icon-14"></i> Generate</button>
                 <button id="btnRrCsv" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="download" class="icon-14"></i> CSV</button>
+                <button id="btnRrXlsx" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="file-spreadsheet" class="icon-14"></i> Excel</button>
                 <button id="btnRrPrint" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="printer" class="icon-14"></i> Print</button>
             </div>
             <small id="rrRangeNote" class="text-muted-small"></small>
@@ -7892,6 +7893,9 @@
     </div>
 </div>
 <!-- ============== /USER MANUAL MODAL ============== -->
+
+<!-- Report print view (Phase 5): filled by report-export.js, shown only while printing -->
+<div id="reportPrintArea" aria-hidden="true"></div>
 
 </body>
 
