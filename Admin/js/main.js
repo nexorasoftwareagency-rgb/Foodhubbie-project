@@ -1016,6 +1016,8 @@ window.showUserManual = (tabId, title) => {
                 • Create discount types: Global, Category, First Order, Coupon.<br>
                 • Set discount percentage or fixed amount.<br>
                 • Set validity dates and usage limits.<br>
+                • <strong>Happy-hour window (Schedule step)</strong>: pick days of the week and a start→end time (IST) to make the discount apply only during those hours — perfect for off-peak offers like "15% off Mon–Fri 3–5 PM". Leave empty to keep the discount valid at all times. The window is end-exclusive: an 18:00–20:00 window ends exactly at 20:00.<br>
+                • Scheduled coupons tell customers "not valid at this time — check its scheduled hours" when tried outside the window (QR menu, WhatsApp and POS all honor the same window).<br>
                 • Track discount usage and revenue impact.<br>
                 • Link discounts to combos via coupon codes.
             `
@@ -1118,10 +1120,11 @@ window.showUserManual = (tabId, title) => {
             title: 'Reports',
             content: `
                 <strong>Reports</strong><br>
-                • View sales reports by date range.<br>
-                • View order reports by restaurant, category, or dish.<br>
-                • Export reports in various formats.<br>
-                • Track revenue trends over time.
+                • <strong>Revenue subtab</strong>: sales by day/item/payment method, tax summary, top customers — with Excel and PDF exports.<br>
+                • <strong>Reports subtab (report runner)</strong>: pick any report from the groups (Sales, Tax, Customers, Staff, Operations, Inventory), set a date range, and Generate. The table always matches the live database.<br>
+                • <strong>Exports</strong>: CSV opens in Excel with raw numbers; <strong>Excel</strong> gives a styled workbook (branded header, frozen title rows, auto-fit columns, money formatted); <strong>Print</strong> opens a clean print/PDF view — wide reports switch to landscape automatically.<br>
+                • Revenue-bearing reports and export buttons are hidden from roles below manager.<br>
+                • Export files are named <code>report-key_from_to.ext</code> so they sort neatly in a folder.
             `
         },
         riderAnalytics: {
