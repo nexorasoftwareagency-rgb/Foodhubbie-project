@@ -40,6 +40,23 @@ This rule applies to:
 
 ---
 
+### ✅ EC2 Git Metadata Reconciled to `main` (117 commits, zero restarts)
+- **File:** `/var/www/foodhubbie` (box only — no repo file changed)
+- **Stage:** `done`
+- **Requirement:** the box must be at `origin/main` with a clean `git status` so a rollback is possible and drift is visible.
+- **Verified:** all 110 tracked runtime files (`bot/ bot-control-api/ webhook-server/ shared/ tools/`) compared against `origin/main` — only `shared/{billing-defaults.cjs,billing-defaults.js,cost-math.js}`, `shared/package.json` and `tools/test-receipt.cjs` differed (all older, none a pm2 entry point); `bot/index.js`, `bot/package-lock.json`, `bot/package.json`, `bot/rider.js`, `bot/utils.js` differed by **CRLF only**.
+- **OK:** `git reset --hard origin/main` → HEAD `01dc0b1` → `9a13756`, 0 tracked changes, 69 untracked files preserved (`node_modules`, `session_data_pizza` + its live creds, `.env.bak*`). `node --check` green on `bot/index.js`, `bot/rider.js`, `shared/billing-defaults.cjs`.
+- **Done:** verified live — **no pm2 restart was required** (identical file content, same PIDs and uptimes before/after); `bot-control-api` was restarted separately only to pick up the ₹5 billing default.
+
+### ✅ WhatsApp / Delivery-Webview Billing Rate Restored to ₹5
+- **Files:** `tools/seed-billing-defaults.cjs`, `tests/supreme-profile-sections.spec.js`; live RTDB rows `businesses/{roshani-pizza/pizza,roshani-cake/cake}/billing/rates`
+- **Stage:** `done`
+- **Verified:** `shared/cost-math.js` self-check OK (asserts `DEFAULT_RATES.WA === 5`); no `WA: 3` / `webview_delivery: 3` left in the repo (`git grep` clean); Node recomputation over the live orders → roshani-pizza ₹182 / 85 orders.
+- **OK:** commit `40f7d9d` (2026-10-21) had made the rate ₹5 in code + website, but the seeder still wrote ₹3 and the DB row overrides the default (`{...DEFAULT_RATES, ...b.rates}`), so Supreme billed ₹3. Seeder now seeds ₹5 and its rate-migration list patches `WA`/`webview_delivery` on existing rows.
+- **Done:** live rows patched ₹3 → ₹5 (E2E outlets untouched), `bot-control-api` restarted, and Supreme verified through Playwright on **desktop + mobile-chrome**: `USAGE ₹182 / 85 orders, EXTRA CHARGES ₹0, RECEIVED ₹117.86, BALANCE DUE ₹64.14`. All-time usage moved ₹164 → ₹182 (9 webview orders × ₹2).
+
+---
+
 ### ✅ Restaurant-Scoped Rider Notification Isolation
 - **Requirement:** Riders of Restaurant 1 must **never** see/pop/pop-up any notification (Order available on Rider App, WhatsApp message) from Restaurant 2, and vice versa. Complete isolation.
 - **Stage:** `done`

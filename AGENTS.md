@@ -51,6 +51,8 @@ All 10 audit agents deployed. Key fixes:
 - `runTransaction` kept for session attaches (atomic)
 - `_toastQueue` FIFO prevents message loss
 - **Live tenant ids are `roshani-pizza` / `roshani-cake`** (verified in RTDB 2026-10-26; `outletIndex` maps `pizza`/`cake` → those bids). "Foodhubbie" is the brand, NOT a business id — never rewrite those literals: `Admin/js/firebase.js`, `menu/js/firebase.js`, `bot/helpers/outlet-resolution.js` defaults, `bot/tests/unit.test.js` assertions and the pm2 process names all depend on them. A 2026-10-26 brand sweep did exactly that and would have pointed admin/menu/bot at a nonexistent business. Rename the DB node first if a rebrand is ever wanted.
+- **Billing rates: WhatsApp + delivery-webview are ₹5/order** (commit `40f7d9d`, 2026-10-21: "no 3 rupee rate"); QR ₹2, POS ₹1, other ₹2, promo ₹1/token. The money math already honours this in `shared/cost-math.js` + `shared/billing-defaults.{js,cjs}`, but **each outlet carries its own `billing.rates` row that overrides those defaults** (`{...DEFAULT_RATES, ...b.rates}`) — so changing a rate means changing `tools/seed-billing-defaults.cjs` (its migration list re-patches existing rows) **and** the live rows, then restarting `bot-control-api` for `getBillingDefaults()`. Live rows were found still at ₹3 on 2026-10-27 (₹182 vs ₹164 all-time usage) because the seeder was missed.
+- **EC2 `/var/www/foodhubbie` is at `origin/main` with a clean `git status`** (reconciled 2026-10-27 from `01dc0b1`, 117 commits behind, zero restarts — the worktree already matched `main` byte-for-byte modulo CRLF). Keep it that way: deploy with `scp`/`rsync` onto a committed tree, and never leave the box dirty, or a `git pull` there silently reverts live behaviour.
 
 ## Ponytail — Laziness Ladder
 
