@@ -213,6 +213,15 @@ Foodhubbie has **no server** for Admin (Firebase Hosting static, Spark free tier
 
 **Verification**: Playwright — switch reports, invalid range blocked, export buttons hidden for a no-export role, print preview shows table only.
 
+### Phase 4 — AS BUILT (2026-10-27, ledger 20261027-035900-phase4-report-ui)
+
+- **Third subtab, not a rebuild**: the runner lives at `.analytics-subtab[data-analytics-tab="runner"]` ("Reports") beside Revenue | WhatsApp Bot; panel `#reportsRunnerPanel`; `_switchAnalyticsPanel` gains a 'runner' branch (lazy `import('./report-runner.js')` + mount, unmount on leave). Existing Revenue analytics untouched.
+- **`shared/report-catalog.js`** (pure, self-check green): REPORT_CATALOG 10 entries `{key,title,group,revenue,req?,snapshot?}` + REPORT_GROUPS + `runReport(key,data) → {columns,rows,colTypes}` with RAW numbers; colTypes 'text'|'num'|'money' drive alignment + Phase 5 export styling. Revenue basis 'Delivered'||'Served'; IST day/hour keys; phone via tableSessionsContact; payment buckets cash/upi/else-COD. `sales-by-category` dropped (cart items carry no category). No menu twin (Admin-only).
+- **Runner** (`Admin/js/features/report-runner.js`): group pills + report list from the catalog, default last-30-days IST range, from≤to toast-block, orders via the Revenue analytics query window (UTC-padded createdAt startAt/endAt + IST filter), per-report `req` extras fetched once per range (contacts/dishes/staff/attendance), generic table with skeleton/error+retry/empty states, CSV (BOM, raw numbers, filename `${key}_${from}_${to}.csv`), print via global + scoped `@media print` chrome-strip.
+- **Permission gate** (tab-roles ponytail): isSuper/level≥1 sees Sales/Tax/Customers + CSV/Print; level 0 sees Staff/Operations/Inventory only. E2E-proven with a custom level-0 'viewer' role in settings/roles.
+- **E2E 35/35** (`%TEMP%/opencode/e2e-reports.js`): every report asserted against a DB-computed oracle; cancelled excluded from money + present in funnel; CSV bytes checked; print emulation checked; zero page errors.
+- **Deferred**: scheduled email reports (§5.1 last bullet) — later/optional per owner.
+
 ---
 
 ## 6. Feature 5 — Marketing Logics (review + adopt)

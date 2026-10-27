@@ -3716,3 +3716,56 @@
     .exp-amount-input { font-size: 26px; }
 }
 
+
+/* ======================================================================
+   REPORT RUNNER (Phase 4) — catalog-driven generic report tables
+   Lives inside #reportsRunnerPanel on the Reports tab.
+   ====================================================================== */
+.rr-group-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.rr-group-pill {
+    border: none; padding: 6px 14px; border-radius: 999px; font-size: 12.5px;
+    font-weight: 600; cursor: pointer; background: var(--bg-subtle, #f1f5f9);
+    color: var(--text-secondary, #475569);
+}
+.rr-group-pill.active { background: var(--primary, #E84908); color: #fff; }
+.rr-report-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.rr-report-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 9px 12px; border-radius: 10px; border: none; cursor: pointer;
+    background: transparent; text-align: left; font-size: 13.5px; color: var(--text-main, #1e293b);
+}
+.rr-report-item:hover { background: var(--bg-subtle, #f1f5f9); }
+.rr-report-item.active { background: var(--mob-orange-light, rgba(232,73,8,.14)); color: var(--primary, #E84908); font-weight: 600; }
+.rr-report-item .rr-lock { font-size: 11px; color: var(--text-secondary, #64748b); }
+.rr-skeleton { padding: 8px 0; }
+.rr-skel-line {
+    height: 14px; border-radius: 7px; margin: 12px 0;
+    background: linear-gradient(90deg, #eef1f5 25%, #f7f9fb 50%, #eef1f5 75%);
+    background-size: 200% 100%; animation: rrSkel 1.2s infinite;
+}
+@keyframes rrSkel { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+#rrTable th {
+    padding: 10px 14px; text-align: left; font-weight: 600; white-space: nowrap;
+    color: var(--text-secondary, #475569); border-bottom: 2px solid var(--border-color, #e2e8f0);
+    background: var(--bg-subtle, #f8fafc);
+}
+#rrTable td { padding: 9px 14px; border-bottom: 1px solid var(--border-color, #eef2f7); }
+#rrTable td.num, #rrTable td.money { text-align: right; font-variant-numeric: tabular-nums; }
+#rrTable td.money { white-space: nowrap; }
+#rrTable tr.rr-total-row td { font-weight: 700; border-top: 2px solid var(--border-color, #e2e8f0); }
+#rrResultMeta { display: block; margin-top: 10px; }
+
+/* Print chrome: when the runner prints, output is the table + title only */
+@media print {
+    #reportsRunnerPanel .mob-hero,
+    #reportsRunnerPanel .mob-toolbar-card,
+    #reportsRunnerPanel #rrError,
+    #reportsRunnerPanel #rrSkeleton,
+    #reportsRunnerPanel #rrResultMeta,
+    #reportsRunnerPanel .analytics-subtabs { display: none !important; }
+    #reportsRunnerPanel #rrResult { display: block !important; }
+    #reportsRunnerPanel { display: block !important; }
+    #rrTable { width: 100% !important; font-size: 10.5pt; }
+    #rrTable th { border-bottom: 1.5pt solid #000 !important; background: transparent !important; color: #000 !important; }
+    #rrTable td { color: #000 !important; border-bottom: 0.5pt solid #999 !important; }
+}

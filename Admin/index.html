@@ -179,7 +179,7 @@
 
     <link rel="stylesheet" href="style.css?v=5.4.6">
 
-    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.8">
+    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.9">
 
     <link rel="stylesheet" href="chat.css?v=5.3.32">
 
@@ -3679,6 +3679,9 @@
     <button class="analytics-subtab active" data-analytics-tab="revenue" role="tab" aria-selected="true">
         <i data-lucide="indian-rupee" class="icon-14"></i> Revenue
     </button>
+    <button class="analytics-subtab" data-analytics-tab="runner" role="tab" aria-selected="false">
+        <i data-lucide="table" class="icon-14"></i> Reports
+    </button>
     <button class="analytics-subtab" data-analytics-tab="whatsapp-bot" role="tab" aria-selected="false">
         <i data-lucide="message-circle" class="icon-14"></i> WhatsApp Bot
     </button>
@@ -3882,6 +3885,64 @@
     <!-- Hidden triggers: mobile export banners fire these -->
     <button id="btnDownloadExcel" style="display:none"></button>
     <button id="btnDownloadPDF" style="display:none"></button>
+
+    <!-- ============ Report Runner Panel (Phase 4: catalog-driven generic reports) ============ -->
+    <div id="reportsRunnerPanel" class="hidden">
+        <div class="mob-hero">
+            <div class="mob-hero-title-row">
+                <h2><i data-lucide="table" class="icon-20"></i> Reports</h2>
+            </div>
+            <p class="mob-hero-sub">Pick a report and a date range — exported tables use the same data you see.</p>
+        </div>
+
+        <div class="mob-toolbar-card">
+            <div class="mob-toolbar-label"><i data-lucide="calendar" class="icon-14"></i> Date Range</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-group-mini">
+                    <label class="form-label-small">From</label>
+                    <input type="date" id="rrFrom" class="form-input">
+                </div>
+                <div class="form-group-mini">
+                    <label class="form-label-small">To</label>
+                    <input type="date" id="rrTo" class="form-input">
+                </div>
+                <button id="btnRrGenerate" class="btn-primary"><i data-lucide="play" class="icon-14"></i> Generate</button>
+                <button id="btnRrCsv" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="download" class="icon-14"></i> CSV</button>
+                <button id="btnRrPrint" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="printer" class="icon-14"></i> Print</button>
+            </div>
+            <small id="rrRangeNote" class="text-muted-small"></small>
+        </div>
+
+        <div class="mob-toolbar-card">
+            <div class="mob-toolbar-label"><i data-lucide="list-tree" class="icon-14"></i> Report</div>
+            <div id="rrGroups" class="rr-group-pills" role="tablist"></div>
+            <div id="rrReportList" class="rr-report-list" role="listbox"></div>
+        </div>
+
+        <div id="rrError" class="glass-card p-16 mb-16" style="display:none;border-left:4px solid var(--danger,#dc2626);">
+            <strong>Report failed.</strong> <span id="rrErrorMsg"></span>
+            <button id="btnRrRetry" class="btn-secondary" style="margin-left:10px;">Retry</button>
+        </div>
+
+        <div id="rrResultCard" class="glass-card p-16">
+            <div id="rrSkeleton" class="rr-skeleton">
+                <div class="rr-skel-line" style="width:30%"></div>
+                <div class="rr-skel-line"></div>
+                <div class="rr-skel-line"></div>
+                <div class="rr-skel-line" style="width:70%"></div>
+            </div>
+            <div id="rrResult" style="display:none;">
+                <h4 id="rrResultTitle" class="mb-8"></h4>
+                <div class="table-container rr-table-wrap" style="overflow-x:auto;">
+                    <table class="staff-table" id="rrTable" style="width:100%;border-collapse:collapse;">
+                        <thead id="rrTableHead"></thead>
+                        <tbody id="rrTableBody"></tbody>
+                    </table>
+                </div>
+                <small id="rrResultMeta" class="text-muted-small"></small>
+            </div>
+        </div>
+    </div>
 
     <!-- ============ WhatsApp Bot Analytics Panel ============ -->
     <div id="waBotAnalyticsPanel" class="wa-bot-analytics-panel hidden">

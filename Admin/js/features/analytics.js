@@ -161,6 +161,7 @@ function renderFromCache() {
 export function cleanupReports() {
     cleanupMobileAnalytics();
     if (_waAnalyticsMod) { _waAnalyticsMod.unmount(); }
+    if (_runnerMod) { _runnerMod.unmount(); }
     _currentAnalyticsTab = 'revenue';
 }
 
@@ -309,6 +310,7 @@ function _filteredForExport() {
 
 // ── Analytics sub-tab switching ────────────────────────────────────────
 let _waAnalyticsMod = null;
+let _runnerMod = null; // Phase 4: catalog-driven report runner (report-runner.js)
 let _currentAnalyticsTab = 'revenue';
 
 function _initAnalyticsSubtabs() {
@@ -327,8 +329,20 @@ function _initAnalyticsSubtabs() {
 async function _switchAnalyticsPanel(tab) {
     const revenuePanel = document.getElementById('reportsMobileView');
     const waPanel = document.getElementById('waBotAnalyticsPanel');
+    const runnerPanel = document.getElementById('reportsRunnerPanel');
 
-    if (tab === 'whatsapp-bot') {
+    if (tab === 'runner') {
+        if (revenuePanel) revenuePanel.classList.add('hidden');
+        if (waPanel) waPanel.classList.add('hidden');
+        if (_waAnalyticsMod) { _waAnalyticsMod.unmount(); }
+        if (runnerPanel) runnerPanel.classList.remove('hidden');
+        if (!_runnerMod) {
+            _runnerMod = await import('./report-runner.js');
+        }
+        _runnerMod.mount();
+    } else if (tab === 'whatsapp-bot') {
+        if (_runnerMod) { _runnerMod.unmount(); }
+        if (runnerPanel) runnerPanel.classList.add('hidden');
         if (revenuePanel) revenuePanel.classList.add('hidden');
         if (waPanel) {
             waPanel.classList.remove('hidden');
@@ -338,6 +352,8 @@ async function _switchAnalyticsPanel(tab) {
             _waAnalyticsMod.mount();
         }
     } else {
+        if (_runnerMod) { _runnerMod.unmount(); }
+        if (runnerPanel) runnerPanel.classList.add('hidden');
         if (waPanel) waPanel.classList.add('hidden');
         if (_waAnalyticsMod) { _waAnalyticsMod.unmount(); }
         if (revenuePanel) revenuePanel.classList.remove('hidden');
