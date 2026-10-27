@@ -16,7 +16,7 @@ const now = Date.now();
 const FREE_TOKENS = 15;
 const DEFAULT_BILLING = {
   mode: 'per_order',
-  rates: { QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2, promo: 1, commission1pct: 0.01 },
+  rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1, commission1pct: 0.01 },
   setup: { amount: 500, status: 'non_refundable', date: new Date(now).toISOString() },
   tokens: { balance: FREE_TOKENS, updatedAt: now },
   tokenPacks: { welcome: { qty: FREE_TOKENS, priceRs: 0, note: 'Free welcome pack', grantedAt: now, grantedBy: 'system' } },
@@ -39,8 +39,11 @@ async function main() {
           console.log(`REPAIR ${bid}/${oid} — stale monthly-plan billing replaced with defaults`);
           seeded++; continue;
         }
-        // Rate migrations on existing billing: POS ₹1/order (was ₹2), promo ₹1/token (was ₹0.86)
-        for (const [key, want] of [['POS', 1], ['promo', 1]]) {
+        // Rate migrations on existing billing: POS ₹1/order (was ₹2), promo ₹1/token
+        // (was ₹0.86), WhatsApp + delivery-webview ₹5/order (was ₹3 — commit 40f7d9d,
+        // 2026-10-21: "no 3 rupee rate"). Live rows were seeded with the old ₹3, so
+        // they are re-patched here on every run.
+        for (const [key, want] of [['POS', 1], ['promo', 1], ['WA', 5], ['webview_delivery', 5]]) {
           const have = val.rates?.[key];
           if (have != null && have !== want) {
             await db.ref(`businesses/${bid}/outlets/${oid}/billing/rates/${key}`).set(want);

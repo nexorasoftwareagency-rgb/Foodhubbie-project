@@ -95,7 +95,7 @@ async function createTempBusiness() {
       mode: 'per_order',
       setup: { amount: 500, status: 'non_refundable' },
       tokens: { balance: 15 },
-      rates: { QR: 2, POS: 1, webview_delivery: 3, WA: 3, other: 2, promo: 1 },
+      rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1 },
       tokenPacks: { welcome: { qty: 15 } },
     },
   });
