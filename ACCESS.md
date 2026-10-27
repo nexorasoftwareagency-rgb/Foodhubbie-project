@@ -101,7 +101,7 @@ ssh -i "D:\Foodhubbie Project\foodhubbie-key.pem" ubuntu@3.111.39.210
 | `bot-control-api` | 101862 | :4000 | 29 days | 83 MB | ✅ online |
 | `webhook-server` | 107953 | :5000 | 28 days | 67 MB | ✅ online |
 | `bot-roshani-pizza-pizza` | 459457 | — | 2 days | 155 MB | ✅ online |
-| `bot-roshani-cake-cake` | — | — | — | — | ⛔ not running |
+| `bot-roshani-cake-cake` | -- | -- | -- | -- | removed 2026-10-27 |
 
 ### EC2 File Locations
 | Path | Contents |
@@ -196,8 +196,7 @@ AWS_SECRET_ACCESS_KEY: <see Credentials/ folder or AWS Console>
 ```javascript
 // ecosystem.config.js
 apps: [
-  { name: 'bot-roshani-pizza-pizza', script: 'index.js', cwd: './bot', env: { OUTLET: 'pizza' } },
-  { name: 'bot-roshani-cake-cake', script: 'index.js', cwd: './bot', env: { OUTLET: 'cake' } }
+  { name: 'bot-roshani-pizza-pizza', script: 'index.js', cwd: './bot', env: { OUTLET: 'pizza' } }
 ]
 ```
 
@@ -303,7 +302,7 @@ cd Admin && node ../tools/build.mjs
 | Issue | Status | Notes |
 |-------|--------|-------|
 | SSH IP dynamic | ⚠️ | Home IP changes; re-add to SG via AWS CLI when blocked |
-| Cake bot not running | ⚠️ | No WhatsApp linked to cake outlet |
+| Cake bot deleted (2026-10-27) | FIXED | pm2 app + `ecosystem.config.js` entry removed; re-add from Supreme Admin if needed |
 | 55 uncommitted files | ✅ FIXED | Committed + pushed in this session (`4966860`) |
 | Delivery site stale | ⚠️ | Last deploy 2026-08-12, no matching `firebase.json` block |
 | Cloud Functions deleted | ✅ | `functions/` removed locally + committed |

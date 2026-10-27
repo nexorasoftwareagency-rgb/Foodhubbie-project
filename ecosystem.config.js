@@ -13,18 +13,9 @@ module.exports = {
         NODE_ENV: 'production',
         OUTLET: 'pizza'
       }
-    },
-    {
-      name: 'bot-roshani-cake-cake',
-      script: 'index.js',
-      cwd: './bot',
-      watch: false,
-      exp_backoff_restart_delay: 500,
-      max_memory_restart: '600M',
-      env: {
-        NODE_ENV: 'production',
-        OUTLET: 'cake'
-      }
     }
+    // The cake bot was removed 2026-10-27 (owner: re-add later from Supreme Admin
+    // if needed). Bots provisioned via Supreme Admin / bot-control-api orchestrator
+    // are started by pm2 directly and are not listed here.
   ]
 };

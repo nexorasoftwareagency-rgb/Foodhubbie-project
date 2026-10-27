@@ -66,6 +66,16 @@ This rule applies to:
 
 ---
 
+### ✅ Cake Bot Deleted From EC2 (re-add later from Supreme Admin)
+- **Files:** `ecosystem.config.js`, `ACCESS.md`; box state `~/.pm2/dump.pm2` + `~/.pm2/logs/`; RTDB `businesses/roshani-cake/outlets/cake/bot/{status,pair}`
+- **Stage:** `done`
+- **Requirement (owner):** "delete Cake bot from Server.. i'll Add later from Supreme Admin -- If i Need it.."
+- **Verified:** `node --check ecosystem.config.js` green and `require()` yields `["bot-roshani-pizza-pizza"]`; `pm2 list` shows no cake app and `grep -c bot-roshani-cake ~/.pm2/dump.pm2` → `0`; `~/.pm2/logs/` has 0 cake files; RTDB cake `bot` node is now `{"transport":"baileys"}` (stale `status` "Online" @ lastSeen `1793092291108` + `pair` "waiting" with a 277-char QR removed, so Admin/Supreme no longer show a phantom online bot).
+- **OK:** `pm2 delete bot-roshani-cake-cake` + `pm2 save`; the `ecosystem.config.js` block removed so `pm2 start ecosystem.config.js` cannot resurrect it. The pizza bot was untouched (same PID/uptime throughout).
+- **Done:** box + repo reconciled (`git pull --ff-only` on EC2). `businesses/roshani-cake` (business/outlet) and `bot/transport` kept deliberately — the orchestrator cannot recreate the worker on its own because `desiredState()` returns null while `outlet.whatsapp` is absent (`bot-control-api/orchestrator.js`).
+
+---
+
 ### ✅ Restaurant-Scoped Rider Notification Isolation
 - **Requirement:** Riders of Restaurant 1 must **never** see/pop/pop-up any notification (Order available on Rider App, WhatsApp message) from Restaurant 2, and vice versa. Complete isolation.
 - **Stage:** `done`
