@@ -1,16 +1,38 @@
 /**
- * BOT-SIDE DISCOUNT ENGINE
- * Mirrors the Admin's discount-evaluator.js but uses firebase-admin (bypasses rules).
+ * BOT-SIDE DISCOUNT ENGINE (I/O wrapper)
+ * Wraps shared/discount-rules.js — the single source of truth shared with
+ * Admin (discount-evaluator.js) and the menu checkout (menu/shared copy) —
+ * with firebase-admin I/O (bypasses rules).
  * Used inside processOrderPlacement to auto-apply the best eligible discount.
  */
 
 const db = require('./firebase.js').db; // firebase-admin instance
 const { getData, resolvePath } = require('./firebase.js');
 
+// The pure rules live in ../shared/discount-rules.js (same repo checkout that
+// ships to EC2 at /var/www/foodhubbie, so a relative require reaches it).
+// require(esm) needs Node >= 22.12; on an older runtime or a partial deploy
+// missing shared/ we degrade gracefully: the 4-line amount formula keeps
+// working via the frozen local copy below, full evaluation returns null
+// (no discount applied — never a WRONG discount), and the warn shows in pm2.
+let rules = null;
+try { rules = require('../shared/discount-rules.js'); }
+catch (e) {
+    console.warn('[Discounts] shared/discount-rules.js failed to load — full discount evaluation disabled.'
+        + ' Ensure the EC2 deploy includes the repo shared/ folder and Node >= 22.12. Detail:', e && e.message);
+}
+
+// ponytail: frozen fallback for the amount formula only — delete once EC2 is
+// confirmed on Node >= 22.12 with shared/ present in the checkout.
+function _localDiscountAmount(d, subtotal) {
+    let amt = d.mode === 'percent' ? subtotal * (Number(d.value) || 0) / 100 : Number(d.value) || 0;
+    if (d.maxCap && amt > d.maxCap) amt = d.maxCap;
+    return amt;
+}
+const discountAmount = rules ? rules.discountAmount : _localDiscountAmount;
+
 const CACHE_TTL_MS = 30_000;
 const _cache = { data: null, fetchedAt: 0, outlet: null };
-
-const _priority = { firstOrder: 4, coupon: 3, global: 2, category: 1 };
 
 async function getAllDiscounts(OUTLET) {
     const now = Date.now();
@@ -26,38 +48,13 @@ async function getAllDiscounts(OUTLET) {
     return _cache.data;
 }
 
-function _cartHasCategory(cart, categoryIds) {
-    if (!Array.isArray(categoryIds) || categoryIds.length === 0) return false;
-    const arr = Array.isArray(cart) ? cart : Object.values(cart || {});
-    if (!arr.length) return false;
-    return arr.some(item => categoryIds.includes(item.categoryId) || categoryIds.includes(item.category));
-}
-
-// P2-9 policy (locked): base = food subtotal only (no tax/SC/delivery).
-// Stacked discounts each use the full food subtotal as base; grand total is capped at subtotal.
-// Same formula in menu/js/discount.js and Admin/js/features/discount-evaluator.js — keep in sync.
-// Exported so bot/tests/unit.test.js can lock the policy.
-function discountAmount(d, subtotal) {
-    let amt = d.mode === 'percent' ? subtotal * (Number(d.value) || 0) / 100 : Number(d.value) || 0;
-    if (d.maxCap && amt > d.maxCap) amt = d.maxCap;
-    return amt;
-}
-const _discountAmount = discountAmount;
-
-function _pickBest(group, subtotal) {
-    return group.slice().sort((a, b) => {
-        const pa = _priority[a.type] || 0, pb = _priority[b.type] || 0;
-        if (pa !== pb) return pb - pa;
-        return _discountAmount(b, subtotal) - _discountAmount(a, subtotal);
-    })[0];
-}
-
 /**
  * Evaluate the best discount for a given checkout context.
  * Returns { discount, allApplied, amount, label, source } or null.
  */
 async function evaluateDiscount({ OUTLET, customer, subtotal, couponCode, cart, channel = 'whatsapp', now = Date.now() }) {
     if (!subtotal || subtotal <= 0) return null;
+    if (!rules) return null;
 
     // Feature flag check (cached via getData)
     let enabled = true;
@@ -72,62 +69,17 @@ async function evaluateDiscount({ OUTLET, customer, subtotal, couponCode, cart, 
         .filter(([, d]) => d && d.type && d.value != null)
         .map(([id, d]) => ({ id, ...d }));
 
-    const customerPhone = customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : null;
-
-    const candidates = list.filter(d =>
-        d.enabled !== false
-        && now >= (d.startsAt || 0)
-        && (d.endsAt === 0 || d.endsAt == null || now <= d.endsAt)
-        && (!d.minSubtotal || subtotal >= d.minSubtotal)
-        && (!d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
-        && (!d.channel || d.channel === 'all' || d.channel === channel || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos' || channel === 'table')))
-        && (!d.perCustomerLimit || !customerPhone || (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit)
-    );
-
-    const applicable = candidates.filter(d => {
-        if (d.type === 'global')     return true;
-        if (d.type === 'firstOrder') return !customer?.firstOrderDiscountUsed;
-        if (d.type === 'category')   return _cartHasCategory(cart, d.categoryIds);
-        if (d.type === 'coupon')     return !!couponCode && String(couponCode).toLowerCase() === String(d.couponCode || '').toLowerCase();
-        return false;
-    });
-
-    if (applicable.length === 0) return null;
-
-    // Group-aware exclusivity
-    const byGroup = new Map();
-    for (const d of applicable) {
-        const g = d.exclusiveGroup || '__none__';
-        if (!byGroup.has(g)) byGroup.set(g, []);
-        byGroup.get(g).push(d);
-    }
-    const bestPerGroup = [...byGroup.values()].map(g => _pickBest(g, subtotal));
-    const exclusive    = bestPerGroup.filter(d => !d.stackable);
-    const stackables   = bestPerGroup.filter(d =>  d.stackable);
-    const chosen       = exclusive.length > 0 ? [_pickBest(exclusive, subtotal), ...stackables] : bestPerGroup;
-
-    let total = 0;
-    for (const d of chosen) total += _discountAmount(d, subtotal);
-    total = Math.round(Math.min(total, subtotal));
-
-    if (total <= 0) return null;
-    const primary = chosen[0];
-    return {
-        discount: primary,
-        allApplied: chosen,
-        amount: total,
-        label: primary.name || (primary.type === 'firstOrder' ? 'New Customer Discount' : 'Discount'),
-        source: primary.type === 'coupon'
-            ? `coupon:${primary.couponCode}`
-            : primary.type === 'firstOrder'
-                ? 'firstOrder'
-                : `auto:${primary.type}`,
-    };
+    // Eligibility, exclusivity, stacking and the P2-9 subtotal cap all live in
+    // the shared core — identical to the Admin POS preview by construction.
+    // (categories bridge intentionally not passed yet: bot webview carts carry
+    // raw category fields, so behavior is unchanged; flip in the marketing phase.)
+    return rules.evaluateDiscounts(list, { customer, subtotal, couponCode, cart, channel, now });
 }
 
 /**
  * Validate a customer-entered coupon code against the discounts node.
- * Returns the matched discount or null. Case-insensitive.
+ * Returns the matched discount or null. Case-insensitive. Non-valid matches
+ * carry `status` plus a human-readable `reason` for customer messaging.
  */
 async function validateCouponCode(OUTLET, code) {
     if (!code) return null;
@@ -137,13 +89,22 @@ async function validateCouponCode(OUTLET, code) {
     for (const [id, d] of Object.entries(all)) {
         if (!d || d.type !== 'coupon' || !d.couponCode) continue;
         if (String(d.couponCode).toLowerCase() === lower) {
-            if (d.enabled === false) return { id, ...d, status: 'disabled' };
-            if (d.startsAt && now < d.startsAt) return { id, ...d, status: 'not_started' };
-            if (d.endsAt && d.endsAt > 0 && now > d.endsAt) return { id, ...d, status: 'expired' };
-            return { id, ...d, status: 'valid' };
+            const status = rules ? rules.couponStatus(d, now) : _localCouponStatus(d, now);
+            const out = { id, ...d, status };
+            if (rules && status !== 'valid') out.reason = rules.COUPON_STATUS_TEXT[status];
+            return out;
         }
     }
     return null;
+}
+
+// ponytail: emergency fallback (shared/ missing on a partial deploy) — same
+// checks as before the shared module existed. Delete with _localDiscountAmount.
+function _localCouponStatus(d, now) {
+    if (d.enabled === false) return 'disabled';
+    if (d.startsAt && now < d.startsAt) return 'not_started';
+    if (d.endsAt && d.endsAt > 0 && now > d.endsAt) return 'expired';
+    return 'valid';
 }
 
 /**
@@ -180,6 +141,45 @@ async function recordDiscountUsage({ OUTLET, discountId, orderId, customerPhone,
             source: discountSource || '',
             discountSource: discountSource || ''
         });
+
+        // Per-customer counters (Phase 1 review fix): the shared evaluator
+        // enforces perCustomerLimit and one-time first-order discounts from
+        // customer.discountUsage / firstOrderDiscountUsed — POS writes those
+        // (pos.js), but the bot never did, so a WhatsApp/webview guest could
+        // reuse a limited discount indefinitely. Best-effort: a counter
+        // failure must never fail the order itself.
+        const phone10 = customerPhone ? String(customerPhone).replace(/\D/g, '').slice(-10) : '';
+        const isFirst = discountSource === 'firstOrder' && !!discountId;
+        const bump = !!discountId && Number(amountGiven) > 0;
+        if (/^[6-9]\d{9}$/.test(phone10) && (isFirst || bump)) {
+            const custRef = db.ref(resolvePath(`customers/${phone10}`, OUTLET));
+            // Seed from a read first: RTDB hands the first transaction attempt
+            // `null` even when the node exists (cold queue) — returning a
+            // fresh record blind would wipe the real customer profile.
+            const baseSnap = await custRef.once('value').catch(() => null);
+            const base = baseSnap && baseSnap.val();
+            await custRef.transaction((c) => {
+                const node = c || base;
+                if (!node) {
+                    // Minimal counter record — the fuller profile is created
+                    // by the order/profile sync paths; never invent a name.
+                    const fresh = { phone: phone10, createdAt: Date.now(), lastSeen: Date.now() };
+                    if (isFirst) { fresh.firstOrderDiscountUsed = Date.now(); fresh.firstOrderDiscountId = discountId; }
+                    if (bump) fresh.discountUsage = { [discountId]: 1 };
+                    return fresh;
+                }
+                const updated = { ...node };
+                if (isFirst && !node.firstOrderDiscountUsed) {
+                    updated.firstOrderDiscountUsed = Date.now();
+                    updated.firstOrderDiscountId = discountId;
+                }
+                if (bump) {
+                    updated.discountUsage = { ...(node.discountUsage || {}) };
+                    updated.discountUsage[discountId] = (updated.discountUsage[discountId] || 0) + 1;
+                }
+                return updated;
+            }).catch(e => console.warn('[Discounts] customer counter update failed:', e?.message || e));
+        }
         return true;
     } catch (e) {
         console.warn('[Discounts] recordDiscountUsage failed:', e?.message || e);

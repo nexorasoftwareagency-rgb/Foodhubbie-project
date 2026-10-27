@@ -175,6 +175,10 @@ function formatOrderInvoice(orderId, order) {
         msg += `🎁 *Discount${pctInfo}:* -₹${order.discount}\n`;
     }
     msg += `💵 *TOTAL AMOUNT: ₹${order.total || 0}*\n`;
+    if (order.loyaltyTender && order.loyaltyTender.amountPaise > 0) {
+        msg += `🎁 *Loyalty Points* (${order.loyaltyTender.points} pts): -₹${order.loyaltyTender.amount}\n`;
+        msg += `💵 *PAYABLE: ₹${order.totalDue != null ? order.totalDue : Math.max(0, (order.total || 0) - order.loyaltyTender.amount)}*\n`;
+    }
     msg += `━━━━━━━━━━━━━━━━━━━━\n`;
     return msg;
 }

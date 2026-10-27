@@ -212,3 +212,33 @@ test('loyalty redemption: only an earned, unspent balance can pay', () => {
     assert.strictEqual(redeem.canAfford(500, 0, 0), false);
     assert.strictEqual(redeem.canAfford(500, 0, NaN), false);
 });
+
+// Phase 2 loyalty math (shared/loyalty-math.js) — the same formulas the bot
+// runs for earn/tender/clawback, exercised directly.
+test('loyalty-math: earn base, two-stage floor, tender caps, bill split', async () => {
+    const lm = await import('../../shared/loyalty-math.js');
+    // R1 earn base: subtotal − discount; legacy orders fall back to total
+    assert.strictEqual(lm.computeEarnBase({ subtotal: 500, discount: 50, total: 525 }), 450);
+    assert.strictEqual(lm.computeEarnBase({ total: 525 }), 525);
+    assert.strictEqual(lm.computeEarnBase({ subtotal: 300, discount: 400 }), 0);
+    assert.strictEqual(lm.computeEarnBase({}), 0);
+    // two-stage floor preserved exactly (floor base/rate, ×tier, floor)
+    assert.strictEqual(lm.computeEarnPoints(500, 2000, 1), 25);
+    assert.strictEqual(lm.computeEarnPoints(500, 2000, 1.5), 37);
+    assert.strictEqual(lm.computeEarnPoints(10, 2000, 1), 0);
+    // tier thresholds inclusive
+    const tiers = { bronze: { min: 0, multiplier: 1 }, silver: { min: 1000, multiplier: 1.25 }, gold: { min: 5000, multiplier: 1.5 } };
+    assert.strictEqual(lm.tierForPoints(1000, tiers), 'silver');
+    assert.strictEqual(lm.tierForPoints(4999, tiers), 'silver');
+    assert.strictEqual(lm.tierForPoints(5000, tiers), 'gold');
+    // R2/R9 tender: points × value, capped at due − minSpend
+    assert.strictEqual(lm.computeTenderPaise({ points: 50, redeemValuePaisePerPoint: 100, totalDuePaise: 50000 }), 5000);
+    assert.strictEqual(lm.computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 30000 }), 30000);
+    assert.strictEqual(lm.computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 30000, minSpendAfterRedemptionPaise: 10000 }), 20000);
+    assert.strictEqual(lm.computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 8000, minSpendAfterRedemptionPaise: 10000 }), 0);
+    // bill-discount split: largest-remainder, shares sum EXACTLY
+    const shares = lm.distributeBillDiscountPaise(100, [500, 300, 200]);
+    assert.strictEqual(shares.reduce((s, x) => s + x, 0), 10000);
+    assert.strictEqual(shares[0], 5000);
+    assert.deepStrictEqual(lm.distributeBillDiscountPaise(0.3, [1, 1, 1, 1]), [8, 8, 7, 7]);
+});

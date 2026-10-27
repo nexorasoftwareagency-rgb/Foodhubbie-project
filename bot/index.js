@@ -1,5 +1,5 @@
 /**
- * ROSHANI ERP | WHATSAPP BOT CORE v4.0
+ * FOODHUBBIE ERP | WHATSAPP BOT CORE v4.0
  * Multi-Outlet Instance (Restaurant-Bot)
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
@@ -40,6 +40,28 @@ const { resolveOutletId, resolveBusinessIdFor, initializeOutletBusinessIndex } =
 const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
 const discountEngine = require('./discount-engine');
 const redeem = require('./redeem');
+
+// Pure order-totals math shared with the menu checkout and Admin POS (same
+// repo checkout that ships to EC2, so a relative require reaches it).
+// require(esm) needs Node >= 22.12; on an older runtime or a partial deploy
+// missing shared/ we degrade gracefully to the legacy verify formulas (see
+// _verifiedOrderTotal below) — never a WRONG total, and the warn shows in pm2.
+let moneyMath = null;
+try { moneyMath = require('../shared/money-math.js'); }
+catch (e) {
+    console.warn('[MoneyMath] shared/money-math.js failed to load — order re-verification falls back to legacy totals.'
+        + ' Ensure the EC2 deploy includes the repo shared/ folder and Node >= 22.12. Detail:', e && e.message);
+}
+
+// Loyalty math (earn base, tier, tender, bill-discount split) — same guarded
+// require(esm) pattern. Without it accrual falls back to the pre-Phase-2
+// order.total base and tender validation is skipped (never a WRONG award).
+let loyaltyMath = null;
+try { loyaltyMath = require('../shared/loyalty-math.js'); }
+catch (e) {
+    console.warn('[LoyaltyMath] shared/loyalty-math.js failed to load — loyalty earn falls back to order.total base.'
+        + ' Ensure the EC2 deploy includes the repo shared/ folder and Node >= 22.12. Detail:', e && e.message);
+}
 
 // ── Suppress noisy libsignal session-state dumps ────────────────────────
 // Baileys' underlying libsignal fork writes raw `console.log("Closing
@@ -956,147 +978,387 @@ function customerAppPhone(order) {
     return /^[6-9]\d{9}$/.test(last10) ? last10 : '';
 }
 
-// ── Loyalty accrual ───────────────────────────────────────────────
-// Awards points when an order reaches a final state (Delivered / Served).
-// Idempotent per orderId — writes an accrual record first so a retry never
-// double-counts. Tier is recomputed from lifetime points after each accrual.
+// ── Loyalty accrual / clawback ────────────────────────────────────
+// Earn fires when a sale is actually PAID (plan §2.3, research R1):
+//   • Delivery / WhatsApp orders — when the order reaches Delivered/Served
+//     (settlement rides the order for these channels).
+//   • Dine-in QR orders — when paymentStatus flips to 'Paid' at table
+//     settlement: the bill-level discount only exists at that moment, and
+//     the order record carries no phone (PII lives in tableSessionsContact).
+// Earn base = subtotal − discount ONLY (R1: tax, service charge, delivery
+// fee never earn points); legacy orders without a subtotal fall back to
+// order.total. Clawback (R3) reverses an accrual when the order is
+// cancelled/refunded or a settled bill is voided (paymentStatus → 'Unpaid').
+// Everything is idempotent per orderId via loyalty/accruals + the
+// lastAccruedOrderId transaction guard; clawback DELETES the accrual record
+// (audit copy under loyalty/clawbacks) so a voided-then-repaid bill earns
+// again. All parameters come from loyalty/config (Admin settings).
+
+// loyalty/config + defaults in one place — every loyalty path reads this.
+async function getLoyaltyConfig(outlet) {
+    const snap = await db.ref(resolvePath('loyalty/config', outlet)).once('value').catch(() => null);
+    const config = (snap && snap.val()) || {};
+    return {
+        ...config,
+        earnRatePaisePerPoint: config.earnRatePaisePerPoint || 2000, // 5 points per ₹100
+        tiers: config.tiers || {
+            bronze: { min: 0, multiplier: 1 },
+            silver: { min: 1000, multiplier: 1.25 },
+            gold: { min: 5000, multiplier: 1.5 }
+        }
+    };
+}
+
+// Dine-in classification — exactly the gate notifyCustomerApp has always
+// used (proven live). sessionId alone does NOT mean dine-in: webview
+// delivery orders carry a chat sessionId.
+function isDineInOrder(order) {
+    return !!order && (order.type === 'dine-in' || order.isDineIn || !!order.tableId);
+}
+
+// R1 earn base in rupees. Falls back to the pre-Phase-2 order.total base if
+// shared/loyalty-math.js failed to load on a partial deploy.
+function loyaltyEarnBase(order) {
+    if (loyaltyMath) return loyaltyMath.computeEarnBase(order);
+    const sub = Number(order.subtotal);
+    const base = Number.isFinite(sub) ? sub - (Number(order.discount) || 0) : Number(order.total || 0);
+    return Math.max(0, base);
+}
+
+function loyaltyTierFor(points, tiers) {
+    if (loyaltyMath) return loyaltyMath.tierForPoints(points, tiers);
+    let tier = 'bronze';
+    for (const name of ['bronze', 'silver', 'gold']) {
+        const t = tiers && tiers[name];
+        if (t && points >= (t.min || 0)) tier = name;
+    }
+    return tier;
+}
+
+// Shared earn tail: idempotency check → tier multiplier → accrual record →
+// loyalty transaction → rankings mirror → customer order history. BOTH earn
+// paths (status-based, dine-in settlement) end here so there is exactly ONE
+// writer for the customer loyalty record. Returns points earned (0 = none).
+async function _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBaseRs, statusLower }) {
+    const config = await getLoyaltyConfig(outlet);
+    if (config.earnEnabled === false) return 0;
+
+    const accrualRef = db.ref(resolvePath(`loyalty/accruals/${String(orderId)}`, outlet));
+    const existing = await accrualRef.once('value').catch(() => null);
+    if (existing && existing.exists()) return 0;
+
+    // Read current loyalty to apply the tier multiplier. Canonical path is
+    // customers/{phone}/loyalty — what the customer app reads and what the
+    // rules validate.
+    const loyaltyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, outlet));
+    const loyaltySnap = await loyaltyRef.once('value').catch(() => null);
+    const current = (loyaltySnap && loyaltySnap.val()) || {};
+    const currentTier = current.tier || 'bronze';
+    const multiplier = (config.tiers[currentTier] && config.tiers[currentTier].multiplier) || 1;
+
+    const pointsEarned = loyaltyMath
+        ? loyaltyMath.computeEarnPoints(earnBaseRs, config.earnRatePaisePerPoint, multiplier)
+        : Math.floor(Math.floor((earnBaseRs * 100) / config.earnRatePaisePerPoint) * multiplier);
+    if (pointsEarned <= 0) return 0;
+
+    const total = Number(order.total || 0);
+    const now = Date.now();
+    const newLifetimePoints = (current.lifetimePoints || 0) + pointsEarned;
+    const newTotalSpent = (current.totalSpent || 0) + total;
+    const newTier = loyaltyTierFor(newLifetimePoints, config.tiers);
+
+    // Mark accrual (idempotency lock) BEFORE the balance tx so a crash
+    // between the two can never double-count; the tx guard below also
+    // refuses a replayed orderId.
+    await accrualRef.set({
+        orderId: String(orderId),
+        phone,
+        outlet,
+        business: bid,
+        pointsEarned,
+        earnBase: earnBaseRs,
+        total,
+        status: statusLower,
+        createdAt: now
+    });
+
+    await loyaltyRef.transaction((cur) => {
+        const c = cur || {};
+        if (c.lastAccruedOrderId === String(orderId)) return undefined;
+        return {
+            phone,
+            outlet,
+            business: bid,
+            // points = spendable balance (what the customer app displays).
+            // The tx REPLACES the whole node — omitting this field wiped the
+            // customer's balance on every earn (found in live E2E).
+            points: (c.points || 0) + pointsEarned,
+            lifetimePoints: (c.lifetimePoints || 0) + pointsEarned,
+            totalSpent: (c.totalSpent || 0) + total,
+            orderCount: (c.orderCount || 0) + 1,
+            tier: newTier,
+            tierReachedAt: newTier !== (c.tier || 'bronze') ? now : (c.tierReachedAt || null),
+            lastOrderAt: now,
+            lastAccruedOrderId: String(orderId),
+            lastClawedOrderId: null,
+            updatedAt: now
+        };
+    });
+
+    // Mirror for the outlet leaderboard. Rank is computed here (server-side)
+    // because customers may only read their own entry — the client cannot
+    // count the whole leaderboard.
+    const rankSnap = await db.ref(resolvePath('loyalty/rankings', outlet)).get().catch(() => null);
+    const rankPool = Object.values((rankSnap && rankSnap.val()) || {});
+    const rank = rankPool.filter(r => Number(r && r.lifetimePoints) > newLifetimePoints).length + 1;
+    await db.ref(resolvePath(`loyalty/rankings/${phone}`, outlet)).set({
+        phone,
+        outlet,
+        business: bid,
+        lifetimePoints: newLifetimePoints,
+        totalSpent: newTotalSpent,
+        tier: newTier,
+        rank,
+        updatedAt: now
+    });
+
+    // Order record with points earned (customer reads this for history).
+    await db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet)).set({
+        orderId: String(orderId),
+        outlet,
+        business: bid,
+        customerPhone: phone,
+        customerName: order.customerName || '',
+        status: statusLower,
+        total,
+        placedAt: order.createdAt || now,
+        deliveredAt: now,
+        pointsEarned,
+        source: order.source || 'QR',
+        itemCount: order.itemCount || Object.keys(order.items || {}).length
+    });
+
+    return pointsEarned;
+}
+
 async function accrueLoyaltyPoints(orderId, order, status) {
     try {
         if (!order) return;
         const statusLower = String(status || order.status || '').toLowerCase();
         if (statusLower !== 'delivered' && statusLower !== 'served') return;
+        // Dine-in earns at table settlement instead (see accrueDineInPaidOrder).
+        if (isDineInOrder(order)) return;
 
         const phone = customerAppPhone(order);
         if (!phone) return;
 
         const outlet = order.outlet || OUTLET;
         const bid = resolveBusinessIdFor(outlet);
-        const total = Number(order.total || 0);
-        if (total <= 0) return;
+        const earnBase = loyaltyEarnBase(order);
+        if (earnBase <= 0) return;
 
-        // Idempotency: skip if this order already accrued points.
-        const accrualRef = db.ref(resolvePath(`loyalty/accruals/${String(orderId)}`, outlet));
-        const existing = await accrualRef.once('value').catch(() => null);
-        if (existing && existing.exists()) return;
-
-        // Config: earn rate (paise per point) + tier table with multipliers.
-        // Default = 5 points per ₹100 spent (2000 paise per point). Admin
-        // controlled via loyalty/config.earnRatePaisePerPoint.
-        const configSnap = await db.ref(resolvePath('loyalty/config', outlet)).once('value').catch(() => null);
-        const config = configSnap && configSnap.val() ? configSnap.val() : {};
-        const earnRate = config.earnRatePaisePerPoint || 2000; // 5 points per ₹100
-        const tiers = config.tiers || {
-            bronze: { min: 0, multiplier: 1 },
-            silver: { min: 1000, multiplier: 1.25 },
-            gold: { min: 5000, multiplier: 1.5 }
-        };
-
-        // Base points = floor(total * 100 / earnRate). earnRate in paise:
-        // 2000 paise per point = ₹20 per point = 5 points per ₹100 spent.
-        const basePoints = Math.floor((total * 100) / earnRate);
-        if (basePoints <= 0) return;
-
-        // Read current loyalty to apply tier multiplier.
-        // Canonical path is customers/{phone}/loyalty (plan L10) — that is what
-        // the customer app reads and what the rules validate. The older
-        // loyalty/customers path is dead: nothing reads it.
-        const loyaltyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, outlet));
-        const loyaltySnap = await loyaltyRef.once('value').catch(() => null);
-        const current = loyaltySnap && loyaltySnap.val() ? loyaltySnap.val() : {};
-        const currentTier = current.tier || 'bronze';
-        const multiplier = (tiers[currentTier] && tiers[currentTier].multiplier) || 1;
-
-        const pointsEarned = Math.floor(basePoints * multiplier);
-        const newTotalSpent = (current.totalSpent || 0) + total;
-        const newOrderCount = (current.orderCount || 0) + 1;
-        const newLifetimePoints = (current.lifetimePoints || 0) + pointsEarned;
-
-        // Recompute tier from lifetime points (tiers ordered low→high).
-        let newTier = 'bronze';
-        for (const tierName of ['bronze', 'silver', 'gold']) {
-            const t = tiers[tierName];
-            if (t && newLifetimePoints >= (t.min || 0)) newTier = tierName;
-        }
-
-        const now = Date.now();
-
-        // Mark accrual (idempotency lock).
-        await accrualRef.set({
-            orderId: String(orderId),
-            phone,
-            outlet,
-            business: bid,
-            pointsEarned,
-            total,
-            status: statusLower,
-            createdAt: now
-        });
-
-        // Update customer loyalty record via transaction (defensive idempotency).
-        await loyaltyRef.transaction((cur) => {
-            const c = cur || {};
-            if (c.lastAccruedOrderId === String(orderId)) return undefined;
-            return {
-                phone,
-                outlet,
-                business: bid,
-                lifetimePoints: (c.lifetimePoints || 0) + pointsEarned,
-                totalSpent: (c.totalSpent || 0) + total,
-                orderCount: (c.orderCount || 0) + 1,
-                tier: newTier,
-                tierReachedAt: newTier !== (c.tier || 'bronze') ? now : (c.tierReachedAt || null),
-                lastOrderAt: now,
-                lastAccruedOrderId: String(orderId),
-                updatedAt: now
-            };
-        });
-
-        // Mirror for the outlet leaderboard. Rank is computed here (server-side)
-        // because customers may only read their own entry — the client cannot
-        // count the whole leaderboard.
-        const rankSnap = await db.ref(resolvePath('loyalty/rankings', outlet)).get().catch(() => null);
-        const rankPool = Object.values((rankSnap && rankSnap.val()) || {});
-        const rank = rankPool.filter(r => Number(r && r.lifetimePoints) > newLifetimePoints).length + 1;
-        await db.ref(resolvePath(`loyalty/rankings/${phone}`, outlet)).set({
-            phone,
-            outlet,
-            business: bid,
-            lifetimePoints: newLifetimePoints,
-            totalSpent: newTotalSpent,
-            tier: newTier,
-            rank,
-            updatedAt: now
-        });
-
-        // Order record with points earned (customer reads this for history).
-        await db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet)).set({
-            orderId: String(orderId),
-            outlet,
-            business: bid,
-            customerPhone: phone,
-            customerName: order.customerName || '',
-            status: statusLower,
-            total,
-            placedAt: order.createdAt || now,
-            deliveredAt: now,
-            pointsEarned,
-            source: order.source || 'QR',
-            itemCount: order.itemCount || Object.keys(order.items || {}).length
-        });
-
-        console.log(`[LOYALTY] Order #${formatOrderId(orderId)}: +${pointsEarned} pts for ${phone}, tier=${newTier}`);
+        const pointsEarned = await _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBaseRs: earnBase, statusLower });
+        if (pointsEarned > 0) console.log(`[LOYALTY] Order #${formatOrderId(orderId)}: +${pointsEarned} pts for ${phone} (base ₹${earnBase})`);
     } catch (e) {
         console.error('[LOYALTY] accrueLoyaltyPoints error:', e.message);
     }
 }
 
+// Phone for a dine-in order: the order record intentionally carries no phone
+// (PII decision) — resolve it from tableSessionsContact instead.
+async function dineInPhoneFor(order, outlet) {
+    const direct = customerAppPhone(order);
+    if (direct) return direct;
+    const sid = order.sessionId || order.tableSessionId;
+    if (!sid) return '';
+    const snap = await db.ref(resolvePath(`tableSessionsContact/${String(sid)}`, outlet)).once('value').catch(() => null);
+    const contact = (snap && snap.val()) || {};
+    const digits = String(contact.customerPhone || contact.guestPhone || '').replace(/\D/g, '');
+    const last10 = digits.slice(-10);
+    return /^[6-9]\d{9}$/.test(last10) ? last10 : '';
+}
+
+// R1 base for a dine-in order at settlement: the order's own subtotal −
+// discount, minus this order's proportional share of the BILL-level discount
+// (applied at settlement on the session or group record — largest-remainder
+// split across the covered orders so shares sum to the bill discount exactly).
+async function dineInEarnBaseRs(orderId, order, outlet) {
+    const ownBase = loyaltyEarnBase(order);
+    const sessId = order.sessionId || order.tableSessionId;
+    if (!sessId || !loyaltyMath) return ownBase;
+    try {
+        const sessSnap = await db.ref(resolvePath(`tableSessions/${String(sessId)}`, outlet)).once('value').catch(() => null);
+        const sess = (sessSnap && sessSnap.val()) || {};
+        let billDiscount = Number(sess.discount) || 0;
+        let coveredIds = Array.isArray(sess.orders) ? sess.orders.filter(Boolean) : [];
+        for (const g of Object.values(sess.orderGroups || {})) {
+            if (g && Array.isArray(g.orders) && g.orders.includes(String(orderId))) {
+                billDiscount = Number(g.discount) || 0;
+                coveredIds = g.orders.filter(Boolean);
+                break;
+            }
+        }
+        if (!(billDiscount > 0) || coveredIds.length === 0) return ownBase;
+        const sibs = await Promise.all(coveredIds.map(id =>
+            db.ref(resolvePath(`orders/${id}`, outlet)).once('value').catch(() => null)));
+        const bases = sibs.map(s => {
+            const o = (s && s.val()) || {};
+            return String(o.status) === 'Cancelled' ? 0 : loyaltyEarnBase(o);
+        });
+        const shares = loyaltyMath.distributeBillDiscountPaise(billDiscount, bases);
+        const idx = coveredIds.indexOf(String(orderId));
+        const sharePaise = idx >= 0 ? (shares[idx] || 0) : 0;
+        const net = ownBase - sharePaise / 100;
+        return Math.max(0, moneyMath ? moneyMath.round2(net) : net);
+    } catch (e) {
+        console.warn('[LOYALTY] dine-in base computation failed, using order base only:', e.message);
+        return ownBase;
+    }
+}
+
+// Dine-in earn: fires when the order's paymentStatus flips to 'Paid' (table
+// settlement / group settlement). Gated by loyalty/config.dineInEarnEnabled.
+async function accrueDineInPaidOrder(orderId, order) {
+    try {
+        if (!order) return;
+        if (order.paymentStatus !== 'Paid') return;
+        if (!isDineInOrder(order)) return;
+        const outlet = order.outlet || OUTLET;
+        const bid = resolveBusinessIdFor(outlet);
+        const config = await getLoyaltyConfig(outlet);
+        if (config.earnEnabled === false || config.dineInEarnEnabled === false) return;
+        const phone = await dineInPhoneFor(order, outlet);
+        if (!phone) return; // anonymous table guest — nothing to attach points to
+        const earnBase = await dineInEarnBaseRs(orderId, order, outlet);
+        if (earnBase <= 0) return;
+        const statusLower = String(order.status || '').toLowerCase();
+        const pointsEarned = await _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBaseRs: earnBase, statusLower });
+        if (pointsEarned > 0) console.log(`[LOYALTY] Dine-in #${formatOrderId(orderId)}: +${pointsEarned} pts for ${phone} (base ₹${earnBase})`);
+    } catch (e) {
+        console.error('[LOYALTY] accrueDineInPaidOrder error:', e.message);
+    }
+}
+
+// R3 clawback: reverse an accrual when the sale falls through — the order is
+// cancelled/refunded, or a settled table bill is voided (paymentStatus flips
+// back to 'Unpaid' once voidTableBill's revert transaction runs). Deletes the
+// accrual record (audit copy under loyalty/clawbacks) and clears
+// lastAccruedOrderId so a voided-then-repaid bill earns again. Gated by
+// loyalty/config.clawbackEnabled.
+async function clawLoyaltyPoints(orderId, order, status) {
+    try {
+        if (!order) return;
+        const statusLower = String(status || order.status || '').toLowerCase();
+        const isCancel = statusLower === 'cancelled' || statusLower === 'refunded';
+        const isVoidedDineIn = isDineInOrder(order) && order.paymentStatus === 'Unpaid';
+        if (!isCancel && !isVoidedDineIn) return;
+        const outlet = order.outlet || OUTLET;
+        const bid = resolveBusinessIdFor(outlet);
+        // Accrual lookup FIRST — unpaid dine-in orders hit this path on every
+        // routine update, and most have nothing to reverse (one cheap read).
+        const accrualRef = db.ref(resolvePath(`loyalty/accruals/${String(orderId)}`, outlet));
+        const snap = await accrualRef.once('value').catch(() => null);
+        const rec = snap && snap.val();
+        if (!rec) return; // never accrued — nothing to reverse
+        const config = await getLoyaltyConfig(outlet);
+        if (config.clawbackEnabled === false) return;
+        const phone = String(rec.phone || '');
+        if (!/^[6-9]\d{9}$/.test(phone)) return;
+        const now = Date.now();
+        const reason = isCancel ? statusLower : 'bill-void';
+        // Audit copy first, then remove the idempotency lock, then reverse.
+        await db.ref(resolvePath(`loyalty/clawbacks/${String(orderId)}`, outlet)).set({
+            ...rec,
+            clawedAt: now,
+            clawedFromStatus: rec.status || '',
+            reason
+        });
+        await accrualRef.remove();
+        // R2 fairness: a burned reward code on this order goes back to active
+        // so a cancellation/void doesn't eat the customer's reward. The
+        // usedOnOrder guard means we only resurrect OUR burn — never a code
+        // that was already spent again elsewhere.
+        const tender = order.loyaltyTender;
+        const tenderPhone = order.phone ? String(order.phone).replace(/\D/g, '').slice(-10) : '';
+        if (tender && tender.rewardKey && /^[6-9]\d{9}$/.test(tenderPhone)) {
+            // Cold-tx seed (redeem.js pattern) — null-first attempt otherwise
+            // aborts the resurrect silently.
+            const resRef = db.ref(resolvePath(`customers/${tenderPhone}/rewards/${String(tender.rewardKey)}`, outlet));
+            const resSeed = (await resRef.once('value').catch(() => null) || {}).val();
+            await resRef.transaction((cur) => {
+                const node = cur || resSeed;
+                if (!node || node.usedOnOrder !== String(orderId)) return undefined;
+                return { ...node, status: 'active', usedAt: null, usedOnOrder: null };
+            }).catch(() => {});
+        }
+        const loyaltyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, outlet));
+        const loyaltySnap = await loyaltyRef.once('value').catch(() => null);
+        const current = (loyaltySnap && loyaltySnap.val()) || {};
+        const newLifetime = Math.max(0, (current.lifetimePoints || 0) - (rec.pointsEarned || 0));
+        const newTier = loyaltyTierFor(newLifetime, config.tiers);
+        await loyaltyRef.transaction((cur) => {
+            const c = cur || {};
+            // Double-claw guard: a second event for the same clawback aborts
+            // here (the accrual record it validated is already gone).
+            if (c.lastClawedOrderId === String(orderId)) return undefined;
+            return {
+                ...c,
+                // Reverse the earned spendable balance too — the accrual added
+                // pointsEarned to `points`, so the claw must subtract it.
+                points: Math.max(0, (c.points || 0) - (rec.pointsEarned || 0)),
+                lifetimePoints: Math.max(0, (c.lifetimePoints || 0) - (rec.pointsEarned || 0)),
+                totalSpent: Math.max(0, (c.totalSpent || 0) - (Number(rec.total) || 0)),
+                orderCount: Math.max(0, (c.orderCount || 0) - 1),
+                tier: newTier,
+                lastAccruedOrderId: null,
+                lastClawedOrderId: String(orderId),
+                updatedAt: now
+            };
+        });
+        // Rankings mirror (rank recomputed server-side — same as accrual).
+        const rankSnap = await db.ref(resolvePath('loyalty/rankings', outlet)).get().catch(() => null);
+        const rankPool = Object.values((rankSnap && rankSnap.val()) || {});
+        const rank = rankPool.filter(r => Number(r && r.lifetimePoints) > newLifetime).length + 1;
+        await db.ref(resolvePath(`loyalty/rankings/${phone}`, outlet)).update({
+            lifetimePoints: newLifetime,
+            totalSpent: Math.max(0, ((current.totalSpent || 0) - (Number(rec.total) || 0))),
+            tier: newTier,
+            rank,
+            updatedAt: now
+        }).catch(() => {});
+        // Customer order history reflects the reversal.
+        await db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet)).update({
+            status: isCancel ? statusLower : 'cancelled',
+            pointsEarned: 0,
+            clawedBackAt: now
+        }).catch(() => {});
+        console.log(`[LOYALTY] Clawed back ${rec.pointsEarned || 0} pts from ${phone} for #${formatOrderId(orderId)} (${reason})`);
+    } catch (e) {
+        console.error('[LOYALTY] clawLoyaltyPoints error:', e.message);
+    }
+}
+
+// Single loyalty entry point from the order listeners. Runs independent of
+// WhatsApp plumbing (dine-in orders carry no JID by design) and must be
+// called BEFORE the child_changed debounce gate so a paymentStatus-only
+// flip (same order status) can never swallow an accrual or clawback.
+async function processLoyalty(orderId, order) {
+    if (!order) return;
+    const statusLower = String(order.status || '').toLowerCase();
+    await clawLoyaltyPoints(orderId, order, statusLower);
+    await accrueLoyaltyPoints(orderId, order, statusLower);
+    await accrueDineInPaidOrder(orderId, order);
+}
+
 async function notifyCustomerApp(orderId, order, status) {
+    // Notification-only since Phase 2: loyalty earn moved to processLoyalty
+    // (called from the order listeners) so dine-in orders — which early-
+    // return below because they have no push identity — still earn points.
     try {
         if (!order || order.type === 'dine-in' || order.isDineIn || order.tableId) return;
         const statusLower = String(status || order.status || '').toLowerCase();
         const copy = CUSTOMER_APP_STATUS[statusLower];
         const phone = customerAppPhone(order);
-        await accrueLoyaltyPoints(orderId, order, status);
         if (!copy || !phone) return;
 
         const outlet = order.outlet || OUTLET;
@@ -1169,7 +1431,7 @@ async function notifyAdmin(sock, orderId, order, type = 'NEW') {
         } else {
             let itemsText = (order.items || []).map(i => `• ${i.name} (${i.size}) x${i.quantity}`).join('\n');
             let adminMsg = type === 'NEW' ? `🔔 *NEW ORDER RECEIVED!* 🔔\n════════════════════════\n` : `📦 *ORDER UPDATE* 📦\n════════════════════════\n`;
-            adminMsg += `🆔 ID: #${formatOrderId(order.orderId || orderId)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n════════════════════════\n📦 Items:\n${itemsText}\n════════════════════════\n💰 Total: ₹${order.total || 0}\n💳 Method: ${order.paymentMethod}`;
+            adminMsg += `🆔 ID: #${formatOrderId(order.orderId || orderId)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n════════════════════════\n📦 Items:\n${itemsText}\n════════════════════════\n💰 Total: ₹${order.total || 0}${order.loyaltyTender && order.loyaltyTender.amountPaise > 0 ? `\n🎁 Loyalty tender (${order.loyaltyTender.points} pts): -₹${order.loyaltyTender.amount}\n💵 Payable: ₹${order.totalDue != null ? order.totalDue : Math.max(0, (order.total || 0) - order.loyaltyTender.amount)}` : ''}\n💳 Method: ${order.paymentMethod}`;
             msg = adminMsg;
         }
 
@@ -1538,6 +1800,109 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
 }
 
 
+// Server-side total re-verification for client-placed orders (QR dine-in +
+// webview delivery). Recomputes tax from the order's own stored taxItems
+// rates on the CORRECTED taxable value — the client-claimed `tax` must never
+// be reused once the discount has been corrected, or an upward-corrected
+// discount leaves tax stale and undercharges (fixed 2026-10-26, Phase 1b).
+// Legacy fallback (order predates taxItems, or shared/money-math.js missing
+// on a partial deploy): claimed tax + claimed SC + fee − discount, matching
+// the pre-Phase-1b formulas. Delivery orders never carry service charge
+// (owner decision: SC is dine-in-only) — callers just pass 0 for it.
+function _verifiedOrderTotal({ subtotal, discount, taxItems, claimedTax = 0, serviceCharge = 0, deliveryFee = 0 }) {
+    const sub = Number(subtotal) || 0;
+    const disc = Math.max(0, Number(discount) || 0);
+    const sc = Number(serviceCharge) || 0;
+    const fee = Number(deliveryFee) || 0;
+    if (moneyMath) {
+        const taxable = moneyMath.round2(Math.max(0, sub - disc));
+        const tax = moneyMath.recomputeTaxOnTaxable(taxable, taxItems);
+        if (tax != null) return Math.max(0, moneyMath.round2(taxable + tax + sc + fee));
+    }
+    return Math.max(0, Math.round((sub + (Number(claimedTax) || 0) + sc + fee - disc) * 100) / 100);
+}
+
+// R2 reward tender (delivery webview only): the order claims a redeemed
+// loyalty code as partial payment. Codes are only trustworthy if the bot
+// itself validates and burns them — the menu app cannot write rewards
+// (rules deny it), so a forged or replayed claim fails here and the bill
+// stands at its verified total. Runs AFTER discount re-verification so the
+// tender is computed on the server-verified total; tender reduces the
+// amount PAYABLE (totalDue), never the taxable value, so tax is untouched.
+// A skipped/failed validation always errs toward FULL payment — never a
+// free discount the bot couldn't check.
+async function verifyRewardTender(orderId, order, OUTLET) {
+    try {
+        const claim = order && order.rewardCode;
+        if (!claim || !claim.key || !claim.code) return;
+        if (!loyaltyMath) {
+            console.warn(`[LoyaltyTender] ${orderId}: shared/loyalty-math.js unavailable — tender claim ignored, customer pays full total.`);
+            return;
+        }
+        const cleanPhone = order.phone ? String(order.phone).replace(/\D/g, '').slice(-10) : '';
+        if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+            console.warn(`[LoyaltyTender] ${orderId}: no valid customer phone — tender claim ignored.`);
+            return;
+        }
+        const outlet = order.outlet || OUTLET;
+        const config = await getLoyaltyConfig(outlet);
+        const rewardRef = db.ref(resolvePath(`customers/${cleanPhone}/rewards/${String(claim.key)}`, outlet));
+        const rewardSnap = await rewardRef.once('value').catch(() => null);
+        const reward = rewardSnap && rewardSnap.val();
+        const claimCode = String(claim.code || '').trim().toUpperCase();
+        if (!reward || reward.status !== 'active'
+            || String(reward.code || '').toUpperCase() !== claimCode) {
+            console.warn(`[LoyaltyTender] ${orderId}: reward claim invalid (missing/used/code mismatch) — ignored.`);
+            return;
+        }
+        const total = Number(order.total) || 0;
+        const tenderPaise = loyaltyMath.computeTenderPaise({
+            points: Number(reward.cost) || 0,
+            redeemValuePaisePerPoint: config.redeemValuePaisePerPoint,
+            totalDuePaise: Math.round(total * 100),
+            minSpendAfterRedemptionPaise: Math.round((Number(config.minSpendAfterRedemption) || 0) * 100)
+        });
+        if (tenderPaise <= 0) {
+            console.warn(`[LoyaltyTender] ${orderId}: tender computes to ₹0 (bill ₹${total} vs minSpend ₹${config.minSpendAfterRedemption || 0}) — code left active.`);
+            return;
+        }
+        // Burn the code FIRST (transaction — a replayed claim on a used code
+        // aborts here, so a tender can never be honored twice). Cold-tx seed
+        // (same as redeem.js): RTDB hands the first attempt null even when
+        // the node exists, and returning undefined aborts — seed from the
+        // validated read so only a genuinely inactive code aborts. A concurrent
+        // burn between read and commit fails the CAS and retries with fresh
+        // data, so the replay guard stays airtight.
+        const now = Date.now();
+        const burn = await rewardRef.transaction((cur) => {
+            const node = cur || reward;
+            if (!node || node.status !== 'active') return undefined;
+            return { ...node, status: 'used', usedAt: now, usedOnOrder: String(orderId) };
+        });
+        if (!burn.committed) {
+            console.warn(`[LoyaltyTender] ${orderId}: code already used — tender ignored.`);
+            return;
+        }
+        const tenderRs = loyaltyMath.round2(tenderPaise / 100);
+        const totalDue = loyaltyMath.round2(Math.max(0, total - tenderRs));
+        const tenderRecord = {
+            rewardKey: String(claim.key),
+            code: String(reward.code || claim.code),
+            rewardId: reward.rewardId || '',
+            label: reward.label || '',
+            points: Number(reward.cost) || 0,
+            amountPaise: tenderPaise,
+            amount: tenderRs
+        };
+        await updateData(`orders/${orderId}`, { loyaltyTender: tenderRecord, totalDue }, outlet);
+        Object.assign(order, { loyaltyTender: tenderRecord, totalDue });
+        console.log(`[LoyaltyTender] ${orderId}: -₹${tenderRs} tender (${tenderRecord.points} pts, ${tenderRecord.label}) → payable ₹${totalDue}`);
+    } catch (e) {
+        console.error('[LoyaltyTender] verifyRewardTender error:', e.message);
+    }
+}
+
+
 // SAFEST-FIRST: sibling fix to the webview_delivery discount re-validation.
 // Dine-in QR orders (menu/js/order.js, tableSessions running-bill flow)
 // compute discount/total client-side the same unverified way delivery
@@ -1574,7 +1939,13 @@ async function verifyQrOrderDiscount(orderId, order, OUTLET) {
         console.error(`[QROrder] Discount re-validation failed for ${orderId}, zeroing out:`, discErr);
         correctedDiscount = 0; // fail safe — never honor an unverified amount
     }
-    const correctedTotal = Math.max(0, Math.round(((order.subtotal || 0) + (order.tax || 0) + (order.serviceCharge || 0) - correctedDiscount) * 100) / 100);
+    const correctedTotal = _verifiedOrderTotal({
+        subtotal: order.subtotal,
+        discount: correctedDiscount,
+        taxItems: order.taxItems,
+        claimedTax: order.tax,
+        serviceCharge: order.serviceCharge,
+    });
     const claimedDiscount = order.discount || 0;
     const claimedTotal = order.total || 0;
     if (correctedDiscount !== claimedDiscount || correctedTotal !== claimedTotal) {
@@ -1943,6 +2314,12 @@ async function sendDailyReportSafely(dateOverride = null) {
 
         orderRef.on("child_changed", (snap) => {
             const order = snap.val();
+            // Loyalty runs BEFORE the debounce gate: settlement and void
+            // events can carry the same order.status as the previous event
+            // (paymentStatus-only flips), and the debounce must never eat an
+            // accrual or clawback. Idempotent per orderId, so extra events
+            // are cheap no-ops. Independent of currentSock on purpose.
+            if (order) processLoyalty(snap.key, order).catch(e => console.error("[LOYALTY] processLoyalty error:", e.message));
             const now = Date.now();
             const last = _recentChildChanged.get(snap.key);
             const sameStatusRecently = last && last.status === order?.status && (now - last.ts) < CHILD_CHANGED_DEBOUNCE_MS;
@@ -1965,7 +2342,15 @@ async function sendDailyReportSafely(dateOverride = null) {
         });
         orderRef.on("child_added", async (snap) => {
             const order = snap.val();
-            if (!order || !currentSock) return;
+            if (!order) return;
+            // Webview delivery orders finalize DB-only (tender burn, stock
+            // deduction, profile save, discount counters) — a dead WhatsApp
+            // socket must not swallow their server-side side effects, or an
+            // outage silently drops tenders and stock. Every sock-dependent
+            // call below guards itself (notifyAdmin, handleOrderStatusUpdate,
+            // deductInventoryStock's alert).
+            const isWebviewFinalize = order.source === "webview_delivery" && !order.stockDeducted;
+            if (!currentSock && !isWebviewFinalize) return;
 
         // Only handle "new" orders if they were created after the bot started
         const orderTime = order.createdAt ? new Date(order.createdAt).getTime() : 0;
@@ -2012,7 +2397,12 @@ async function sendDailyReportSafely(dateOverride = null) {
                             channel: 'website'
                         });
                         const correctedDiscount = verified ? verified.amount : 0;
-                        const correctedTotal = Math.max(0, Math.round((order.subtotal || 0) + (order.deliveryFee || 0) - correctedDiscount));
+                        const correctedTotal = _verifiedOrderTotal({
+                            subtotal: order.subtotal,
+                            discount: correctedDiscount,
+                            taxItems: order.taxItems,
+                            deliveryFee: order.deliveryFee,
+                        });
                         if (correctedDiscount !== (order.discount || 0) || correctedTotal !== (order.total || 0)) {
                             console.warn(`[WebOrder] Discount mismatch on ${snap.key}: client claimed ₹${order.discount || 0} (total ₹${order.total}), server verified ₹${correctedDiscount} (total ₹${correctedTotal}). Correcting.`);
                         }
@@ -2037,11 +2427,22 @@ async function sendDailyReportSafely(dateOverride = null) {
                         // Fail safe: if verification itself breaks, don't honor an
                         // unverified client-supplied discount — zero it out rather
                         // than risk giving away money on a check we couldn't run.
-                        const safeTotal = Math.round((order.subtotal || 0) + (order.deliveryFee || 0));
+                        // Tax still recomputes from the order's own taxItems rates.
+                        const safeTotal = _verifiedOrderTotal({
+                            subtotal: order.subtotal,
+                            discount: 0,
+                            taxItems: order.taxItems,
+                            deliveryFee: order.deliveryFee,
+                        });
                         const correction = { discount: 0, discountId: null, discountLabel: null, discountSource: null, discountMode: null, discountValue: 0, discountGlobalLimit: 0, total: safeTotal };
                         await updateData(`orders/${snap.key}`, correction, order.outlet).catch(() => {});
                         Object.assign(order, correction);
                     }
+
+                    // R2: honor a claimed loyalty reward code as tender against
+                    // the VERIFIED total (burns the code server-side, writes
+                    // loyaltyTender + totalDue for the invoice/admin views).
+                    await verifyRewardTender(snap.key, order, order.outlet || OUTLET);
 
                     deductInventoryStock(currentSock, order.items, order.outlet).catch(e =>
                         console.error("[WebOrder] Stock deduction failed:", e));
