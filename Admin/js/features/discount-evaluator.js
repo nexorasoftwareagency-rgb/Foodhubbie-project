@@ -1,17 +1,29 @@
 /**
- * SHARED DISCOUNT EVALUATOR
+ * SHARED DISCOUNT EVALUATOR (I/O layer)
  * Used by both Admin (POS preview) and Bot (order placement).
  * Resolves the best applicable discount for a given cart + customer context.
+ *
+ * Pure math + eligibility rules live in shared/discount-rules.js — the single
+ * source of truth. The P2-9 formula used to be triplicated here, in
+ * bot/discount-engine.js and menu/js/discount.js with "keep in sync"
+ * comments, and had already drifted. This file keeps only what touches
+ * Firebase: caches, the feature flag, and usage recording.
  */
 
 import { Outlet, ref, get, runTransaction, push } from '../firebase.js';
+import {
+    discountAmount, evaluateDiscounts, isDiscountActiveNow, discountAllowsChannel,
+    cartHasCategory, needsPinApproval,
+} from '../../shared/discount-rules.js';
+
+// Re-exported so existing importers (utils.js → needsPinApproval) and future
+// consumers keep a single familiar import path.
+export { discountAmount, isDiscountActiveNow, discountAllowsChannel, needsPinApproval };
 
 const CACHE_TTL_MS = 30_000;
 const _cache = { data: null, fetchedAt: 0 };
 const _catCache = { data: null, fetchedAt: 0 };
 const FEATURE_FLAG_PATH = 'discounts/featureEnabled';
-
-const _priority = { firstOrder: 4, coupon: 3, global: 2, category: 1 };
 
 /**
  * Fetch all enabled+active discount definitions for the current outlet.
@@ -58,42 +70,12 @@ export async function getAllCategories() {
     return _catCache.data;
 }
 
-/**
- * True if a discount is enabled and within its active window right now.
- * Shared home for this check — POS's offers panel uses it directly;
- * discounts.js and discountsReports.js each still keep their own local
- * copy of the same logic (pre-existing, not touched here to avoid
- * risking a regression in already-reviewed code) but could be pointed
- * at this one in a future pass.
- */
-export function isDiscountActiveNow(d, now = Date.now()) {
-    if (!d || d.enabled === false) return false;
-    if (d.startsAt && now < d.startsAt) return false;
-    if (d.endsAt && d.endsAt !== 0 && now > d.endsAt) return false;
-    return true;
-}
-
-/** True if a discount's `channel` field permits it to apply on this channel. */
-export function discountAllowsChannel(d, channel) {
-    return !d.channel || d.channel === 'all' || d.channel === channel
-        // Table bills settle through the POS terminal, so a POS-only discount
-        // covers them too — table billing passes channel:'table' (tables.js),
-        // while the editor can only author WhatsApp/POS/Both/Website/All.
-        || (d.channel === 'pos' && channel === 'table')
-        || (d.channel === 'both' && (channel === 'whatsapp' || channel === 'pos' || channel === 'table'));
-}
-
-/**
- * Approval ceiling for MANUAL discounts, expressed as a % of the bill.
- * Returns true only when a human-entered discount is above `ceilingPct`
- * and the ceiling is switched on (>0). Auto-applied discounts are out of
- * scope: they are author-defined and already bounded by `maxCap`.
- * Pure on purpose — unit-checkable with no DOM or Firebase.
- */
-export function needsPinApproval(discountValue, subtotal, ceilingPct) {
-    if (!(ceilingPct > 0) || !(subtotal > 0)) return false;
-    return (Number(discountValue) / subtotal) * 100 > ceilingPct;
-}
+// isDiscountActiveNow, discountAllowsChannel and needsPinApproval moved to
+// shared/discount-rules.js and are re-exported above. discounts.js and
+// discountsReports.js still keep their own local copies of the active/channel
+// logic (pre-existing, not touched here to avoid risking a regression in
+// already-reviewed code) but could be pointed at the shared module in a
+// future pass.
 
 /**
  * Builds the list of currently-eligible-for-display discounts for a
@@ -120,7 +102,7 @@ export async function getEligibleOffersForDisplay(all, { channel = 'pos', now = 
         return baseList
             .filter(d => {
                 if (d.type === 'category') {
-                    const matches = _cartHasCategory(cart, d.categoryIds, categories);
+                    const matches = cartHasCategory(cart, d.categoryIds, categories);
                     d._categoryMatches = matches;
                     return true; // Include all category discounts
                 }
@@ -133,7 +115,7 @@ export async function getEligibleOffersForDisplay(all, { channel = 'pos', now = 
     return baseList
         .filter(d => {
             if (d.type === 'category') {
-                return _cartHasCategory(cart, d.categoryIds, categories);
+                return cartHasCategory(cart, d.categoryIds, categories);
             }
             return true;
         })
@@ -150,45 +132,10 @@ async function _isFeatureEnabled() {
 }
 
 /**
- * Does the cart contain anything in one of this discount's categories?
- *
- * `categoryIds` are Firebase push keys; `item.category` is a category NAME
- * (POS walk-in cart stores `dish.category`) and `item.categoryId` is usually
- * absent. Compare keys against keys, then keys (resolved via `categories`)
- * against names — otherwise this always returns false and category
- * discounts never fire in any channel.
- */
-function _cartHasCategory(cart, categoryIds, categories) {
-    if (!Array.isArray(cart) || !Array.isArray(categoryIds) || categoryIds.length === 0) return false;
-    const names = new Set(
-        (categories || [])
-            .filter(c => c && categoryIds.includes(c.id))
-            .map(c => c.name)
-    );
-    return cart.some(item => categoryIds.includes(item.categoryId)
-        || categoryIds.includes(item.category)
-        || names.has(item.category));
-}
-
-// P2-9 policy (locked): base = food subtotal only (ctx.subtotal excludes tax/SC/delivery).
-// Stacked discounts each use the full food subtotal as base; grand total is capped at subtotal below.
-// Same formula in menu/js/discount.js and bot/discount-engine.js — keep in sync.
-function _discountAmount(d, subtotal) {
-    let amt = d.mode === 'percent' ? subtotal * (Number(d.value) || 0) / 100 : Number(d.value) || 0;
-    if (d.maxCap && amt > d.maxCap) amt = d.maxCap;
-    return amt;
-}
-
-function _pickBest(group, subtotal) {
-    return group.slice().sort((a, b) => {
-        const pa = _priority[a.type] || 0, pb = _priority[b.type] || 0;
-        if (pa !== pb) return pb - pa;
-        return _discountAmount(b, subtotal) - _discountAmount(a, subtotal);
-    })[0];
-}
-
-/**
  * Evaluate which discount(s) apply to this checkout.
+ * Eligibility + math live in shared/discount-rules.js (evaluateDiscounts);
+ * this wrapper adds only the Firebase I/O: feature flag, discounts fetch,
+ * and the category key→name bridge.
  * @param {Object} ctx
  * @param {Object} [ctx.customer] - Customer record (may be null for new customers)
  * @param {number} ctx.subtotal - Food subtotal in ₹ (NOT including delivery)
@@ -199,7 +146,7 @@ function _pickBest(group, subtotal) {
  * @returns {Promise<null | { discount, allApplied, amount, label, source }>}
  */
 export async function evaluateDiscount(ctx = {}) {
-    const { customer = null, subtotal = 0, couponCode = null, cart = [], channel = 'whatsapp', now = Date.now() } = ctx;
+    const { subtotal = 0 } = ctx;
     if (!subtotal || subtotal <= 0) return null;
     if (!await _isFeatureEnabled()) return null;
 
@@ -211,60 +158,7 @@ export async function evaluateDiscount(ctx = {}) {
     // keeps the common checkout read count unchanged.
     const categories = list.some(d => d.type === 'category') ? await getAllCategories() : [];
 
-    const customerPhone = customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : null;
-
-    const candidates = list.filter(d =>
-        d.enabled !== false
-        && now >= (d.startsAt || 0)
-        && (d.endsAt === 0 || d.endsAt == null || now <= d.endsAt)
-        && (!d.minSubtotal || subtotal >= d.minSubtotal)
-        && (!d.globalLimit || (d.stats?.usedCount || 0) < d.globalLimit)
-        && discountAllowsChannel(d, channel)
-        && (!d.perCustomerLimit || !customerPhone || 
-            (customer?.discountUsage?.[d.id] || 0) < d.perCustomerLimit &&
-            // For table channel, also check separate table counter
-            (channel !== 'table' || (customer?.discountUsage?.table?.[d.id] || 0) < d.perCustomerLimit))
-    );
-
-    const applicable = candidates.filter(d => {
-        if (d.type === 'global')     return true;
-        if (d.type === 'firstOrder') return !customer?.firstOrderDiscountUsed;
-        if (d.type === 'category')   return _cartHasCategory(cart, d.categoryIds, categories);
-        if (d.couponCode)     return !!couponCode && String(couponCode).toLowerCase() === String(d.couponCode || '').toLowerCase();
-        return false;
-    });
-
-    if (applicable.length === 0) return null;
-
-    // Group-aware exclusivity
-    const byGroup = new Map();
-    for (const d of applicable) {
-        const g = d.exclusiveGroup || '__none__';
-        if (!byGroup.has(g)) byGroup.set(g, []);
-        byGroup.get(g).push(d);
-    }
-    const bestPerGroup = [...byGroup.values()].map(g => _pickBest(g, subtotal));
-    const exclusive    = bestPerGroup.filter(d => !d.stackable);
-    const stackables   = bestPerGroup.filter(d =>  d.stackable);
-    const chosen       = exclusive.length > 0 ? [_pickBest(exclusive, subtotal), ...stackables] : bestPerGroup;
-
-    let total = 0;
-    for (const d of chosen) total += _discountAmount(d, subtotal);
-    total = Math.round(Math.min(total, subtotal));
-
-    if (total <= 0) return null;
-    const primary = chosen[0];
-    return {
-        discount: primary,
-        allApplied: chosen,
-        amount: total,
-        label: primary.name || (primary.type === 'firstOrder' ? 'New Customer Discount' : 'Discount'),
-        source: primary.couponCode
-            ? `coupon:${primary.couponCode}`
-            : primary.type === 'firstOrder'
-                ? 'firstOrder'
-                : `auto:${primary.type}`,
-    };
+    return evaluateDiscounts(list, { ...ctx, categories });
 }
 
 /**

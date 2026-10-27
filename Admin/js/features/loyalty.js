@@ -23,6 +23,16 @@ const TIER_COLOUR = { bronze: '#8a6d3b', silver: '#a8a8a8', gold: '#c5a005' };
 
 const DEFAULTS = {
   earnRatePaisePerPoint: 2000,
+  // R2: 1 point redeems for ₹1 of tender (100 paise). Admin-tunable.
+  redeemValuePaisePerPoint: 100,
+  // R9: optional minimum spend AFTER redemption — a bill below this cannot
+  // use reward tender. 0 = disabled.
+  minSpendAfterRedemption: 0,
+  // Toggles (Phase 2): master earn switch, dine-in settlement earn, and
+  // clawback on cancellation/void.
+  earnEnabled: true,
+  dineInEarnEnabled: true,
+  clawbackEnabled: true,
   tiers: {
     bronze: { min: 0, label: 'Bronze', multiplier: 1 },
     silver: { min: 1000, label: 'Silver', multiplier: 1.25 },
@@ -98,9 +108,48 @@ function cloneConfig(c) {
     if (!c) return JSON.parse(JSON.stringify(DEFAULTS));
     return {
         earnRatePaisePerPoint: Number(c.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint,
+        redeemValuePaisePerPoint: (Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
+            ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
+        minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
+        earnEnabled: c.earnEnabled !== false,
+        dineInEarnEnabled: c.dineInEarnEnabled !== false,
+        clawbackEnabled: c.clawbackEnabled !== false,
         tiers: { ...DEFAULTS.tiers, ...(c.tiers || {}) },
         rewards: Array.isArray(c.rewards) ? c.rewards.slice() : DEFAULTS.rewards.slice()
     };
+}
+
+// Single payload builder — set() overwrites the whole loyalty/config node,
+// so EVERY writer must carry ALL fields or an unrelated save (e.g. adding a
+// reward) would silently reset the rest to defaults.
+function buildConfigPayload(overrides = {}) {
+    const c = _config || {};
+    return {
+        earnRatePaisePerPoint: Number(c.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint,
+        redeemValuePaisePerPoint: (Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
+            ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
+        minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
+        earnEnabled: c.earnEnabled !== false,
+        dineInEarnEnabled: c.dineInEarnEnabled !== false,
+        clawbackEnabled: c.clawbackEnabled !== false,
+        tiers: c.tiers || JSON.parse(JSON.stringify(DEFAULTS.tiers)),
+        rewards: Array.isArray(c.rewards) ? c.rewards.slice() : DEFAULTS.rewards.slice(),
+        ...overrides
+    };
+}
+
+// R8: what one rupee of spend is actually worth when redeemed, per tier —
+// (pointValue / earnRate) × multiplier, shown as a percentage. Makes the
+// earn↔burn relationship visible before an admin changes either number.
+function effectiveCashback(config) {
+    const earn = Number(config && config.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint;
+    const redeem = Number(config && config.redeemValuePaisePerPoint) || DEFAULTS.redeemValuePaisePerPoint;
+    const tiers = (config && config.tiers) || DEFAULTS.tiers;
+    return TIER_KEYS.map(tk => {
+        const mult = (tiers[tk] && Number(tiers[tk].multiplier)) || 1;
+        const pct = (redeem / earn) * mult * 100;
+        return `${tierLabel(tk)} ${pct % 1 === 0 ? pct : pct.toFixed(1)}%`;
+    }).join(' · ');
 }
 
 function rewardSlug(label) {
@@ -192,14 +241,25 @@ function renderAddRewardRow() {
 function renderConfigForm() {
     const c = _config;
     const rateRs = (c.earnRatePaisePerPoint || DEFAULTS.earnRatePaisePerPoint) / 100;
+    const redeemRs = ((Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
+        ? c.redeemValuePaisePerPoint : DEFAULTS.redeemValuePaisePerPoint) / 100;
+    const minSpendRs = Number(c.minSpendAfterRedemption) || 0;
+    const earnOn = c.earnEnabled !== false;
+    const dineInOn = c.dineInEarnEnabled !== false;
+    const clawbackOn = c.clawbackEnabled !== false;
     const tiers = c.tiers || DEFAULTS.tiers;
+    const toggle = (id, checked, label, sub) => `
+                <label style="display:flex;gap:8px;align-items:flex-start;min-width:200px;cursor:pointer;">
+                    <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} style="margin-top:3px;">
+                    <span><span style="font-size:12px;font-weight:600;">${label}</span><br><span style="font-size:11px;color:var(--mob-sub);">${sub}</span></span>
+                </label>`;
     return `
     <div class="mob-card mob-table-card" style="margin:0;">
         <div class="mob-section-head-row">
             <h3 class="mob-card-title">Configure the program</h3>
             <p class="mob-td-sub" style="margin-left:auto;max-width:420px;color:var(--mob-sub);">
-                Customers earn <b>${ptsPer100(c)} points per ?100 spent</b> ({money(c.earnRatePaisePerPoint / 100)} spent per point).
-                Tier multipliers apply to points earned on each order.
+                Customers earn <b>${ptsPer100(c)} points per ?100 spent</b> (${money(c.earnRatePaisePerPoint / 100)} spent per point).
+                Points redeem at <b>${money(redeemRs)} per point</b> as payment tender on delivery checkout.
             </p>
         </div>
         <div style="padding:16px;">
@@ -209,7 +269,23 @@ function renderConfigForm() {
                     <input type="number" id="loyalty-earn-rate" min="1" step="1"
                         value="${Number(rateRs).toFixed(rateRs % 1 === 0 ? 0 : 2)}" class="mob-input-reward">
                 </div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Value of 1 point (?)</label>
+                    <input type="number" id="loyalty-redeem-value" min="0.25" step="0.25"
+                        value="${Number(redeemRs).toFixed(redeemRs % 1 === 0 ? 0 : 2)}" class="mob-input-reward">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Min spend after redemption (?)</label>
+                    <input type="number" id="loyalty-min-spend" min="0" step="10"
+                        value="${minSpendRs}" class="mob-input-reward" style="max-width:140px;">
+                </div>
                 <button type="button" data-action="loyalty-save-config" class="btn-primary">Save program settings</button>
+            </div>
+            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum).</div>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;">
+                ${toggle('loyalty-earn-enabled', earnOn, 'Points earning', 'Turn off to pause all earning')}
+                ${toggle('loyalty-dinein-earn-enabled', dineInOn, 'Dine-in earning', 'Award points when a table bill is paid')}
+                ${toggle('loyalty-clawback-enabled', clawbackOn, 'Clawback on cancel/void', 'Reverse points when an order is cancelled or a paid bill is voided')}
             </div>
             <table class="mob-data-table" style="margin-top:14px;">
                 <thead>
@@ -224,6 +300,7 @@ function renderConfigForm() {
                     ${TIER_KEYS.map(tk => renderTierRow(tk, tiers)).join('')}
                 </tbody>
             </table>
+            <div class="mob-td-sub" style="margin-top:8px;">Effective value back when redeemed: <b>${effectiveCashback(c)}</b> <span style="opacity:0.8;">(point value ÷ earn rate × tier multiplier)</span></div>
         </div>
     </div>`;
 }
@@ -377,6 +454,20 @@ async function saveConfig() {
         rateEl.focus();
         return;
     }
+    const redeemEl = document.getElementById('loyalty-redeem-value');
+    const redeemRs = parseFloat(redeemEl.value);
+    if (!Number.isFinite(redeemRs) || redeemRs <= 0) {
+        showToast('Enter a valid value per point', 'error');
+        redeemEl.focus();
+        return;
+    }
+    const minSpendEl = document.getElementById('loyalty-min-spend');
+    const minSpendRs = parseFloat(minSpendEl.value) || 0;
+    if (minSpendRs < 0) {
+        showToast('Minimum spend cannot be negative', 'error');
+        minSpendEl.focus();
+        return;
+    }
     const tiers = {};
     let ok = true;
     for (const tk of TIER_KEYS) {
@@ -394,12 +485,19 @@ async function saveConfig() {
     }
     if (!ok) { showToast('Enter valid tier thresholds and multipliers', 'error'); return; }
 
-    const rewards = (_config && _config.rewards) || DEFAULTS.rewards.slice();
-    const payload = {
+    // Update the in-memory config first so buildConfigPayload carries every
+    // field (set() overwrites the whole node).
+    _config = {
+        ...(_config || {}),
         earnRatePaisePerPoint: Math.round(rateRs * 100),
-        tiers,
-        rewards
+        redeemValuePaisePerPoint: Math.round(redeemRs * 100),
+        minSpendAfterRedemption: minSpendRs,
+        earnEnabled: document.getElementById('loyalty-earn-enabled').checked,
+        dineInEarnEnabled: document.getElementById('loyalty-dinein-earn-enabled').checked,
+        clawbackEnabled: document.getElementById('loyalty-clawback-enabled').checked,
+        tiers
     };
+    const payload = buildConfigPayload();
     try {
         const btn = document.querySelector('[data-action="loyalty-save-config"]');
         const oldText = btn.textContent;
@@ -411,7 +509,7 @@ async function saveConfig() {
         btn.disabled = false;
         btn.textContent = oldText;
         showToast('Program settings saved', 'success');
-        logger.info('LOYALTY', 'Config saved', { outlet: Outlet.current, earnRate: payload.earnRatePaisePerPoint });
+        logger.info('LOYALTY', 'Config saved', { outlet: Outlet.current, earnRate: payload.earnRatePaisePerPoint, redeemValue: payload.redeemValuePaisePerPoint });
         renderAll();
     } catch (e) {
         console.error('[Loyalty] save failed:', e);
@@ -427,11 +525,7 @@ async function saveRewards() {
         const oldText = btn.textContent;
         btn.disabled = true;
         btn.textContent = 'Saving.';
-        const payload = {
-            earnRatePaisePerPoint: (_config && _config.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint,
-            tiers: (_config && _config.tiers) || DEFAULTS.tiers,
-            rewards: (_config && _config.rewards) || DEFAULTS.rewards.slice()
-        };
+        const payload = buildConfigPayload();
         await set(cfgPath(), payload);
         _server = JSON.parse(JSON.stringify(payload));
         btn.disabled = false;
@@ -449,11 +543,7 @@ async function deleteReward(id) {
     const sure = await showConfirm(`Remove this reward from the catalog? Already redeemed codes stay valid for customers.`, 'Delete reward');
     if (!sure) return;
     const rewards = ((_config && _config.rewards) || DEFAULTS.rewards.slice()).filter(r => r.id !== id);
-    const payload = {
-        earnRatePaisePerPoint: (_config && _config.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint,
-        tiers: (_config && _config.tiers) || DEFAULTS.tiers,
-        rewards
-    };
+    const payload = buildConfigPayload({ rewards });
     try {
         await set(cfgPath(), payload);
         _server = JSON.parse(JSON.stringify(payload));

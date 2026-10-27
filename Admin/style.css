@@ -10791,13 +10791,13 @@ body.pos-selection-mode .walkin-picker {
 .rt-chip.on { border-color: var(--primary, #E84908); background: rgba(232, 73, 8, 0.06); color: var(--primary, #E84908); font-weight: 600; }
 .rt-chip.on i, .rt-chip.on svg { opacity: 1; }
 
-/* Operator identity chip � topbar role + name (desktop) and mobile header line */
+/* Operator identity chip — topbar role + name (desktop) and mobile header line */
 .user-role-chip { background: var(--bg-subtle, #f1f5f9); border: 1px solid var(--border-light, #e2e8f0); border-radius: 20px; padding: 3px 10px; font-size: 12px; color: var(--text-muted, #64748b); white-space: nowrap; }
 .user-role-chip b { color: var(--primary, #E84908); font-weight: 700; }
 .mobile-role-chip { display: block; font-size: 10px; font-weight: 600; color: var(--text-muted, #64748b); text-align: center; }
 
 /* ================================================================
-   App Notifications (Push) � Promotions tab sub-panel
+   App Notifications (Push) — Promotions tab sub-panel
    ================================================================ */
 .promo-notifications-header {
     margin-bottom: 16px;
@@ -10900,5 +10900,236 @@ body.pos-selection-mode .walkin-picker {
 .promo-notifications-pane .btn-secondary {
     flex: 1;
     min-width: 140px;
+}
+
+/* ================================================================
+   COMBO MODAL — Glassmorphism Redesign
+   ================================================================ */
+
+.cmb-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.cmb-sec {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-sub, #64748b);
+    margin: 20px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--card-border, #e5e7eb);
+}
+
+.cmb-media {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.cmb-grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.cmb-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--card-border, #e5e7eb);
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.cmb-row:last-child {
+    border-bottom: none;
+}
+
+.cmb-row.on {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.2);
+}
+
+.cmb-row label {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.cmb-row .cmb-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cmb-row .cmb-price {
+    color: var(--text-sub, #64748b);
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.cmb-qty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.cmb-qty button {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border, #ddd);
+    background: var(--surface, #fff);
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+    font-size: 16px;
+    transition: all 150ms ease;
+}
+
+.cmb-qty button:hover {
+    background: var(--primary-light, #fef0e8);
+    border-color: var(--primary, #E84908);
+    transform: scale(1.05);
+}
+
+.cmb-qty button:active {
+    transform: scale(0.95);
+}
+
+.cmb-qty span {
+    min-width: 24px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.cmb-qty.off {
+    opacity: 0.4;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+.cmb-err {
+    color: var(--error, #d32f2f);
+    font-size: 12px;
+    margin-top: 6px;
+    display: none;
+    animation: errFade 200ms ease;
+}
+
+.cmb-err.show {
+    display: block;
+    animation: errFadeIn 200ms ease;
+}
+
+.cmb-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-sub, #888);
+    font-size: 14px;
+}
+
+#comboPriceStrip {
+    margin-top: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary-light, #fef0e8) 0%, var(--primary-lighter, rgba(232,73,8,0.08)) 100%);
+    border: 1px solid var(--primary-light, #ffe0c2);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--primary-dark, #c43d00);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.img-placeholder {
+    width: 128px;
+    height: 128px;
+    flex-shrink: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    background: linear-gradient(135deg, var(--neutral-50, #f8fafc) 0%, var(--neutral-100, #f1f5f9) 100%);
+    border: 2px dashed var(--card-border, #e5e7eb);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.cmb-img-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 8px;
+}
+
+.cmb-img-empty i {
+    color: var(--neutral-400, #94a3b8);
+    font-size: 28px;
+}
+
+.cmb-img-empty span {
+    font-size: 12px;
+    color: var(--neutral-500, #64748b);
+}
+
+.comboUploadStatus {
+    font-size: 11px;
+    color: var(--primary, #E84908);
+    margin-top: 8px;
+    font-weight: 600;
+    font-family: monospace;
+}
+
+/* Modal overrides for combo */
+.modal-content.glass-card {
+    border-radius: 20px;
+    box-shadow: var(--shadow-strong);
+    overflow: hidden;
+    max-width: 640px;
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+@keyframes errFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spinnerSpin {
+    to { transform: rotate(360deg); }
+}
+
+.spinner-sm {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spinnerSpin 0.8s linear infinite;
+}
+
+@keyframes spinnerSpin {
+    to { transform: rotate(360deg); }
 }
 

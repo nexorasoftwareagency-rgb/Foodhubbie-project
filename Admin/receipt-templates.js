@@ -1,5 +1,5 @@
 /**
- * PIZZA ERP | RECEIPT TEMPLATES
+ * FOODHUBBIE ERP | RECEIPT TEMPLATES
  * Standardized templates for order printing.
  */
 

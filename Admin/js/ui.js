@@ -1,4 +1,4 @@
-﻿import { haptic } from './utils.js';
+import { haptic } from './utils.js';
 import { showToast, showConfirm } from './ui-utils.js';
 import { state } from './state.js';
 import { toggleNotificationSheet, updateNotificationUI, updateNotificationSettingsUI } from './features/notifications.js';
@@ -102,6 +102,141 @@ export const canAccessTab = (tabId) => {
     }
     return false; // deny by default for unknown roles
 };
+
+// --- PHASE 3.25: DATA LOADING (extracted for clarity) ---
+export async function loadTabData(tabId) {
+    switch (tabId) {
+        case 'dashboard': {
+            const [{ loadRiders: lr }, { renderOrders }] = await Promise.all([
+                mod('riders'), mod('orders')
+            ]);
+            lr({ withStats: false });
+            renderOrders(state.lastOrdersSnap);
+            break;
+        }
+        case 'orders': {
+            const { loadOrdersPage } = await mod('orders');
+            loadOrdersPage(true);
+            break;
+        }
+        case 'live': {
+            const { loadTableManagement } = await mod('tables');
+            loadTableManagement();
+            break;
+        }
+        case 'liveTracker': {
+            const { initLiveRiderTracker } = await mod('tracker');
+            initLiveRiderTracker();
+            break;
+        }
+        case 'catalog':
+        case 'categories':
+        case 'menu': {
+            const { loadCategories, loadMenu } = await mod('catalog');
+            loadCategories();
+            loadMenu();
+            break;
+        }
+        case 'combos': {
+            const { loadCombos } = await mod('catalog');
+            loadCombos();
+            break;
+        }
+        case 'menu-browser': {
+            const { initMenuBrowser } = await mod('menu-browser');
+            initMenuBrowser();
+            break;
+        }
+        case 'riders': {
+            const { loadRiders } = await mod('riders');
+            loadRiders();
+            break;
+        }
+        case 'feedback': {
+            const { loadFeedbacks } = await mod('feedback');
+            loadFeedbacks();
+            break;
+        }
+        case 'loyalty': {
+            const { loadLoyalty } = await mod('loyalty');
+            loadLoyalty();
+            break;
+        }
+        case 'walkin': {
+            const { loadWalkinMenu } = await mod('pos');
+            loadWalkinMenu();
+            break;
+        }
+        case 'settings': {
+            const { loadStoreSettings } = await mod('settings');
+            loadStoreSettings();
+            break;
+        }
+        case 'customers': {
+            const { loadCustomers } = await mod('customers');
+            loadCustomers();
+            break;
+        }
+        case 'reports': {
+            const { loadReports } = await mod('analytics');
+            loadReports();
+            break;
+        }
+        case 'inventory': {
+            const { loadInventory } = await mod('inventory');
+            loadInventory();
+            break;
+        }
+        case 'riderAnalytics': {
+            const { initRiderAnalytics } = await mod('rider-analytics');
+            initRiderAnalytics();
+            break;
+        }
+        case 'payments': { const { renderOrders } = await mod('orders'); renderOrders(state.lastOrdersSnap); break; }
+        case 'costs': {
+            const { loadCosts } = await mod('costs');
+            loadCosts();
+            break;
+        }
+        case 'expenses': {
+            const { state } = await import('./state.js');
+            if (!state.features?.expense) {
+                showToast('Expense feature is disabled. Enable it in Settings > Features.', 'info');
+                // Switch back to previous tab or dashboard
+                const prevTab = document.querySelector('.nav-btn.active')?.dataset.tab || 'dashboard';
+                document.querySelector(`[data-tab="${prevTab}"]`)?.click();
+                return;
+            }
+            const { loadExpenses, initExpenseModals } = await mod('expenses');
+            loadExpenses();
+            initExpenseModals();
+            break;
+        }
+        case 'promotions': {
+            const { loadPromotions } = await mod('promotions');
+            loadPromotions();
+            break;
+        }
+        case 'discounts': {
+            const { loadDiscounts } = await mod('discounts');
+            loadDiscounts();
+            break;
+        }
+        case 'tables': {
+            const { loadTableManagement } = await mod('tables');
+            loadTableManagement();
+            break;
+        }
+        case 'chat': {
+            const { loadChat } = await mod('chat');
+            loadChat();
+            break;
+        }
+        default: {
+            console.warn('[loadTabData] No data loader for tab:', tabId);
+        }
+    }
+}
 
 export const switchTab = async (tabId, skipHistory = false) => {
     if (!canAccessTab(tabId)) {
@@ -266,143 +401,15 @@ export const switchTab = async (tabId, skipHistory = false) => {
         await Promise.allSettled(cleanupTasks);
         console.log(`[SWITCH] cleanup done for ${tabId}`);
 
-        // --- PHASE 3.25: DATA REFRESH ---
-        window.__adminLogger?.data('TAB', `Loading data for: ${tabId}`);
-        try {
-            switch (tabId) {
-                case 'dashboard': {
-                    const [{ loadRiders: lr }, { renderOrders }] = await Promise.all([
-                        mod('riders'), mod('orders')
-                    ]);
-                    lr({ withStats: false });
-                    renderOrders(state.lastOrdersSnap);
-                    break;
-                }
-                case 'orders': {
-                    const { loadOrdersPage } = await mod('orders');
-                    loadOrdersPage(true);
-                    break;
-                }
-                case 'live': {
-                    const { loadTableManagement } = await mod('tables');
-                    loadTableManagement();
-                    break;
-                }
-                case 'liveTracker': {
-                    const { initLiveRiderTracker } = await mod('tracker');
-                    initLiveRiderTracker();
-                    break;
-                }
-                case 'catalog':
-                case 'categories':
-                case 'menu': {
-                    const { loadCategories, loadMenu } = await mod('catalog');
-                    loadCategories();
-                    loadMenu();
-                    break;
-                }
-                case 'combos': {
-                    const { loadCombos } = await mod('catalog');
-                    loadCombos();
-                    break;
-                }
-                case 'menu-browser': {
-                    const { initMenuBrowser } = await mod('menu-browser');
-                    initMenuBrowser();
-                    break;
-                }
-                case 'riders': {
-                    const { loadRiders } = await mod('riders');
-                    loadRiders();
-                    break;
-                }
-                case 'feedback': {
-                    const { loadFeedbacks } = await mod('feedback');
-                    loadFeedbacks();
-                    break;
-                }
-                case 'loyalty': {
-                    const { loadLoyalty } = await mod('loyalty');
-                    loadLoyalty();
-                    break;
-                }
-                case 'walkin': {
-                    const { loadWalkinMenu } = await mod('pos');
-                    loadWalkinMenu();
-                    break;
-                }
-                case 'settings': {
-                    const { loadStoreSettings } = await mod('settings');
-                    loadStoreSettings();
-                    break;
-                }
-                case 'customers': {
-                    const { loadCustomers } = await mod('customers');
-                    loadCustomers();
-                    break;
-                }
-                case 'reports': {
-                    const { loadReports } = await mod('analytics');
-                    loadReports();
-                    break;
-                }
-                
-                case 'inventory': {
-                    const { loadInventory } = await mod('inventory');
-                    loadInventory();
-                    break;
-                }
-                case 'riderAnalytics': {
-                    const { initRiderAnalytics } = await mod('rider-analytics');
-                    initRiderAnalytics();
-                    break;
-                }
-                case 'payments': { const { renderOrders } = await mod('orders'); renderOrders(state.lastOrdersSnap); break; }
-                case 'costs': {
-                    const { loadCosts } = await mod('costs');
-                    loadCosts();
-                    break;
-                }
-                case 'expenses': {
-                    const { state } = await import('./state.js');
-                    if (!state.features?.expense) {
-                        showToast('Expense feature is disabled. Enable it in Settings > Features.', 'info');
-                        // Switch back to previous tab or dashboard
-                        const prevTab = document.querySelector('.nav-btn.active')?.dataset.tab || 'dashboard';
-                        document.querySelector(`[data-tab="${prevTab}"]`)?.click();
-                        return;
-                    }
-                    const { loadExpenses, initExpenseModals } = await mod('expenses');
-                    loadExpenses();
-                    initExpenseModals();
-                    break;
-                }
-                case 'promotions': {
-                    const { loadPromotions } = await mod('promotions');
-                    loadPromotions();
-                    break;
-                }
-                case 'discounts': {
-                    const { loadDiscounts } = await mod('discounts');
-                    loadDiscounts();
-                    break;
-                }
-                case 'tables': {
-                    const { loadTableManagement } = await mod('tables');
-                    loadTableManagement();
-                    break;
-                }
-                case 'chat': {
-                    const { loadChat } = await mod('chat');
-                    loadChat();
-                    break;
-                }
-            }
-        } catch (loadErr) {
-            window.__adminLogger?.error('TAB', `Load error for ${tabId}: ${loadErr.message}`, loadErr);
-        }
+// --- PHASE 3.25: DATA REFRESH ---
+    window.__adminLogger?.data('TAB', `Loading data for: ${tabId}`);
+    try {
+        await loadTabData(tabId);
+    } catch (loadErr) {
+        window.__adminLogger?.error('TAB', `Load error for ${tabId}: ${loadErr.message}`, loadErr);
+    }
 
-        await loadLucide();
+    await loadLucide();
         window.lucide.createIcons({ root: target });
 
         applyDataLabels();

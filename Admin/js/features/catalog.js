@@ -1,4 +1,4 @@
-﻿import { Outlet, BUSINESS_ID, db, uploadImage, deleteImage, ref, get, set, update, remove, push, onValue, child } from '../firebase.js';
+import { Outlet, BUSINESS_ID, db, uploadImage, deleteImage, ref, get, set, update, remove, push, onValue, child } from '../firebase.js';
 import { showToast, escapeHtml, logAudit, getSkeletonRows, getSkeletonDivs, previewImage } from '../utils.js';
 import { state } from '../state.js';
 import { requireAdminReauth } from '../auth.js';

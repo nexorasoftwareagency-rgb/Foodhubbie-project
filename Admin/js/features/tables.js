@@ -1876,7 +1876,7 @@ export async function voidTableBill(tableId, groupId = null) {
                 await Outlet.multiUpdate(updates);
                 // Revert orders to Served
                 await Promise.all(groupOrders.map(o => runTransaction(Outlet.ref(`orders/${o.id}`), (cur) => {
-                    if (!cur || cur.status !== 'Paid') return cur;
+                    if (!cur || cur.paymentStatus !== 'Paid') return cur;
                     return { ...cur, status: 'Served', paymentStatus: 'Unpaid', paymentMethod: null, paymentDetails: null, paymentEntries: null, discount: 0, discountLabel: null, discountId: null, discountSource: null, updatedAt: now };
                 })));
 
@@ -1900,7 +1900,10 @@ export async function voidTableBill(tableId, groupId = null) {
         }
 
         // Full table void
-        const paidOrders = _ordersForSession(sess.sessionId).filter(o => o.id && o.status === 'Paid');
+        // NOTE: payment writes paymentStatus (status stays 'Served' through
+        // the lifecycle) — filtering on status here made full-table void
+        // permanently dead code ("No paid orders to void" on every attempt).
+        const paidOrders = _ordersForSession(sess.sessionId).filter(o => o.id && o.paymentStatus === 'Paid' && o.status !== 'Cancelled');
         if (paidOrders.length === 0) {
             showToast('No paid orders to void', 'warning');
             return;
@@ -1936,7 +1939,7 @@ export async function voidTableBill(tableId, groupId = null) {
         try {
             await Outlet.multiUpdate(updates);
             await Promise.all(paidOrders.map(o => runTransaction(Outlet.ref(`orders/${o.id}`), (cur) => {
-                if (!cur || cur.status !== 'Paid') return cur;
+                if (!cur || cur.paymentStatus !== 'Paid') return cur;
                 return { ...cur, status: 'Served', paymentStatus: 'Unpaid', paymentMethod: null, paymentDetails: null, paymentEntries: null, discount: 0, discountLabel: null, discountId: null, discountSource: null, updatedAt: now };
             })));
             await runTransaction(Outlet.ref(`tableAnalytics/${tableId}`), (p) => {

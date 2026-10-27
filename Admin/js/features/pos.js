@@ -13,6 +13,7 @@ import { t } from '../l10n.js';
 import { evaluateDiscount, recordDiscountUsage, clearDiscountCache, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
 import { logger } from '../utils/logger.js';
 import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
+import { computeOrderTotals } from '../../shared/money-math.js';
 
 let _connUnsub = null;
 let _dineinSettings = {};
@@ -535,14 +536,15 @@ export async function renderWalkinCart() {
     const de = _dineinSettings;
     const taxRates = (de.taxRates && Array.isArray(de.taxRates) && de.taxRates.length > 0) ? de.taxRates : (de.taxEnabled !== false ? [{ name: de.taxName || 'GST', rate: typeof de.taxRate === 'number' ? de.taxRate : 5 }] : []);
     const scPct = typeof de.serviceChargeRate === 'number' ? de.serviceChargeRate : 0;
-    // GST is charged on the net taxable value (after trade discounts — CGST Sec 15(3)(a)).
+    // GST is charged on the net taxable value (after trade discounts — CGST Sec 15(3)(a)),
+    // via the shared money-math (identical to menu checkout + bot re-verify).
     const roundedDiscount = Math.max(0, Math.round(discountValue));
-    const taxable = Math.max(0, subtotal - roundedDiscount);
-    const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(taxable * (r.rate / 100) * 100) / 100 }));
-    const tax = taxItems.reduce((s, t) => s + t.amount, 0);
+    const totals = computeOrderTotals({ subtotal, discount: roundedDiscount, taxRates, serviceChargeEnabled: de.serviceChargeEnabled === true, serviceChargeRate: scPct });
+    const taxItems = totals.taxItems;
+    const tax = totals.tax;
     // Service charge from settings (unchanged policy).
-    const sc = de.serviceChargeEnabled === true ? Math.round(subtotal * (scPct / 100) * 100) / 100 : 0;
-    const finalTotal = Math.max(0, taxable + tax + sc);
+    const sc = totals.serviceCharge;
+    const finalTotal = totals.total;
 
     document.getElementById("walkinSubtotal").innerText = `₹${subtotal.toLocaleString()}`;
 
@@ -1005,11 +1007,12 @@ export async function submitWalkinSale() {
         discountValue = Math.max(0, Math.round(discountValue));
         const isManualDiscount = discountSource === 'manual:flat' || discountSource === 'manual:percent';
 
-        // GST on the net taxable value after discount (CGST Sec 15(3)(a)).
-        const taxable = Math.max(0, subtotal - discountValue);
-        const taxItems = taxRates.map(r => ({ name: r.name, rate: r.rate, amount: Math.round(taxable * (r.rate / 100) * 100) / 100 }));
-        const tax = taxItems.reduce((s, t) => s + t.amount, 0);
-        const sc = scEnabled ? Math.round(subtotal * (scPct / 100) * 100) / 100 : 0;
+        // GST on the net taxable value after discount (CGST Sec 15(3)(a)) —
+        // shared money-math, identical to the menu checkout and bot re-verify.
+        const totals = computeOrderTotals({ subtotal, discount: discountValue, taxRates, serviceChargeEnabled: scEnabled, serviceChargeRate: scPct });
+        const taxItems = totals.taxItems;
+        const tax = totals.tax;
+        const sc = totals.serviceCharge;
 
         // Approval ceiling: a manual discount above settings/Security/discountCeilingPct
         // needs a manager PIN before the sale is written.
@@ -1017,7 +1020,7 @@ export async function submitWalkinSale() {
         const counterStaffUid = sessionStorage.getItem('counterStaffUid') || state.adminData?.uid;
         if (!await gateManualDiscountPin({ discountValue, subtotal, discountId, staffUid: counterStaffUid })) return;
 
-        const total = Math.max(0, taxable + tax + sc);
+        const total = totals.total;
 
         const today = new Date();
         const dd = today.getDate().toString().padStart(2, '0');
