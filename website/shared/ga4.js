@@ -10,6 +10,7 @@ const firebaseConfig = {
   storageBucket: 'foodhubbie-10.firebasestorage.app',
   messagingSenderId: '372428105696',
   appId: '1:372428105696:web:a3a979191a5cf94569ed85',
+  measurementId: 'G-2RM3BXW1K1', // GA4 web stream "FoodHubbie Website" (foodhubbie.in)
 };
 
 window.addEventListener('load', async () => {

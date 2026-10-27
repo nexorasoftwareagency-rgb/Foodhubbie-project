@@ -1,3 +1,5 @@
 User-agent: *
 Allow: /
-Sitemap: https://foodhubbie-web.web.app/sitemap.xml
+Sitemap: https://foodhubbie.in/sitemap.xml
+
+

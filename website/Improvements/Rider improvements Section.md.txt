@@ -877,3 +877,4 @@ For the Rider section, I would structure the page like this:
 11. 📲 Start Free Trial / Book Demo / WhatsApp
 
 The key is that the website should show the Rider App as a complete operational product, rather than simply saying “we have delivery management.” This makes the delivery capability much easier for a restaurant owner to understand.
+

@@ -36,33 +36,35 @@
 - One-time setup ₹500 (non-refundable, adjusted in first bill).
 
 ## Pages
-- https://foodhubbie-web.web.app/ — product, features, pricing
-- https://foodhubbie-web.web.app/architecture — customer/dine-in/rider/admin flows
-- https://foodhubbie-web.web.app/signup — restaurant registration (writes onboardingRequests)
-- https://foodhubbie-web.web.app/billing-policy - Billing: per-order rates by channel, 500 setup, cancelled/refunded orders not billed, invoice disputes
-- https://foodhubbie-web.web.app/refund-policy - Refunds and termination: setup fee non-refundable, no lock-in, 30-day data retention after closure
-- https://foodhubbie-web.web.app/whatsapp-policy - WhatsApp policy: official API only for promos, consent-only audiences, STOP honoured, approved templates, 1/msg
-- https://foodhubbie-web.web.app/privacy - privacy policy: what data is stored, who can see it, deletion requests
-- https://foodhubbie-web.web.app/book — demo/inquiry via WhatsApp
-- https://foodhubbie-web.web.app/contact — WhatsApp +91 97246 49971
+- https://foodhubbie.in/ — product, features, pricing
+- https://foodhubbie.in/architecture — customer/dine-in/rider/admin flows
+- https://foodhubbie.in/signup — restaurant registration (writes onboardingRequests)
+- https://foodhubbie.in/billing-policy - Billing: per-order rates by channel, 500 setup, cancelled/refunded orders not billed, invoice disputes
+- https://foodhubbie.in/refund-policy - Refunds and termination: setup fee non-refundable, no lock-in, 30-day data retention after closure
+- https://foodhubbie.in/whatsapp-policy - WhatsApp policy: official API only for promos, consent-only audiences, STOP honoured, approved templates, 1/msg
+- https://foodhubbie.in/privacy - privacy policy: what data is stored, who can see it, deletion requests
+- https://foodhubbie.in/book — demo/inquiry via WhatsApp
+- https://foodhubbie.in/contact — WhatsApp +91 97246 49971
 
-- https://foodhubbie-web.web.app/qr-ordering — QR code ordering system
-- https://foodhubbie-web.web.app/pos-billing — POS billing software
-- https://foodhubbie-web.web.app/kds — kitchen display system
-- https://foodhubbie-web.web.app/riders — rider delivery management
-- https://foodhubbie-web.web.app/whatsapp-ordering — WhatsApp ordering system (official Meta API)
-- https://foodhubbie-web.web.app/whatsapp-marketing — WhatsApp promo campaigns, coupons, combos
-- https://foodhubbie-web.web.app/table-management — tables, dine-in sessions, split bills
-- https://foodhubbie-web.web.app/inventory — stock, recipes, low-stock alerts
-- https://foodhubbie-web.web.app/customer-database — customer book, push notifications, reviews
-- https://foodhubbie-web.web.app/multi-outlet — several outlets under one login
-- https://foodhubbie-web.web.app/restaurant-analytics — sales, channel and item reports
-- https://foodhubbie-web.web.app/use-cases — use cases: cafes, family restaurants, cloud kitchens
-- https://foodhubbie-web.web.app/pricing — pricing (₹1–5 per order, ₹500 setup)
-- https://foodhubbie-web.web.app/compare — vs monthly-fee POS suites
-- https://foodhubbie-web.web.app/best-software — 2026 software buyer's guide
+- https://foodhubbie.in/qr-ordering — QR code ordering system
+- https://foodhubbie.in/pos-billing — POS billing software
+- https://foodhubbie.in/kds — kitchen display system
+- https://foodhubbie.in/riders — rider delivery management
+- https://foodhubbie.in/whatsapp-ordering — WhatsApp ordering system (official Meta API)
+- https://foodhubbie.in/whatsapp-marketing — WhatsApp promo campaigns, coupons, combos
+- https://foodhubbie.in/table-management — tables, dine-in sessions, split bills
+- https://foodhubbie.in/inventory — stock, recipes, low-stock alerts
+- https://foodhubbie.in/customer-database — customer book, push notifications, reviews
+- https://foodhubbie.in/multi-outlet — several outlets under one login
+- https://foodhubbie.in/restaurant-analytics — sales, channel and item reports
+- https://foodhubbie.in/use-cases — use cases: cafes, family restaurants, cloud kitchens
+- https://foodhubbie.in/pricing — pricing (₹1–5 per order, ₹500 setup)
+- https://foodhubbie.in/compare — vs monthly-fee POS suites
+- https://foodhubbie.in/best-software — 2026 software buyer's guide
 
 ## Live apps
 - Admin: https://foodhubbie-admins.web.app
 - Customer menu: https://foodhubbie-qrmenu.web.app
 - Rider: https://foodhubbie-riderapp.web.app
+
+

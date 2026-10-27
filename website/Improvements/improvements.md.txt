@@ -57,7 +57,7 @@ Use the following as the complete prompt for your website/AI coding system:
 UPGRADE THE EXISTING FOODHUBBIE ERP WEBSITE.
 
 WEBSITE:
-https://foodhubbie-web.web.app/
+https://foodhubbie.in/
 
 IMPORTANT:
 Do NOT redesign the website from scratch.
@@ -883,3 +883,5 @@ AI image = “What FoodHubbie can do”
 Real screenshot = “This is what FoodHubbie actually looks like.”
 
 Also, your existing site already describes POS, analytics, menu/inventory, marketing, QR ordering and multi-outlet functionality, so the uploaded screenshots can be distributed naturally across those existing sections rather than creating a completely separate “Screenshots” page.
+
+

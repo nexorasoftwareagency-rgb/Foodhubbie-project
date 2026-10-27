@@ -1,27 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://foodhubbie-web.web.app/</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/qr-ordering</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/pos-billing</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/kds</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/riders</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/use-cases</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/compare</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/pricing</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/best-software</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/architecture</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/signup</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/book</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/contact</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/privacy</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/inventory</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/whatsapp-ordering</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/table-management</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/whatsapp-marketing</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/multi-outlet</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/restaurant-analytics</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/customer-database</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/billing-policy</loc><lastmod>2026-10-21</lastmod><changefreq>yearly</changefreq><priority>0.3</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/refund-policy</loc><lastmod>2026-10-21</lastmod><changefreq>yearly</changefreq><priority>0.3</priority></url>
-  <url><loc>https://foodhubbie-web.web.app/whatsapp-policy</loc><lastmod>2026-10-21</lastmod><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://foodhubbie.in/</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://foodhubbie.in/qr-ordering</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/pos-billing</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/kds</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/riders</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/use-cases</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/compare</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://foodhubbie.in/pricing</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://foodhubbie.in/best-software</loc><lastmod>2026-10-22</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://foodhubbie.in/architecture</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://foodhubbie.in/signup</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://foodhubbie.in/book</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://foodhubbie.in/contact</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://foodhubbie.in/privacy</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://foodhubbie.in/inventory</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/whatsapp-ordering</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/table-management</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/whatsapp-marketing</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://foodhubbie.in/multi-outlet</loc><lastmod>2026-10-20</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://foodhubbie.in/restaurant-analytics</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://foodhubbie.in/customer-database</loc><lastmod>2026-10-22</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://foodhubbie.in/billing-policy</loc><lastmod>2026-10-21</lastmod><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://foodhubbie.in/refund-policy</loc><lastmod>2026-10-21</lastmod><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://foodhubbie.in/whatsapp-policy</loc><lastmod>2026-10-21</lastmod><changefreq>yearly</changefreq><priority>0.3</priority></url>
 </urlset>
+
+
