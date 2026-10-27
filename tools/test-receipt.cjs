@@ -12,7 +12,7 @@ vm.createContext(sandbox);
 vm.runInContext(src, sandbox);
 const T = sandbox.window.ReceiptTemplates;
 
-const store = { name: 'Roshani Pizza' };
+const store = { name: 'Foodhubbie' };
 const num = (html, label) => {
     const text = html.replace(/<[^>]+>/g, ' ').replace(/[₹$]/g, '').replace(/\s+/g, ' ');
     const i = text.indexOf(label);

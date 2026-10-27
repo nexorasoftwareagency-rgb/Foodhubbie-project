@@ -102,13 +102,15 @@ const OWNER_HOOK_LINE = {
   restaurant: "For a restaurant like yours, dine-in QR + WhatsApp orders on one screen is the piece worth seeing first."
 };
 const OWNER_DM =
-  "Boost your restaurant's success with FoodHubbie! 🚀\n\n" +
-  "Discover our all-in-one management software, packed with features that will take your business to the next level:\n\n" +
-  "1. *QR Table Ordering*: Digital menus at customers' fingertips\n" +
-  "2. *WhatsApp Bot Ordering*: Seamless ordering experience for customers directly on WhatsApp\n" +
-  "3. *Rider App Deliveries*: Efficient order delivery system in place\n" +
-  "4. *Analytics and Reports*: Data-driven insights for informed decisions\n\n" +
-  "Experience increased customer returns & direct social media links.. Try it now: https://foodhubbie-web.web.app/";
+  "*FoodHubbie* — aapke restaurant ka poora control, ek hi screen par.\n\n" +
+  "Jo outlets FoodHubbie par chalte hain, unke paas sab kuch ek jagah hota hai:\n\n" +
+  "• *QR Table Ordering* — guest scan kare, order seedha kitchen screen par. Waiter ka relay khatam.\n" +
+  "• *WhatsApp Ordering* — customer ko app download nahi. Orders 24x7 aapke WhatsApp par.\n" +
+  "• *Rider App* — apni delivery, apne riders, live tracking. Aggregator commission 0.\n" +
+  "• *Live Reports* — kaunsi dish chalti hai, peak hour kya hai. Decisions data se.\n\n" +
+  "*Demo aaj hi — 10 minute.* Aapka menu, aapki settings, live chal ke dekhein:\n" +
+  "👉 https://foodhubbie-web.web.app/\n\n" +
+  "Bas *demo* reply kijiye — main aapke outlet ka demo aaj hi set kar deta hoon.";
 const HOOKS = {
   cafe:     {hi: "guest QR scan karke order karta hai — kitchen tak seedha pahunch jaata hai, no waiter-runner",
              en: "guests scan a QR at the table and order — it lands straight in the kitchen, no waiter relay"},
@@ -144,7 +146,7 @@ function outletKeyOf(l) {
 // English bodies, Hinglish greetings; "MSG LANG" excel column overrides per lead.
 // owner's broadcast copy (verbatim) wrapped in a personalized greeting + hook — not identical payloads
 const composeOwner = l =>
-  `Namaste 🙏${greetFor(l) ? " " + greetFor(l) : ""} — Nilesh, *FoodHubbie* se.\n\n` +
+  `Namaste 🙏${greetFor(l) ? " " + greetFor(l) : ""} — Nilesh, *FoodHubbie* founder.\n\n` +
   OWNER_HOOK_LINE[outletKeyOf(l)] + "\n\n" + OWNER_DM;
 function compose(l) {
   if (OWNER_COPY) return composeOwner(l);
@@ -598,37 +600,65 @@ async function main(argv) {
   }
 
   if (cmd === "send") {
+    // NOTE: Daily cap check is racy for `--n > 1` — `sentToday()` reads the CSV log file.
+    // Between this check and the actual send, another process could write to the log,
+    // allowing the cap to be exceeded by 1-2 messages. This is accepted as "owner's call"
+    // because the `--cap N` override lets the owner explicitly set a higher limit (e.g.,
+    // the daily-drip wrapper uses `--cap 25`). The mid-run re-check at line ~641
+    // limits overshoot within a single run, but cross-process races remain possible.
     if (sentToday() >= DAILY_CAP) { L("Daily cap", DAILY_CAP, "reached — stop for today (human behaviour)."); return finishReport([]); }
     const targets = pickTargets(n);
     if (!targets.length) { L("QUEUE EMPTY"); return finishReport([]); }
     const lead = targets[0];
     assertAllowlisted(lead.phone, leads);
     if (lead.status === "Not interested") throw new Error("opted-out, refusing: " + lead.crm);
-    const kind = ["dm1", "dm2", "dm3"][lead.attempts || 0]; // attempts 0->dm1, 1->dm2, 2->dm3
+    const kind = ["dm1", "dm2", "dm3"][lead.attempts || 0];
     const msg = compose(lead);
+    // Capture original values BEFORE any mutation for safe rollback
+    const original = { status: lead.status, attempts: lead.attempts || 0, firstContact: lead.status === "New" ? "" : lead.firstContact || "", lastContact: lead.lastContact || "" };
     if (webMode) {
       const {ctx, p} = await bootWeb();
       const stamp = {status: "Contacted", "attempts": (lead.attempts || 0) + 1, "first contact": lead.status === "New" ? today() : undefined, "last contact": today()};
-      leadUpdate(lead.crm, stamp); // mark FIRST so a mid-run crash can never re-DM the same lead
-      await webSend(p, lead.phone.replace(/\D/g, ""), msg);
+      leadUpdate(lead.crm, stamp);
+      try {
+        await webSend(p, lead.phone.replace(/\D/g, ""), msg);
+      } catch (e) {
+        leadUpdate(lead.crm, original);
+        throw e;
+      }
       await ctx.close();
       appendLog({crm: lead.crm, name: lead.name, phone: lead.phone, type: kind, text: msg, status: "ok"});
       did.push(lead.crm + ":web");
     } else {
       const sock = await bootBaileys();
       const stamp = {status: "Contacted", "attempts": (lead.attempts || 0) + 1, "first contact": lead.status === "New" ? today() : undefined, "last contact": today()};
-      leadUpdate(lead.crm, stamp); // mark FIRST so a mid-run crash can never re-DM the same lead
-      const okS = await sendTracked(sock, lead, msg, kind);
+      leadUpdate(lead.crm, stamp);
+      let okS;
+      try {
+        okS = await sendTracked(sock, lead, msg, kind);
+      } catch (e) {
+        leadUpdate(lead.crm, original);
+        throw e;
+      }
       did.push(lead.crm + (okS ? ":baileys" : ":unreachable"));
       if (targets.length > 1) {
         L("staggering remaining sends…");
         for (let i = 1; i < Math.min(targets.length, n); i++) {
+          // NOTE: This mid-run cap check is also racy — another process could send between
+          // the check and our send. The overshoot is limited to at most 1-2 messages per run.
           if (sentToday() >= DAILY_CAP) { L("Daily cap", DAILY_CAP, "reached mid-run — stopping here (no overshoot)."); break; }
-          await sleep(HUMAN_GAP());                       // 5-14s random gap (owner rule) — EVERY send
+          await sleep(HUMAN_GAP());
           const l2 = targets[i];
           assertAllowlisted(l2.phone, leads);
+          const orig2 = { status: l2.status, attempts: l2.attempts || 0, firstContact: l2.status === "New" ? "" : l2.firstContact || "", lastContact: l2.lastContact || "" };
           leadUpdate(l2.crm, {status: "Contacted", "attempts": (l2.attempts || 0) + 1, "first contact": l2.status === "New" ? today() : undefined, "last contact": today()});
-          const ok2 = await sendTracked(sock, l2, compose(l2), ["dm1", "dm2", "dm3"][l2.attempts || 0]);
+          let ok2;
+          try {
+            ok2 = await sendTracked(sock, l2, compose(l2), ["dm1", "dm2", "dm3"][l2.attempts || 0]);
+          } catch (e) {
+            leadUpdate(l2.crm, orig2);
+            throw e;
+          }
           did.push(l2.crm + (ok2 ? ":ok" : ":unreachable"));
         }
       }

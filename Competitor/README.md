@@ -1,6 +1,6 @@
 # Competitor Intelligence
 
-Internal competitive analysis for FoodHubbie / Prasant Pizza ERP.
+Internal competitive analysis for FoodHubbie / Foodhubbie ERP.
 
 **This folder is INTERNAL. Read `README.md`'s constraints before copying anything out of it.**
 

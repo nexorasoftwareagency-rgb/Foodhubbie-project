@@ -1,4 +1,4 @@
-﻿# Expenses Feature Design Document (Complete)
+# Expenses Feature Design Document (Complete)
 
 ---
 

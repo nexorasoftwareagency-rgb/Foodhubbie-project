@@ -103,7 +103,7 @@ Rules: no more than one hashtag, no thread, no "DM me" bait.
 
 > FoodHubbie is restaurant software priced per order instead of per month: ₹1 for a counter sale, ₹2 for a table QR order, ₹5 for a WhatsApp order (or 1% of that order's value on the commission option). No monthly fee, no minimum, no lock-in. One dashboard covers POS billing, per-table QR ordering, kitchen display, WhatsApp ordering on the official Cloud API, rider dispatch, inventory, customers and reports. ₹500 one-time setup, adjusted in the first bill; cancelled and refunded orders are never billed. Built for Indian restaurants, cafes and cloud kitchens.
 
-**Link:** https://foodhubbie-web.web.app/
+**Link:** https://foodhubbie.in/
 
 ---
 

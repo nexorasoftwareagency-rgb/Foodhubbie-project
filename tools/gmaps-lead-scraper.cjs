@@ -1,4 +1,4 @@
-﻿// Google Maps restaurant lead scraper (Node Playwright — already-installed dep, no extra packages).
+// Google Maps restaurant lead scraper (Node Playwright — already-installed dep, no extra packages).
 // Usage:   node tools/gmaps-lead-scraper.cjs "<narrow-area query>" [max] [deepen 0/1]
 // Example: node tools/gmaps-lead-scraper.cjs "cafes in navrangpura ahmedabad" 10 1
 //

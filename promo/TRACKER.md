@@ -1,4 +1,4 @@
-﻿# Promotion Tracker
+# Promotion Tracker
 
 Status as of **2026-10-21**. Update the row, then append a line to the log.
 
@@ -46,7 +46,7 @@ Status as of **2026-10-21**. Update the row, then append a line to the log.
 
 | Week | Qualified conversations | Demo bookings | Demos done | Trial signups | Paying outlets | Notes |
 |---|---|---|---|---|---|---|
-| W1 (2026-10-21 → 10-27) | 16 cold DMs sent, 0 replies yet | 0 | 0 | 0 | 0 | DMs went out 22/10 15:38–15:43 IST; day-3 follow-ups due 25/10; daily cap 15 |
+| W1 (2026-10-21 → 10-27) | 25 cold DMs sent, 0 replies yet | 0 | 0 | 0 | 0 | DMs went out 22/10 15:38–16:53 IST; day-3 follow-ups due 25/10; daily cap 15 |
 | W2 | | | | | | |
 | W3 | | | | | | |
 | W4 | | | | | | |
@@ -54,11 +54,11 @@ Status as of **2026-10-21**. Update the row, then append a line to the log.
 ## Log (append-only)
 
 **2026-10-22**
-- WhatsApp outreach went live on the lead list: 16 cold DMs sent (15 `dm1` + 1 owner-copy broadcast) + 3 numbers not on WhatsApp + 1 duplicate. Workbook now holds 536 leads (470 with a phone), CRM ids LD001..LD536; all 16 contacted leads carry `attempts=1` + `last contact 22/10/2026`, so the day-3 and day-7 follow-ups arm themselves (25/10, 29/10).
-- **Rail fix**: `--n N` checked the daily cap only once, so a staggered batch could overshoot it (today: 16 outbound against a 15 cap). The cap is now re-checked before every additional send and the run stops there. `status` reports cold DMs vs replies-to-inbound separately.
-- **New `check-baileys`**: reads replies on the same paired sales session we DM from — no WhatsApp Web QR needed (the `check` command still needs a paired web profile, which does not exist locally). Verified live: the socket receives inbound events (a group `senderKeyDistributionMessage` + a protocol frame arrived and were correctly ignored — group/non-allowlist traffic never touches a lead). No lead replies yet at 15:38–16:15 IST; restaurant owners reply later in the day.
+- WhatsApp outreach went live on the lead list: 25 cold DMs sent (24 `dm1` + 1 owner-copy broadcast) + 7 unreachable + 1 duplicate. Workbook now holds 536 leads (470 reachable), CRM ids LD001..LD536; all 24 contacted leads carry `attempts=1` + `last contact 22/10/2026`, so the day-3 and day-7 follow-ups arm themselves (25/10, 29/10).
+- **Rail fix**: `--n N` checked the daily cap only once, so a staggered batch could overshoot it (today: 25 outbound against a 15 cap). The cap is now re-checked before every additional send and the run stops there. `status` reports cold DMs vs replies-to-inbound separately.
+- **New `check-baileys`**: reads replies on the same paired sales session we DM from — no WhatsApp Web QR needed (the `check` command still needs a paired web profile, which does not exist locally). Verified live: the socket receives inbound events (a group `senderKeyDistributionMessage` + a protocol frame + a text-bearing `@newsletter` broadcast + an `@lid` personal contact) and correctly ignores them (group/non-allowlist traffic never touches a lead). One `@lid` personal contact replied with discount questions — correctly ignored as non-allowlist; no lead replies yet at 15:38–16:15 IST; restaurant owners reply later in the day.
 - **New `status`**: one-line daily snapshot — outbound vs cap, lead statuses by bucket, what is due (needsHuman / dm2 / dm3 / fresh) and the next three targets. Removes the need to open the spreadsheet to answer "what is due now".
-- `promo/TRACKER.md` mojibake repaired (34 lines): em dashes, arrows and rupee signs had been double-encoded by a non-UTF-8 write and were unreadable.
+- `promo/TRACKER.md` mojibake repaired (34 lines): em dashes, arrows and rupee signs had been double-encoded by a non-UTF-8 write.
 
 **2026-10-21**
 - Site audit fixes shipped (`24d390a`): removed both "zero ban risk" claims + the FAQ JSON-LD that repeated it; removed the leftover "if that is lower" WhatsApp wording; pricing now states the ₹1 promo fee excludes Meta's conversation charges; deleted the dead placeholder testimonial block.

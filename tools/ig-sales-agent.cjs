@@ -113,7 +113,7 @@ async function sendDm(p, handle, text) {
 
 async function send(n) {
   const all = read();
-  const leads = all.filter(l => l.status === "New");
+  const leads = all.filter(l => l.status === "New" && !/^unknown/i.test(l.name || ""));
   if (!leads.length) return L("queue empty");
   const {ctx, p} = await openIg();
   let sent = 0;
