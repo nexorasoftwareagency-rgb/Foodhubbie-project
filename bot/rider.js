@@ -5,6 +5,7 @@
 
 const { formatJid, isSocketDead, getBroadcastDelayRangeMs, sleep, randomBetween, OutboundTracker, formatOrderId } = require('./utils');
 const { db, resolvePath } = require('./firebase');
+const { resolveBusinessIdFor } = require('./helpers/outlet-resolution');
 const { paceBurstSend } = require('./send-pacer');
 const outboundTracker = new OutboundTracker(db, resolvePath);
 
@@ -132,18 +133,31 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
         const outlet = order.outlet || 'pizza';
         const riders = await getData("riders", outlet) || {};
 
+        // `riders` is a platform-wide root node (resolvePath treats it as
+        // shared), so getData returns EVERY restaurant's riders here — outlet
+        // scoping has to happen in this filter or a pizza order broadcasts to
+        // cake riders. A rider without an outlet field is skipped, never
+        // broadcast to: fail closed (Phase 5 runtime test found this leak).
+        const businessId = order.businessId || resolveBusinessIdFor(outlet);
+        let otherOutlet = 0;
+
         const RIDER_STALE_MS = 5 * 60 * 1000;
         const onlineRiders = Object.entries(riders)
             .map(([uid, data]) => ({ uid, ...data }))
             .filter(r => {
                 if (!r.phone) return false;
+                if (r.outlet !== outlet || (businessId && r.businessId && r.businessId !== businessId)) {
+                    otherOutlet++;
+                    return false;
+                }
                 const status = String(r.status || '').toLowerCase();
                 if (status !== "online") return false;
                 const ts = r.lastSeen || r.location?.ts || 0;
                 return ts && (Date.now() - ts) < RIDER_STALE_MS;
             });
 
-        console.log(`[RIDER] 📢 Broadcasting pickup for #${formatOrderId(order.orderId || orderId)} to ${onlineRiders.length} online riders.`);
+        console.log(`[RIDER] 📢 Broadcasting pickup for #${formatOrderId(order.orderId || orderId)} to ${onlineRiders.length} online riders.` +
+            (otherOutlet ? ` (${otherOutlet} rider(s) from another restaurant skipped)` : ''));
 
         if (onlineRiders.length === 0) {
             console.log(`[RIDER] ⚠️ No online riders available for broadcast of #${formatOrderId(order.orderId || orderId)}`);

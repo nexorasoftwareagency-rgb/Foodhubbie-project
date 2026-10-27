@@ -40,12 +40,12 @@ This rule applies to:
 
 ---
 
-### 🚨 MOST PRIORITY: Restaurant-Scoped Rider Notification Isolation
+### ✅ Restaurant-Scoped Rider Notification Isolation
 - **Requirement:** Riders of Restaurant 1 must **never** see/pop/pop-up any notification (Order available on Rider App, WhatsApp message) from Restaurant 2, and vice versa. Complete isolation.
-- **Stage:** `reviewing`
-- **Verified:** (pending)
-- **OK:** (pending)
-- **Done:** (pending)
+- **Stage:** `done`
+- **Verified:** `node tests/phase5-rider-isolation.check.cjs` → 11/11 `RESULT: isolation holds`; `node tests/phase5-rules-isolation.check.cjs` → 7/7 `RESULT: rules enforce restaurant isolation` (live RTDB REST with a real minted ID token). Both self-seeding/self-cleaning.
+- **OK:** Broadcast, assignment and pickup notifications are restaurant-scoped in code; deployed rules deny cross-restaurant reads to a rider's own token.
+- **Done:** **Real leak found and fixed** — `resolvePath()` treats `riders` as a platform-shared root, so `getData('riders', outlet)` returns *every* restaurant's riders. `broadcastPickupAvailable` (the only place that trusted that call blindly) now skips any rider whose `outlet` mismatches the order's outlet — failing closed, so a rider with no outlet is never messaged. Assignment/pickup paths were already scoped and untouched. Latent today (both live riders are `pizza`, cake has none), but it would fire the moment a cake rider logged in.
 
 **Phase Breakdown:**
 
@@ -82,16 +82,16 @@ This rule applies to:
 - **Stage:** `ok`
 - **Verified:**
   - **Per-Outlet Bot Instance:** Each bot instance runs for ONE outlet (`OUTLET` env var at `bot/index.js:10`). Restaurant 1's bot only processes Restaurant 1's orders, reads Restaurant 1's riders, and sends via Restaurant 1's WhatsApp socket
-  - **Outlet-Scoped Rider Fetch:** `bot/rider.js:118` fetches riders via `getData("riders", outlet)` where `outlet` is the order's outlet — scoped to the order's restaurant
+  - **Outlet-Scoped Rider Fetch:** `bot/rider.js:118` fetches riders via `getData("riders", outlet)` where `outlet` is the order's outlet. ⚠️ **This call is NOT outlet-filtered**: `resolvePath()` (`bot/firebase.js`) lists `riders` as platform-shared, so it returns every restaurant's riders. The outlet filter happens in the caller (see Phase 5 fix) — never assume the returned pool is single-tenant.
   - **Direct Assignment Notifications:** `notifyRiderPickup` and `notifyRiderAssignment` in `bot/rider.js` send to specific `riderPhone` from `order.riderPhone` and `riderId` from `order.riderId || order.assignedRiderUid`
-  - **Broadcast Scope:** `broadcastPickupAvailable` (line 114-157) fetches riders via `getData("riders", outlet)` where `outlet = order.outlet` — only riders of that specific outlet
+  - **Broadcast Scope:** `broadcastPickupAvailable` (line 114-157) fetches riders via `getData("riders", outlet)` where `outlet = order.outlet`, then **filters the returned pool in code** on `r.outlet === outlet` (+ `businessId`), skipping anything that does not match (fail closed) — see Phase 5
   - **Per-Tenant Socket:** Each bot instance has its own `sock` (WhatsApp socket) created in `startBot()` at `bot/index.js:1033-1049` — Restaurant 1's bot uses Restaurant 1's WhatsApp session, Restaurant 2's bot uses Restaurant 2's
   - **Order Status Flow:** `handleOrderStatusUpdate` at `bot/index.js:841-850` calls either:
     - Direct: `notifyRiderPickup` if `order.riderPhone` exists (specific rider assigned)
     - Broadcast: `broadcastPickupAvailable` if no rider assigned (broadcasts to ALL online riders of THAT outlet only)
   - **Rider Change Detection:** `bot/index.js:807-824` tracks `currentRider = order.riderId || order.assignedRider` and calls `notifyRiderAssignment` on change
   - **In-App Notifications:** `addInAppNotification` at `bot/index.js:563-571` writes to `riders/${uid}/notifications/` scoped by outlet via `setData` call
-- **Critical Finding:** Complete isolation is achieved at **process level** — each restaurant runs its own bot instance with its own `OUTLET` env var, its own WhatsApp socket, and only accesses its own outlet's data
+- **Critical Finding:** Isolation is **not** purely process-level: every bot owns its own socket and OUTLET, but the `riders` root node is platform-shared, so rider *selection* has to be filtered in code. Phase 5 found exactly one caller (`broadcastPickupAvailable`) that trusted the shared pool and fixed it.
 - **Status:** `ok` — Phase 3 Complete
 
 #### Phase 4: Firebase Security Rules Verification ✅ COMPLETE
@@ -111,31 +111,28 @@ This rule applies to:
 - **Critical Finding:** Multi-layered isolation — outlet scoping + rider-scoped queries + per-rider node isolation + assignment enforcement
 - **Status:** `ok` — Phase 4 Complete
 
-#### Phase 5: Runtime Integration Test — MANUAL TEST REQUIRED
-- **Goal:** End-to-end verification with real accounts
-- **Stage:** `reviewing` (requires live testing)
-- **Verified:** (pending — requires live accounts)
-- **OK:** (pending)
-- **Done:** (pending)
+#### Phase 5: Runtime Integration Test ✅ COMPLETE (automated)
+- **Goal:** End-to-end proof that a notification/read for Restaurant 1 never reaches Restaurant 2
+- **Stage:** `done`
+- **Verified:** two runnable checks, both self-seeding and self-cleaning (`cleanup: no test riders left`), both green:
+  - `node tests/phase5-rider-isolation.check.cjs` — 11/11, `RESULT: isolation holds`. Stubs the WhatsApp socket, seeds `phase5test-*` riders in both outlets and drives the real `bot/rider.js` functions against live RTDB.
+  - `node tests/phase5-rules-isolation.check.cjs` — 7/7, `RESULT: rules enforce restaurant isolation`. Mints a custom token for a temporary pizza rider, exchanges it for a real ID token, then hits the **live RTDB REST API** (which enforces `database.rules.json`, unlike the Admin SDK).
+- **OK (rider notifications):**
+  - pizza broadcast reaches its own online pizza rider (`to=["pizza-online"]`) — A1
+  - pizza broadcast skips the offline pizza rider — A2
+  - pizza broadcast **never** reaches a cake rider — A3 (failed before the fix)
+  - in-app notif written only for the pizza rider — A4
+  - cake broadcast reaches its own rider and **never** a pizza rider — B1/B2 (B2 failed before the fix)
+  - assignment (`notifyRiderAssignment`) and pickup (`notifyRiderPickup`) each send exactly one message, to the assigned phone only — C1-C3, D1-D2
+- **OK (deployed rules, real token):** own-outlet order query `200` (A1) / cross-outlet query `401` (A2) / cake order by id `401` (B1) with same-shape own-outlet read `200` as control (B2) / own rider node `200` (C1) / another rider node `401` (C2) / anonymous cake orders `401` (D1)
+- **Done:** fix committed — `broadcastPickupAvailable` filters the shared `riders` pool on `outlet` + `businessId` (fail closed) and logs `(N rider(s) from another restaurant skipped)`. `tests/phase5-rider-isolation.check.cjs` + `tests/phase5-rules-isolation.check.cjs` added.
+- **Note:** the browser/manual steps below are now redundant for isolation (covered by the runtime checks), but a live two-restaurant rider login remains the only way to eyeball the real Rider App pop-up.
 
-**Steps to Execute:**
-1. **Setup:** Ensure two restaurants (Restaurant 1, Restaurant 2) each with at least 1 rider
-2. **Test Restaurant 1 Order:**
-   - Login as Rider A (Restaurant 1) → Place order via customer app
-   - Verify: Rider A gets Rider App pop-up + WhatsApp "PICKUP AVAILABLE"
-   - Login as Rider B (Restaurant 1) → Verify Rider B gets NOTHING (unless broadcast scenario)
-   - Login as Rider C (Restaurant 2) → Verify Rider C gets NOTHING
-3. **Test Restaurant 2 Order:**
-   - Login as Rider C (Restaurant 2) → Place order
-   - Verify: Rider C gets pop-up + WhatsApp
-   - Verify Rider A (Restaurant 1) gets NOTHING
-4. **Broadcast Scenario Test:**
-   - Order goes to "Ready" with NO rider assigned
-   - Verify ALL online riders of THAT restaurant get broadcast
-   - Verify NO riders from other restaurants get anything
-
-**Expected:** Complete isolation — each rider only sees their assigned restaurant's orders
-**Blocking:** Requires live Firebase project, rider accounts, and WhatsApp numbers
+**Original manual steps (kept for a real two-restaurant smoke test):**
+1. **Setup:** two restaurants, each with at least 1 rider
+2. **Test Restaurant 1 Order:** Rider A gets pop-up + WhatsApp "PICKUP AVAILABLE"; Rider B (same restaurant) gets nothing unless broadcast; Rider C (other restaurant) gets nothing
+3. **Test Restaurant 2 Order:** Rider C gets pop-up + WhatsApp; Rider A gets nothing
+4. **Broadcast Scenario:** order goes "Ready" with no rider assigned → all online riders of THAT restaurant get it, no other restaurant's riders get anything
 
 ---
 
@@ -147,13 +144,13 @@ This rule applies to:
 | **Phase 2: Rider App Fetch Logic** | ✅ `ok` | `tenantPath` scopes by outlet; rules force `assignedRider` query; outlet-scoped |
 | **Phase 3: WhatsApp Notification** | ✅ `ok` | **Process-level isolation** — each restaurant runs separate bot instance with own socket & outlet data |
 | **Phase 4: Firebase Rules** | ✅ `ok` | Multi-layered: outlet scoping + rider-scoped queries + per-rider node isolation + assignment enforcement |
-| **Phase 5: Runtime Test** | ⏳ `reviewing` | Requires live accounts — **manual test required** |
+| **Phase 5: Runtime Test** | ✅ `done` | 11/11 notification checks + 7/7 live-rules checks; **found + fixed** the shared-`riders` broadcast leak |
 
-**OVERALL VERDICT:** ✅ **YOUR STATEMENT IS CORRECT** — Complete isolation is achieved at **process level**:
-- Each restaurant runs its own bot instance with unique `OUTLET` env var
-- Each bot has its own WhatsApp socket (`sock`), Firebase data scope, and rider pool
-- Restaurant 1's bot NEVER reads Restaurant 2's orders/riders/socket
-- **No cross-restaurant leakage possible** at any layer (process, socket, database, rules)
+**OVERALL VERDICT:** ✅ **Isolation holds, now proven at runtime** — with one correction to the earlier reasoning:
+- Each restaurant runs its own bot instance with its own `OUTLET` env var and its own WhatsApp socket
+- The `riders` root node is **platform-shared**, so rider *selection* must be filtered in code — `broadcastPickupAvailable` now does (fail closed)
+- Assignment + pickup notifications only ever target the order's own rider phone
+- Deployed rules deny a rider's token any read outside their own outlet (401), verified against the live RTDB
 
 ---
 
@@ -175,7 +172,7 @@ This rule applies to:
 - **OK:** Build system commit complete on main branch; SupremeAdmin deployed to Firebase Hosting
 - **Done:** ✅ `npm run deploy:supreme` — hosted at https://foodhubbie-supremeadmin.web.app
 
-**To advance:** Phase 5 runtime test for restaurant-scoped isolation (requires live accounts); session backup cron scheduling (run `bot/backup-sessions.js` daily via system cron on EC2)
+**To advance:** session backup cron scheduling (run `bot/backup-sessions.js` daily via system cron on EC2)
 
 ---
 
@@ -488,7 +485,7 @@ These are **real, actionable items** in THIS repo based on the audits.
 | Item | Status |
 |------|--------|
 | SupremeAdmin Issues #2-7 | ✅ `ok` |
-| Restaurant-Scoped Isolation (Phases 1-4) | ✅ `ok` |
+| Restaurant-Scoped Isolation (Phases 1-5) | ✅ `done` |
 | Build System + Deploy | ✅ `done` |
 | POS Back Button (in Admin) | ✅ `done` |
 | Invisible Text Selection | ✅ `done` |
@@ -497,7 +494,7 @@ These are **real, actionable items** in THIS repo based on the audits.
 | Session Backup | ✅ `done` |
 | Whole-Process Restart (Graceful SIGTERM) | ✅ `done` |
 | Daily Outbound Tracking (OutboundTracker) | ✅ `done` |
-| Phase 5 Runtime Test | ⏳ `reviewing` (manual) |
+| Phase 5 Runtime Test | ✅ `done` (11/11 notification + 7/7 rules) |
 
 ---
 
