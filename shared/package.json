@@ -1,8 +1,8 @@
 {
-  "name": "prasant-shared",
+  "name": "foodhubbie-shared",
   "version": "1.0.0",
   "type": "module",
-  "description": "Shared utilities for Prasant Pizza ERP (Admin, Rider, Bot)",
+  "description": "Shared utilities for Foodhubbie ERP (Admin, Rider, Bot)",
   "exports": {
     "./dom/escape.js": "./dom/escape.js",
     "./dom/modal.js": "./dom/modal.js",
