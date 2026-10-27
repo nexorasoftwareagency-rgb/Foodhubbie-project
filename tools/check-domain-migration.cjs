@@ -8,6 +8,9 @@ const OLD_WWW = 'https://www.foodhubbie.in';
 const ROOT = process.cwd();
 const EXT = ['.html', '.xml', '.txt', '.md'];
 const SKIP = new Set(['node_modules', '.git', '.firebase', '.playwright-mcp', '.pw-profile', 'wa-user-data', 'wa-user-data2', '.wa-sales-auth', '.agent', '.agents']);
+// Append-only history: these legitimately record the pre-migration URL and must
+// not be rewritten to make a guard pass.
+const SKIP_FILES = new Set(['PROJECT_LEDGER.md', path.join('docs', 'META-PLATFORM-AUDIT.md')]);
 
 let hits = 0;
 let files = 0;
@@ -17,6 +20,7 @@ function walk(dir) {
     if (SKIP.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) { walk(full); continue; }
+    if (SKIP_FILES.has(path.relative(ROOT, full))) continue;
     if (!EXT.includes(path.extname(entry.name).toLowerCase())) continue;
     files++;
     let src;
