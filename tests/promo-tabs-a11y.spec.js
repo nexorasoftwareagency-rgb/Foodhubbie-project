@@ -14,7 +14,14 @@ test.describe('Promotions tab — ARIA tab semantics', () => {
   test('mode + campaign tabs keep aria-selected in sync and aria-controls resolvable', async ({ page }) => {
     await login(page);
 
-    await page.click('[data-action="switchTab"][data-tab="promotions"]');
+    // On mobile the sidebar is a drawer: the Promotions nav button only exists
+    // inside it, so open the hamburger first (desktop header is display:none).
+    const promoNav = page.locator('[data-action="switchTab"][data-tab="promotions"]');
+    if (!(await promoNav.isVisible())) {
+      await page.locator('#mobileHamburger:visible').click();
+      await page.waitForTimeout(500);
+    }
+    await promoNav.click();
     await expect(page.locator('#tab-promotions')).toBeVisible();
 
     const nowPill = page.locator('.promo-mode-pill[data-mode="now"]');
