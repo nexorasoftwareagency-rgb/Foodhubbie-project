@@ -7,6 +7,7 @@
     "deploy:supreme": "npm run build:supreme && firebase deploy --only hosting:supreme",
     "test": "playwright test",
     "test:encoding": "node tests/encoding-check.mjs",
+    "test:isolation": "node tests/phase5-rider-isolation.check.cjs && node tests/phase5-rules-isolation.check.cjs",
     "seo:check-domain": "node tools/check-domain-migration.cjs",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
