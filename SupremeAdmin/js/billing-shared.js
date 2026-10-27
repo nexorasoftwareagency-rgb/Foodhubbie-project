@@ -8,7 +8,7 @@
  * sends at PROMO_RATE. Scope = time window over createdAt (ISO string or ms).
  * Months are Asia/Kolkata calendar months.
  */
-import { DEFAULT_RATES, PROMO_RATE, computeCostIndex } from '/shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, computeCostIndex } from '/shared/cost-math.js';
 import { escapeHtml, showToast } from '/js/utils.js';
 
 const IST = '+05:30';
@@ -208,6 +208,18 @@ export function recordPaymentModal({ bid, oid, due = 0 }) {
         const receiptNo = `RCP-${ymd}-${(ref.key || 'xxx').slice(-3).toUpperCase()}`;
         await ref.set({ amount, method, period: per, note: note || null, receiptNo, createdAt: now, createdBy: uid() });
         showToast(`Payment of ${inr(amount)} recorded.`, 'success');
+        // First-top-up hint: a locked restaurant that has now paid the minimum is ready to go live.
+        try {
+          const base = `businesses/${bid}/outlets/${oid}`;
+          const [lk, pays] = await Promise.all([
+            firebase.database().ref(`${base}/locked`).once('value'),
+            firebase.database().ref(`${base}/billing/payments`).once('value'),
+          ]);
+          const total = Object.values(pays.val() || {}).reduce((a, p) => a + Number((p && p.amount) || 0), 0);
+          if (lk.val() === true && total >= MIN_TOPUP) {
+            showToast(`Wallet reached ${inr(total)} (minimum ${inr(MIN_TOPUP)}). Unlock this restaurant from its profile to take it live.`, 'success');
+          }
+        } catch (_) { /* hint only */ }
         done({ amount, method, period: per, note, receiptNo, createdAt: now, id: ref.key });
       } catch (err) {
         okBtn.disabled = false;

@@ -1,3 +1,4 @@
+import { MIN_TOPUP } from '../../shared/cost-math.js';
 import { haptic } from './utils.js';
 import { showToast, showConfirm } from './ui-utils.js';
 import { state } from './state.js';
@@ -64,6 +65,11 @@ export const TAB_DEFS = [
     ['costs', 'Costs'], ['settings', 'Settings']
 ];
 const ALL_TABS = TAB_DEFS.map(t => t[0]);
+
+// Tabs usable while the outlet is locked ("setup mode": new restaurant before its first wallet top-up).
+// Everything that takes orders or spends money (POS, orders, kitchen, riders, promotions, chat...) is excluded.
+// The database rules also refuse order/table-session writes while locked; this list is the friendly UI layer.
+export const SETUP_TABS = ['dashboard', 'menu', 'categories', 'combos', 'menu-browser', 'tables', 'inventory', 'settings', 'costs', 'notifications'];
 const _allExcept = (skip) => ALL_TABS.filter(t => !skip.includes(t));
 
 // Built-in matrix — the default for every outlet until an admin saves a
@@ -252,6 +258,11 @@ export const switchTab = async (tabId, skipHistory = false) => {
         }
         window.__adminLogger?.warn?.('NAV', `Blocked by role: ${tabId}`);
         showToast(`You don't have access to that section`, 'warning');
+        return;
+    }
+    if (state.locked && !SETUP_TABS.includes(tabId)) {
+        if (!state.currentActiveTab) return switchTab('dashboard', true);
+        showLockedScreen();
         return;
     }
     if (state.currentActiveTab === tabId) {
@@ -458,28 +469,57 @@ tableObserver.observe(observerTarget, { childList: true, subtree: true });
 
 export const toggleMobileCart = (state) => import('./features/pos.js').then(m => m.toggleMobileCart(state));
 
+export const SUPPORT_WA = 'https://wa.me/919724649971?text=' + encodeURIComponent('Hi FoodHubbie Team! I want to top up my wallet (minimum \u20B9' + MIN_TOPUP + ') and go live.');
+const LOCK_MSG = `Your restaurant is in <strong>setup mode</strong>. You can set up your menu, tables and settings now. To start taking orders, add a minimum wallet balance of <strong>\u20B9${MIN_TOPUP.toLocaleString('en-IN')}</strong>. Contact FoodHubbie support and we will add it once your payment is received.`;
+
+// Dismissible popup shown when a locked outlet tries something that needs go-live.
 export function showLockedScreen() {
     let el = document.getElementById('locked-screen');
     if (!el) {
         el = document.createElement('div');
         el.id = 'locked-screen';
-        el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,10,10,.92);display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;';
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('aria-label', 'Top up required to go live');
+        el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,10,10,.8);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;';
         el.innerHTML = `
             <div style="max-width:480px;color:#fff">
-                <div style="font-size:48px;margin-bottom:16px">🔒</div>
-                <h2 style="font-size:24px;font-weight:800;margin-bottom:12px">Access Restricted</h2>
-                <p style="font-size:16px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:24px">
-                    Your restaurant is not yet activated.<br>
-                    Contact <strong>Supreme Admin</strong> for permission and pay the setup fee for access.
-                </p>
-                <button class="btn btn-primary" onclick="window.open('https://wa.me/919724649971?text=Hi%20FoodHubbie%20Team!%20I%20need%20access%20to%20my%20restaurant%20dashboard.','_blank')" style="padding:12px 24px;font-size:15px">
-                    Contact Supreme Admin
-                </button>
-            </div>
-        `;
+                <h2 style="font-size:22px;font-weight:800;margin-bottom:12px">Top up to go live</h2>
+                <p style="font-size:15px;color:rgba(255,255,255,.8);line-height:1.7;margin-bottom:24px">${LOCK_MSG}</p>
+                <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+                    <button type="button" class="btn btn-primary" id="lockedContactBtn" style="padding:12px 24px;font-size:15px">Contact support</button>
+                    <button type="button" class="btn btn-secondary" id="lockedCloseBtn" style="padding:12px 24px;font-size:15px">Continue setup</button>
+                </div>
+            </div>`;
         document.body.appendChild(el);
+        el.querySelector('#lockedContactBtn').addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+        const close = () => { el.style.display = 'none'; };
+        el.querySelector('#lockedCloseBtn').addEventListener('click', close);
+        el.addEventListener('click', (e) => { if (e.target === el) close(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && el.style.display !== 'none') close(); });
     }
     el.style.display = 'flex';
+    el.querySelector('#lockedCloseBtn')?.focus();
+}
+
+// Called once the outlet is known to be locked: show a slim persistent banner and make sure
+// we are not sitting on an operations tab.
+export function enterSetupMode() {
+    if (!document.getElementById('locked-banner')) {
+        const b = document.createElement('div');
+        b.id = 'locked-banner';
+        b.setAttribute('role', 'status');
+        b.style.cssText = 'position:sticky;top:0;z-index:60;background:#fef3c7;color:#78350f;padding:8px 14px;font-size:13px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;';
+        b.innerHTML = `<span>Setup mode: add a minimum wallet balance of \u20B9${MIN_TOPUP.toLocaleString('en-IN')} to start taking orders.</span><button type="button" class="btn-secondary btn-sm" id="lockedBannerBtn">Contact support</button>`;
+        (document.querySelector('.main') || document.body).prepend(b);
+        b.querySelector('#lockedBannerBtn').addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+    }
+    if (state.currentActiveTab && !SETUP_TABS.includes(state.currentActiveTab)) switchTab('dashboard', true);
+}
+
+export function leaveSetupMode() {
+    document.getElementById('locked-banner')?.remove();
+    document.getElementById('locked-screen')?.remove();
 }
 
 export const ui = {

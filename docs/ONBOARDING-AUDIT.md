@@ -1,4 +1,4 @@
-# FoodHubbie Onboarding Audit (2026-10-28)
+# FoodHubbie Onboarding Audit and Redesign (2026-10-28)
 
 Audited from the public repo at commit `a4392f1` (`main`). Nothing was run against production. The live pricing page was not reachable from the audit environment, so no price is stated here or hardcoded in code.
 
@@ -18,41 +18,68 @@ Audited from the public repo at commit `a4392f1` (`main`). Nothing was run again
 4. Owner logs in to Admin. `Admin/js/auth.js` sets `state.locked`; `showLockedScreen()` blocks every non-safe click until Supreme Admin sets `locked: false` (setup fee).
 5. Unlocked owner lands on a dashboard with no guidance. No setup checklist existed.
 
-## 3. Findings
-| # | Step | Problem (evidence) | Recommendation | Risk | Priority |
-|---|---|---|---|---|---|
-| 1 | Signup | `.success` "Application received!" had no CSS, so it was visible before submit | Fixed in this branch | Misleading UI | High |
-| 2 | Signup | Retry after a failed password save created a second request; success state re-enabled the button after 3s (duplicate requests) | Fixed: one request per visit, retry re-sends only step 2, form locks on success | Duplicate records | High |
-| 3 | Signup | Validation used `alert()`; no inline errors, no focus management | Fixed: inline, accessible errors; data preserved on failure | UX | Medium |
-| 4 | Signup | No email ownership verification: anyone can apply with someone else's email and a chosen password; approval then creates that Auth user | Add email verification or have the owner set the password via reset link at approval; needs your decision | Account takeover of an unclaimed email | High |
-| 5 | Signup | Password sits in `onboardingSecrets` until approval and approval API echoes it back to Supreme Admin | Move to emailed reset link; stop returning the password | Credential exposure | High |
-| 6 | Signup rules | Unauthenticated writes with no rate limit / App Check / captcha | Add App Check or a proxy endpoint with rate limiting | Spam, DB bloat | High |
-| 7 | Lock | `locked` is enforced only in browser JS. `database.rules.json` restricts writing the flag itself but not writes under the outlet, so a locked owner can write via the SDK/REST | Rules gate on `locked` (needs careful rollout and testing) | Setup-fee bypass | High |
-| 8 | Lock | Locked owners cannot touch anything, even settings or menu, while waiting for activation | Business decision: allow read/setup-only access before activation? | Slower time-to-value | Medium |
-| 9 | Dashboard | No setup checklist or next action | Implemented (`setup-checklist.js`) | Low | High |
-| 10 | Data | Signup collects no address, cuisine or table count; nothing prompts for it later | Checklist now prompts for address, menu, tables | Low | Medium |
-| 11 | Tests | Playwright config targets the live production URL; CI runs no onboarding tests | Point E2E at emulator/staging | Prod data risk | Medium |
-| 12 | Docs | `PLAN-WEBSITE-ONBOARDING-APPROVAL.md` still says the password is stored on the request | Update doc | Low | Low |
+## 3. Product decisions (owner, 2026-10-28)
+1. No manual approval. Sign-ups are created automatically; the owner is notified in Supreme Admin and keeps full control (lock, unlock, disable).
+2. The lock must be enforced in the database rules, not only in the browser.
+3. A locked restaurant gets setup-only access (menu, tables, settings, wallet), not a dead screen.
+4. The last required setup step is a wallet top-up of at least Rs 1,000. The restaurant pays FoodHubbie directly (UPI/bank), contacts Supreme Admin, who records the payment. The balance is shown and used in the Cost tab, which was redesigned as a wallet.
 
-## 4. Changes in this branch (`feat/onboarding-setup-checklist`)
-- `website/signup.html`: findings 1-3. Password minimum raised from 6 to 8 on the client (rules still accept 6+).
-- `Admin/js/features/setup-checklist.js` (new), `Admin/index.html`, `Admin/js/ui.js`: dashboard checklist, derived from existing data (store profile, dishes, tables, WhatsApp status, orders). Read-only, no schema change, resumes automatically, hides when complete, shows an Activation step while locked, shows unknown (not done) if a read fails, hidden for roles without Settings access.
-- `tests/signup-onboarding.check.mjs` (new): mocked-network check, never touches production.
+## 4. Findings and status
+| # | Finding | Status |
+|---|---|---|
+| 1 | "Application received!" box had no CSS and was always visible | Fixed |
+| 2 | Retry created duplicate requests; form re-enabled after success | Fixed |
+| 3 | `alert()` validation, no inline errors | Fixed |
+| 4 | Email ownership not verified; applicant picks the password | **Open, higher risk now** because approval is automatic. See section 7 |
+| 5 | Password held in `onboardingSecrets` until approval; manual approval API returns it | Auto path never returns or logs it. Manual endpoint unchanged. Still stored until approval (seconds now) |
+| 6 | Unauthenticated writes, no rate limit | Partly mitigated: auto-approval capped at 20/hour (env `AUTO_APPROVE_MAX_PER_HOUR`), extras stay pending, new outlets are locked and inert. Rules-level rate limiting / App Check still open |
+| 7 | Lock enforced only in the browser | Fixed for orders, table sessions and table requests (rules). See limits in section 7 |
+| 8 | Locked owners could do nothing | Fixed: setup-only mode |
+| 9 | No setup checklist | Done |
+| 10 | Address / menu / tables never prompted | Done (checklist) |
+| 11 | E2E tests target production | Open |
+| 12 | Plan doc stale | Open |
+| 13 | Cost tab had usage only, no balance | Fixed: Wallet view |
 
-## 5. Test report
+## 5. What changed (branch `feat/onboarding-setup-checklist`)
+- `website/signup.html`: findings 1-3; copy now says the dashboard is created automatically and a Rs 1,000 minimum wallet is needed to go live.
+- `bot-control-api/server.js`: approval logic extracted into `approveOnboardingRequest()` (manual endpoint behaviour unchanged) plus an auto-approval watcher. Creates the outlet locked, writes a Supreme notification (`inquiries`), retries while the browser's password write lands, rejects duplicate emails, caps per hour, kill switch `ONBOARDING_AUTO_APPROVE=off`.
+- `database.rules.json` (3 lines): writes to `orders`, `tableSessions`, `tableRequests` are refused while the outlet is `locked`, except for Super/Supreme admins.
+- `Admin/js/ui.js`, `auth.js`, `main.js`: setup mode. Allowed tabs: dashboard, menu, categories, combos, menu browser, tables, inventory, settings, costs, notifications. Slim banner, dismissible "top up to go live" popup, auto-reload when unlocked.
+- `Admin/js/features/setup-checklist.js` (+ `index.html`, `ui.js`): dashboard checklist. Last required step is the Rs 1,000 top-up (done when total recorded payments reach the minimum), then "first order".
+- `shared/cost-math.js`: `MIN_TOPUP` and `computeWallet()` (balance = paid - orders - promo - charges; same ledger as Supreme's "due", sign flipped).
+- `Admin/js/features/costs.js` + `index.html`: new default "Wallet" sub-tab (balance, topped up, used, charges, how to top up, top-up history). Existing Overview/Breakdown/Feed/Connect kept.
+- `SupremeAdmin/js/billing-shared.js`: after recording a payment that brings a locked restaurant to the minimum, shows a reminder to unlock it.
+
+## 6. Test report
 | Check | Result |
 |---|---|
-| `NODE_PATH=$(npm root -g) node tests/signup-onboarding.check.mjs` | Passed (12/12) |
-| Checklist module vs stubbed Firebase/DOM (7 cases) | Passed (script not committed) |
-| `node tests/encoding-check.mjs` | Passed |
-| `node tests/check-imports.mjs` | Passed |
-| `node gate-verify.js` | Passed (live DB gate skipped, no credentials) |
-| `npm run build:admin` | Blocked: npm registry unreachable in this environment |
+| `node tests/signup-onboarding.check.mjs` (mocked network; needs Playwright chromium) | Passed 12/12 |
+| `node tests/auto-onboarding.check.cjs` (real server functions, fake Admin SDK) | Passed 6/6 |
+| `node tests/admin-wallet-checklist.check.mjs` (real modules, stubbed Firebase/DOM) | Passed 12/12 |
+| `node shared/cost-math.js` | Passed |
+| `node tests/encoding-check.mjs`, `node tests/check-imports.mjs`, `node tools/check-shared-twins.cjs` | Passed |
+| `node gate-verify.js` | Passed (live DB gate skipped) |
+| `database.rules.json` parses as JSON | Passed |
+| Database rules behaviour (emulator) | **Not run**: emulator not installable here. Test before deploying |
+| `npm run build:admin` | **Blocked**: npm registry unreachable here |
+| Admin app in a real browser (setup mode, banner, tab gating, wallet) | **Not run** |
+| Live auto-approval against real Firebase | **Not run** |
 | Existing Playwright specs | Not run (target production) |
-| Checklist in a real browser against a real outlet | Not run |
 
-## 6. Needs your decision / authorization
-1. Findings 4-5: verify email or send reset link instead of storing a chosen password?
-2. Finding 7: enforce the lock in database rules?
-3. Finding 8: allow setup-only access before activation?
-4. Review and push the branch; deploy only after build and a staging check.
+## 7. Known limits and risks
+- **Rules untested.** The lock gate was verified by reading and JSON validation only. Run it in the Firebase emulator (`tests/rules.emulator.mjs`) before deploying, including: locked outlet admin cannot create orders/sessions/requests; unlocked outlet unchanged; Supreme can write either way; public QR ordering on an unlocked outlet unchanged.
+- **Lock covers orders, table sessions and table requests only.** Other writes (settings, menu, inventory) stay open by design. The WhatsApp bot and promos run on the server with admin credentials and are not blocked by rules. If you need promo sending stopped for locked outlets, that is a bot-side check.
+- **No spend limit.** Nothing stops orders when the wallet is empty or negative; it only shows a warning. Decide whether to enforce this.
+- **Email still unverified.** With auto-approval, anyone can register any unregistered email with a password of their choice. Mitigations in place are small (hour cap, locked outlets). Recommended next step: send a password-set link to the email instead of storing a chosen password, or require email verification.
+- **Wallet is computed in the browser** from all orders (one read when the Cost tab opens). Fine for new restaurants; for large order histories it should move to a server-maintained balance.
+- **Public pricing copy conflicts.** `website/pricing.html` and `PRICING_AND_TERMS.md` describe a Rs 500 one-time setup and no minimum balance. They were not changed. Please decide the public wording.
+- **Auto-approval needs the API process restarted** and assumes a single instance, like the status watcher.
+
+## 8. Deployment order (nothing was deployed)
+1. Run the rules emulator test; fix anything it finds.
+2. Deploy rules: `firebase deploy --only database`. Existing locked outlets immediately lose order writes.
+3. Deploy `bot-control-api` (restart via PM2). Optional env: `ONBOARDING_AUTO_APPROVE=off` to disable, `AUTO_APPROVE_MAX_PER_HOUR`.
+4. `npm run build:admin && npm run deploy:admin`, `npm run build:supreme && npm run deploy:supreme`.
+5. Deploy the website (`signup.html`) last, so the new copy only appears once auto-approval is live.
+Rollback: revert the commit and redeploy; rules rollback restores order writes for locked outlets.

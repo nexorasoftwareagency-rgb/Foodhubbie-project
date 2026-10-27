@@ -336,17 +336,20 @@ app.post('/api/admin/update-password', requireSuperOnly, async (req, res) => {
 
 // Approve a website onboarding request — creates the full outlet + Auth user
 // atomically. Called from the Supreme Admin onboarding-requests page.
-app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => {
-  const { reqKey, businessName, outletName, contactPhone, contactEmail, adminEmail, plan, template, whatsappConnect } = req.body || {};
-  if (!reqKey || !businessName || !outletName || !adminEmail) {
-    return res.status(400).json({ error: 'reqKey, businessName, outletName, adminEmail are required' });
-  }
-  try {
+class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
+const httpError = (status, message) => new HttpError(status, message);
+
+// Core of onboarding approval, shared by the manual Supreme Admin endpoint and
+// the auto-approval watcher below. Creates the Auth user, admins/{uid} mirror and
+// the outlet (locked: true until the first wallet top-up is recorded). Throws
+// HttpError for expected failures; any other throw is unexpected.
+async function approveOnboardingRequest(reqKey, f, reviewerUid) {
+  const { businessName, outletName, contactPhone, contactEmail, adminEmail, plan, template, whatsappConnect } = f;
     // Verify the request is still pending
     const reqSnap = await admin.database().ref(`onboardingRequests/${reqKey}`).get();
     const reqData = reqSnap.val();
-    if (!reqData) return res.status(404).json({ error: 'Onboarding request not found' });
-    if (reqData.status !== 'pending') return res.status(409).json({ error: `Request already ${reqData.status}` });
+    if (!reqData) throw httpError(404, 'Onboarding request not found');
+    if (reqData.status !== 'pending') throw httpError(409, `Request already ${reqData.status}`);
 
     // Password: prefer the write-only secrets node (new flow — never client-readable);
     // fall back to the legacy inline field for requests submitted before the cutover.
@@ -359,13 +362,13 @@ app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => 
     }
     if (!adminPassword) adminPassword = reqData.adminPassword || null;
     if (!adminPassword || adminPassword.length < 6) {
-      return res.status(422).json({ error: 'Password secret missing or too short — ask the applicant to re-submit.' });
+      throw httpError(422, 'Password secret missing or too short — ask the applicant to re-submit.');
     }
 
     // Check for duplicate admin email
     try {
       const existing = await admin.auth().getUserByEmail(adminEmail);
-      return res.status(409).json({ error: `Admin email ${adminEmail} already exists (uid: ${existing.uid})` });
+      throw httpError(409, `Admin email ${adminEmail} already exists (uid: ${existing.uid})`);
     } catch (err) {
       if (err.code !== 'auth/user-not-found') throw err;
     }
@@ -469,16 +472,97 @@ billing: getBillingDefaults(),
       status: 'approved',
       bid, oid,
       reviewedAt: now,
-      reviewedBy: req.auth?.uid || null,
+      reviewedBy: reviewerUid || null,
       adminPassword: null,
     });
 
-    res.json({ ok: true, bid, oid, uid, email: adminEmail, password: adminPassword, loginUrl: 'https://foodhubbie-admins.web.app' });
+  return { bid, oid, uid, email: adminEmail, password: adminPassword };
+}
+
+// Manual approval (Supreme Admin UI). Unchanged contract: same body, same response.
+app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => {
+  const { reqKey, businessName, outletName, contactPhone, contactEmail, adminEmail, plan, template, whatsappConnect } = req.body || {};
+  if (!reqKey || !businessName || !outletName || !adminEmail) {
+    return res.status(400).json({ error: 'reqKey, businessName, outletName, adminEmail are required' });
+  }
+  try {
+    const r = await approveOnboardingRequest(reqKey, { businessName, outletName, contactPhone, contactEmail, adminEmail, plan, template, whatsappConnect }, req.auth?.uid);
+    res.json({ ok: true, ...r, loginUrl: 'https://foodhubbie-admins.web.app' });
   } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('approve-onboarding failed', err);
     res.status(500).json({ error: `Approval failed — ${err.message}` });
   }
 });
+
+// ---- Auto-approval of website sign-ups --------------------------------------
+// New restaurants are created automatically (no manual review). The owner is
+// notified via an `inquiries` record (shows in Supreme > Notifications) and the
+// request appears as "approved" in Supreme > Onboarding. The new outlet stays
+// locked until the first wallet top-up is recorded, so spam only creates inert
+// records. Guards: ONBOARDING_AUTO_APPROVE=off disables it; AUTO_APPROVE_MAX_PER_HOUR
+// caps it (extra requests stay "pending" for manual review). Single-instance
+// assumption, same as status-watcher.js.
+const AUTO_APPROVE_ON = String(process.env.ONBOARDING_AUTO_APPROVE || 'on').toLowerCase() !== 'off';
+const AUTO_APPROVE_MAX_PER_HOUR = Number(process.env.AUTO_APPROVE_MAX_PER_HOUR || 20);
+const SECRET_RETRY_MS = [3000, 10000, 30000, 90000]; // step 2 (password) lands after step 1 (request)
+const _autoRecent = [];             // timestamps of recent auto-approvals
+const _autoSeen = new Set();        // reqKeys already handled in this process
+let _autoChain = Promise.resolve(); // serialise: outletCounter + duplicate-email checks must not race
+
+async function notifySupreme(title, message, extra = {}) {
+  try {
+    await admin.database().ref('inquiries').push({
+      name: title, phone: extra.phone || '', type: 'New restaurant signup', message,
+      store: extra.store || '', status: 'new', source: 'auto-onboarding', createdAt: Date.now(),
+    });
+  } catch (e) { console.warn('[auto-onboarding] notify failed (non-fatal):', e.message); }
+}
+
+async function autoApproveOne(reqKey, attempt = 0) {
+  const snap = await admin.database().ref(`onboardingRequests/${reqKey}`).get();
+  const r = snap.val();
+  if (!r || r.status !== 'pending' || r.source !== 'website') return;
+  const now = Date.now();
+  while (_autoRecent.length && now - _autoRecent[0] > 3600000) _autoRecent.shift();
+  if (_autoRecent.length >= AUTO_APPROVE_MAX_PER_HOUR) {
+    console.warn(`[auto-onboarding] hourly cap reached; ${reqKey} left pending for manual review`);
+    await notifySupreme('Signup needs manual review', `Auto-approval hourly cap (${AUTO_APPROVE_MAX_PER_HOUR}) reached. ${r.businessName} (${r.adminEmail}) is waiting in Onboarding.`, { phone: r.contactPhone, store: r.outletName });
+    return;
+  }
+  try {
+    const out = await approveOnboardingRequest(reqKey, r, 'auto-onboarding');
+    _autoRecent.push(Date.now());
+    await admin.database().ref(`onboardingRequests/${reqKey}`).update({ autoApproved: true });
+    await notifySupreme(`New restaurant: ${r.businessName}`, `${r.outletName} signed up (${r.adminEmail}) and was created automatically. It is locked until its first wallet top-up (min ₹1,000) is recorded.`, { phone: r.contactPhone, store: r.outletName });
+    console.log(`[auto-onboarding] approved ${reqKey} -> ${out.bid}/${out.oid}`);
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 422 && attempt < SECRET_RETRY_MS.length) {
+      setTimeout(() => { _autoChain = _autoChain.then(() => autoApproveOne(reqKey, attempt + 1)).catch(() => {}); }, SECRET_RETRY_MS[attempt]);
+      return;
+    }
+    if (err instanceof HttpError && err.status === 409 && /already exists/.test(err.message)) {
+      await admin.database().ref(`onboardingRequests/${reqKey}`).update({
+        status: 'rejected', rejectReason: 'This login email is already registered.', reviewedAt: Date.now(), reviewedBy: 'auto-onboarding',
+      }).catch(() => {});
+      return;
+    }
+    console.error(`[auto-onboarding] ${reqKey} left pending:`, err.message);
+    await notifySupreme('Signup needs manual review', `${r.businessName} (${r.adminEmail}) could not be auto-approved: ${err.message}`, { phone: r.contactPhone, store: r.outletName });
+  }
+}
+
+function startAutoApproval() {
+  if (!AUTO_APPROVE_ON) { console.log('[auto-onboarding] disabled (ONBOARDING_AUTO_APPROVE=off)'); return; }
+  admin.database().ref('onboardingRequests').orderByChild('status').equalTo('pending').on('child_added', (snap) => {
+    const key = snap.key;
+    if (_autoSeen.has(key)) return;
+    _autoSeen.add(key);
+    // small delay lets the browser's step-2 password write land first
+    setTimeout(() => { _autoChain = _autoChain.then(() => autoApproveOne(key)).catch((e) => console.error('[auto-onboarding]', e)); }, 2000);
+  }, (e) => console.error('[auto-onboarding] listener error:', e.message));
+  console.log(`[auto-onboarding] watching new sign-ups (cap ${AUTO_APPROVE_MAX_PER_HOUR}/hour)`);
+}
 
 app.post('/api/bot/stop/:bid/:oid', requireSuperOnly, async (req, res) => {
   try {
@@ -1175,6 +1259,7 @@ console.log(`[Auto-Settlement] Daily scheduler armed for ${SETTLEMENT_HOUR}:00 s
 
 app.listen(PORT, () => console.log(`Bot Control API listening on :${PORT}`));
 
+startAutoApproval();
 startStatusWatcher({ admin, processName, statusOf }).catch((err) => {
   console.error('Status watcher failed to start — bot status will not be real-time until this is fixed', err);
 });

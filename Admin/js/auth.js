@@ -299,7 +299,7 @@ export function initAuth() {
                     ]));
                     if (lockedSnap && lockedSnap.exists() && lockedSnap.val() === true) {
                         state.locked = true;
-                        import('./ui.js').then(u => u.showLockedScreen());
+                        import('./ui.js').then(u => u.enterSetupMode());
                     }
                 } catch (e) {
                     console.warn("[Auth] Locked check failed:", e?.message || e);
@@ -346,11 +346,12 @@ export function initAuth() {
                 _lockedUnsub = onValue(ref(db, `businesses/${bid}/outlets/${oid}/locked`), (snap) => {
                     if (snap.exists() && snap.val() === true) {
                         state.locked = true;
+                        import('./ui.js').then(u => u.enterSetupMode());
                     } else {
+                        const wasLocked = state.locked;
                         state.locked = false;
-                        // If the locked screen is showing, reload to clear it
-                        const lockedEl = document.getElementById('locked-screen');
-                        if (lockedEl) window.location.reload();
+                        // Unlocked while logged in (Supreme Admin recorded the top-up): reload so every tab re-initialises.
+                        if (wasLocked || document.getElementById('locked-banner') || document.getElementById('locked-screen')) window.location.reload();
                     }
                 });
             }

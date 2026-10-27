@@ -10,6 +10,31 @@ export const DEFAULT_RATES = { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other:
 export const PROMO_RATE = 1;
 export const FREE_PROMO_TOKENS = 15;
 export const COMMISSION_PCT = 0.01;
+// Minimum first wallet top-up before a restaurant goes live (paid to FoodHubbie directly by UPI/bank;
+// Supreme Admin records it under billing/payments).
+export const MIN_TOPUP = 1000;
+
+const _n = (x) => Number(x) || 0;
+const _r2 = (x) => Math.round(x * 100) / 100;
+
+/**
+ * Prepaid wallet view of the existing billing ledger.
+ * balance = paid - (order fees + promo sends + manual charges). Same numbers as Supreme's "due", sign flipped.
+ * `billing` = outlet.billing node, `orders` = all outlet orders, `campaigns` = bot.promotions.campaigns.
+ */
+export function computeWallet({ billing, orders, campaigns } = {}) {
+    const b = billing || {};
+    const rates = { ...DEFAULT_RATES, ...(b.rates || {}) };
+    const mode = b.mode === 'commission_1pct' ? 'commission_1pct' : 'per_order';
+    const idx = computeCostIndex(orders || {}, rates, mode);
+    let promoSent = 0;
+    for (const c of Object.values(campaigns || {})) promoSent += _n(c && c.totalSent);
+    const sum = (node) => Object.values(node || {}).reduce((a, x) => a + _n(x && x.amount), 0);
+    const paid = _r2(sum(b.payments));
+    const charges = _r2(sum(b.charges));
+    const used = _r2(idx.total + promoSent * PROMO_RATE);
+    return { paid, charges, used, balance: _r2(paid - used - charges), topUpDone: paid >= MIN_TOPUP, minTopUp: MIN_TOPUP };
+}
 
 const EXCLUDED = new Set(['Cancelled', 'Refunded']);
 
@@ -55,5 +80,14 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     assert.equal(legacy.total, 1, 'untagged dine-in → POS rate');
     assert.equal(PROMO_RATE, 1, 'promo ₹1/token');
     assert.equal(DEFAULT_RATES.WA, 5, 'WhatsApp order ₹5');
+    const w = computeWallet({
+        billing: { payments: { a: { amount: 1000 }, b: { amount: 500 } }, charges: { c: { amount: 200 } } },
+        orders: { a: o(100, 'QR'), b: o(100, 'POS'), c: o(100, 'QR', 'Cancelled') },
+        campaigns: { x: { totalSent: 10 } },
+    });
+    assert.equal(w.paid, 1500); assert.equal(w.used, 13, 'QR2 + POS1 + 10 promo'); assert.equal(w.charges, 200);
+    assert.equal(w.balance, 1287, 'paid - used - charges'); assert.equal(w.topUpDone, true);
+    assert.equal(computeWallet({ billing: { payments: { a: { amount: 999 } } } }).topUpDone, false, 'below minimum');
+    assert.equal(computeWallet({}).balance, 0, 'empty is zero');
     console.log('cost-math OK');
 }

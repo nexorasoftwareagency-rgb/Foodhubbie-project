@@ -89,7 +89,7 @@
     <a href="/" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;margin-bottom:28px">← Back to Home</a>
     <div class="kicker">New Restaurant Registration</div>
     <h1>Register Your Restaurant on FoodHubbie</h1>
-    <p class="sub">Fill in your details and our team will review your application. Once approved, you'll get access to your restaurant dashboard.</p>
+    <p class="sub">Fill in your details and we'll create your restaurant dashboard automatically. You can set up your menu and tables right away; to go live, add a minimum wallet balance of ₹1,000 by contacting us.</p>
   </div>
 </section>
 
@@ -181,13 +181,13 @@
     </label>
 
     <div class="form-status" id="formStatus" role="alert" aria-live="polite"></div>
-    <button type="submit" class="submit-btn" id="submitBtn">Submit Application</button>
+    <button type="submit" class="submit-btn" id="submitBtn">Register Restaurant</button>
   </div>
 
     <div class="success" id="successMsg" role="status" tabindex="-1">
-      ✅ <b>Application received!</b><br>
-      Our team will review your registration and contact you within 24 hours.<br>
-      Once approved, you can log in to your dashboard with the email and password you provided.
+      ✅ <b>Registration received!</b><br>
+      Your restaurant account is being created. In a few minutes you can log in to your dashboard with the email and password you chose.<br>
+      Set up your menu and tables first. To start taking orders, add a minimum wallet balance of ₹1,000 by contacting FoodHubbie support from the dashboard.
     </div>
   </form>
 </div>
@@ -358,7 +358,7 @@
       status.textContent = 'We could not submit your application. Your details are still filled in. Check your connection and press Submit again.';
       _submitting = false;
       btn.disabled = false;
-      btn.textContent = _reqKey ? 'Retry Submit' : 'Submit Application';
+      btn.textContent = _reqKey ? 'Retry Submit' : 'Register Restaurant';
       return false;
     }
 

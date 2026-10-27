@@ -15,8 +15,10 @@
  * Pure math lives in ../../shared/cost-math.js (node-runnable self-check).
  * ============================================================================
  */
-import { Outlet, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
-import { DEFAULT_RATES, PROMO_RATE, sourceOf, feeOf, computeCostIndex } from '../../shared/cost-math.js';
+import { Outlet, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
+import { state } from '../state.js';
+import { SUPPORT_WA } from '../ui.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet } from '../../shared/cost-math.js';
 
 let _unsubs = [];
 let _orders = {};
@@ -28,6 +30,8 @@ let _subtabsWired = false;
 let _rangeWired = false;
 let _range = null;           // { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
 let _orderUnsubs = [];
+let _allOrders = null;       // all-time orders (one-time read) for the wallet balance; null = not loaded
+let _walletWired = false;
 
 function _wireSubtabs() {
     if (_subtabsWired) return;
@@ -124,6 +128,7 @@ function _render() {
     const mode = _mode();
     const idx = computeCostIndex(_orders, rates, mode);
 
+    _renderWallet();
     _setText('costMonthLabel', _rangeLabel());
 
     const idxEl = document.getElementById('costKpiIndex');
@@ -264,11 +269,65 @@ function _render() {
     }
 }
 
+function _renderWallet() {
+    if (!document.getElementById('walletBalance')) return;
+    _setText('walletMinLabel', _inr(MIN_TOPUP));
+    if (_billing === false) {
+        _setText('walletBalance', '\u2014');
+        _setText('walletStatus', 'Wallet details are not available right now. Please try again or contact support.');
+        return;
+    }
+    if (_allOrders === false) {
+        // never show a balance computed without the usage side: it would be overstated
+        _setText('walletBalance', '\u2014');
+        _setText('walletStatus', 'Could not load your usage just now. Reload to see your balance.');
+        return;
+    }
+    if (_allOrders === null || _billing === null) { _setText('walletStatus', 'Calculating\u2026'); }
+    const w = computeWallet({ billing: _billing || {}, orders: _allOrders || {}, campaigns: _campaigns || {} });
+    const el = document.getElementById('walletBalance');
+    if (el) {
+        el.textContent = (w.balance < 0 ? '\u2212' : '') + _inr(Math.abs(w.balance));
+        el.style.color = w.balance < 0 ? '#dc2626' : '';
+    }
+    _setText('walletPaid', _inr(w.paid));
+    _setText('walletUsed', _inr(w.used));
+    _setText('walletCharges', _inr(w.charges));
+    if (_allOrders !== null && _billing !== null) {
+        let msg;
+        if (!w.topUpDone) msg = `Top up at least ${_inr(MIN_TOPUP)} to go live.`;
+        else if (state.locked) msg = 'Top-up received. Your restaurant is being switched live.';
+        else if (w.balance < 0) msg = 'Balance is negative. Please top up to avoid interruption.';
+        else msg = 'Your restaurant is live.';
+        _setText('walletStatus', msg);
+    }
+    const body = document.getElementById('walletHistoryBody');
+    if (body) {
+        const pays = Object.values((_billing && _billing.payments) || {})
+            .map(p => ({ ...p, ts: typeof p.createdAt === 'number' ? p.createdAt : Date.parse(p.createdAt) || 0 }))
+            .sort((a, b) => b.ts - a.ts);
+        const esc = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        body.innerHTML = pays.length ? pays.map(p => `<tr>
+            <td>${p.ts ? new Date(p.ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '\u2014'}</td>
+            <td>${esc(p.method || '\u2014')}</td>
+            <td>${esc(p.receiptNo || '\u2014')}</td>
+            <td>${_inr(p.amount)}</td>
+        </tr>`).join('') : '<tr><td colspan="4">No top-ups yet</td></tr>';
+    }
+}
+
+function _wireWallet() {
+    if (_walletWired) return;
+    _walletWired = true;
+    document.getElementById('walletContactBtn')?.addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+}
+
 export function loadCosts() {
     cleanupCosts();
     _wireSubtabs();
     _wireRange();
-    _billing = null; _campaigns = null;
+    _wireWallet();
+    _billing = null; _campaigns = null; _allOrders = null;
     _range = _range || _monthRange(0);
     _applyRange(_range);
 
@@ -277,6 +336,10 @@ export function loadCosts() {
         () => { _billing = false; _scheduleRender(); }));
     _unsubs.push(onValue(Outlet.ref('bot/promotions/campaigns'),
         s => { _campaigns = s.val(); _scheduleRender(); }, () => {}));
+
+    // All-time orders, read once per visit, so the wallet balance is lifetime paid minus lifetime usage.
+    get(Outlet.ref('orders')).then(snap => { _allOrders = snap.val() || {}; _scheduleRender(); })
+        .catch(() => { _allOrders = false; _scheduleRender(); }); // false = could not load
 
     _render();
 }
