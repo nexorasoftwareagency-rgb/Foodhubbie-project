@@ -709,3 +709,4 @@ All budget amounts in the system are stored and displayed in **Rupees (₹)**, n
 ---
 
 *End of Manual — Last updated: 2026-09-27 | Version 5.3.6*
+

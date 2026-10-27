@@ -112,3 +112,5 @@ Manual source of truth stays `docs/MANAGER-PIN-USER-MANUAL.md`, rendered to
   answer). Re-enable once from Settings ▸ Features if the ceiling/PIN/void-PIN gates are wanted back.
 - No production deploy in this pass (`firebase deploy --only hosting:admin` is a separate,
   deliberate step).
+
+

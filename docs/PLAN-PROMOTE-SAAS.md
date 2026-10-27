@@ -7,7 +7,7 @@ Canonical facts (must match the site, `shared/billing-defaults.js`, and the back
 - Flat per-order pricing, ₹1–5 per order; **₹500 one-time setup**; ₹1 per promotional message.
 - No commission on sales, no monthly lock-in, no hardware.
 - QR table ordering, KDS, POS, rider app with OTP handoff, WhatsApp ordering on the official API, inventory, reports, multi-outlet.
-- WhatsApp: +91 97246 49971 · site https://foodhubbie-web.web.app
+- WhatsApp: +91 97246 49971 · site https://foodhubbie.in
 
 ---
 
@@ -105,3 +105,5 @@ Definition of done for this plan: **5 paying outlets, 1 case study live, 2 chann
 2. Trial length and what it includes (today the site says "free trial" without a number — pick 14 days).
 3. Is ₹500 setup waivable as a launch offer for the first 10 outlets? It is the easiest objection to remove and the cheapest discount to give.
 4. Who sits with the trial outlet on Saturday? Without that, Phase 1 stalls at "signed up".
+
+

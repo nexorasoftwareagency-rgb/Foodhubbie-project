@@ -1,6 +1,6 @@
 # Backlink kit — copy-paste pack for listings (GBP / JustDial / IndiaMART)
 
-Goal: 3–5 real backlinks to https://foodhubbie-web.web.app/ . Each listing takes ~10 min.
+Goal: 3–5 real backlinks to https://foodhubbie.in/ . Each listing takes ~10 min.
 Do NOT spin up fake directory spam — one accurate profile per platform.
 
 ## Canonical facts (use verbatim everywhere — consistency = trust)
@@ -8,7 +8,7 @@ Do NOT spin up fake directory spam — one accurate profile per platform.
 - Business name: **FoodHubbie ERP**
 - Phone/WhatsApp: **+91 97246 49971**
 - Email: nileshshah84870@gmail.com
-- Website: https://foodhubbie-web.web.app/
+- Website: https://foodhubbie.in/
 - Category: Restaurant Management Software / POS Software / Food Delivery Software
 - Hours: Mon–Sun, 10:00–23:00 IST
 
@@ -19,7 +19,7 @@ ordering, kitchen display system, POS counter billing, delivery dispatch with ri
 OTP handoff, WhatsApp ordering on the official Meta API, promotions and discount engine,
 inventory, analytics and multi-outlet reporting — in one realtime dashboard. Flat per-order
 pricing (QR ₹2, POS ₹1, WhatsApp Official ₹5 or 1%), ₹500 one-time setup, no monthly
-lock-in. https://foodhubbie-web.web.app/
+lock-in. https://foodhubbie.in/
 
 ## Long description (JustDial / IndiaMART)
 
@@ -51,3 +51,5 @@ Management
 - Track: Google Search Console → Links → Top linking sites (needs Search Console access).
 - Priority order: Google Business Profile first (local pack + knowledge panel link), then
   JustDial, then IndiaMART.
+
+

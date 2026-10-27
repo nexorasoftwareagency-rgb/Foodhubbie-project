@@ -128,3 +128,5 @@ Stats row (placeholder): **[X]+ orders managed · [X]% fewer missed orders · [X
 - Copy is honest to shipped features (grep-verified against `Admin/js/features`, `menu/js`, `rider-app`). Nothing claimed that isn't in the codebase.
 - Placeholders to fill: owner testimonial, stat numbers, pricing, contact number/email.
 - Screenshots to add: customer menu on phone, KDS board, live delivery map, dashboard KPIs.
+
+

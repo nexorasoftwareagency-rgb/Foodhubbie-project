@@ -304,3 +304,4 @@ This release completes the **Critical & High severity fixes** from the comprehen
 **Live at:** `https://foodhubbie-admins.web.app`  
 **Project:** `foodhubbie-10` (Spark Plan)  
 **Next Review:** When Blaze plan approved
+

@@ -157,3 +157,5 @@ In `bot/index.js` `notifyCustomerApp` / order status listener:
 - [ ] Rating a delivered order saves 1–5★, one per order
 - [ ] Account tab shows tier badge, points, progress bar, total spent
 - [ ] Customer sees own rank #N
+
+

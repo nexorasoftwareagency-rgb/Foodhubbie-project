@@ -9,6 +9,10 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
+const { getBillingDefaults } = require(path.join(__dirname, '..', 'shared', 'billing-defaults.cjs'));
+
+const BILLING_DEFAULTS = getBillingDefaults();
+const EXPECTED_RATES = BILLING_DEFAULTS.rates;
 
 // CI: bot/node_modules is not installed and bot/service-account.json is
 // gitignored — the test self-skips there, runs fully in local/dev checkouts.
@@ -115,7 +119,7 @@ test.describe('wizard billing regression', () => {
       // The regression itself: stale monthly-plan model had none of this.
       expect(billing.monthlyRate).toBeUndefined();
       expect(billing.mode).toBe('per_order');
-      expect(billing.rates).toEqual({ QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1, commission1pct: 0.01 });
+      expect(billing.rates).toEqual(EXPECTED_RATES);
       expect(billing.setup).toMatchObject({ amount: 500, status: 'non_refundable' });
       expect(billing.tokens && billing.tokens.balance).toBe(15);
       expect(billing.tokenPacks && billing.tokenPacks.welcome && billing.tokenPacks.welcome.qty).toBe(15);

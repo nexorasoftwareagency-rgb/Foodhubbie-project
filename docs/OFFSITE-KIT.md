@@ -15,7 +15,7 @@ enforces the numbers (₹1–5 per order, ₹500 setup, one phone, one email) an
 | Field | Value |
 |---|---|
 | Brand | FoodHubbie ERP |
-| Website | https://foodhubbie-web.web.app/ |
+| Website | https://foodhubbie.in/ |
 | Phone / WhatsApp | +91 97246 49971 |
 | Email | nileshshah84870@gmail.com |
 | Category | Restaurant Management Software / POS Software |
@@ -108,7 +108,7 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 > month too.
 >
 > 32-second walkthrough of a real order flow:
-> https://foodhubbie-web.web.app?utm_source=linkedin&utm_medium=social&utm_campaign=linkedin-demo
+> https://foodhubbie.in?utm_source=linkedin&utm_medium=social&utm_campaign=linkedin-demo
 >
 > Free trial, no card. If you run a cafe or restaurant and want the numbers to match your
 > reality, message me on WhatsApp: +91 97246 49971.
@@ -118,12 +118,12 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 **A (cost angle)**
 > Most restaurant software charges per month whether you serve 20 plates or 200.
 > FoodHubbie ERP charges per order: ₹1 POS, ₹2 QR table, ₹5 WhatsApp, ₹500 setup, no monthly fee.
-> 32 sec: https://foodhubbie-web.web.app?utm_source=x&utm_medium=social&utm_campaign=x-cost
+> 32 sec: https://foodhubbie.in?utm_source=x&utm_medium=social&utm_campaign=x-cost
 
 **B (KDS angle)**
 > Paper KOTs lose orders. FoodHubbie ERP puts every order on a kitchen screen the moment it lands
 > — dine-in, QR or delivery — with the status visible to the counter and the owner.
-> https://foodhubbie-web.web.app/kds?utm_source=x&utm_medium=social&utm_campaign=x-kds
+> https://foodhubbie.in/kds?utm_source=x&utm_medium=social&utm_campaign=x-kds
 
 ### Instagram / Facebook caption
 
@@ -138,7 +138,7 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 - Description: `A full order flow in FoodHubbie ERP: a table QR order lands on the kitchen screen, the
   cashier bills the session, the rider takes it out with OTP handoff. Flat per-order pricing — ₹1 POS,
   ₹2 QR table, ₹5 WhatsApp order, ₹500 one-time setup, no monthly subscription. Free trial, no card:
-  https://foodhubbie-web.web.app?utm_source=youtube&utm_medium=social&utm_campaign=youtube-demo`
+  https://foodhubbie.in?utm_source=youtube&utm_medium=social&utm_campaign=youtube-demo`
 - Tags: restaurant software, QR code ordering, POS software India, kitchen display system, restaurant
   billing software, delivery rider management
 
@@ -197,3 +197,5 @@ one quote with a name and outlet.`
 6. **JustDial + IndiaMART** (Indian buyer intent, include phone + WhatsApp)
 7. **Review requests** to the first 3 real customers
 8. **Bing Webmaster Tools** — import from GSC, submit the same sitemap
+
+

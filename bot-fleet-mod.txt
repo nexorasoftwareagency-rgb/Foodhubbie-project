@@ -1,4 +1,4 @@
-﻿import { navigate, registerAction } from '/js/main.js';
+import { navigate, registerAction } from '/js/main.js';
 import { subscribe, flattenOutlets, isReadOnly } from '/js/data-store.js';
 import { exportXlsx, refreshIcons, isStale, escapeHtml, formatUptime, statusPillHtml, transportBadgeHtml, formatMemory, transportLabel } from '/js/utils.js';
 

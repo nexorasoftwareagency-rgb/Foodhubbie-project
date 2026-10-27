@@ -1,4 +1,4 @@
-# Prasant Pizza ERP — Architecture
+# Foodhubbie ERP — Architecture
 
 ```mermaid
 flowchart LR
@@ -52,3 +52,5 @@ flowchart LR
 
 ## Deployment
 `npm run build` then `firebase deploy --only hosting:admin` (per target), or all: `firebase deploy --only database,hosting`.
+
+

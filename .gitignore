@@ -39,7 +39,7 @@ SupremeAdmin/dist/
 .opencode/
 
 # Audit report
-roshani_pizza_admin_ui_audit.html
+foodhubbie_pizza_admin_ui_audit.html
 
 # OS artifacts
 .DS_Store
@@ -48,6 +48,9 @@ Desktop.ini
 
 # Playwright MCP snapshots
 .playwright-mcp/
+
+# Reference clones (read-only, never commit)
+reference/
 
 # Root screenshots
 *.png

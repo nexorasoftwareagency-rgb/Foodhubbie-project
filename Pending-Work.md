@@ -443,7 +443,7 @@ These are **real, actionable items** in THIS repo based on the audits.
 - **File:** `firebase.json` (website hosting target)
 - **Stage:** `done`
 - **Task:** Deployed website to `foodhubbie-web.web.app`
-- **Deployed:** https://foodhubbie-web.web.app
+- **Deployed:** https://foodhubbie.in
 
 ---
 

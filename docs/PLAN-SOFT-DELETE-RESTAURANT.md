@@ -115,3 +115,4 @@ Cancellations by riders/admins remain permitted (their clauses are auth-gated, n
 
 - Permanent hard-delete (full `remove()` of business/outlet). Would be a separate, super-only, typed-confirm action.
 - Disabling whole business (per-outlet chosen).
+

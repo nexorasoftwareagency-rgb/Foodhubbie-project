@@ -71,3 +71,5 @@ Menu / bot / Admin Costs UI: untouched.
 8. Full builds (`--admin --supreme`) + `node --check` all
 9. Deploy: `database`, `hosting:admin`, `hosting:supreme`
 10. E2E (temp super: list parity with Admin Costs KPI · record in tab · record in profile · monthly/yearly/custom scopes correct · receipt prints · live +₹2 on test QR order · cleanup) → screenshots → `PROJECT_LEDGER.md`
+
+

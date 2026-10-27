@@ -190,3 +190,4 @@ Phase 1 alone delivers the headline ask ("run, create, connect each restaurant's
 - `META_SYSTEM_USER_TOKEN` is a **system user token** (long-lived), not the app token; needs the two `whatsapp_business_*` scopes. It also powers quota (already reads it).
 - PM2 `pm2.save` must run after `start` so workers survive reboot (the `bot-control-api` app already uses `pm2-ubuntu.service`).
 - Provisioned apps run on the shared EC2 box — watch memory; one worker per outlet is the model, alerting already exists via `status-watcher`.
+

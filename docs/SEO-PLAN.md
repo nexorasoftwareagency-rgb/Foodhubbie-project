@@ -134,3 +134,5 @@ and bulk sending on those connections is the fastest way to get a number restric
 ## Parked (explicitly skipped for now)
 - GBP video verification — user does it manually; profile is live & complete (see PROJECT_LEDGER.md 2026-10-17 entry).
 - Paid keyword tools — free methods only until traffic justifies them.
+
+

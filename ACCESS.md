@@ -33,7 +33,7 @@
 | menu | `foodhubbie-qrmenu` | https://foodhubbie-qrmenu.web.app | 2026-09-10 |
 | supreme | `foodhubbie-supremeadmin` | https://foodhubbie-supremeadmin.web.app | 2026-09-10 |
 | assets | `foodhubbie-assets` | https://foodhubbie-assets.web.app | 2026-09-10 |
-| website | `foodhubbie-web` | https://foodhubbie-web.web.app | 2026-09-10 |
+| website | `foodhubbie-web` | https://foodhubbie.in | 2026-09-10 |
 | delivery | `foodhubbie-delivery` | https://foodhubbie-delivery.web.app | 2026-08-12 ⚠️ STALE |
 
 ### Default Hosting

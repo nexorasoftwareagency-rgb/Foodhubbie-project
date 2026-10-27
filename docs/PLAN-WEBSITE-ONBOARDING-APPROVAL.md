@@ -374,3 +374,5 @@ Body: { reqKey, businessName, outletName, contactPhone, contactEmail, adminEmail
 - Multi-outlet signup from one form
 - Auto-approve for trusted domains
 - Bot health monitoring dashboard
+
+

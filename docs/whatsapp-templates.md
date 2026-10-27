@@ -213,3 +213,5 @@ free-form text inside the 24h window instead.
 - Same-name create is blocked (`100/2388024`); edit an existing template with `POST /{template-id}` sending `components` only (`PUT` unsupported).
 - Hinglish shells use `language: en` (romanized Latin; `hi` means Devanagari) and carry a single `{{1}}`, so `bot/transport.js` `sendTemplate` maps `body` -> `{{1}}` unchanged.
 - Promos are hard-blocked on Baileys transport, so these MARKETING shells only deliver once an outlet flips to `meta`.
+
+

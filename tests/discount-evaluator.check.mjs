@@ -14,6 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
+import { resolve } from 'node:path';
 
 const DISCOUNTS = {
     cat1: {
@@ -43,6 +44,14 @@ const { outputFiles } = await build({
         setup(b) {
             b.onResolve({ filter: /firebase\.js$/ }, () => ({ path: 'stub', namespace: 'fb' }));
             b.onLoad({ filter: /^stub$/, namespace: 'fb' }, () => ({ contents: FIREBASE_STUB, loader: 'js' }));
+            // shared/* imports are runtime-URL-relative in production (build.mjs
+            // does not bundle — it minifies per-file and copies repo-root shared/
+            // to dist/shared, where the browser resolves ../../shared/* against
+            // /js/features/*). Bundling HERE needs the real file, so map the
+            // repo-root copy explicitly.
+            b.onResolve({ filter: /shared\/.+\.js$/ }, (args) => ({
+                path: resolve(process.cwd(), args.path.replace(/^(\.\.\/)+/, '')),
+            }));
         },
     }],
 });
