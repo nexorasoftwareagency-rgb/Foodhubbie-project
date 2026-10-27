@@ -18,7 +18,10 @@ const ROOTS = [
   'bot',
   'bot-control-api',
 ];
-const EXTS = /\.(js|mjs|html|css|txt|json)$/;
+// .cjs/.ts/.tsx/.jsx were missing, so the 2026-10-26 sweep left 12 corrupted
+// rider-app/src/*.ts(x) files in the tree while this guard reported clean
+// (the cp1252 round-trip produced printable chars in them, not C1 controls).
+const EXTS = /\.(js|mjs|cjs|ts|tsx|jsx|html|css|txt|json)$/;
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage']);
 
 // Sequences that only exist when UTF-8 bytes were decoded as cp1252.
