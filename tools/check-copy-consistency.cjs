@@ -67,18 +67,25 @@ for (const f of CANON_FILES) {
 
 // Every page that declares a canonical must be in the sitemap; sitemap must not list a
 // missing page. Pages without a canonical (404, GSC verification token) are not indexable.
+// ORIGIN: migrated 2026-10-26 — canonical is the apex (www 301s here); was foodhubbie-web.web.app.
+const ORIGIN = 'https://foodhubbie.in';
 const sitemap = fs.readFileSync(`${SITE}/sitemap.xml`, 'utf8');
 const locs = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(m => m[1]);
-const listed = new Set(locs.map(u => u.replace('https://foodhubbie-web.web.app/', '').replace(/\/$/, '')));
+const listed = new Set(locs.map(u => u.replace(ORIGIN, '').replace(/^\//, '').replace(/\/$/, '')));
 for (const f of html) {
   const c = fs.readFileSync(`${SITE}/${f}`, 'utf8');
-  const canon = c.match(/<link rel="canonical" href="https:\/\/foodhubbie-web\.web\.app\/(.*?)"/);
+  const canon = c.match(/<link rel="canonical" href="https:\/\/foodhubbie\.in\/(.*?)"/);
   if (!canon) continue;
   const slug = canon[1].replace(/\/$/, '');
   if (!listed.has(slug)) fail(`${SITE}/sitemap.xml`, `missing page ${slug}`);
 }
 for (const slug of listed) {
-  if (slug && !fs.existsSync(`${SITE}/${slug}.html`)) fail(`${SITE}/sitemap.xml`, `lists missing page ${slug}`);
+  if (slug && !fs.existsSync(`${SITE}/${slug}.html`) && !fs.existsSync(`${SITE}/${slug}/index.html`)) {
+    // /demo is generated from Admin/dist by tools/build-demo-site.mjs and is
+    // gitignored, so a fresh clone has nothing to stat; tools/check-demo-nav.cjs
+    // proves the built mirror exists and is current.
+    if (slug !== 'demo') fail(`${SITE}/sitemap.xml`, `lists missing page ${slug}`);
+  }
 }
 
 // FAQPage structured data must repeat the visible <details> copy verbatim - Google requires
@@ -102,7 +109,7 @@ for (const f of html) site[f] = fs.readFileSync(`${SITE}/${f}`, 'utf8');
 const titles = new Map(), descs = new Map();
 for (const f of html) {
   const c = site[f];
-  const canon = c.match(/<link rel="canonical" href="https:\/\/foodhubbie-web\.web\.app\/(.*?)"/);
+  const canon = c.match(/<link rel="canonical" href="https:\/\/foodhubbie\.in\/(.*?)"/);
   if (!canon) continue; // 404 + GSC verification token are not indexable pages
   const t = (c.match(/<title>(.*?)<\/title>/s) || [])[1] || '';
   const d = (c.match(/<meta name="description" content="(.*?)"/s) || [])[1] || '';
