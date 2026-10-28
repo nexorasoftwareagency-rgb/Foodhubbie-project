@@ -182,7 +182,7 @@ function renderTierRow(tk, tiers) {
         <td class="mob-th-center">
             <input type="number" min="0.1" step="0.05" data-field="mult" data-tier="${escapeHtml(tk)}"
                 value="${Number(td.multiplier || 1).toFixed(2)}" class="mob-input-tier" ${disabled}>
-            <div class="mob-td-sub">points earned per ?100</div>
+            <div class="mob-td-sub">points earned per ₹100</div>
         </td>
     </tr>`;
 }
@@ -258,7 +258,7 @@ function renderConfigForm() {
         <div class="mob-section-head-row">
             <h3 class="mob-card-title">Configure the program</h3>
             <p class="mob-td-sub" style="margin-left:auto;max-width:420px;color:var(--mob-sub);">
-                Customers earn <b>${ptsPer100(c)} points per ?100 spent</b> (${money(c.earnRatePaisePerPoint / 100)} spent per point).
+                Customers earn <b>${ptsPer100(c)} points per ₹100 spent</b> (${money(c.earnRatePaisePerPoint / 100)} spent per point).
                 Points redeem at <b>${money(redeemRs)} per point</b> as payment tender on delivery checkout.
             </p>
         </div>
@@ -606,7 +606,7 @@ function renderAll() {
                 </div>
                 <div style="display:flex;flex-direction:column;gap:2px;">
                     <span class="mob-td-sub">Earn rate</span>
-                    <span class="mob-td-strong">${ptsPer100(_config)} points per ?100</span>
+                    <span class="mob-td-strong">${ptsPer100(_config)} points per ₹100</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:2px;">
                     <span class="mob-td-sub">Rewards in catalog</span>
@@ -644,6 +644,8 @@ function renderAll() {
 // Deferred form listeners (attached after render so inputs exist)
 function attachFormListeners() {
     if (_formListenersAttached) return;
+    const container = document.getElementById('loyaltyApp');
+    if (!container) return;
     _formListenersAttached = true;
     container.addEventListener('click', async (e) => {
         const btn = e.target.closest('button[data-action]');

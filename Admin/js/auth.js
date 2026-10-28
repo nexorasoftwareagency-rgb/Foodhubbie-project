@@ -166,7 +166,7 @@ export function initAuth() {
                                 console.log("[Auth] Bootstrapped missing role from staff:", adminData.role, "outlet:", oid);
                                 
                                 // Write role back to admin node so fcmToken and future writes work
-                                await update(ref(db, `admins/${user.uid}`), { email: user.email, role: rec.role, outlet: oid })
+                                await update(ref(db, `admins/${user.uid}`), { email: user.email, role: rec.role, outlet: oid, businessId: bid })
                                     .catch(e => console.warn("[Auth] Failed to write bootstrapped role:", e));
                                 break;
                             }
@@ -189,6 +189,7 @@ export function initAuth() {
                             adminData = {
                                 email: user.email,
                                 outlet: oid,
+                                businessId: bid,
                                 name: rec.displayName || user.email,
                                 role: rec.role,
                                 uid: user.uid,
@@ -454,10 +455,13 @@ export function initAuth() {
             const adminNode = {
                 email: user.email,
                 outlet: adminData.outlet || 'pizza',
+                businessId: adminData.businessId || BUSINESS_BY_OUTLET[adminData.outlet] || undefined,
                 name: adminData.name || adminData.email || user.email,
                 role: adminData.role || 'Admin',
                 fcmToken: ''
             };
+            // undefined would be dropped by the SDK; keep the node valid JSON
+            if (!adminNode.businessId) delete adminNode.businessId;
             if (adminData.isSuper) adminNode.isSuper = true;
             if (adminData.isSupreme) adminNode.isSupreme = true;
             set(ref(db, `admins/${user.uid}`), adminNode).catch(e => console.warn('[Auth] Failed to create admin node:', e));

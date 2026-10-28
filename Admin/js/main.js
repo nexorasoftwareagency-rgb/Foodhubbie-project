@@ -6,6 +6,7 @@ import { switchOutlet, openOutletInNewTab } from './branding.js';
 import { switchTab, toggleSidebar, toggleMobileCart, loadLucide } from './ui.js';
 import { initGestures } from './gestures.js';
 import { initAuth, userLogout } from './auth.js';
+import { initDemoMode } from './demo-mode.js';
 import { installPWA, completeSiteRefresh } from './pwa.js';
 import { logger } from './utils/logger.js';
 
@@ -537,7 +538,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    const demoMode = await initDemoMode();
     initAuth();
+    if (demoMode) console.log('[Demo] live demo mode active');
     (await useMod('rider-analytics')).initRiderAnalytics();
     (await useMod('inventory')).initInventory();
 
@@ -891,7 +894,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // cleanup handled by visibilitychange in individual modules
     });
 
-    pruneOldLogs();
+    // ponytail: audit log is super/supreme-readable only (cross-tenant leak fix);
+    // everyone else would just burn a denied read + a warn, so only supers prune.
+    if (state.adminData?.isSuper || state.adminData?.isSupreme) pruneOldLogs();
 
     // Bot status on the dashboard widget
     window.addEventListener('botStatusChange', (e) => {

@@ -6,6 +6,14 @@
 const _toastMap = {};
 
 export const showToast = (message, type = 'success', durationMs = 3000, id = null) => {
+    // Demo mode: every write is denied by the rules layer. A control action that
+    // slipped past the click gate should surface the spec restriction modal, not
+    // a raw PERMISSION_DENIED toast.
+    if (window.__demoMode && type === 'error' && /permission[_ ]denied/i.test(String(message || ''))) {
+        import('./demo/restrict.js').then(m => m.restrict()).catch(() => {});
+        return id;
+    }
+
     const container = document.getElementById('alertContainer');
     if (!container) return;
 

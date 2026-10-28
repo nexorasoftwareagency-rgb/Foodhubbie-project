@@ -15,10 +15,43 @@ export const RESTRICT_BUTTON = 'Got it';
 let _lastTrigger = null;
 let _bound = false;
 
+/**
+ * The static replica (/demo/tour) carries these rules inline in its own HTML.
+ * The live dashboard has no such block, so the modal brings its own — the copy
+ * is kept identical to `Admin/demo.html` apart from the z-index (the ERP stacks
+ * drawers/sidebars at 5000+ and its own modals at 10000+).
+ */
+const MODAL_CSS = `
+.demo-modal{position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;padding:18px}
+.demo-modal.is-open{display:flex}
+.demo-modal__backdrop{position:absolute;inset:0;background:rgba(15,23,42,.55);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+.demo-modal__box{position:relative;width:min(460px,100%);background:#fff;border-radius:20px;padding:26px 24px 22px;
+  box-shadow:0 40px 90px -40px rgba(15,23,42,.8);text-align:center;animation:demoPop .18s ease-out}
+@keyframes demoPop{from{transform:translateY(8px) scale(.985);opacity:.6}to{transform:none;opacity:1}}
+.demo-modal__icon{width:48px;height:48px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;
+  border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;color:var(--primary-dark,#c43d00)}
+.demo-modal__icon i{width:24px;height:24px}
+.demo-modal__title{margin:0 0 10px;font-size:17px;font-weight:800;letter-spacing:-.3px;color:#0f172a}
+.demo-modal__text{margin:0;font-size:13px;line-height:1.6;color:var(--text-secondary,#475569)}
+.demo-modal__feature{margin:12px 0 0;font-size:11.5px;font-weight:600;color:var(--text-tertiary,#94a3b8);
+  background:#f8fafc;border:1px dashed rgba(15,23,42,.08);border-radius:9px;padding:6px 10px}
+.demo-modal__btn{margin-top:18px;width:100%;justify-content:center}
+body.demo-modal-open{overflow:hidden}
+`;
+
+function ensureStyles() {
+    if (document.getElementById('demoModalStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'demoModalStyles';
+    style.textContent = MODAL_CSS;
+    document.head.appendChild(style);
+}
+
 function ensureModal() {
     let modal = document.getElementById('demoRestrictModal');
     if (modal) return modal;
 
+    ensureStyles();
     modal = document.createElement('div');
     modal.id = 'demoRestrictModal';
     modal.className = 'demo-modal';

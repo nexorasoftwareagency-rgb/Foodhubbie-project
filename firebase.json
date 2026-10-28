@@ -38,7 +38,7 @@
       ],
       "rewrites": [
         {
-          "source": "/demo",
+          "source": "/demo/tour",
           "destination": "/demo.html"
         },
         {
@@ -173,7 +173,7 @@
           ]
         },
         {
-          "regex": "^/(demo|demo\\.html)$",
+          "regex": "^/demo(\\.html|/tour)$",
           "headers": [
             {
               "key": "Cache-Control",
@@ -478,9 +478,21 @@
         "**/node_modules/**"
       ],
       "cleanUrls": true,
-      "rewrites": [
+      "redirects": [
         {
           "source": "/demo",
+          "destination": "https://foodhubbie-admins.web.app/demo",
+          "type": 302
+        },
+        {
+          "source": "/demo/",
+          "destination": "https://foodhubbie-admins.web.app/demo",
+          "type": 302
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/demo/tour",
           "destination": "/demo/index.html"
         }
       ],

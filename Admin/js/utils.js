@@ -190,6 +190,8 @@ export const standardizeOrderData = (o) => {
 };
 
 export const logAudit = async (action, details = {}) => {
+    // Demo mode: logs/audit writes are denied for the demo admin by design.
+    if (window.__demoMode) return;
     try {
         const user = auth.currentUser;
         const auditRef = push(Outlet.ref('logs/audit'));
