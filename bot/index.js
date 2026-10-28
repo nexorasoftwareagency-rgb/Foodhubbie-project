@@ -937,9 +937,9 @@ async function sendFCMToAdmins(orderId, order) {
     }
 }
 
-async function sendFCMToRider(riderId, title, body, data = {}) {
+async function sendFCMToRider(riderId, title, body, data = {}, outlet = 'pizza') {
     try {
-        const snap = await db.ref(`riders/${riderId}/fcmToken`).once('value');
+        const snap = await db.ref(resolvePath(`riders/${riderId}/fcmToken`, outlet)).once('value');
         const token = snap.val();
         if (!token) return;
         await admin.messaging().send({
@@ -2948,7 +2948,7 @@ function initFCMWatcher() {
         riderUid = rider?.uid || riderUid;
       }
       if (riderUid) {
-        sendFCMToRider(riderUid, 'New Order Assigned!', `Order #${formatOrderId(after.orderId || orderId)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: '/active' });
+        sendFCMToRider(riderUid, 'New Order Assigned!', `Order #${formatOrderId(after.orderId || orderId)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: '/active' }, botOutlet);
       }
     } else if (after.riderId && after.status && after.status !== before.status) {
       const s = String(after.status).toLowerCase();
@@ -2961,9 +2961,9 @@ function initFCMWatcher() {
         riderUid = rider?.uid || riderUid;
       }
       if (['ready', 'packed', 'cooked'].includes(s)) {
-        if (riderUid) sendFCMToRider(riderUid, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} is ready for pickup!`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
+        if (riderUid) sendFCMToRider(riderUid, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} is ready for pickup!`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status }, botOutlet);
       } else if (s === 'cancelled') {
-        if (riderUid) sendFCMToRider(riderUid, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} has been cancelled.`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status });
+        if (riderUid) sendFCMToRider(riderUid, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} has been cancelled.`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status }, botOutlet);
       }
     }
   });

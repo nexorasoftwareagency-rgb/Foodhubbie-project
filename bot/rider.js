@@ -133,11 +133,11 @@ async function broadcastPickupAvailable(sock, orderId, order, getData, addInAppN
         const outlet = order.outlet || 'pizza';
         const riders = await getData("riders", outlet) || {};
 
-        // `riders` is a platform-wide root node (resolvePath treats it as
-        // shared), so getData returns EVERY restaurant's riders here — outlet
-        // scoping has to happen in this filter or a pizza order broadcasts to
-        // cake riders. A rider without an outlet field is skipped, never
-        // broadcast to: fail closed (Phase 5 runtime test found this leak).
+        // `riders` is now outlet-scoped (businesses/{bid}/outlets/{outlet}/riders),
+        // so getData already returns only this outlet's riders. The outlet field
+        // filter below is kept as belt-and-braces for legacy records written
+        // before the move: a rider without a matching outlet field is skipped,
+        // never broadcast to (fail closed).
         const businessId = order.businessId || resolveBusinessIdFor(outlet);
         let otherOutlet = 0;
 

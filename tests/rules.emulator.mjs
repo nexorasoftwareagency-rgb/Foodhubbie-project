@@ -52,15 +52,15 @@ const OUT = '/businesses/b1/outlets/pizza';
 const CUST = `${OUT}/customers/9876543210`;
 
 const cases = [
-  ['rider acks own existing settlement', () => call('PUT', '/settlements/RIDER1/S1/riderAck', RIDER, ack), 200],
-  ['rider acks with serverTimestamp', () => call('PUT', '/settlements/RIDER1/S1/riderAck', RIDER, { ...ack, acknowledgedAt: { '.sv': 'timestamp' } }), 200],
-  ['rider edits own amountCollected', () => call('PATCH', '/settlements/RIDER1/S1', RIDER, { amountCollected: 999999 }), 'deny'],
-  ['rider acks another rider settlement', () => call('PUT', '/settlements/RIDER2/S1/riderAck', RIDER, { ...ack, riderUid: 'RIDER2' }), 'deny'],
-  ['rider acks non-existent settlement', () => call('PUT', '/settlements/RIDER1/NEW/riderAck', RIDER, { ...ack, settlementId: 'NEW' }), 'deny'],
-  ['rider ack with extra child', () => call('PUT', '/settlements/RIDER1/S1/riderAck', RIDER, { ...ack, extra: 1 }), 'deny'],
-  ['rider ack claiming another riderUid', () => call('PUT', '/settlements/RIDER2/S1/riderAck', OTHER, ack), 'deny'],
-  ['admin writes settlement', () => call('PUT', '/settlements/RIDER1/S1', ADMIN, { riderId: 'RIDER1', amountCollected: 5000 }), 200],
-  ['admin deletes settlement', () => call('DELETE', '/settlements/RIDER1/S1', ADMIN), 200],
+  ['rider acks own existing settlement', () => call('PUT', `${OUT}/settlements/RIDER1/S1/riderAck`, RIDER, ack), 200],
+  ['rider acks with serverTimestamp', () => call('PUT', `${OUT}/settlements/RIDER1/S1/riderAck`, RIDER, { ...ack, acknowledgedAt: { '.sv': 'timestamp' } }), 200],
+  ['rider edits own amountCollected', () => call('PATCH', `${OUT}/settlements/RIDER1/S1`, RIDER, { amountCollected: 999999 }), 'deny'],
+  ['rider acks another rider settlement', () => call('PUT', `${OUT}/settlements/RIDER2/S1/riderAck`, RIDER, { ...ack, riderUid: 'RIDER2' }), 'deny'],
+  ['rider acks non-existent settlement', () => call('PUT', `${OUT}/settlements/RIDER1/NEW/riderAck`, RIDER, { ...ack, settlementId: 'NEW' }), 'deny'],
+  ['rider ack with extra child', () => call('PUT', `${OUT}/settlements/RIDER1/S1/riderAck`, RIDER, { ...ack, extra: 1 }), 'deny'],
+  ['rider ack claiming another riderUid', () => call('PUT', `${OUT}/settlements/RIDER2/S1/riderAck`, OTHER, ack), 'deny'],
+  ['admin writes settlement', () => call('PUT', `${OUT}/settlements/RIDER1/S1`, ADMIN, { riderId: 'RIDER1', amountCollected: 5000 }), 200],
+  ['admin deletes settlement', () => call('DELETE', `${OUT}/settlements/RIDER1/S1`, ADMIN), 200],
   ['rider raises own SOS', () => call('PUT', '/sosAlerts/RIDER1/A2', RIDER, sos), 200],
   ['rider resolves own SOS', () => call('PATCH', '/sosAlerts/RIDER1/A1', RIDER, { status: 'resolved', resolvedAt: 5 }), 200],
   ['SOS riderId mismatch', () => call('PUT', '/sosAlerts/RIDER1/A3', RIDER, { ...sos, riderId: 'RIDER2' }), 'deny'],
@@ -68,7 +68,7 @@ const cases = [
   ['SOS bad status value', () => call('PUT', '/sosAlerts/RIDER1/A5', RIDER, { ...sos, status: 'weird' }), 'deny'],
   ['non-admin writes rating', () => call('PUT', '/ratings/RIDER1/O1', OTHER, { riderId: 'RIDER1', rating: 5, createdAt: 1 }), 'deny'],
   ['admin writes rating', () => call('PUT', '/ratings/RIDER1/O2', ADMIN, { riderId: 'RIDER1', rating: 5, createdAt: 1 }), 200],
-  ['unauthenticated write control', () => call('PUT', '/settlements/RIDER1/S1/x', null, 1), 'deny'],
+  ['unauthenticated write control', () => call('PUT', `${OUT}/settlements/RIDER1/S1/x`, null, 1), 'deny'],
   ['redeem request accepted from the public', () => call('PUT', `${OUT}/bot/redeemQueue/req-1`, null, { phone: '9876543210', rewardId: 'free_fries', requestedAt: 1, outlet: 'pizza' }), 200],
   ['redeem request with a bad phone', () => call('PUT', `${OUT}/bot/redeemQueue/req-2`, null, { phone: '123', rewardId: 'free_fries', requestedAt: 1, outlet: 'pizza' }), 'deny'],
   ['redeem request for another outlet', () => call('PUT', `${OUT}/bot/redeemQueue/req-3`, null, { phone: '9876543210', rewardId: 'free_fries', requestedAt: 1, outlet: 'cake' }), 'deny'],
@@ -79,12 +79,12 @@ const cases = [
 
 await seed({
   admins: { ADMIN1: { email: 'a@b.c', outlet: 'pizza' } },
-  settlements: { RIDER1: { S1: { riderId: 'RIDER1', amountCollected: 5000, createdAt: 1 } } },
   sosAlerts: { RIDER1: { A1: { riderId: 'RIDER1', riderName: 'R', lat: 1, lng: 2, ts: 3, status: 'active' } } },
   businesses: {
     b1: {
       outlets: {
         pizza: {
+          settlements: { RIDER1: { S1: { riderId: 'RIDER1', amountCollected: 5000, createdAt: 1 } } },
           loyalty: { config: { earnRatePaisePerPoint: 2000, tiers: { bronze: { min: 0 }, silver: { min: 500 }, gold: { min: 1000 } }, rewards: [{ id: 'free_fries', label: 'Free Fries', cost: 200 }] } },
           customers: { 9876543210: { loyalty: { phone: '9876543210', outlet: 'pizza', business: 'b1', lifetimePoints: 500, pointsSpent: 100, totalSpent: 1, orderCount: 1, tier: 'silver', updatedAt: 1 } } }
         }

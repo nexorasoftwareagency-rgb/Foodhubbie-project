@@ -46,7 +46,7 @@ function resolvePath(path, outlet = 'pizza') {
     if (!path) return '';
 
     // Platform-level nodes that remain at root (NOT tenant-scoped)
-    const shared = ['admins', 'riders', 'riderStats', 'migrationStatus', 'logs', 'settlements', 'phoneNumberIndex'];
+    const shared = ['admins', 'migrationStatus', 'logs', 'phoneNumberIndex'];
     const rootNode = path.split('/')[0];
 
     // Already multi-tenant absolute or platform node — return as is

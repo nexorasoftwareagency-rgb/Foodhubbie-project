@@ -24,13 +24,13 @@ export function subscribeSettlements(
 }
 
 /** Rider confirms they received the cash for a settlement. Writes
- *  `settlements/${uid}/${settlementId}/riderAck` so the admin can see it was received. */
+ *  `<outlet>/settlements/${uid}/${settlementId}/riderAck` so the admin can see it was received. */
 export async function acknowledgeSettlement(params: {
   uid: string;
   settlementId: string;
 }): Promise<void> {
   const { uid, settlementId } = params;
-  const ackRef = ref(db, `settlements/${uid}/${settlementId}/riderAck`);
+  const ackRef = ref(db, dbPaths.settlementAck(uid, settlementId));
   await update(ackRef, {
     settlementId,
     acknowledged: true,

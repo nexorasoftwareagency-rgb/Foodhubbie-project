@@ -2,6 +2,7 @@
 // Emergency SOS — one-tap alert to the rider's emergency contact with live
 // location, logged to Firebase for audit.
 import { db, ref, set, push, update } from "@/lib/firebase";
+import { dbPaths } from "@/lib/constants";
 import type { EmergencyContact } from "@/types";
 
 export type SOSEvent = {
@@ -20,7 +21,7 @@ export async function saveEmergencyContact(params: {
   contact: EmergencyContact;
 }): Promise<void> {
   const { uid, contact } = params;
-  await update(ref(db, `riders/${uid}/emergencyContact`), contact);
+  await update(ref(db, `${dbPaths.rider(uid)}/emergencyContact`), contact);
 }
 
 export async function triggerSOS(params: {

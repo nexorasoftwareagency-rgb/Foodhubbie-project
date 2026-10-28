@@ -68,13 +68,27 @@ export function tenantPathSync(outlet: OutletId, path: string): string {
   return `businesses/${bid}/outlets/${outlet}/${path}`;
 }
 
+/** Current rider's outlet — set once by resolveRiderScope() before any rider path is built. */
+let currentRiderOutlet: OutletId | null = null;
+
+export function setRiderOutlet(outlet: OutletId): void {
+  currentRiderOutlet = outlet;
+}
+
+export function getCurrentRiderOutlet(): OutletId {
+  if (!currentRiderOutlet) {
+    throw new Error("Rider outlet not resolved yet — call resolveRiderScope() first.");
+  }
+  return currentRiderOutlet;
+}
+
 /** Async path helpers — use during app initialization. */
 export const dbPathsAsync = {
-  rider: (rId: string) => `riders/${rId}`,
-  riderNotifs: (rId: string) => `riders/${rId}/notifications`,
-  riderLocation: (rId: string) => `riders/${rId}/location`,
-  /** Global rider stats (NOT per-outlet) — matches Admin's global riderStats node. */
-  riderStats: async (_outlet: OutletId, rId: string) => `riderStats/${rId}`,
+  rider: async (rId: string) => tenantPathAsync(getCurrentRiderOutlet(), `riders/${rId}`),
+  riderNotifs: async (rId: string) => tenantPathAsync(getCurrentRiderOutlet(), `riders/${rId}/notifications`),
+  riderLocation: async (rId: string) => tenantPathAsync(getCurrentRiderOutlet(), `riders/${rId}/location`),
+  /** Outlet-scoped rider stats — mirrors Admin's Outlet.ref('riderStats'). */
+  riderStats: async (_outlet: OutletId, rId: string) => tenantPathAsync(getCurrentRiderOutlet(), `riderStats/${rId}`),
   orders: async (outlet: OutletId) => {
     const bid = await resolveBusinessIdForOutlet(outlet);
     return `businesses/${bid}/outlets/${outlet}/orders`;
@@ -95,23 +109,24 @@ export const dbPathsAsync = {
     const bid = await resolveBusinessIdForOutlet(outlet);
     return `businesses/${bid}/outlets/${outlet}/otpAttempts/${orderId}`;
   },
-  settlements: (rId: string) => `settlements/${rId}`,
+  settlements: async (rId: string) => tenantPathAsync(getCurrentRiderOutlet(), `settlements/${rId}`),
   riderErrors: (rId: string) => `logs/riderErrors/${rId}`,
 };
 
 /** Sync path helpers — use AFTER RiderContext initializes cache. */
 export const dbPaths = {
-  rider: (rId: string) => `riders/${rId}`,
-  riderNotifs: (rId: string) => `riders/${rId}/notifications`,
-  riderLocation: (rId: string) => `riders/${rId}/location`,
-  /** Global rider stats (NOT per-outlet) — matches Admin's global riderStats node. */
-  riderStats: (rId: string) => `riderStats/${rId}`,
+  rider: (rId: string) => tenantPathSync(getCurrentRiderOutlet(), `riders/${rId}`),
+  riderNotifs: (rId: string) => tenantPathSync(getCurrentRiderOutlet(), `riders/${rId}/notifications`),
+  riderLocation: (rId: string) => tenantPathSync(getCurrentRiderOutlet(), `riders/${rId}/location`),
+  /** Outlet-scoped rider stats — mirrors Admin's Outlet.ref('riderStats'). */
+  riderStats: (rId: string) => tenantPathSync(getCurrentRiderOutlet(), `riderStats/${rId}`),
   orders: (outlet: OutletId) => `businesses/${getBusinessIdForOutletSync(outlet)}/outlets/${outlet}/orders`,
   singleOrder: (outlet: OutletId, orderId: string) => `businesses/${getBusinessIdForOutletSync(outlet)}/outlets/${outlet}/orders/${orderId}`,
   outletSettings: (outlet: OutletId) => `businesses/${getBusinessIdForOutletSync(outlet)}/outlets/${outlet}/settings`,
   botCommands: (outlet: OutletId) => `businesses/${getBusinessIdForOutletSync(outlet)}/outlets/${outlet}/bot/commands`,
   otpAttempts: (outlet: OutletId, orderId: string) => `businesses/${getBusinessIdForOutletSync(outlet)}/outlets/${outlet}/otpAttempts/${orderId}`,
-  settlements: (rId: string) => `settlements/${rId}`,
+  settlements: (rId: string) => tenantPathSync(getCurrentRiderOutlet(), `settlements/${rId}`),
+  settlementAck: (rId: string, settlementId: string) => tenantPathSync(getCurrentRiderOutlet(), `settlements/${rId}/${settlementId}/riderAck`),
   riderErrors: (rId: string) => `logs/riderErrors/${rId}`,
 };
 

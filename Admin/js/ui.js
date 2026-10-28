@@ -107,10 +107,13 @@ export const canAccessTab = (tabId) => {
 export async function loadTabData(tabId) {
     switch (tabId) {
         case 'dashboard': {
-            const [{ loadRiders: lr }, { renderOrders }] = await Promise.all([
+            const [{ loadRiders: lr, isRidersSubscribed }, { renderOrders }] = await Promise.all([
                 mod('riders'), mod('orders')
             ]);
-            lr({ withStats: false });
+            // Dashboard boot can land after the Riders tab already subscribed
+            // (module imports are async) — reloading here would drop the
+            // riderStats listener and blank every rider's Orders/Wallet.
+            if (!isRidersSubscribed()) lr({ withStats: false });
             renderOrders(state.lastOrdersSnap);
             break;
         }

@@ -1,7 +1,8 @@
 // === src/services/shiftService.ts ===
 // Rider shift scheduling — stores preferred online hours per day of week.
-// Stored at riders/{uid}/shiftSchedule.
+// Stored at <outlet>/riders/{uid}/shiftSchedule (outlet-scoped like staff).
 import { db, ref, get, update, serverTimestamp } from "@/lib/firebase";
+import { dbPaths } from "@/lib/constants";
 import type { ShiftSchedule } from "@/types";
 
 export async function saveShiftSchedule(params: {
@@ -9,13 +10,13 @@ export async function saveShiftSchedule(params: {
   schedule: ShiftSchedule;
 }): Promise<void> {
   const { uid, schedule } = params;
-  await update(ref(db, `riders/${uid}/shiftSchedule`), {
+  await update(ref(db, `${dbPaths.rider(uid)}/shiftSchedule`), {
     ...schedule,
     updatedAt: serverTimestamp(),
   });
 }
 
 export async function getShiftSchedule(uid: string): Promise<ShiftSchedule | null> {
-  const snap = await get(ref(db, `riders/${uid}/shiftSchedule`));
+  const snap = await get(ref(db, `${dbPaths.rider(uid)}/shiftSchedule`));
   return (snap.val() as ShiftSchedule | null) || null;
 }

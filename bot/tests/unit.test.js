@@ -12,11 +12,18 @@ const helpers = require('../helpers/outlet-resolution');
 const redeem = require('../redeem');
 
 test('resolvePath: shared (platform-root) nodes pass through unchanged', () => {
-    for (const root of ['admins', 'riders', 'riderStats', 'migrationStatus', 'logs', 'settlements', 'phoneNumberIndex']) {
+    for (const root of ['admins', 'migrationStatus', 'logs', 'phoneNumberIndex']) {
         assert.strictEqual(firebaseResolvePath(`${root}/x/y`), `${root}/x/y`, `${root} should stay at root`);
     }
     // businesses/ absolute passes through too
     assert.strictEqual(firebaseResolvePath('businesses/bid/outlets/oid/orders'), 'businesses/bid/outlets/oid/orders');
+});
+
+test('resolvePath: rider nodes are outlet-scoped like staff (no global riders)', () => {
+    assert.strictEqual(firebaseResolvePath('riders/uid1'), 'businesses/roshani-pizza/outlets/pizza/riders/uid1');
+    assert.strictEqual(firebaseResolvePath('riderStats/uid1'), 'businesses/roshani-pizza/outlets/pizza/riderStats/uid1');
+    assert.strictEqual(firebaseResolvePath('settlements/uid1'), 'businesses/roshani-pizza/outlets/pizza/settlements/uid1');
+    assert.strictEqual(firebaseResolvePath('riders/uid1', 'cake'), 'businesses/roshani-cake/outlets/cake/riders/uid1');
 });
 
 test('resolvePath: tenant-scoped paths get businesses/{bid}/outlets/{oid} prefix', () => {

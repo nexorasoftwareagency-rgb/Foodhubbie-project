@@ -171,6 +171,16 @@ Fragile Files before starting ANY task.
 - Notes: Firebase v12 messaging handled; sw.js has background message handler; notificationclick wired.
 
 <!-- TASK_LOG_START -->
+### [20261028-074722-c394] Riders outlet-level: move riders/riderStats/settlements under businesses/{bid}/outlets/{oid} like staff; rules, Admin, bot, rider-app, migration
+- TIER: 3 (high-risk)
+- STATUS: DONE
+- Started: 2026-10-28 07:47 UTC
+- Files touched: database.rules.json;Admin/js/firebase.js;Admin/js/features/riders.js;Admin/js/features/rider-analytics.js;Admin/js/features/tracker.js;Admin/js/utils.js;Admin/js/ui.js;bot/firebase.js;bot/index.js;bot/rider.js;bot/helpers/outlet-resolution.js;bot-control-api/server.js;rider-app/src/lib/constants.ts;rider-app/src/services/riderService.ts;rider-app/src/services/authService.ts;rider-app/src/hooks/useRiderProfile.ts;rider-app/src/services/shiftService.ts;rider-app/src/services/sosService.ts;rider-app/src/services/walletService.ts;rider-app/src/contexts/AuthContext.tsx;rider-app/src/contexts/RiderContext.tsx;tools/migrate-riders-outlet.cjs;tests/phase5-rider-isolation.check.cjs;tests/phase5-rules-isolation.check.cjs;tests/rules.emulator.mjs;gate-verify.js
+- Verified: rules deployed; phase5-rules 11/11 live; phase5-rider-isolation 13/13; bot unit 18/18; gate-verify PASS; encoding OK; rider-app tsc+vite build; admin build; live migration 6/6 + root prune; super-admin REST 200 outlet/401 root; Playwright Riders tab 2 riders + Nilesh 5 orders Rs210 wallet; EC2 pm2 1/6/2 restarted clean
+- NOT verified / open risk: rider-app on-device login after re-deploy (needs rider credentials); Firebase rules emulator suite not run (Java)
+- Confidence: HIGH
+- Ended: 2026-10-28 08:38 UTC
+
 ### [20261027-022446-040c] Phase 5 rider isolation: real cross-restaurant broadcast leak found + fixed, deployed to EC2; runtime checks added
 - TIER: 2 (medium-risk)
 - STATUS: DONE

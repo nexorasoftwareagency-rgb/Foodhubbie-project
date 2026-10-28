@@ -1,4 +1,4 @@
-import { db, auth, getSecondaryAuth, isSecondaryAuthAvailable, Outlet, serverTimestamp, ref, get, set, push, update, runTransaction, remove, query, orderByChild, equalTo, onValue, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword, BUSINESS_BY_OUTLET } from '../firebase.js';
+import { db, auth, getSecondaryAuth, isSecondaryAuthAvailable, Outlet, serverTimestamp, ref, get, set, push, update, runTransaction, remove, query, orderByChild, equalTo, onValue, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword, BUSINESS_BY_OUTLET, BUSINESS_ID, tenantRef, tenantPath } from '../firebase.js';
 import { state } from '../state.js';
 import { showDeleteConfirm } from '../ui-utils.js';
 import { showToast, haptic, escapeHtml, standardizeAuthError, logAudit, showConfirm, addRiderNotification, getSkeletonRows, formatOrderId } from '../utils.js';
@@ -20,7 +20,7 @@ export function loadRiders({ withStats = true } = {}) {
     const ridersTbody = document.getElementById('riderDataTableBody');
     if (ridersTbody) ridersTbody.innerHTML = getSkeletonRows(5, 6);
 
-    const ridersRef = ref(db, "riders");
+    const ridersRef = Outlet.ref("riders");
     const statsRef = Outlet.ref("riderStats");
 
     if (withStats) {
@@ -60,6 +60,14 @@ export function loadRiders({ withStats = true } = {}) {
 export function cleanupRiders() {
     if (_ridersUnsub) { _ridersUnsub(); _ridersUnsub = null; }
     if (_statsUnsub) { _statsUnsub(); _statsUnsub = null; }
+}
+
+/** True while the riders listener set is live — lets the dashboard skip its
+ *  boot-time loadRiders({withStats:false}) when the Riders tab already owns the
+ *  subscription. Without this, that late boot call tore down the tab's
+ *  riderStats listener and every rider showed 0 Orders / ₹0 Wallet. */
+export function isRidersSubscribed() {
+    return !!_ridersUnsub;
 }
 
 function _riderProfileImg(r) {
@@ -398,7 +406,7 @@ export async function saveRiderAccount() {
 
         if (state.isEditRiderMode) {
             const riderId = state.currentEditingRiderId;
-            await update(ref(db, `riders/${riderId}`), riderData);
+            await update(Outlet.ref(`riders/${riderId}`), riderData);
             logAudit("Riders", `Updated Rider: ${name}`, riderId);
             showToast("Rider updated successfully!", "success");
             hideRiderModal();
@@ -407,7 +415,8 @@ export async function saveRiderAccount() {
             const _sa = getSecondaryAuth();
             const userCredential = await createUserWithEmailAndPassword(_sa, email, pass);
             const uid = userCredential.user.uid;
-            await set(ref(db, `riders/${uid}`), { uid, name, email, phone, fatherName, age, aadharNo, qualification, address, profilePhoto, aadharPhoto, status: "Offline", outlet: Outlet.current, businessId: BUSINESS_BY_OUTLET[Outlet.current], createdAt: Date.now() });
+            await set(Outlet.ref(`riders/${uid}`), { uid, name, email, phone, fatherName, age, aadharNo, qualification, address, profilePhoto, aadharPhoto, status: "Offline", outlet: Outlet.current, businessId: BUSINESS_ID(), createdAt: Date.now() });
+            await set(ref(db, `riderIndex/${uid}`), { bid: BUSINESS_ID(), outlet: Outlet.current });
             await signOut(_sa);
             logAudit("Riders", `Created New Rider: ${name}`, uid);
             closePasswordModal();
@@ -423,12 +432,13 @@ export async function saveRiderAccount() {
 }
 
 export async function deleteRider(id) {
-    const snap = await get(ref(db, `riders/${id}`));
+    const snap = await get(Outlet.ref(`riders/${id}`));
     const riderName = snap.val()?.name || "Unknown";
     if (!(await showDeleteConfirm(riderName))) return;
     haptic();
     try {
-        await remove(ref(db, `riders/${id}`));
+        await remove(Outlet.ref(`riders/${id}`));
+        await remove(ref(db, `riderIndex/${id}`));
         logAudit("Riders", `Deleted Rider: ${riderName}`, id);
         showToast("Rider removed successfully.", "success");
     } catch (error) { showToast("Failed to delete rider.", "error"); }
@@ -458,7 +468,7 @@ export async function settleRiderWallet(riderId, riderName, customTimeLimit = nu
         let ordersToSettle = [];
         const outlets = Object.keys(BUSINESS_BY_OUTLET);
         for (const outlet of outlets) {
-            const snap = await get(query(ref(db, `${outlet}/orders`), orderByChild('riderId'), equalTo(riderId)));
+            const snap = await get(query(tenantRef(outlet, 'orders'), orderByChild('riderId'), equalTo(riderId)));
             if (snap.exists()) {
                 snap.forEach(child => {
                     const o = child.val();
@@ -477,9 +487,9 @@ export async function settleRiderWallet(riderId, riderName, customTimeLimit = nu
         if (!(await showConfirm(`Confirm collection of ₹${pendingCash} from ${riderName}?`))) return;
 
         const updates = {};
-        ordersToSettle.forEach(o => { updates[`${o.outlet}/orders/${o.id}/settled`] = true; });
+        ordersToSettle.forEach(o => { updates[tenantPath(o.outlet, `orders/${o.id}/settled`)] = true; });
         const settlementId = "SETTLE_" + Date.now();
-        updates[`settlements/${riderId}/${settlementId}`] = { timestamp: Date.now(), amountCollected: pendingCash, settledByAdmin: auth.currentUser?.email || "Admin", ordersClearedCount: ordersToSettle.length };
+        updates[tenantPath(Outlet.current, `settlements/${riderId}/${settlementId}`)] = { timestamp: Date.now(), amountCollected: pendingCash, settledByAdmin: auth.currentUser?.email || "Admin", ordersClearedCount: ordersToSettle.length };
         await update(ref(db), updates);
         logAudit("Riders", `Settled Wallet for ${riderName}: ₹${pendingCash}`, riderId);
         showToast(`Successfully settled ₹${pendingCash} for ${riderName}.`, "success");
@@ -492,7 +502,7 @@ export async function settleRiderWallet(riderId, riderName, customTimeLimit = nu
             if (cleanPhone && cleanPhone.length === 10) {
                 const message = `Hello ${riderName}! 🌟\n\nYour cash settlement has been completed successfully.\n\n💰 *Total Collected:* ₹${pendingCash}\n📦 *Orders Cleared:* ${ordersToSettle.length}\n✅ *Status:* Settled\n\nThank you for your hard work! 🙏`;
                 const botOutlet = ordersToSettle[0]?.outlet || 'pizza';
-                const cmdRef = push(ref(db, `bot/${botOutlet}/commands`));
+                const cmdRef = push(tenantRef(botOutlet, 'bot/commands'));
                 await set(cmdRef, { action: "SEND_GENERIC_MESSAGE", phone: cleanPhone, message, timestamp: serverTimestamp() });
             }
         } catch (notifError) { console.warn("[Riders] Post-settlement notification failed:", notifError); }

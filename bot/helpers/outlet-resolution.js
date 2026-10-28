@@ -5,7 +5,7 @@
  * helpers, so `businesses/{bid}/outlets/{oid}` is guaranteed to read and
  * write a matching path across bot, menu, Admin and rider-app.
  *
- * Shared nodes (admins, riders, settlements, riderStats, logs, migrationStatus)
+ * Shared nodes (admins, logs, migrationStatus, phoneNumberIndex) are platform-level;
  * intentionally stay at root — they are platform-level, not tenant-level.
  *
  * When BUSINESS_ID / OUTLET_ID env vars are present (orchestrator sets them,
@@ -70,8 +70,11 @@ function resolvePath(scope, ...rest) {
 /** businessId for an outlet — env wins, else reverse index, else legacy map, else throw. */
 function resolveBusinessIdFor(outletId) {
     outletId = normalizeOutletId(outletId);
-    // 1. Explicit env var (orchestrator sets per-instance)
-    if (process.env.BUSINESS_ID) return process.env.BUSINESS_ID;
+    // 1. Explicit env var (orchestrator sets per-instance). Only valid for THIS
+    //    process's own outlet — using it for any other outlet would resolve a
+    //    cross-outlet read to `businesses/{ownBid}/outlets/{otherOutlet}`,
+    //    a phantom path that silently returns null.
+    if (process.env.BUSINESS_ID && outletId === resolveOutletId()) return process.env.BUSINESS_ID;
     // 2. Reverse index (O(1) - populated at startup)
     if (outletToBusinessIdCache.has(outletId)) return outletToBusinessIdCache.get(outletId);
     // 3. Legacy map (for backward compat with existing QR codes)

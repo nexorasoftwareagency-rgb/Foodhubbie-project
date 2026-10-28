@@ -323,7 +323,7 @@ export async function gateManualDiscountPin({ discountValue, subtotal, discountI
 export const addRiderNotification = async (uid, title, sub, type = 'info') => {
     if (!uid) return;
     try {
-        const notifRef = push(ref(db, `riders/${uid}/notifications`));
+        const notifRef = push(Outlet.ref(`riders/${uid}/notifications`));
         await set(notifRef, {
             id: notifRef.key,
             title,

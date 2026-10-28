@@ -72,9 +72,10 @@ if (rules && rules.rules) {
 // ---- 2. bot/firebase.js resolvePath — shared list + no stale literals ----
 console.log('\n[2] bot/firebase.js resolvePath');
 const fbSrc = read('bot/firebase.js');
-const sharedList = ['admins', 'riders', 'riderStats', 'migrationStatus', 'logs', 'settlements', 'phoneNumberIndex'];
+const sharedList = ['admins', 'migrationStatus', 'logs', 'phoneNumberIndex'];
 const sharedOk = sharedList.every(n => fbSrc.includes(`'${n}'`));
 check('resolvePath shared list intact', sharedOk, sharedOk ? sharedList.join(',') : 'missing node');
+check('riders/riderStats/settlements are NOT shared', !/'riders'/.test(fbSrc) && !/'riderStats'/.test(fbSrc) && !/'settlements'/.test(fbSrc));
         check('resolvePath uses outlet-resolution helper', /outletPath\(resolveBusinessIdFor\(outlet\), outlet, path\)/.test(fbSrc));
 check('no botUsers references', !/botUsers/.test(fbSrc));
 check('no botStatus references', !/botStatus/.test(fbSrc));
@@ -105,9 +106,10 @@ const adminSrc = read('Admin/js/firebase.js');
 check('BUSINESS_ID getter present', /window\.currentBusinessId/.test(adminSrc));
 check('tenantRef exported', /export function tenantRef/.test(adminSrc));
 check('tenantPath exported', /export function tenantPath/.test(adminSrc));
-const adminGlobal = ['admins', 'riders', 'logs', 'migrationStatus', 'settlements'];
+const adminGlobal = ['admins', 'logs', 'migrationStatus'];
 const globalOk = adminGlobal.every(n => adminSrc.includes(`'${n}'`));
 check('Outlet.ref globalPaths list', globalOk, globalOk ? adminGlobal.join(',') : 'missing node');
+check('riders/riderStats/settlements are NOT global in Admin', !/'riders'/.test(adminSrc) && !/'riderStats'/.test(adminSrc) && !/'settlements'/.test(adminSrc));
 check('Outlet.ref falls back to tenantRef', /return tenantRef\(this\.current/.test(adminSrc));
 
 // ---- 6. rider-app constants.ts — tenantPath + BUSINESS_ID ----
@@ -116,7 +118,9 @@ const riderSrc = read('rider-app/src/lib/constants.ts');
 check('outlet-to-business dynamic resolver', /export async function resolveBusinessIdForOutlet/.test(riderSrc));
 check('tenantPath helper', /export function tenantPath/.test(riderSrc));
 check('orders dbPath tenant-scoped', /singleOrder: \(outlet: OutletId, orderId: string\) => `businesses\/\$\{getBusinessIdForOutletSync\(outlet\)\}\/outlets\/\$\{outlet\}\/orders\/\$\{orderId\}`/.test(riderSrc));
-check('settlements stays platform-root', /settlements: \(rId: string\) => `settlements\/\$\{rId\}`/.test(riderSrc));
+check('settlements dbPath tenant-scoped', riderSrc.includes('settlements: (rId: string) => tenantPathSync(getCurrentRiderOutlet(), `settlements/${rId}`)'));
+check('riderIndex bootstrap pointer read', read('rider-app/src/services/riderService.ts').includes('riderIndex/${uid}'));
+check('no direct global rider path assignment in rider-app constants', !/= `(?:riders|riderStats|settlements)\//.test(riderSrc));
 
 // ---- 7. syntax check all touched bot/admin/menu JS ----
 console.log('\n[7] syntax (node --check)');

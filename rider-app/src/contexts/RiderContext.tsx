@@ -38,11 +38,12 @@ export function RiderProvider({ children }: { children: ReactNode }) {
   const [retryTick, setRetryTick] = useState(0);
   const [toggling, setToggling] = useState(false);
 
-// Subscribe to global rider stats (single node for all outlets)
+  // Subscribe to this outlet's rider stats once the rider's scope is resolved
+  // (riderStats is outlet-scoped like the rider record itself).
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid || !rider?.outlet) return;
     const unsub = subscribeRiderStats(user.uid, (globalStats) => {
-      // Mirror global stats to all known outlets for UI compatibility
+      // Mirror the outlet stats to all known outlets for UI compatibility
       setStatsByOutlet((prev) => {
         const next = { ...prev };
         outlets.forEach((o) => { next[o.id] = globalStats; });
@@ -50,7 +51,7 @@ export function RiderProvider({ children }: { children: ReactNode }) {
       });
     });
     return () => { unsub(); };
-  }, [user?.uid, outlets]);
+  }, [user?.uid, rider?.outlet, outlets]);
 
   // Load ONLY the rider's own outlet — riders never see other restaurants
   useEffect(() => {

@@ -8,6 +8,11 @@
  * on real data. Nothing is sent to WhatsApp and no real rider is touched —
  * the script seeds its own `phase5test-*` riders and removes them in `finally`.
  *
+ * Riders are outlet-scoped since 2026-10-28 (businesses/{bid}/outlets/{oid}/
+ * riders), exactly like staff. The test seeds BOTH outlet trees and also plants
+ * a mislabelled legacy rider inside the pizza tree to prove the fail-closed
+ * outlet filter still holds.
+ *
  * Run: node tests/phase5-rider-isolation.check.cjs
  * Exit 0 = isolation holds. Exit 1 = a rider from another restaurant was
  * notified (or the scoped paths missed their target).
@@ -35,17 +40,22 @@ const { notifyRiderAssignment, notifyRiderPickup, broadcastPickupAvailable } = r
 
 const PIZZA = { outlet: 'pizza', businessId: 'roshani-pizza' };
 const CAKE = { outlet: 'cake', businessId: 'roshani-cake' };
+const tree = (scope) => `businesses/${scope.businessId}/outlets/${scope.outlet}/riders`;
 
 const RIDERS = {
   'phase5test-pizza-online': { name: 'P5 Pizza Online', phone: '919000000001', email: 'p5-pizza@example.invalid', ...PIZZA, status: 'online' },
   'phase5test-pizza-offline': { name: 'P5 Pizza Offline', phone: '919000000002', email: 'p5-pizza-off@example.invalid', ...PIZZA, status: 'Offline' },
   'phase5test-cake-online': { name: 'P5 Cake Online', phone: '919000000003', email: 'p5-cake@example.invalid', ...CAKE, status: 'online' },
+  // Legacy mislabelled record: lives in the pizza tree but claims the cake
+  // outlet. The bot must fail closed and never message it for a pizza order.
+  'phase5test-pizza-mislabelled': { name: 'P5 Mislabelled', phone: '919000000004', email: 'p5-mis@example.invalid', outlet: 'cake', businessId: 'roshani-cake', status: 'online' },
 };
 
 const PHONE = {
   '919000000001': 'pizza-online',
   '919000000002': 'pizza-offline',
   '919000000003': 'cake-online',
+  '919000000004': 'pizza-mislabelled',
 };
 
 const sent = [];
@@ -83,15 +93,30 @@ function check(name, ok, detail) {
 const recipients = () => [...new Set(sent.map((s) => PHONE[s.digits] || s.digits))];
 const reset = () => { sent.length = 0; inApp.length = 0; };
 
+async function removeTestRiders() {
+  for (const [uid, r] of Object.entries(RIDERS)) {
+    await db.ref(`${tree(uid.includes('mislabelled') ? PIZZA : r)}/${uid}`).remove();
+  }
+  // Sweep any leftovers from an aborted run in both trees.
+  for (const scope of [PIZZA, CAKE]) {
+    const left = (await db.ref(tree(scope)).once('value')).val() || {};
+    for (const k of Object.keys(left)) {
+      if (k.startsWith('phase5test-')) await db.ref(`${tree(scope)}/${k}`).remove();
+    }
+  }
+}
+
 (async () => {
   // Guard: remove leftovers from an aborted earlier run before seeding.
-  for (const uid of Object.keys(RIDERS)) await db.ref(`riders/${uid}`).remove();
+  await removeTestRiders();
 
   const seededAt = Date.now();
   for (const [uid, r] of Object.entries(RIDERS)) {
-    await db.ref(`riders/${uid}`).set({ ...r, lastSeen: seededAt, createdAt: seededAt });
+    // The mislabelled record is deliberately planted in the pizza tree.
+    const scope = uid.includes('mislabelled') ? PIZZA : r;
+    await db.ref(`${tree(scope)}/${uid}`).set({ ...r, lastSeen: seededAt, createdAt: seededAt });
   }
-  console.log(`seeded ${Object.keys(RIDERS).length} test riders (pizza online/offline + cake online)\n`);
+  console.log(`seeded ${Object.keys(RIDERS).length} test riders (pizza online/offline/mislabelled + cake online)\n`);
 
   try {
     /* ---- A: pizza order broadcast must reach pizza riders only ---- */
@@ -101,7 +126,8 @@ const reset = () => { sent.length = 0; inApp.length = 0; };
     check('A1 pizza broadcast reaches its own online rider', to.includes('pizza-online'), 'to=' + JSON.stringify(to));
     check('A2 pizza broadcast SKIPS offline pizza rider', !to.includes('pizza-offline'), 'to=' + JSON.stringify(to));
     check('A3 pizza broadcast never reaches a CAKE rider', !to.includes('cake-online'), 'to=' + JSON.stringify(to));
-    check('A4 pizza broadcast in-app notif only for pizza rider', inApp.length > 0 && inApp.every((n) => n.outlet === 'pizza'), 'uid/outlet=' + JSON.stringify(inApp.map((n) => n.uid + ':' + n.outlet)));
+    check('A4 pizza broadcast fails closed on a mislabelled rider', !to.includes('pizza-mislabelled'), 'to=' + JSON.stringify(to));
+    check('A5 pizza broadcast in-app notif only for pizza rider', inApp.length > 0 && inApp.every((n) => n.outlet === 'pizza'), 'uid/outlet=' + JSON.stringify(inApp.map((n) => n.uid + ':' + n.outlet)));
 
     /* ---- B: cake order broadcast must reach cake riders only ---- */
     reset();
@@ -123,16 +149,19 @@ const reset = () => { sent.length = 0; inApp.length = 0; };
     check('D1 pickup sends exactly one message', sent.length === 1, 'sent=' + sent.length);
     check('D2 pickup goes to the assigned phone', recipients().join(',') === 'cake-online', 'to=' + JSON.stringify(recipients()));
   } finally {
-    for (const uid of Object.keys(RIDERS)) await db.ref(`riders/${uid}`).remove();
-    const left = (await db.ref('riders').once('value')).val() || {};
-    const leftovers = Object.keys(left).filter((k) => k.startsWith('phase5test-'));
-    log(`\ncleanup: ${leftovers.length === 0 ? 'no test riders left' : 'LEFTOVERS ' + leftovers.join(',')}`);
-    if (leftovers.length) failures++;
+    await removeTestRiders();
+    let leftovers = 0;
+    for (const scope of [PIZZA, CAKE]) {
+      const left = (await db.ref(tree(scope)).once('value')).val() || {};
+      leftovers += Object.keys(left).filter((k) => k.startsWith('phase5test-')).length;
+    }
+    log(`\ncleanup: ${leftovers === 0 ? 'no test riders left' : 'LEFTOVERS ' + leftovers}`);
+    if (leftovers) failures++;
     log(failures === 0 ? '\nRESULT: isolation holds' : `\nRESULT: ${failures} check(s) failed`);
     finish(failures === 0 ? 0 : 1);
   }
 })().catch(async (e) => {
   log('ERR ' + (e && e.message));
-  try { for (const uid of Object.keys(RIDERS)) await db.ref(`riders/${uid}`).remove(); } catch { /* ignore */ }
+  try { await removeTestRiders(); } catch { /* ignore */ }
   finish(1);
 });

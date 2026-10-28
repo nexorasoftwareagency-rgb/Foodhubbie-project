@@ -56,9 +56,13 @@ async function getIdToken() {
 }
 
 (async () => {
-  // seed a pizza rider + a cake rider that must stay invisible to the pizza one
-  await db.ref(`riders/${UID}`).set({ name: 'P5 Rules Pizza', email: EMAIL, phone: '919000000004', outlet: 'pizza', businessId: 'roshani-pizza', status: 'Offline' });
-  await db.ref(`riders/${OTHER_UID}`).set({ name: 'P5 Rules Cake', email: 'p5-rules-cake@example.invalid', phone: '919000000005', outlet: 'cake', businessId: 'roshani-cake', status: 'Offline' });
+  // Seed a pizza rider + a cake rider that must stay invisible to the pizza one.
+  // Riders are outlet-scoped since 2026-10-28 (staff pattern); riderIndex is the
+  // rider app's bootstrap pointer.
+  await db.ref(`businesses/roshani-pizza/outlets/pizza/riders/${UID}`).set({ name: 'P5 Rules Pizza', email: EMAIL, phone: '919000000004', outlet: 'pizza', businessId: 'roshani-pizza', status: 'Offline' });
+  await db.ref(`businesses/roshani-cake/outlets/cake/riders/${OTHER_UID}`).set({ name: 'P5 Rules Cake', email: 'p5-rules-cake@example.invalid', phone: '919000000005', outlet: 'cake', businessId: 'roshani-cake', status: 'Offline' });
+  await db.ref(`riderIndex/${UID}`).set({ bid: 'roshani-pizza', outlet: 'pizza' });
+  await db.ref(`riderIndex/${OTHER_UID}`).set({ bid: 'roshani-cake', outlet: 'cake' });
 
   const cakeOrderIds = Object.keys((await db.ref('businesses/roshani-cake/outlets/cake/orders').once('value')).val() || {});
   const cakeOrderId = cakeOrderIds[0] || '-Phase5NoSuchOrder';
@@ -90,12 +94,24 @@ async function getIdToken() {
     const ownOne = await get('businesses/roshani-pizza/outlets/pizza/orders/-Phase5NoSuchOrder');
     check('B2 same read in the rider OWN outlet is allowed (control)', ownOne.status === 200, 'status=' + ownOne.status);
 
-    /* ---- rider node isolation ---- */
-    const ownNode = await get(`riders/${UID}`);
+    /* ---- rider node isolation (outlet-scoped like staff) ---- */
+    const ownNode = await get(`businesses/roshani-pizza/outlets/pizza/riders/${UID}`);
     check('C1 rider can read their own rider node', ownNode.status === 200, 'status=' + ownNode.status);
 
-    const otherNode = await get(`riders/${OTHER_UID}`);
-    check('C2 rider CANNOT read another rider node', otherNode.status === 401, 'status=' + otherNode.status);
+    const otherNode = await get(`businesses/roshani-cake/outlets/cake/riders/${OTHER_UID}`);
+    check('C2 rider CANNOT read another outlet rider node', otherNode.status === 401, 'status=' + otherNode.status);
+
+    const sameTreeOther = await get(`businesses/roshani-pizza/outlets/pizza/riders/phase5rules-someone-else`);
+    check('C3 rider CANNOT read another rider node in the same outlet', sameTreeOther.status === 401, 'status=' + sameTreeOther.status);
+
+    const rootRiders = await get('riders');
+    check('C4 global root riders node is gone (denied)', rootRiders.status === 401, 'status=' + rootRiders.status);
+
+    const ownIndex = await get(`riderIndex/${UID}`);
+    check('C5 rider can read their own riderIndex pointer', ownIndex.status === 200, 'status=' + ownIndex.status);
+
+    const otherIndex = await get(`riderIndex/${OTHER_UID}`);
+    check('C6 rider CANNOT read another riderIndex pointer', otherIndex.status === 401, 'status=' + otherIndex.status);
 
     /* ---- unauthenticated sanity ---- */
     const anon = await fetch(`${DB}/businesses/roshani-cake/outlets/cake/orders.json`).then((r) => r.status);
@@ -104,11 +120,14 @@ async function getIdToken() {
     log('ERR during checks: ' + ((e && (e.stack || e.message)) || e));
     failures++;
   } finally {
-    await db.ref(`riders/${UID}`).remove();
-    await db.ref(`riders/${OTHER_UID}`).remove();
+    await db.ref(`businesses/roshani-pizza/outlets/pizza/riders/${UID}`).remove();
+    await db.ref(`businesses/roshani-cake/outlets/cake/riders/${OTHER_UID}`).remove();
+    await db.ref(`riderIndex/${UID}`).remove();
+    await db.ref(`riderIndex/${OTHER_UID}`).remove();
     try { await admin.auth().deleteUser(UID); } catch { /* never created */ }
-    const left = (await db.ref('riders').once('value')).val() || {};
-    const leftovers = Object.keys(left).filter((k) => k.startsWith('phase5rules-'));
+    const leftPizza = (await db.ref('businesses/roshani-pizza/outlets/pizza/riders').once('value')).val() || {};
+    const leftCake = (await db.ref('businesses/roshani-cake/outlets/cake/riders').once('value')).val() || {};
+    const leftovers = [...Object.keys(leftPizza), ...Object.keys(leftCake)].filter((k) => k.startsWith('phase5rules-'));
     log(`\ncleanup: ${leftovers.length === 0 ? 'no test riders left' : 'LEFTOVERS ' + leftovers.join(',')}`);
     if (leftovers.length) failures++;
     log(failures === 0 ? '\nRESULT: rules enforce restaurant isolation' : `\nRESULT: ${failures} check(s) failed`);
@@ -117,8 +136,10 @@ async function getIdToken() {
 })().catch(async (e) => {
   log('ERR ' + (e && e.message));
   try {
-    await db.ref(`riders/${UID}`).remove();
-    await db.ref(`riders/${OTHER_UID}`).remove();
+    await db.ref(`businesses/roshani-pizza/outlets/pizza/riders/${UID}`).remove();
+    await db.ref(`businesses/roshani-cake/outlets/cake/riders/${OTHER_UID}`).remove();
+    await db.ref(`riderIndex/${UID}`).remove();
+    await db.ref(`riderIndex/${OTHER_UID}`).remove();
   } catch { /* ignore */ }
   finish(1);
 });

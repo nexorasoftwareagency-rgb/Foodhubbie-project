@@ -55,7 +55,7 @@ export async function generateRiderPerformanceReport() {
 
         const [statsSnap, settlementsSnap] = await Promise.all([
             get(Outlet.ref(`riderStats/${riderId}`)),
-            get(ref(db, `settlements/${riderId}`))
+            get(Outlet.ref(`settlements/${riderId}`))
         ]);
 
         const stats = statsSnap.val() || {};

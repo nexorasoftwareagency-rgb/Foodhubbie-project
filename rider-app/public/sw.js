@@ -3,7 +3,7 @@
 // shell so riders always get the latest code, cache-first-with-fallback for
 // static assets so the app still opens instantly during dead zones.
 
-const CACHE_NAME = "foodhubbie-rider-v1.0.1";
+const CACHE_NAME = "foodhubbie-rider-v1.0.2";
 const PRECACHE_ASSETS = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {

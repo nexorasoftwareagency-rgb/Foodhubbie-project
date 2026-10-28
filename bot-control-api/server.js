@@ -1113,39 +1113,48 @@ async function runDailySettlement(admin) {
   await admin.database().ref(SETTLEMENT_LAST_RUN_PATH).set(today);
 
   try {
-    // Enumerate all riders
-    const ridersSnap = await admin.database().ref('riders').get();
-    const riders = ridersSnap.val() || {};
+    // Enumerate riders per outlet (riders are outlet-scoped like staff since
+    // the 2026-10-28 migration; there is no global riders node any more).
+    const businessesSnap = await admin.database().ref('businesses').get();
+    const businesses = businessesSnap.val() || {};
 
-    for (const [uid, rider] of Object.entries(riders)) {
-      const r = rider || {};
-      const statsSnap = await admin.database().ref(`riderStats/${uid}`).get();
-      const stats = statsSnap.val() || { totalEarnings: 0, totalOrders: 0 };
-      const totalEarnings = stats.totalEarnings || 0;
+    for (const [bid, business] of Object.entries(businesses)) {
+      const outlets = (business && business.outlets) || {};
+      for (const oid of Object.keys(outlets)) {
+        const base = `businesses/${bid}/outlets/${oid}`;
+        const ridersSnap = await admin.database().ref(`${base}/riders`).get();
+        const riders = ridersSnap.val() || {};
 
-      // Sum already-settled amounts
-      const settleSnap = await admin.database().ref(`settlements/${uid}`).get();
-      const settlements = settleSnap.val() || {};
-      const settledTotal = Object.values(settlements).reduce(
-        (sum, s) => sum + (s?.amountCollected || 0),
-        0
-      );
+        for (const uid of Object.keys(riders)) {
+          const statsSnap = await admin.database().ref(`${base}/riderStats/${uid}`).get();
+          const stats = statsSnap.val() || { totalEarnings: 0, totalOrders: 0 };
+          const totalEarnings = stats.totalEarnings || 0;
 
-      const pendingCash = Math.max(0, totalEarnings - settledTotal);
-      if (pendingCash <= 0) continue;
+          // Sum already-settled amounts
+          const settleSnap = await admin.database().ref(`${base}/settlements/${uid}`).get();
+          const settlements = settleSnap.val() || {};
+          const settledTotal = Object.values(settlements).reduce(
+            (sum, s) => sum + (s?.amountCollected || 0),
+            0
+          );
 
-      // Create settlement record
-      const settlementRef = admin.database().ref(`settlements/${uid}`).push();
-      await settlementRef.set({
-        amountCollected: pendingCash,
-        ordersClearedCount: stats.totalOrders || 0,
-        settledByAdmin: 'Auto-Settlement (Daily Cron)',
-        timestamp: Date.now(),
-        source: 'daily-auto-settlement',
-        riderAck: null,
-      });
+          const pendingCash = Math.max(0, totalEarnings - settledTotal);
+          if (pendingCash <= 0) continue;
 
-      console.log(`[Auto-Settlement] Created settlement for rider ${uid}: ₹${pendingCash}`);
+          // Create settlement record
+          const settlementRef = admin.database().ref(`${base}/settlements/${uid}`).push();
+          await settlementRef.set({
+            amountCollected: pendingCash,
+            ordersClearedCount: stats.totalOrders || 0,
+            settledByAdmin: 'Auto-Settlement (Daily Cron)',
+            timestamp: Date.now(),
+            source: 'daily-auto-settlement',
+            riderAck: null,
+          });
+
+          console.log(`[Auto-Settlement] Created settlement for rider ${uid} (${bid}/${oid}): ₹${pendingCash}`);
+        }
+      }
     }
   } catch (err) {
     console.error('[Auto-Settlement] Failed:', err);

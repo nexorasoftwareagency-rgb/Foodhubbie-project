@@ -3,7 +3,7 @@
  * Leaflet map + rider sidebar with named markers, per-rider info, and status legend.
  */
 
-import { db, ref, onValue } from '../firebase.js';
+import { db, ref, onValue, Outlet } from '../firebase.js';
 import { escapeHtml, formatOrderId } from '../utils.js';
 import { loadLucide } from '../ui.js';
 
@@ -409,7 +409,7 @@ export function cleanupLiveRiderTracker() {
 function startRiderLocationListener() {
     if (riderLocationUnsub) { riderLocationUnsub(); riderLocationUnsub = null; }
 
-    const ridersRef = ref(db, 'riders');
+    const ridersRef = Outlet.ref('riders');
     riderLocationUnsub = onValue(ridersRef, snap => {
         const all = snap.val() || {};
         _allRiders = all;

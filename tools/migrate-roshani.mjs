@@ -28,7 +28,7 @@ admin.initializeApp({ credential: admin.credential.cert(require(sa)), databaseUR
 const db = admin.database();
 const root = db.ref();
 
-const shared = ['admins', 'riders', 'riderStats', 'logs', 'settlements', 'migrationStatus', 'botUsers', 'settings'];
+const shared = ['admins', 'logs', 'migrationStatus', 'botUsers', 'settings'];
 const strip = (o) => JSON.parse(JSON.stringify(o));
 
 async function main() {

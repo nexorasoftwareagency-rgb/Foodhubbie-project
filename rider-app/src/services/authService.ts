@@ -5,6 +5,7 @@ import {
   ref,
   set,
   update,
+  remove,
   onDisconnect,
   serverTimestamp,
   signInWithEmailAndPassword,
@@ -13,7 +14,7 @@ import {
   onAuthStateChanged,
 } from "@/lib/firebase";
 import type { User } from "firebase/auth";
-import { dbPaths, resolveBusinessIdForOutlet, type OutletId } from "@/lib/constants";
+import { dbPaths, resolveBusinessIdForOutlet, setRiderOutlet, type OutletId } from "@/lib/constants";
 import type { Rider } from "@/types";
 
 /** Riders authenticate with {10-digit phone}@rider.com, matching auth.js exactly. */
@@ -85,6 +86,9 @@ export async function registerRider(params: {
   // outlet it doesn't know, sending the rider record to a dead tree.
   const outletId = params.outlet;
   const businessId = await resolveBusinessIdForOutlet(outletId);
+  // Every rider path is outlet-scoped (like staff), so the scope must be set
+  // before any dbPaths.rider* helper is used by this session.
+  setRiderOutlet(outletId);
 
   const riderPayload: Partial<Rider> = {
     uid: user.uid,
@@ -102,10 +106,18 @@ export async function registerRider(params: {
   };
 
   try {
+    // riderIndex is the rider app's bootstrap pointer ({bid, outlet}) — the
+    // rider cannot read the businesses tree, so without it no rider path can
+    // be built. Write it before the profile so a concurrent reader never sees
+    // the profile without the index.
+    await set(ref(db, `riderIndex/${user.uid}`), { bid: businessId, outlet: outletId });
     await set(ref(db, dbPaths.rider(user.uid)), riderPayload);
   } catch (err) {
-    // Rollback: attempt to delete the auth user if profile write fails.
-    // Client SDK cannot delete users directly; this is best-effort only.
+    // Rollback: best-effort cleanup + sign-out. Client SDK cannot delete auth
+    // users directly, so a half-created account may remain (admin can clean).
+    try {
+      await remove(ref(db, `riderIndex/${user.uid}`));
+    } catch {}
     try {
       await firebaseSignOut(auth);
     } catch {}

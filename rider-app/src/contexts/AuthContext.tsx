@@ -5,10 +5,10 @@ import {
   subscribeAuthState,
   loginRider,
   logoutRider,
-  armDisconnectHandlers,
   wasPreviouslyLoggedIn,
   type AuthErrorInfo,
 } from "@/services/authService";
+import { resolveRiderScope } from "@/services/riderService";
 import { logRiderError } from "@/services/auditService";
 
 type AuthContextValue = {
@@ -32,8 +32,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u);
       setAuthLoading(false);
       if (u) {
-        armDisconnectHandlers(u.uid);
-        import("@/services/notificationService").then((m) => m.registerPushNotifications(u.uid));
+        // Riders are outlet-scoped (riders/riderStats/settlements live under
+        // businesses/{bid}/outlets/{oid}/), so resolve riderIndex/{uid} before
+        // anything that builds a rider path. useRiderProfile does the same —
+        // resolveRiderScope is cached, so the second call is free.
+        resolveRiderScope(u.uid)
+          .then(() => import("@/services/notificationService").then((m) => m.registerPushNotifications(u.uid)))
+          .catch((err) => logRiderError(u.uid, "authBootstrap", err));
       }
     });
     return unsubscribe;
