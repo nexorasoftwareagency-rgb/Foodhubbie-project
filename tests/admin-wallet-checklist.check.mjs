@@ -5,10 +5,10 @@ import fs from 'fs'; import os from 'os'; import path from 'path'; import { spaw
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fh-wallet-'));
 const put = (rel, txt) => { const f = path.join(tmp, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, txt); };
 const copy = (rel, to = rel) => put(to, fs.readFileSync(rel, 'utf8'));
-copy('Admin/js/features/costs.js'); copy('Admin/js/features/setup-checklist.js'); copy('shared/cost-math.js', 'Admin/shared/cost-math.js');
+copy('Admin/js/features/costs.js'); copy('Admin/js/features/setup-checklist.js'); copy('Admin/js/features/wallet-alert.js'); copy('shared/cost-math.js', 'Admin/shared/cost-math.js');
 put('Admin/js/state.js', 'export const state = { locked: false };');
 put('Admin/js/ui.js', "export const SUPPORT_WA = 'https://wa.me/x'; export const canAccessTab = () => true;");
-put('Admin/js/firebase.js', `export const Outlet = { ref: (p) => p };
+put('Admin/js/firebase.js', `export const Outlet = { ref: (p) => p, current: 'o1' };
 export const limitToLast = () => null, query = (p) => p;
 export const get = async (p) => { const v = globalThis.DATA[p]; if (v === 'ERR') throw new Error('x'); return { exists: () => v != null, val: () => v ?? null }; };
 export const onValue = (p, cb) => { cb({ val: () => globalThis.DATA[p] ?? null }); return () => {}; };
@@ -37,7 +37,26 @@ assert.ok(e.walletStatus.textContent.includes('Top-up received')); console.log('
 e = await run({ billing: { payments: { a: { amount: 1000, createdAt: 1 } } }, orders: 'ERR' });
 assert.equal(e.walletBalance.textContent, '—'); assert.ok(e.walletStatus.textContent.includes('Could not load')); console.log('PASS usage read failure: no overstated balance shown');
 e = await run({ billing: { payments: { a: { amount: 1000, createdAt: 1 } }, charges: { c: { amount: 1200 } } }, orders: {} });
-assert.equal(e.walletBalance.textContent, '−₹200'); assert.ok(e.walletStatus.textContent.includes('negative')); console.log('PASS negative balance flagged');
+assert.equal(e.walletBalance.textContent, '−₹200'); assert.ok(e.walletStatus.textContent.includes('finished')); console.log('PASS negative balance flagged as finished');
+e = await run({ billing: { payments: { a: { amount: 1000, createdAt: 1 } }, charges: { c: { amount: 800 } } }, orders: {} });
+assert.ok(e.walletStatus.textContent.includes('Low balance') && e.walletStatus.textContent.includes('25%')); console.log('PASS 200 left of 1000 topped up: low-balance message');
+e = await run({ billing: { mode: 'percentage', payments: { a: { amount: 1000, createdAt: 1 } } }, orders: { o: { source: 'webview_delivery', status: 'Delivered', total: 10000, createdAt: '2026-10-01' } } });
+assert.equal(e.walletBalance.textContent, '₹800'); console.log('PASS percentage package: 2% of 10000 WhatsApp order = 200 used');
+console.log('ALL PASSED');
+`);
+put('alert.mjs', `import assert from 'assert';
+const els = { walletAlert: { style: {}, innerHTML: '', querySelector() { return null; } } };
+globalThis.document = { getElementById: (id) => els[id] }; globalThis.window = { open() {} };
+const run = async (data) => { globalThis.DATA = data; els.walletAlert.style = {}; els.walletAlert.innerHTML = ''; const m = await import('./Admin/js/features/wallet-alert.js?' + Math.random()); await m.loadWalletAlert(); return els.walletAlert; };
+const pay = (a) => ({ billing: { payments: { p: { amount: a } } } });
+let e = await run({ ...pay(1000), orders: { a: { source: 'QR', status: 'Delivered', total: 100, createdAt: 'x' } } });
+assert.equal(e.style.display, 'none'); console.log('PASS healthy wallet: no alert');
+e = await run({ billing: { payments: { p: { amount: 1000 } }, mode: 'percentage' }, orders: { a: { source: 'webview_delivery', status: 'Delivered', total: 37500, createdAt: 'x' } } });
+assert.ok(e.innerHTML.includes('Low wallet balance'), e.innerHTML); assert.ok(e.innerHTML.includes('25%')); console.log('PASS 2% WhatsApp percentage usage pushes wallet to low (250 left of 1000)');
+e = await run({ billing: { payments: { p: { amount: 1000 } }, mode: 'percentage' }, orders: { a: { source: 'webview_delivery', status: 'Delivered', total: 50000, createdAt: 'x' } } });
+assert.ok(e.innerHTML.includes('Wallet balance finished')); console.log('PASS wallet used up: finished alert');
+e = await run({ billing: { payments: {} }, orders: { a: { source: 'QR', status: 'Delivered', total: 1, createdAt: 'x' } } });
+assert.equal(e.style.display, 'none'); console.log('PASS never topped up: no alert (checklist covers it)');
 console.log('ALL PASSED');
 `);
 put('checklist.mjs', `import assert from 'assert';
@@ -72,7 +91,7 @@ console.log('ALL PASSED');
 `);
 
 let bad = 0;
-for (const f of ['wallet.mjs', 'checklist.mjs']) {
+for (const f of ['wallet.mjs', 'checklist.mjs', 'alert.mjs']) {
   const r = spawnSync(process.execPath, [f], { cwd: tmp, encoding: 'utf8' });
   process.stdout.write(r.stdout); if (r.status !== 0) { bad++; process.stderr.write(r.stderr); }
 }

@@ -9,6 +9,7 @@ import { navigate, registerAction } from '/js/main.js';
 import { subscribe, flattenOutlets, getRawBusinesses } from '/js/data-store.js';
 import { refreshIcons, escapeHtml } from '/js/utils.js';
 import { scopeStats, inr, currentYm, monthLabel } from '/js/billing-shared.js';
+import { walletLevel } from '/shared/cost-math.js';
 
 const mainEl = document.getElementById('app-main');
 let allRows = [];
@@ -87,6 +88,7 @@ function buildRows() {
       return {
         ...r,
         orders: all.orders, usage: all.usage, paid: all.paid, due: all.due,
+        level: walletLevel({ paid: all.paid, used: all.usage, charges: all.charges }), locked: outlet.locked === true,
         monthUsage: month.usage, monthPaid: month.paid,
       };
     })
@@ -98,6 +100,7 @@ function renderKpis() {
   const ym = currentYm();
   const outstanding = Math.round(allRows.reduce((s, r) => s + Math.max(r.due, 0), 0) * 100) / 100;
   const owing = allRows.filter((r) => r.due > 0.009).length;
+  const lowWallets = allRows.filter((r) => r.level === 'low' || r.level === 'empty').length;
   const monthUsage = Math.round(allRows.reduce((s, r) => s + r.monthUsage, 0) * 100) / 100;
   const monthPaid = Math.round(allRows.reduce((s, r) => s + r.monthPaid, 0) * 100) / 100;
   document.getElementById('pay-kpis').innerHTML = `
@@ -112,6 +115,10 @@ function renderKpis() {
     <div class="glass-card kpi-tile ${monthPaid > 0 ? 'accent-online' : ''}">
       <div class="kpi-label"><svg data-lucide="indian-rupee" style="width:13px;height:13px"></svg> Collected · ${monthLabel(ym)}</div>
       <div class="kpi-value">${inr(monthPaid)}</div>
+    </div>
+    <div class="glass-card kpi-tile ${lowWallets > 0 ? 'accent-offline' : ''}">
+      <div class="kpi-label"><svg data-lucide="wallet" style="width:13px;height:13px"></svg> Low / empty wallets</div>
+      <div class="kpi-value">${lowWallets} <small>at or below 25% left</small></div>
     </div>
     <div class="glass-card kpi-tile">
       <div class="kpi-label"><svg data-lucide="store" style="width:13px;height:13px"></svg> Restaurants</div>
@@ -160,7 +167,7 @@ function renderTable() {
   }
   tbody.innerHTML = rows.map((r) => `
     <tr class="${r.disabled ? 'row-stale' : ''}">
-      <td><strong>${escapeHtml(r.outletName)}</strong>${r.disabled ? ' <span class="transport-badge unknown">disabled</span>' : ''}</td>
+      <td><strong>${escapeHtml(r.outletName)}</strong>${r.disabled ? ' <span class="transport-badge unknown">disabled</span>' : ''}${r.locked ? ' <span class="transport-badge unknown">locked</span>' : ''}${r.level === 'empty' ? ' <span class="transport-badge" style="color:var(--status-offline,#dc2626)">wallet empty</span>' : r.level === 'low' ? ' <span class="transport-badge" style="color:var(--status-degraded,#d97706)">low balance</span>' : ''}</td>
       <td>${escapeHtml(r.businessName)}</td>
       <td><span class="transport-badge" style="color:var(--accent-payment);background:var(--accent-payment-soft)">${escapeHtml(r.plan)}</span></td>
       <td style="text-align:right;font-variant-numeric:tabular-nums">${r.orders}</td>

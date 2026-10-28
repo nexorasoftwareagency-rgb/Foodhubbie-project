@@ -24,6 +24,9 @@ Audited from the public repo at commit `a4392f1` (`main`). Nothing was run again
 3. A locked restaurant gets setup-only access (menu, tables, settings, wallet), not a dead screen.
 4. The last required setup step is a wallet top-up of at least Rs 1,000. The restaurant pays FoodHubbie directly (UPI/bank), contacts Supreme Admin, who records the payment. The balance is shown and used in the Cost tab, which was redesigned as a wallet.
 
+5. Low-balance rule: warn when the wallet is at or below 25% of everything topped up so far; orders stop only at zero (stopping is not enforced yet, see section 7).
+6. New percentage package, chosen per restaurant in Supreme Admin: 1% of order value on QR, POS and all other features, 2% on WhatsApp-based ordering. Flat per-order stays the default; existing restaurants are unchanged until you switch them. Making this package visible on the website and pricing pages comes later.
+
 ## 4. Findings and status
 | # | Finding | Status |
 |---|---|---|
@@ -49,6 +52,8 @@ Audited from the public repo at commit `a4392f1` (`main`). Nothing was run again
 - `Admin/js/features/setup-checklist.js` (+ `index.html`, `ui.js`): dashboard checklist. Last required step is the Rs 1,000 top-up (done when total recorded payments reach the minimum), then "first order".
 - `shared/cost-math.js`: `MIN_TOPUP` and `computeWallet()` (balance = paid - orders - promo - charges; same ledger as Supreme's "due", sign flipped).
 - `Admin/js/features/costs.js` + `index.html`: new default "Wallet" sub-tab (balance, topped up, used, charges, how to top up, top-up history). Existing Overview/Breakdown/Feed/Connect kept.
+- Percentage package: `shared/cost-math.js` (`percentage` mode, `PERCENT_RATES`, `rateLabel`, `normalizeMode`), used by the Admin Cost tab, Supreme billing math, payment record and billing card. Supreme restaurant profile: "Switch to ..." buttons (`billing-set-mode`) with a confirmation that states the effect.
+- Low balance (`walletLevel`, `LOW_BALANCE_RATIO = 0.25`): dashboard banner in Admin (`features/wallet-alert.js`), colour and message in the Wallet view, and in Supreme > Payments a "low balance" / "wallet empty" chip per restaurant plus a "Low / empty wallets" tile.
 - `SupremeAdmin/js/billing-shared.js`: after recording a payment that brings a locked restaurant to the minimum, shows a reminder to unlock it.
 
 ## 6. Test report
@@ -61,6 +66,8 @@ Audited from the public repo at commit `a4392f1` (`main`). Nothing was run again
 | `node tests/encoding-check.mjs`, `node tests/check-imports.mjs`, `node tools/check-shared-twins.cjs` | Passed |
 | `node gate-verify.js` | Passed (live DB gate skipped) |
 | `database.rules.json` parses as JSON | Passed |
+| Percentage package and 25% rule (`node shared/cost-math.js`, wallet/alert test) | Passed |
+| Supreme Admin screens (mode switch, chips) | Syntax-checked only, **not run** |
 | Database rules behaviour (emulator) | **Not run**: emulator not installable here. Test before deploying |
 | `npm run build:admin` | **Blocked**: npm registry unreachable here |
 | Admin app in a real browser (setup mode, banner, tab gating, wallet) | **Not run** |
@@ -70,7 +77,9 @@ Audited from the public repo at commit `a4392f1` (`main`). Nothing was run again
 ## 7. Known limits and risks
 - **Rules untested.** The lock gate was verified by reading and JSON validation only. Run it in the Firebase emulator (`tests/rules.emulator.mjs`) before deploying, including: locked outlet admin cannot create orders/sessions/requests; unlocked outlet unchanged; Supreme can write either way; public QR ordering on an unlocked outlet unchanged.
 - **Lock covers orders, table sessions and table requests only.** Other writes (settings, menu, inventory) stay open by design. The WhatsApp bot and promos run on the server with admin credentials and are not blocked by rules. If you need promo sending stopped for locked outlets, that is a bot-side check.
-- **No spend limit.** Nothing stops orders when the wallet is empty or negative; it only shows a warning. Decide whether to enforce this.
+- **Warning only, no hard stop.** At 25% left the restaurant sees a warning and you see a chip in Supreme > Payments. Nothing stops orders at zero yet, and you do not get a push notification (the Payments tab is where you see it). A hard stop at zero would need the same rules approach as the lock plus a server-maintained balance.
+- **Changing a restaurant's package re-prices its past orders** in reports and the wallet for any period shown, because fees are computed from orders, not stored. Switch at the start of a billing period.
+- **Public visibility of the percentage package** (website pricing, `llms.txt`, plan pages) is not done yet.
 - **Email still unverified.** With auto-approval, anyone can register any unregistered email with a password of their choice. Mitigations in place are small (hour cap, locked outlets). Recommended next step: send a password-set link to the email instead of storing a chosen password, or require email verification.
 - **Wallet is computed in the browser** from all orders (one read when the Cost tab opens). Fine for new restaurants; for large order histories it should move to a server-maintained balance.
 - **Public pricing copy conflicts.** `website/pricing.html` and `PRICING_AND_TERMS.md` describe a Rs 500 one-time setup and no minimum balance. They were not changed. Please decide the public wording.

@@ -18,7 +18,7 @@
 import { Outlet, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { state } from '../state.js';
 import { SUPPORT_WA } from '../ui.js';
-import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet } from '../../shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel } from '../../shared/cost-math.js';
 
 let _unsubs = [];
 let _orders = {};
@@ -108,7 +108,7 @@ const _rangeLabel = () => {
     return `${f.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – ${t.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 };
 const _rates = () => ({ ...DEFAULT_RATES, ...(_billing && typeof _billing === 'object' ? _billing.rates || {} : {}) });
-const _mode = () => (_billing && typeof _billing === 'object' && _billing.mode === 'commission_1pct') ? 'commission_1pct' : 'per_order';
+const _mode = () => normalizeMode(_billing && typeof _billing === 'object' ? _billing.mode : null);
 
 const LABELS = { QR: 'QR menu', POS: 'POS counter', webview_delivery: 'WhatsApp / webview', WA: 'WhatsApp', other: 'Other' };
 const _label = src => LABELS[src] || src;
@@ -150,7 +150,7 @@ function _render() {
         const rows = Object.entries(idx.bySource);
         bb.innerHTML = rows.length ? rows.map(([src, v]) => `<tr>
             <td>${_label(src)}</td>
-            <td>${mode === 'commission_1pct' && src === 'webview_delivery' ? '1% of order' : _inr(rates[src] ?? rates.other)}</td>
+            <td>${rateLabel(src, mode, rates)}</td>
             <td>${v.orders}</td>
             <td>${_inr(v.cost)}</td>
         </tr>`).join('') : '<tr><td colspan="4">No orders in this range</td></tr>';
@@ -202,7 +202,7 @@ function _render() {
             const b = _billing;
             const rates = _rates();
             const mode = _mode();
-            const modeLabel = mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
+            const modeLabel = mode === 'percentage' ? 'Percentage package (1% of order value, 2% on WhatsApp orders)' : mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
             const setup = b.setup || {};
             const setupStatus = setup.status || 'non_refundable';
             const tp = b.tokenPacks || {};
@@ -243,7 +243,7 @@ function _render() {
                     <div style="margin-top:14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#64748b;">Per-source rates</div>
                     <div class="cost-rate-chips">
                         ${Object.keys(LABELS).filter(k => k in rates).map(k =>
-                            `<span class="cost-rate-chip">${_label(k)}: ${mode === 'commission_1pct' && k === 'webview_delivery' ? '1% of order' : '₹' + rates[k]}</span>`).join('')}
+                            `<span class="cost-rate-chip">${_label(k)}: ${rateLabel(k, mode, rates).replace('/order', '')}</span>`).join('')}
                     </div>
                 </div>`;
         }
@@ -297,9 +297,12 @@ function _renderWallet() {
         let msg;
         if (!w.topUpDone) msg = `Top up at least ${_inr(MIN_TOPUP)} to go live.`;
         else if (state.locked) msg = 'Top-up received. Your restaurant is being switched live.';
-        else if (w.balance < 0) msg = 'Balance is negative. Please top up to avoid interruption.';
+        else if (w.level === 'empty') msg = 'Your wallet balance is finished. Please top up now to avoid interruption.';
+        else if (w.level === 'low') msg = `Low balance: 25% or less of your top-ups is left. Please top up soon.`;
         else msg = 'Your restaurant is live.';
         _setText('walletStatus', msg);
+        const hero = document.getElementById('walletHero');
+        if (hero) hero.style.borderLeft = w.level === 'empty' ? '4px solid #dc2626' : w.level === 'low' ? '4px solid #f59e0b' : '';
     }
     const body = document.getElementById('walletHistoryBody');
     if (body) {

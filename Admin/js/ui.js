@@ -121,6 +121,7 @@ export async function loadTabData(tabId) {
             // riderStats listener and blank every rider's Orders/Wallet.
             if (!isRidersSubscribed()) lr({ withStats: false });
             renderOrders(state.lastOrdersSnap);
+            mod('wallet-alert').then(m => m.loadWalletAlert()).catch(e => console.warn('[UI] wallet alert failed:', e));
             mod('setup-checklist').then(m => m.loadSetupChecklist()).catch(e => console.warn('[UI] setup checklist failed:', e));
             break;
         }

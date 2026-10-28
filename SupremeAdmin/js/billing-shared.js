@@ -8,7 +8,7 @@
  * sends at PROMO_RATE. Scope = time window over createdAt (ISO string or ms).
  * Months are Asia/Kolkata calendar months.
  */
-import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, computeCostIndex } from '/shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, computeCostIndex, normalizeMode } from '/shared/cost-math.js';
 import { escapeHtml, showToast } from '/js/utils.js';
 
 const IST = '+05:30';
@@ -66,7 +66,7 @@ function billingOf(outlet) {
   const b = outlet.billing || {};
   return {
     rates: { ...DEFAULT_RATES, ...(b.rates || {}) },
-    mode: b.mode === 'commission_1pct' ? 'commission_1pct' : 'per_order',
+    mode: normalizeMode(b.mode),
     raw: b,
   };
 }

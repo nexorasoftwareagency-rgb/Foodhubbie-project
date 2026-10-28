@@ -13,7 +13,7 @@ import {
   scopeStats, monthlyRows, ledgerRows, inr, currentYm, monthLabel, scopeLabel,
   monthStartMs, monthEndMs, recordPaymentModal, addChargeModal, printReceipt,
 } from '/js/billing-shared.js';
-import { PROMO_RATE } from '/shared/cost-math.js';
+import { PROMO_RATE, rateLabel } from '/shared/cost-math.js';
 
 const mainEl = document.getElementById('app-main');
 let state = null; // {bid, oid, scope, ym, year, from, to, outlet, ledger}
@@ -223,9 +223,7 @@ function renderCost(stats) {
   const rows = [];
   for (const [src, b] of Object.entries(stats.bySource || {})) {
     if (!b.orders) continue;
-    const rate = src === 'webview_delivery' && stats.mode === 'commission_1pct'
-      ? '1% of sales'
-      : `₹${stats.rates[src] ?? stats.rates.other}/order`;
+    const rate = rateLabel(src, stats.mode, stats.rates);
     rows.push({ label: SRC_LABEL[src] || src, count: String(b.orders), rate, amount: b.cost });
   }
   if (stats.promo > 0) rows.push({ label: 'Promo messages', count: String(stats.promoTokens), rate: `₹${PROMO_RATE} each`, amount: stats.promo });

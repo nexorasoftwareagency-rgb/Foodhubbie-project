@@ -981,25 +981,30 @@ registerAction('scan-baileys', async () => {
 // --- end of reactivate-outlet handler ---
 
 // ---- Billing & promo tokens ----------------------------------------------
-registerAction('billing-toggle-mode', async () => {
+const BILLING_MODE_INFO = {
+  per_order: { label: 'flat per-order billing', body: (b) => `Every source is billed at flat per-order rates (QR \u20B9${b.rates?.QR ?? 2} \u00B7 POS \u20B9${b.rates?.POS ?? 1} \u00B7 WhatsApp \u20B9${b.rates?.WA ?? 5}).` },
+  percentage: { label: 'the percentage package', body: () => 'Every order is billed as a share of its value: 1% on QR, POS and all other features, 2% on WhatsApp-based ordering. Cancelled and refunded orders are not billed. Promo messages stay per token.' },
+  commission_1pct: { label: '1% of sales (WhatsApp only)', body: () => 'WhatsApp delivery orders are billed at 1% of order value. QR, POS and other sources stay per-order.' },
+};
+registerAction('billing-set-mode', async (btn) => {
   if (isReadOnly()) return showToast("Your account is view-only.", 'error');
   const b = lastRaw?.[currentBid]?.outlets?.[currentOid]?.billing;
-  if (!b) return showToast('Billing not seeded — run tools/seed-billing-defaults.cjs.', 'error');
-  const next = b.mode === 'commission_1pct' ? 'per_order' : 'commission_1pct';
+  if (!b) return showToast('Billing not seeded \u2014 run tools/seed-billing-defaults.cjs.', 'error');
+  const next = btn?.dataset?.mode;
+  const info = BILLING_MODE_INFO[next];
+  if (!info) return showToast('Unknown billing mode.', 'error');
   const ok = await showConfirm({
-    title: next === 'commission_1pct' ? 'Switch to 1% of sales?' : 'Switch to per-order billing?',
-    body: next === 'commission_1pct'
-      ? `WhatsApp delivery orders are billed at 1% of order value instead of the flat ₹${b.rates?.WA ?? 3}. QR, POS and other sources stay per-order.`
-      : `Every source goes back to flat per-order rates (QR ₹${b.rates?.QR ?? 2} · POS ₹${b.rates?.POS ?? 1}, WhatsApp delivery ₹${b.rates?.WA ?? 3}).`,
+    title: `Switch to ${info.label}?`,
+    body: `${info.body(b)} This applies to all of this restaurant's orders in reports and the wallet, including past orders in the selected period.`,
     confirmLabel: 'Switch mode',
   });
   if (!ok) return;
   try {
     await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}/billing`).update({ mode: next });
-    showToast(`Billing mode → ${next === 'commission_1pct' ? '1% of sales' : 'per order'}.`, 'success');
+    showToast(`Billing mode \u2192 ${info.label}.`, 'success');
   } catch (err) {
     console.error('billing mode switch failed', err);
-    showToast('Mode switch failed — check the console.', 'error');
+    showToast('Mode switch failed \u2014 check the console.', 'error');
   }
 });
 
