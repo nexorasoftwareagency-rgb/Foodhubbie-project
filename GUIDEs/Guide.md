@@ -11,7 +11,7 @@
 | Area | Behaviour |
 |---|---|
 | Sign-up (`website/signup.html`) | Inline validation, one request per visit (retry reuses it), form locks after success, success box hidden until success. |
-| Auto-approval (`bot-control-api/server.js`) | A website sign-up creates the Auth user, `admins/{uid}`, and the outlet automatically. The outlet starts `locked: true`. Supreme Admin gets a notification (`inquiries` record). Capped per hour; kill switch available. The manual approve endpoint still works. |
+| Auto-approval (`bot-control-api/server.js`) | A website sign-up creates the Auth user, `admins/{uid}`, and the outlet automatically. The outlet starts `locked: true`. Supreme Admin gets a notification (`inquiries` record). Capped per hour; only sign-ups from the last 15 minutes are auto-approved; kill switch available. The manual approve endpoint still works. |
 | Lock (`database.rules.json`) | While `locked`, writes to `orders`, `tableSessions`, `tableRequests` are refused (Super/Supreme exempt). |
 | Setup-only mode (Admin app) | A locked owner can use Dashboard, Menu, Categories, Combos, Menu Browser, Tables, Inventory, Settings, Costs, Notifications. Other tabs show a "top up to go live" popup. A banner explains the state. |
 | Setup checklist (Admin dashboard) | Derived from existing data. Last required step: wallet top-up of at least `MIN_TOPUP` (Rs 1,000). Then "Take your first order". |
@@ -24,7 +24,7 @@
 | File | Change |
 |---|---|
 | `shared/cost-math.js` | `MIN_TOPUP`, `LOW_BALANCE_RATIO`, `PERCENT_RATES`, `normalizeMode`, `rateLabel`, `computeWallet`, `walletLevel`, percentage fee; self-checks |
-| `database.rules.json` | 3 `.write` rules wrapped with the lock gate |
+| `database.rules.json` | 3 `.write` rules wrapped with the lock gate, plus `.indexOn: ["status"]` on `onboardingRequests` |
 | `bot-control-api/server.js` | `approveOnboardingRequest()`, manual endpoint, auto-approval watcher |
 | `Admin/js/ui.js`, `auth.js`, `main.js` | `SETUP_TABS`, setup mode, locked popup, dashboard hooks |
 | `Admin/js/features/setup-checklist.js` | New: dashboard checklist |
@@ -131,6 +131,7 @@ Optional environment variables (set in `ecosystem-bot-control.config.js` env or 
 | `AUTO_APPROVE_MAX_PER_HOUR` | `20` | Extra sign-ups in an hour stay pending and you get a notification |
 
 Run exactly one API instance (the watcher keeps its counters in memory).
+On start the API replays requests that are already pending. Only those created in the last 15 minutes are auto-approved; older pending requests (including any legacy ones) stay in Supreme > Onboarding for manual review.
 
 **STEP 8: deploy Admin and Supreme**
 ```
@@ -181,7 +182,7 @@ How the balance is computed: `balance = payments - (order fees + promo messages 
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| New sign-up stays "pending" | Hourly cap reached, auto-approval off, password write missing, or API not restarted | Check `pm2 logs bot-control-api`; approve manually in Supreme > Onboarding |
+| New sign-up stays "pending" | Hourly cap reached, auto-approval off, request older than 15 minutes when the API saw it (for example pending before a restart), password write missing, or API not restarted | Check `pm2 logs bot-control-api`; approve manually in Supreme > Onboarding |
 | Sign-up marked "rejected: email already registered" | Login email already exists in Firebase Auth | Ask the owner to use another email, or log in |
 | Restaurant says orders fail after rules deploy | Outlet is still `locked` | Record the top-up, then unlock |
 | Wallet shows a dash and "Could not load your usage" | Orders read failed or was denied | Reload; check the admin has `orders` read access |

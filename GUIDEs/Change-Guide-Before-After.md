@@ -8,19 +8,19 @@
 
 | Kind | Lines added | Lines removed | Net |
 |---|---:|---:|---:|
-| Production code and rules | 711 | 130 | +581 |
-| New tests | 244 | 0 | +244 |
-| Docs and guides | 305 | 0 | +305 |
-| **Total** | **1260** | **130** | **+1130** |
+| Production code and rules | 719 | 130 | +589 |
+| New tests | 248 | 0 | +248 |
+| Docs and guides | 2342 | 0 | +2342 |
+| **Total** | **3309** | **130** | **+3179** |
 
-21 files touched: 14 existing files modified, 2 new production files, 3 new test files, 2 docs.
+22 files touched: 14 existing files modified, 2 new production files, 3 new test files, 3 docs.
 
 ## 2. Summary by file
 
 | File | Added | Removed | Changes | What it does |
 |---|---:|---:|---:|---|
-| `database.rules.json` | 3 | 3 | 3 | Lock enforced server-side for order-creating paths. |
-| `bot-control-api/server.js` | 97 | 12 | 8 | Auto-approval of website sign-ups; manual approval unchanged. |
+| `database.rules.json` | 4 | 3 | 4 | Lock enforced server-side for order-creating paths. |
+| `bot-control-api/server.js` | 104 | 12 | 8 | Auto-approval of website sign-ups; manual approval unchanged. |
 | `Admin/js/ui.js` | 54 | 12 | 6 | Setup-only mode and dashboard hooks. |
 | `Admin/js/auth.js` | 5 | 4 | 2 | Use setup mode instead of the full block. |
 | `Admin/js/main.js` | 4 | 2 | 2 | Locked gate only blocks operations tabs. |
@@ -36,16 +36,16 @@
 | `Admin/js/features/setup-checklist.js` (NEW) | 110 | 0 | whole file | Dashboard setup checklist. |
 | `Admin/js/features/wallet-alert.js` (NEW) | 62 | 0 | whole file | Dashboard low-balance banner. |
 | `tests/signup-onboarding.check.mjs` (NEW) | 69 | 0 | whole file | Mocked-network test of the sign-up form (12 checks). |
-| `tests/auto-onboarding.check.cjs` (NEW) | 76 | 0 | whole file | Runs the real server functions against a fake Admin SDK (6 checks). |
+| `tests/auto-onboarding.check.cjs` (NEW) | 80 | 0 | whole file | Runs the real server functions against a fake Admin SDK (6 checks). |
 | `tests/admin-wallet-checklist.check.mjs` (NEW) | 99 | 0 | whole file | Runs real costs/checklist/alert modules against stubs (3 suites). |
 
 ## 3. Changes to existing files
 
 ### `database.rules.json`
 
-**Database security rules.** +3 / -3 lines in 3 change(s). Lock enforced server-side for order-creating paths.
+**Database security rules.** +4 / -3 lines in 4 change(s). Lock enforced server-side for order-creating paths.
 
-#### database.rules.json change 1 of 3: old lines 163-165 -> new lines 163-165 (+1 / -1)
+#### database.rules.json change 1 of 4: old lines 163-165 -> new lines 163-165 (+1 / -1)
 
 **What:** `orders/$orderId` `.write`: new first condition. Writes are allowed only if the outlet is NOT `locked`, or the writer is Super/Supreme. The original rule is kept unchanged inside the parentheses.
 
@@ -65,7 +65,7 @@ After:
   165 |                 ".validate": "newData.hasChildren(['items', 'total', 'status', 'createdAt']) && newData.child('total').isNumber() && newData.child('status').isString() && newData.child('createdAt').isString() && (!newData.hasChild('subtotal') || newData.child('subtotal').isNumber()) && (!newData.hasChild('tax') || newData.child('tax').isNumber()) && (!newData.hasChild('serviceCharge') || n...
 ```
 
-#### database.rules.json change 2 of 3: old lines 469-471 -> new lines 469-471 (+1 / -1)
+#### database.rules.json change 2 of 4: old lines 469-471 -> new lines 469-471 (+1 / -1)
 
 **What:** Same gate on `tableSessions/$sessionId` `.write`.
 
@@ -85,7 +85,7 @@ After:
   471 |                 "orders": {
 ```
 
-#### database.rules.json change 3 of 3: old lines 509-511 -> new lines 509-511 (+1 / -1)
+#### database.rules.json change 3 of 4: old lines 509-511 -> new lines 509-511 (+1 / -1)
 
 **What:** Same gate on `tableRequests/$reqId` `.write`.
 
@@ -105,9 +105,28 @@ After:
   511 |                 ".validate": "newData.hasChildren(['tableId','type','createdAt'])"
 ```
 
+#### database.rules.json change 4 of 4: old lines 614-615 -> new lines 614-616 (+1 / -0)
+
+**What:** `onboardingRequests`: new `".indexOn": ["status"]`.
+
+**Effect:** The auto-approval watcher queries pending requests by status; the index keeps that query efficient and removes a Firebase warning. No access change.
+
+Before (`main`):
+```json
+  614 |     "onboardingRequests": {
+  615 |       ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
+```
+
+After:
+```json
+  614 |     "onboardingRequests": {
+  615 |       ".indexOn": ["status"],
+  616 |       ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
+```
+
 ### `bot-control-api/server.js`
 
-**Onboarding API (runs on EC2).** +97 / -12 lines in 8 change(s). Auto-approval of website sign-ups; manual approval unchanged.
+**Onboarding API (runs on EC2).** +104 / -12 lines in 8 change(s). Auto-approval of website sign-ups; manual approval unchanged.
 
 #### bot-control-api/server.js change 1 of 8: old lines 338-345 -> new lines 338-348 (+9 / -6)
 
@@ -258,11 +277,11 @@ After:
   493 |     console.error('approve-onboarding failed', err);
 ```
 
-#### bot-control-api/server.js change 7 of 8: old lines 482-483 -> new lines 497-567 (+69 / -0)
+#### bot-control-api/server.js change 7 of 8: old lines 482-483 -> new lines 497-574 (+76 / -0)
 
-**What:** NEW block: constants (`ONBOARDING_AUTO_APPROVE`, `AUTO_APPROVE_MAX_PER_HOUR`), `notifySupreme()`, `autoApproveOne()` (hour cap, retries, duplicate email -> rejected, notifications) and `startAutoApproval()` (listener on pending requests).
+**What:** NEW block: constants (`ONBOARDING_AUTO_APPROVE`, `AUTO_APPROVE_MAX_PER_HOUR`), `notifySupreme()`, `autoApproveOne()` (hour cap, 15-minute freshness limit, retries, duplicate email -> rejected, notifications) and `startAutoApproval()` (listener on pending requests).
 
-**Effect:** New website sign-ups become locked restaurants within about a minute and you get a Notifications entry. Over the hourly cap or on error, the request stays pending and you are notified.
+**Effect:** New website sign-ups become locked restaurants within about a minute and you get a Notifications entry. Over the hourly cap, older than 15 minutes (for example already pending when the API restarts), or on error, the request stays pending for manual review.
 
 Before (`main`):
 ```js
@@ -284,68 +303,75 @@ After:
   506 | const AUTO_APPROVE_ON = String(process.env.ONBOARDING_AUTO_APPROVE || 'on').toLowerCase() !== 'off';
   507 | const AUTO_APPROVE_MAX_PER_HOUR = Number(process.env.AUTO_APPROVE_MAX_PER_HOUR || 20);
   508 | const SECRET_RETRY_MS = [3000, 10000, 30000, 90000]; // step 2 (password) lands after step 1 (request)
-  509 | const _autoRecent = [];             // timestamps of recent auto-approvals
-  510 | const _autoSeen = new Set();        // reqKeys already handled in this process
-  511 | let _autoChain = Promise.resolve(); // serialise: outletCounter + duplicate-email checks must not race
-  512 | 
-  513 | async function notifySupreme(title, message, extra = {}) {
-  514 |   try {
-  515 |     await admin.database().ref('inquiries').push({
-  516 |       name: title, phone: extra.phone || '', type: 'New restaurant signup', message,
-  517 |       store: extra.store || '', status: 'new', source: 'auto-onboarding', createdAt: Date.now(),
-  518 |     });
-  519 |   } catch (e) { console.warn('[auto-onboarding] notify failed (non-fatal):', e.message); }
-  520 | }
-  521 | 
-  522 | async function autoApproveOne(reqKey, attempt = 0) {
-  523 |   const snap = await admin.database().ref(`onboardingRequests/${reqKey}`).get();
-  524 |   const r = snap.val();
-  525 |   if (!r || r.status !== 'pending' || r.source !== 'website') return;
-  526 |   const now = Date.now();
-  527 |   while (_autoRecent.length && now - _autoRecent[0] > 3600000) _autoRecent.shift();
-  528 |   if (_autoRecent.length >= AUTO_APPROVE_MAX_PER_HOUR) {
-  529 |     console.warn(`[auto-onboarding] hourly cap reached; ${reqKey} left pending for manual review`);
-  530 |     await notifySupreme('Signup needs manual review', `Auto-approval hourly cap (${AUTO_APPROVE_MAX_PER_HOUR}) reached. ${r.businessName} (${r.adminEmail}) is waiting in Onboarding.`, { phone: r.contactPhone, store: r.outletName });
-  531 |     return;
-  532 |   }
-  533 |   try {
-  534 |     const out = await approveOnboardingRequest(reqKey, r, 'auto-onboarding');
-  535 |     _autoRecent.push(Date.now());
-  536 |     await admin.database().ref(`onboardingRequests/${reqKey}`).update({ autoApproved: true });
-  537 |     await notifySupreme(`New restaurant: ${r.businessName}`, `${r.outletName} signed up (${r.adminEmail}) and was created automatically. It is locked until its first wallet top-up (min ₹1,000) is recorded.`, { phone: r.contactPhone, store: r.outletName });
-  538 |     console.log(`[auto-onboarding] approved ${reqKey} -> ${out.bid}/${out.oid}`);
-  539 |   } catch (err) {
-  540 |     if (err instanceof HttpError && err.status === 422 && attempt < SECRET_RETRY_MS.length) {
-  541 |       setTimeout(() => { _autoChain = _autoChain.then(() => autoApproveOne(reqKey, attempt + 1)).catch(() => {}); }, SECRET_RETRY_MS[attempt]);
-  542 |       return;
-  543 |     }
-  544 |     if (err instanceof HttpError && err.status === 409 && /already exists/.test(err.message)) {
-  545 |       await admin.database().ref(`onboardingRequests/${reqKey}`).update({
-  546 |         status: 'rejected', rejectReason: 'This login email is already registered.', reviewedAt: Date.now(), reviewedBy: 'auto-onboarding',
-  547 |       }).catch(() => {});
-  548 |       return;
-  549 |     }
-  550 |     console.error(`[auto-onboarding] ${reqKey} left pending:`, err.message);
-  551 |     await notifySupreme('Signup needs manual review', `${r.businessName} (${r.adminEmail}) could not be auto-approved: ${err.message}`, { phone: r.contactPhone, store: r.outletName });
-  552 |   }
-  553 | }
-  554 | 
-  555 | function startAutoApproval() {
-  556 |   if (!AUTO_APPROVE_ON) { console.log('[auto-onboarding] disabled (ONBOARDING_AUTO_APPROVE=off)'); return; }
-  557 |   admin.database().ref('onboardingRequests').orderByChild('status').equalTo('pending').on('child_added', (snap) => {
-  558 |     const key = snap.key;
-  559 |     if (_autoSeen.has(key)) return;
-  560 |     _autoSeen.add(key);
-  561 |     // small delay lets the browser's step-2 password write land first
-  562 |     setTimeout(() => { _autoChain = _autoChain.then(() => autoApproveOne(key)).catch((e) => console.error('[auto-onboarding]', e)); }, 2000);
-  563 |   }, (e) => console.error('[auto-onboarding] listener error:', e.message));
-  564 |   console.log(`[auto-onboarding] watching new sign-ups (cap ${AUTO_APPROVE_MAX_PER_HOUR}/hour)`);
-  565 | }
-  566 | 
-  567 | app.post('/api/bot/stop/:bid/:oid', requireSuperOnly, async (req, res) => {
+  509 | // Only fresh sign-ups are auto-approved. On every API start the listener replays all requests that are already
+  510 | // pending; older ones (stale, legacy inline-password, or over the hourly cap) must stay for manual review.
+  511 | const AUTO_APPROVE_MAX_AGE_MS = 15 * 60 * 1000;
+  512 | const _autoRecent = [];             // timestamps of recent auto-approvals
+  513 | const _autoSeen = new Set();        // reqKeys already handled in this process
+  514 | let _autoChain = Promise.resolve(); // serialise: outletCounter + duplicate-email checks must not race
+  515 | 
+  516 | async function notifySupreme(title, message, extra = {}) {
+  517 |   try {
+  518 |     await admin.database().ref('inquiries').push({
+  519 |       name: title, phone: extra.phone || '', type: 'New restaurant signup', message,
+  520 |       store: extra.store || '', status: 'new', source: 'auto-onboarding', createdAt: Date.now(),
+  521 |     });
+  522 |   } catch (e) { console.warn('[auto-onboarding] notify failed (non-fatal):', e.message); }
+  523 | }
+  524 | 
+  525 | async function autoApproveOne(reqKey, attempt = 0) {
+  526 |   const snap = await admin.database().ref(`onboardingRequests/${reqKey}`).get();
+  527 |   const r = snap.val();
+  528 |   if (!r || r.status !== 'pending' || r.source !== 'website') return;
+  529 |   const now = Date.now();
+  530 |   if (Math.abs(now - Number(r.createdAt || 0)) > AUTO_APPROVE_MAX_AGE_MS) {
+  531 |     console.log(`[auto-onboarding] ${reqKey} is not a fresh sign-up; left pending for manual review`);
+  532 |     return;
+  533 |   }
+  534 |   while (_autoRecent.length && now - _autoRecent[0] > 3600000) _autoRecent.shift();
+  535 |   if (_autoRecent.length >= AUTO_APPROVE_MAX_PER_HOUR) {
+  536 |     console.warn(`[auto-onboarding] hourly cap reached; ${reqKey} left pending for manual review`);
+  537 |     await notifySupreme('Signup needs manual review', `Auto-approval hourly cap (${AUTO_APPROVE_MAX_PER_HOUR}) reached. ${r.businessName} (${r.adminEmail}) is waiting in Onboarding.`, { phone: r.contactPhone, store: r.outletName });
+  538 |     return;
+  539 |   }
+  540 |   try {
+  541 |     const out = await approveOnboardingRequest(reqKey, r, 'auto-onboarding');
+  542 |     _autoRecent.push(Date.now());
+  543 |     await admin.database().ref(`onboardingRequests/${reqKey}`).update({ autoApproved: true });
+  544 |     await notifySupreme(`New restaurant: ${r.businessName}`, `${r.outletName} signed up (${r.adminEmail}) and was created automatically. It is locked until its first wallet top-up (min ₹1,000) is recorded.`, { phone: r.contactPhone, store: r.outletName });
+  545 |     console.log(`[auto-onboarding] approved ${reqKey} -> ${out.bid}/${out.oid}`);
+  546 |   } catch (err) {
+  547 |     if (err instanceof HttpError && err.status === 422 && attempt < SECRET_RETRY_MS.length) {
+  548 |       setTimeout(() => { _autoChain = _autoChain.then(() => autoApproveOne(reqKey, attempt + 1)).catch(() => {}); }, SECRET_RETRY_MS[attempt]);
+  549 |       return;
+  550 |     }
+  551 |     if (err instanceof HttpError && err.status === 409 && /already exists/.test(err.message)) {
+  552 |       await admin.database().ref(`onboardingRequests/${reqKey}`).update({
+  553 |         status: 'rejected', rejectReason: 'This login email is already registered.', reviewedAt: Date.now(), reviewedBy: 'auto-onboarding',
+  554 |       }).catch(() => {});
+  555 |       return;
+  556 |     }
+  557 |     console.error(`[auto-onboarding] ${reqKey} left pending:`, err.message);
+  558 |     await notifySupreme('Signup needs manual review', `${r.businessName} (${r.adminEmail}) could not be auto-approved: ${err.message}`, { phone: r.contactPhone, store: r.outletName });
+  559 |   }
+  560 | }
+  561 | 
+  562 | function startAutoApproval() {
+  563 |   if (!AUTO_APPROVE_ON) { console.log('[auto-onboarding] disabled (ONBOARDING_AUTO_APPROVE=off)'); return; }
+  564 |   admin.database().ref('onboardingRequests').orderByChild('status').equalTo('pending').on('child_added', (snap) => {
+  565 |     const key = snap.key;
+  566 |     if (_autoSeen.has(key)) return;
+  567 |     _autoSeen.add(key);
+  568 |     // small delay lets the browser's step-2 password write land first
+  569 |     setTimeout(() => { _autoChain = _autoChain.then(() => autoApproveOne(key)).catch((e) => console.error('[auto-onboarding]', e)); }, 2000);
+  570 |   }, (e) => console.error('[auto-onboarding] listener error:', e.message));
+  571 |   console.log(`[auto-onboarding] watching new sign-ups (cap ${AUTO_APPROVE_MAX_PER_HOUR}/hour)`);
+  572 | }
+  573 | 
+  574 | app.post('/api/bot/stop/:bid/:oid', requireSuperOnly, async (req, res) => {
 ```
 
-#### bot-control-api/server.js change 8 of 8: old lines 1168-1169 -> new lines 1252-1254 (+1 / -0)
+#### bot-control-api/server.js change 8 of 8: old lines 1168-1169 -> new lines 1259-1261 (+1 / -0)
 
 **What:** One call `startAutoApproval();` placed just before `startStatusWatcher(...)` at boot.
 
@@ -359,9 +385,9 @@ Before (`main`):
 
 After:
 ```js
- 1252 | 
- 1253 | startAutoApproval();
- 1254 | startStatusWatcher({ admin, processName, statusOf }).catch((err) => {
+ 1259 | 
+ 1260 | startAutoApproval();
+ 1261 | startStatusWatcher({ admin, processName, statusOf }).catch((err) => {
 ```
 
 ### `Admin/js/ui.js`
@@ -2002,7 +2028,7 @@ Dashboard low-balance banner. Skips restaurants that never topped up (no extra r
 
 Mocked-network test of the sign-up form (12 checks).
 
-### `tests/auto-onboarding.check.cjs` (NEW, 76 lines)
+### `tests/auto-onboarding.check.cjs` (NEW, 80 lines)
 
 Runs the real server functions against a fake Admin SDK (6 checks).
 

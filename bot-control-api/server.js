@@ -506,6 +506,9 @@ app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => 
 const AUTO_APPROVE_ON = String(process.env.ONBOARDING_AUTO_APPROVE || 'on').toLowerCase() !== 'off';
 const AUTO_APPROVE_MAX_PER_HOUR = Number(process.env.AUTO_APPROVE_MAX_PER_HOUR || 20);
 const SECRET_RETRY_MS = [3000, 10000, 30000, 90000]; // step 2 (password) lands after step 1 (request)
+// Only fresh sign-ups are auto-approved. On every API start the listener replays all requests that are already
+// pending; older ones (stale, legacy inline-password, or over the hourly cap) must stay for manual review.
+const AUTO_APPROVE_MAX_AGE_MS = 15 * 60 * 1000;
 const _autoRecent = [];             // timestamps of recent auto-approvals
 const _autoSeen = new Set();        // reqKeys already handled in this process
 let _autoChain = Promise.resolve(); // serialise: outletCounter + duplicate-email checks must not race
@@ -524,6 +527,10 @@ async function autoApproveOne(reqKey, attempt = 0) {
   const r = snap.val();
   if (!r || r.status !== 'pending' || r.source !== 'website') return;
   const now = Date.now();
+  if (Math.abs(now - Number(r.createdAt || 0)) > AUTO_APPROVE_MAX_AGE_MS) {
+    console.log(`[auto-onboarding] ${reqKey} is not a fresh sign-up; left pending for manual review`);
+    return;
+  }
   while (_autoRecent.length && now - _autoRecent[0] > 3600000) _autoRecent.shift();
   if (_autoRecent.length >= AUTO_APPROVE_MAX_PER_HOUR) {
     console.warn(`[auto-onboarding] hourly cap reached; ${reqKey} left pending for manual review`);

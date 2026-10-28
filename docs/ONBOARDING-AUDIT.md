@@ -83,7 +83,7 @@ Audited from the public repo at commit `a4392f1` (`main`). Nothing was run again
 - **Email still unverified.** With auto-approval, anyone can register any unregistered email with a password of their choice. Mitigations in place are small (hour cap, locked outlets). Recommended next step: send a password-set link to the email instead of storing a chosen password, or require email verification.
 - **Wallet is computed in the browser** from all orders (one read when the Cost tab opens). Fine for new restaurants; for large order histories it should move to a server-maintained balance.
 - **Public pricing copy conflicts.** `website/pricing.html` and `PRICING_AND_TERMS.md` describe a Rs 500 one-time setup and no minimum balance. They were not changed. Please decide the public wording.
-- **Auto-approval needs the API process restarted** and assumes a single instance, like the status watcher.
+- **Auto-approval needs the API process restarted** and assumes a single instance, like the status watcher. It only approves sign-ups from the last 15 minutes, so requests already pending when the API (re)starts stay for manual review (found and fixed in the final recheck).
 
 ## 8. Deployment order (nothing was deployed)
 1. Run the rules emulator test; fix anything it finds.

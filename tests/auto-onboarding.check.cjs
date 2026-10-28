@@ -36,7 +36,7 @@ const mk = (fake) => {
   vm.runInContext(code + '\n;this.autoApproveOne = autoApproveOne; this._autoRecent = _autoRecent; this.HttpError = HttpError; this.approveOnboardingRequest = approveOnboardingRequest;', ctx);
   return ctx;
 };
-const req = (o = {}) => ({ businessName: 'Spice', outletName: 'Spice A', adminEmail: 'a@x.com', contactPhone: '9999999999', plan: 'starter', source: 'website', status: 'pending', ...o });
+const req = (o = {}) => ({ businessName: 'Spice', outletName: 'Spice A', adminEmail: 'a@x.com', contactPhone: '9999999999', plan: 'starter', source: 'website', status: 'pending', createdAt: Date.now(), ...o });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 (async () => {
   let f = makeFake({ onboardingRequests: { r1: req() }, onboardingSecrets: { r1: { password: 'secret123' } } }, {});
@@ -72,5 +72,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   f = makeFake({ onboardingRequests: { r1: req() }, onboardingSecrets: { r1: { password: 'abc' } } }, {}); c = mk(f);
   await c.autoApproveOne('r1'); await sleep(40); assert.equal(f.db.onboardingRequests.r1.status, 'pending');
   console.log('PASS short password never creates an account');
+  f = makeFake({ onboardingRequests: { old: req({ createdAt: Date.now() - 3600000 }), legacy: req({ createdAt: Date.now() - 86400000 * 30, adminPassword: 'plaintext1' }) } }, {});
+  c = mk(f); await c.autoApproveOne('old'); await c.autoApproveOne('legacy');
+  assert.ok(!f.db.businesses && !f.users['a@x.com']); assert.equal(f.db.onboardingRequests.old.status, 'pending'); assert.equal(f.db.onboardingRequests.legacy.status, 'pending');
+  console.log('PASS requests already pending before the API started (old / legacy) are NOT auto-approved');
   console.log('ALL PASSED');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });
