@@ -132,5 +132,17 @@ for (const f of html) {
   if (!linked) fail(`${SITE}/${f}`, 'orphan page - not linked from any other page');
 }
 
+// The public demo is the LIVE dashboard — the static /demo/tour replica was deleted
+// 2026-10-29. Every nav "Live demo" link must point straight at it, and no page may
+// link the dead tour URL (the hosts still 301/302 it, but the copy must not advertise it).
+const DEMO_URL = 'https://foodhubbie-admins.web.app/demo';
+for (const f of html) {
+  const c = site[f];
+  if (/\/demo\/tour/.test(c)) fail(`${SITE}/${f}`, 'links the deleted /demo/tour replica - use the live demo');
+  for (const m of c.matchAll(/<a class="link nav-demo" href="([^"]+)"/g)) {
+    if (m[1] !== DEMO_URL) fail(`${SITE}/${f}`, `demo nav link is "${m[1]}", want ${DEMO_URL}`);
+  }
+}
+
 console.log(bad ? `FAILED: ${bad} problem(s)` : `OK: ${PUBLIC.length} files + ${locs.length} sitemap urls consistent`);
 process.exit(bad ? 1 : 0);
