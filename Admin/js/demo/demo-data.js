@@ -3,7 +3,7 @@
  *
  * Everything here is invented. No production record, customer, employee or
  * credential is ever read into the demo (the demo page never loads the Firebase
- * SDK at all — see tools/check-demo-nav.cjs).
+ * SDK at all).
  *
  * Money is computed with the REAL shared/money-math.js, so demo totals follow
  * exactly the same rounding/tax/service-charge rules as the live ERP.

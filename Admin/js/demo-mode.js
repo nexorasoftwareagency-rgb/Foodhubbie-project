@@ -11,8 +11,8 @@
  * real Firebase Auth users, sending WhatsApp/reset messages, changing the demo
  * account password, or disabling the outlet itself.
  *
- * The static marketing replica lives at /demo/tour and is linked from the
- * normal login screen; it does not use this module.
+ * The old static marketing replica (/demo/tour) was removed on 2026-10-29:
+ * every demo link now points at this live sandbox.
  */
 
 import { auth, signInWithEmailAndPassword, signOut, setPersistence, browserSessionPersistence } from './firebase.js';

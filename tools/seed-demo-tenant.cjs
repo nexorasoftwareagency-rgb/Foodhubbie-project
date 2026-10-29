@@ -18,8 +18,8 @@
  *     outlets that have one, so no bot worker is ever spawned for the demo.
  *
  * Fixtures (dishes, riders, customers, staff, inventory, ...) are imported from
- * Admin/js/demo/demo-data.js - the same dataset the static /demo/tour replica
- * renders - so the live demo and the tour show the same restaurant. Money is
+ * Admin/js/demo/demo-data.js for the synthetic history/staff/inventory
+ * fixtures. Money is
  * computed with the real shared/money-math.js.
  *
  * Idempotent: a run rewrites the whole business subtree and re-asserts the auth

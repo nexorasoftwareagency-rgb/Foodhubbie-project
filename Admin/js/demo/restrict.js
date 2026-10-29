@@ -16,10 +16,10 @@ let _lastTrigger = null;
 let _bound = false;
 
 /**
- * The static replica (/demo/tour) carries these rules inline in its own HTML.
- * The live dashboard has no such block, so the modal brings its own — the copy
- * is kept identical to `Admin/demo.html` apart from the z-index (the ERP stacks
- * drawers/sidebars at 5000+ and its own modals at 10000+).
+ * Copy is duplicated verbatim nowhere else; keep this as the single source.
+ * The live dashboard has no such block, so the modal brings its own at
+ * z-index 100000 — the ERP stacks drawers/sidebars at 5000+ and its own
+ * modals at 10000+.
  */
 const MODAL_CSS = `
 .demo-modal{position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;padding:18px}
