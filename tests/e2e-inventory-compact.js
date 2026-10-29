@@ -59,6 +59,31 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     await page.waitForTimeout(700);
     await page.screenshot({ path: path.join(T, 'inventory-compact-grid.png') });
 
+    // ---- Menu Management tab (same density pass) ----
+    await page.locator('.nav-btn[data-tab="menu"]').first().click();
+    await page.waitForTimeout(3500);
+    const mo = await page.evaluate(() => {
+        const grid = document.getElementById('menuGrid');
+        const cards = [...grid.querySelectorAll('.dish-card')];
+        const rect = grid.getBoundingClientRect();
+        return {
+            cards: cards.length,
+            gridWidth: Math.round(rect.width),
+            cardW: cards[0] ? Math.round(cards[0].getBoundingClientRect().width) : 0,
+            cardH: cards[0] ? Math.round(cards[0].getBoundingClientRect().height) : 0,
+            stepX: cards.length > 1 ? Math.round(cards[1].getBoundingClientRect().x - cards[0].getBoundingClientRect().x) : 0,
+            btnW: (grid.querySelector('.btn-action-v4') || {}).offsetWidth || 0,
+            chipPad: (() => { const c = grid.querySelector('.price-chip-v4'); return c ? Math.round(getComputedStyle(c).getPropertyValue('padding-top').replace('px', '')) : 0; })(),
+        };
+    });
+    ok('menu tab cards render', mo.cards > 0, `${mo.cards} cards`);
+    ok('menu tab cards compact', mo.cardW > 0 && mo.cardW < 150, `card ${mo.cardW}x${mo.cardH}px -> ~${mo.stepX ? Math.round(mo.gridWidth / mo.stepX) : 1} columns on ${mo.gridWidth}px`);
+    ok('menu tab action buttons compact', mo.btnW === 0 || mo.btnW <= 28, `edit/delete btn ${mo.btnW}px`);
+    ok('menu tab price chips compact', mo.chipPad > 0 && mo.chipPad <= 6, `chip vertical padding ${mo.chipPad}px`);
+    await page.evaluate(() => document.getElementById('tab-menu').scrollIntoView());
+    await page.waitForTimeout(700);
+    await page.screenshot({ path: path.join(T, 'menu-compact.png') });
+
     await browser.close();
     const fails = results.filter(r => !r.pass).length;
     console.log(`\nRESULT: ${results.length - fails}/${results.length} passed`);

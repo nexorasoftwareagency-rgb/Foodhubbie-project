@@ -55,6 +55,13 @@ This rule applies to:
 - **Before deploy:** run the rules emulator (needs a JDK; not possible on this box) or the live probe in plan §7.1 — the lock gate is the only unproven part. Then `firebase deploy --only database` → restart `bot-control-api` → admin/supreme builds → website last.
 - **Open owner decisions:** duplicate `GUIDEs/` docs; email verification / password-set link (auto-approval lets anyone register any unregistered email); public pricing copy (₹500 setup vs ₹1,000 minimum wallet); hard stop at zero balance; percentage-package visibility.
 
+### ✅ MenuTab Density Pass — deployed (done)
+- **Files:** `Admin/style.css` (`#menuGrid` compact block), `Admin/js/features/catalog.js` (chip modifier `main` → `single`, root-cause fix for the app-shell `.main` padding collision), `Admin/index.html` + `Admin/sw.js` (`style.css?v=5.4.9`, cache `v5.12.6`)
+- **Stage:** `done`
+- **Verified:** production E2E `tests/e2e-inventory-compact.js` 9/9 (both tabs) — menu card 132×227px, ~8 columns on 1112px (was ~160px/6 cols), 24px edit/delete buttons, price chip padding 2px (was broken 0/30/30 by `.main` shell rule `!important` on desktop ≥1025px)
+- **OK:** inventory battery 5/5 unchanged on the same deploy (regression clean)
+- **Done:** deployed 2026-10-29; ledger `[20261029-180000-menu-compact]`.
+
 ### ✅ Inventory Tab Density Pass — deployed (done)
 - **Files:** `Admin/style.css` (scoped to `#inventoryMenuSection`/`.inventory-dish-card`), `Admin/js/features/inventory.js` (`MENU_PAGE_SIZE` 20→30), `Admin/index.html` + `Admin/sw.js` (`style.css?v=5.4.7`, cache `v5.12.4`)
 - **Stage:** `done`

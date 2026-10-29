@@ -279,7 +279,7 @@ dishes.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
                                     <span class="price">₹${escapeHtml(String(price))}</span>
                                 </div>
                         `).join("") : `
-<div class="price-chip-v4 main">
+<div class="price-chip-v4 single">
                                     <span class="size">Price</span>
                                     <span class="price">₹${escapeHtml(String(d.price || 0))}</span>
                                 </div>
