@@ -12,7 +12,7 @@ let _invSearch = '';
 let _invSortField = 'name', _invSortDir = 'asc';
 let _menuPage = 1;
 let _menuAllRows = [];
-const MENU_PAGE_SIZE = 20;
+const MENU_PAGE_SIZE = 30;
 
 export function initInventory() {
     console.log("[Inventory] Initializing Simplified Module...");

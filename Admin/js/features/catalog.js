@@ -113,7 +113,7 @@ export async function addCategory() {
 
         if (fileInput.files.length > 0) {
             const file = fileInput.files[0];
-            imageUrl = await uploadImage(file, `categories/${Date.now()}_${file.name}`);
+            imageUrl = await uploadImage(file, `categories/${Date.now()}_${file.name}`, { webp: true });
         }
 
         const addons = {};
@@ -349,7 +349,7 @@ export async function saveDish() {
                 const snap = await get(Outlet.ref(`dishes/${state.editingDishId}`));
                 oldImageUrl = snap.val()?.image;
             }
-            image = await uploadImage(file, `dishes/${Date.now()}_${file.name}`);
+            image = await uploadImage(file, `dishes/${Date.now()}_${file.name}`, { webp: true });
             if (oldImageUrl && image !== oldImageUrl) {
                 await deleteImage(oldImageUrl);
             }
@@ -691,7 +691,7 @@ export async function saveCategoryEdits() {
     let imageUrl = cat.image;
     if (fileInput.files && fileInput.files[0]) {
         try {
-            imageUrl = await uploadImage(fileInput.files[0], `categories/${id}_${Date.now()}_${fileInput.files[0].name}`);
+            imageUrl = await uploadImage(fileInput.files[0], `categories/${id}_${Date.now()}_${fileInput.files[0].name}`, { webp: true });
         } catch (e) {
             console.error('[Catalog] Image upload failed:', e);
             return showToast('Failed to upload image', 'error');
@@ -1599,7 +1599,7 @@ export async function showComboModal(comboId = null) {
             saveBtn.innerHTML = '<span class="spinner-sm"></span> Saving...';
             let image = combo?.image || null;
             if (draft.file) {
-                image = await uploadImage(draft.file, `combos/${Date.now()}_${draft.file.name}`);
+                image = await uploadImage(draft.file, `combos/${Date.now()}_${draft.file.name}`, { webp: true });
                 if (combo?.image && image !== combo.image) deleteImage(combo.image).catch(err => console.warn('[Combos] Old image deletion failed:', err));
             }
             const payload = {
