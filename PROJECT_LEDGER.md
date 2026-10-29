@@ -2179,3 +2179,15 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Verification: copy-consistency OK (30 files + 25 sitemap urls), domain-migration 0 stale refs (204 files), encoding ok, 32/32 JSON-LD blocks parse and are ERP-free, all wa.me CTA texts read naturally, spot-checked titles/H1s/nav/footer on 7 pages.
 - Pending owner actions: production deploy (firebase deploy --only hosting:website), GSC re-fetch for changed URLs.
 - Confidence: HIGH for repo state; live site still shows ERP until deploy.
+
+### [20261029-130000-webp-images] Website images converted to WebP + favicon downscale
+- TIER: 1 (static assets only; no copy, no schema, no rules)
+- STATUS: DONE (not deployed - deploy authorization still pending from the brand sweep)
+- User request: every image format on the website into WebP.
+- Converted (ffmpeg libwebp, dimensions preserved): website/assets/demo/demo-poster.png (380KB) -> demo-poster.webp (78KB, q90); website/assets/social/restaurant-os-1080x1350.png (1.97MB @2160x2700) -> restaurant-os-1080x1350.webp (311KB, q87). Old PNGs deleted; references updated in website/index.html (video poster), docs/OFFSITE-KIT.md, promo/ASSETS.md, promo/COPY.md, promo/TRACKER.md.
+- Favicon KEPT PNG by design (not converted): apple-touch-icon is PNG-only per iOS spec, Safari does not render WebP favicons, and the favicon.png + JSON-LD logo should stay universally readable. Instead optimizer: favicon.png was 1254x1254 at 794KB -> resized to 256x256 lanczos, now 48KB (all real use sizes are <=180px; favicon-512.png untouched at 512px/183KB since it is the structured-data logo).
+- Out of scope (left as-is): favicon.svg (vector), website/demo/icon-erp-logo.png (gitignored mirror generated from Admin/dist by tools/build-demo-site.mjs - converting it means touching the Admin app; the mirror's 794KB logo is a noted optimization for a future Admin-side pass).
+- Staying-PNG provenance refs left as history: PROJECT_LEDGER.md (append-only); promo/*.md refs to promo/assets/demo-poster.png point at the promo pack folder deleted by earlier work, not website assets.
+- Gotcha avoided: PowerShell Set-Content rewrote line endings on promo/*.md (whole-file CRLF diff) - reverted and redone with content-preserving edits (TRACKER.md diff is exactly 3 lines).
+- Verification: ffprobe both webp dims exact; copy-consistency OK; encoding ok; domain-migration 0 stale; repo-wide grep shows no live refs to the deleted PNGs.
+- Commit: cadaac7 (webp); brand sweep from the prior entry = 0c4db00

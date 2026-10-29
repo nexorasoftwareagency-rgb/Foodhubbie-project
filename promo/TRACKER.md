@@ -6,7 +6,7 @@ Status as of **2026-10-21**. Update the row, then append a line to the log.
 
 | # | Channel | Type | Cost | Status | Next action | Owner | Result |
 |---|---|---|---|---|---|---|---|
-| 1 | X (Twitter) | Social | Free | READY | Post `COPY.md` → X #1 with `assets/restaurant-os-1080x1350.png` (or `website/assets/social/restaurant-os-1080x1350.png`) | Owner | — |
+| 1 | X (Twitter) | Social | Free | READY | Post `COPY.md` → X #1 with `assets/restaurant-os-1080x1350.webp` (or `website/assets/social/restaurant-os-1080x1350.webp`) | Owner | — |
 | 2 | Threads | Social | Free | READY | Post 1/2 + image, then reply 2/2 | Owner | — |
 | 3 | LinkedIn (personal) | Social | Free | READY | Post `COPY.md` → LinkedIn | Owner | — |
 | 4 | Product Hunt | Launch | Free | BLOCKED — needs account + 1–2 days lead time | Create account, pick launch date, upload gallery from `assets/` | Owner | — |
@@ -34,7 +34,7 @@ Status as of **2026-10-21**. Update the row, then append a line to the log.
 
 | Asset | Path | Status |
 |---|---|---|
-| Social card 1080×1350 | `website/assets/social/restaurant-os-1080x1350.png` | DONE |
+| Social card 1080×1350 | `website/assets/social/restaurant-os-1080x1350.webp` | DONE |
 | Product Hunt gallery ×4 (1270×760) | `promo/assets/ph-gallery-{1..4}.png` | DONE |
 | Logo 240×240 | `promo/assets/logo-240.png` | DONE |
 | Product Hunt thumbnail 240×240 | `promo/assets/logo-240.png` (same file) | DONE |
@@ -62,7 +62,7 @@ Status as of **2026-10-21**. Update the row, then append a line to the log.
 
 **2026-10-21**
 - Site audit fixes shipped (`24d390a`): removed both "zero ban risk" claims + the FAQ JSON-LD that repeated it; removed the leftover "if that is lower" WhatsApp wording; pricing now states the ₹1 promo fee excludes Meta's conversation charges; deleted the dead placeholder testimonial block.
-- Social card generated: `website/assets/social/restaurant-os-1080x1350.png` (real POS screen, ₹1–5/order footer, no unbackable claims).
+- Social card generated: `website/assets/social/restaurant-os-1080x1350.webp` (real POS screen, ₹1–5/order footer, no unbackable claims).
 - Product Hunt gallery generated: 4 frames (POS, tables, analytics with real ₹1,125/9 orders, consent-based promotions). Rejected frames: `admin-dashboard` (₹0 revenue + CANCELLED rows), `analytics-1/2` (₹0), `whatsapp-bot` (pixelated chat list), `orders` (mostly CANCELLED rows), `live-orders`/`table-management` empty states.
 - `promo/` workspace created: README (ground rules + ritual + KPIs), this tracker, `COPY.md`, `ASSETS.md`.
 - Policy pages live (`/billing-policy`, `/refund-policy`, `/whatsapp-policy`) — these are the links to use when a directory asks for terms/refund URLs.

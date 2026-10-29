@@ -6,7 +6,7 @@ Forbidden: "zero ban risk", "guaranteed delivery", invented customer counts, inv
 
 ---
 
-## X (single post, with `restaurant-os-1080x1350.png`)
+## X (single post, with `restaurant-os-1080x1350.webp`)
 
 > A restaurant runs on five tools that don't talk to each other: billing, table orders, kitchen tickets, WhatsApp, reports.
 >

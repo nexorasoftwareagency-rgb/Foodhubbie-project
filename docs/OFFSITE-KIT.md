@@ -24,7 +24,7 @@ enforces the numbers (₹1–5 per order, ₹500 setup, one phone, one email) an
 | Platform | Browser (no install) — Admin Dashboard, Customer QR Menu, Rider App |
 | Support | WhatsApp +91 97246 49971, Mon–Sun 10:00–23:00 IST |
 | Screenshots | `website/assets/shots/` — admin-dashboard.webp, pos.webp, qr-table.webp, live-orders.webp, rider-management.webp, menu-landing-mobile.webp, inventory.webp |
-| Demo video | `website/assets/demo/demo-walkthrough-32s.mp4` (poster: demo-poster.png) |
+| Demo video | `website/assets/demo/demo-walkthrough-32s.mp4` (poster: demo-poster.webp) |
 
 **One-line pitch:** Restaurant management software that charges per order, not per month — QR table
 ordering, kitchen display, POS billing, WhatsApp ordering and delivery riders in one live system.

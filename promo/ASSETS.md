@@ -6,7 +6,7 @@ All marketing images are **real product screenshots** with a branded frame. No s
 
 | Asset | Size | Path | Used for |
 |---|---|---|---|
-| Social card | 1080×1350 (@2x) | `website/assets/social/restaurant-os-1080x1350.png` | X post, Threads 1/2, LinkedIn |
+| Social card | 1080×1350 (@2x) | `website/assets/social/restaurant-os-1080x1350.webp` | X post, Threads 1/2, LinkedIn |
 | PH gallery 1 — POS | 1270×760 (@2x) | `promo/assets/ph-gallery-1.png` | Product Hunt, directory listings |
 | PH gallery 2 — tables | 1270×760 (@2x) | `promo/assets/ph-gallery-2.png` | Product Hunt |
 | PH gallery 3 — analytics | 1270×760 (@2x) | `promo/assets/ph-gallery-3.png` | Product Hunt |
