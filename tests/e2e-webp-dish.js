@@ -8,7 +8,7 @@ const admin = require('D:/Foodhubbie Project/bot/node_modules/firebase-admin');
 
 const BID = 'e2e-biz-1792987605261';
 const OID = 'e2e-outlet-1792987605261';
-const APP = 'http://localhost:4599/';
+const APP = process.env.E2E_ADMIN_BASE || 'http://localhost:4599/';
 const DISH_NAME = 'WebP E2E Test Dish v1';
 const T = 'C:/Users/2nile/AppData/Local/Temp/opencode';
 

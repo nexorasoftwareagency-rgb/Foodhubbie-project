@@ -40,9 +40,24 @@ This rule applies to:
 
 ---
 
-### ✅ WebP Catalog Images — committed + live E2E verified, awaiting deploy
+### 🔍 Onboarding setup checklist / auto-approval / wallet / percentage package — reviewed, awaiting merge decision
+- **Source:** `Fixes-and-Changes/Foodhubbie Onboarding PLAAN/` (6-commit mbox on base `a4392f1` + Guide.md + Change-Guide-Before-After.md)
+- **Stage:** `reviewing`
+- **Branch:** local `onboarding-setup-checklist` (`4c32061..b4a301a`, 7 commits incl. the two test fixes, based on `df45d29`) — **not merged, not deployed, no live data touched**
+- **Plan:** `docs/PLAN-ONBOARDING-WALLET-PERCENTAGE.md` (compatibility matrix, file map, findings, verification, phased rollout, rollback, live probes, open decisions)
+- **Verified:** `node shared/cost-math.js`, `tests/encoding-check.mjs`, `tests/check-imports.mjs`, `tests/auto-onboarding.check.cjs` 7/7, `tests/admin-wallet-checklist.check.mjs` 3 suites, `tests/signup-onboarding.check.mjs` 12/12, `tools/check-shared-twins.cjs` 5/5, `tools/check-copy-consistency.cjs`, `gate-verify.js` PASS, `build:admin`, `build:supreme`; real-browser boot of the built Admin (demo tenant) + Supreme, and setup mode 8/8 with `state.locked` injected through the module cache
+- **OK:** (pending — two P1 fixes first)
+- **Done:** (pending — merge + deploy)
+- **Must fix before merge:**
+  - [ ] **F1** `SETUP_TABS` in `Admin/js/ui.js` is missing `'chat'`, but the setup checklist's "Connect WhatsApp ordering" step links to it → the button opens the "Top up to go live" popup instead. Add `'chat'` (decide on `'discounts'`).
+  - [ ] **F2** `approveOnboardingRequest()` (bot-control-api/server.js) must write `outletIndex/{oid} = {bid, name, createdAt}` like the Supreme wizard does, or every auto-created outlet has no resolvable outlet key / QR menu link.
+  - [ ] **F5** bump `Admin/sw.js` `CACHE_NAME` at merge → `v5.12.4` (the WebP commit `b0c1757` already took `v5.12.3`).
+- **Before deploy:** run the rules emulator (needs a JDK; not possible on this box) or the live probe in plan §7.1 — the lock gate is the only unproven part. Then `firebase deploy --only database` → restart `bot-control-api` → admin/supreme builds → website last.
+- **Open owner decisions:** duplicate `GUIDEs/` docs; email verification / password-set link (auto-approval lets anyone register any unregistered email); public pricing copy (₹500 setup vs ₹1,000 minimum wallet); hard stop at zero balance; percentage-package visibility.
+
+### ✅ WebP Catalog Images — deployed to production (done)
 - **Files:** `Admin/js/firebase.js` (`uploadImage(fileOrBlob, path, opts = {})` — `opts.webp` encodes via `canvas.toBlob('image/webp', 0.75)` and only resolves that blob when `blob.type === 'image/webp'`, otherwise falls back to `toDataURL('image/jpeg', 0.6)`), `Admin/js/features/catalog.js` (4 call sites pass `{ webp: true }`: `addCategory`, `saveDish`, `saveCategoryEdits`, `showComboModal`), `Admin/sw.js` (`v5.12.2` → `v5.12.3`)
-- **Stage:** `verified` (commit `b0c1757`; ledger `[20261029-160000-webp-dishes]`)
+- **Stage:** `done` (commit `b0c1757`; ledger `[20261029-160000-webp-dishes]` + `[20261029-170000-deploy-admin-webp]`)
 - **Origin:** appeared in the working tree on 2026-10-29 while the demo/tour work was being shipped; it is NOT part of that work and was deliberately left uncommitted. Live admin host still serves the JPEG path at `v5.12.2`.
 - **Requirement:** shrink the base64 catalog images that ship in every QR-menu payload, without breaking WhatsApp image sends, the customer menu, or browsers that cannot encode WebP. Deliberately untouched: `uploadImage(blob, 'temp')` inside `runImageMigration()` and the rider/KYC call sites in `riders.js` (no `opts` → legacy JPEG).
 - **Verified:**
@@ -52,8 +67,8 @@ This rule applies to:
   - **Safari fallback:** `blob.type` check + JPEG fallback is in place; NOT executable on Windows — accepted as documented, not tested.
   - **runImageMigration:** intentionally stays JPEG (legacy Storage→base64 backfill, rarely used; documented in ledger).
   - **WhatsApp Sharp path:** `bot/index.js` normalizes ANY `data:image` through Sharp → JPEG before Baileys, so a webp dish image reaches WhatsApp normalized; NOT yet proven with a real send (e2e/cake WhatsApp sessions are dead — pre-existing). Promos remain JPEG-locked by design (no `webp` flag on that path).
-- **OK:** (pending — needs a real WhatsApp send proof where available + second-party review)
-- **Done:** (pending — `firebase deploy --only hosting:admin` needs owner authorization; the v5.12.3 SW cache-name bump forces a clean re-cache after deploy)
+- **OK:** owner-authorized deploy `firebase deploy --only hosting:admin` (2026-10-29, release complete); live host serves the toBlob/webp encoder, the v5.12.3 cache-name bump, and all 4 `webp:!0` call sites; **production E2E 10/10** re-run against the live admin host (`E2E_ADMIN_BASE`), same assertions green incl. menu render + cleanup.
+- **Done:** deployed and verified live (`https://foodhubbie-admins.web.app`). Residual notes: Safari/JPEG fallback is documented-not-tested (Windows only); a real WhatsApp send of a webp dish photo is pending a live WhatsApp session (e2e/cake sessions dead — pre-existing) but `bot/index.js` Sharp-normalizes ANY `data:image` to JPEG before Baileys; live-tenant migration apply remains deliberately skipped (7% ceiling on double-compressed leftovers — script kept with backup + `--restore`).
 
 ### ✅ EC2 Git Metadata Reconciled to `main` (117 commits, zero restarts)
 - **File:** `/var/www/foodhubbie` (box only — no repo file changed)
