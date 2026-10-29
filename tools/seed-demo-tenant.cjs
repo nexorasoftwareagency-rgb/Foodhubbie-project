@@ -46,6 +46,12 @@ const OID = 'demo';
 const DEMO_EMAIL = 'demo@foodhubbie.in';
 const DEMO_PASSWORD = 'Demo@Foodhubbie2026';
 const DEMO_NAME = 'Demo Dashboard';
+const DEMO_OUTLET_NAME = 'Demo Dashboard';
+// Menu + combos are copied from the live Roshani Pizza outlet so the demo
+// showcases the real product catalog (prices, sizes, photos, combos) instead of
+// invented fixtures. Read over the public REST API: no credentials needed.
+const SOURCE_BID = process.env.DEMO_SOURCE_BID || 'roshani-pizza';
+const SOURCE_OID = process.env.DEMO_SOURCE_OID || 'pizza';
 const DB_URL = process.env.FIREBASE_DATABASE_URL
     || `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com`;
 
@@ -145,68 +151,75 @@ async function loadFixtures() {
 
 // ------------------------------------------------------------------ catalog
 
-const CAT_COLOURS = {
-    Pizzas: '#E84908', Sides: '#F59E0B', Pasta: '#16A34A', Desserts: '#DB2777', Drinks: '#0EA5E9',
-};
+/**
+ * Read the live catalog (categories/dishes/combos) straight from RTDB. Those
+ * nodes are publicly readable (the customer menu needs them), so this works
+ * from any machine — no service account for the read, only for the write.
+ */
+async function loadLiveCatalog() {
+    const base = `${DB_URL}/businesses/${SOURCE_BID}/outlets/${SOURCE_OID}`;
+    const out = {};
+    for (const node of ['categories', 'dishes', 'combos']) {
+        const res = await fetch(`${base}/${node}.json`);
+        if (!res.ok) throw new Error(`source catalog ${node}: HTTP ${res.status}`);
+        out[node] = (await res.json()) || {};
+    }
+    if (!Object.keys(out.dishes).length) throw new Error(`source catalog is empty (${SOURCE_BID}/${SOURCE_OID})`);
+    return out;
+}
 
-function buildCatalog(fx) {
+function buildCatalog(live, fx) {
     const categories = {};
-    for (const c of fx.CATEGORIES) {
-        categories[`cat_${c.id}`] = {
+    for (const [id, c] of Object.entries(live.categories)) {
+        categories[id] = {
             name: c.name,
-            icon: c.icon,
-            order: c.order,
+            icon: c.icon || '',
+            order: Number(c.order) || 0,
             visible: c.visible !== false,
             desc: c.desc || '',
-            image: svgImage(c.name, CAT_COLOURS[c.name] || '#E84908'),
-            addons: c.name === 'Pizzas'
-                ? { 'Extra Cheese': 49, 'Extra Paneer': 39, 'Extra Onion': 19, 'Extra Corn': 19, 'Extra Tomato': 19 }
-                : {},
-            createdAt: NOW - 60 * DAY,
+            image: c.image || '',
+            addons: c.addons || {},
+            createdAt: c.createdAt || NOW - 60 * DAY,
         };
     }
 
     const dishes = {};
-    for (const d of fx.DISHES) {
-        dishes[`dish_${d.id}`] = {
-            name: d.name,
-            category: d.category,
-            price: d.price,
-            veg: d.veg !== false,
-            desc: d.desc || '',
-            description: d.desc || '',
-            prepTime: d.prep,
-            stock: d.available !== false,
-            available: d.available !== false,
+    for (const [id, d] of Object.entries(live.dishes)) {
+        const stock = d.stock !== false;
+        dishes[id] = {
+            ...d,
+            stock,
+            available: stock,
             gstRate: d.gstRate || 5,
-            image: svgImage(d.name, CAT_COLOURS[d.category] || '#E84908'),
-            createdAt: NOW - 60 * DAY,
+            desc: d.desc || d.description || '',
+            createdAt: d.createdAt || NOW - 60 * DAY,
             updatedAt: NOW - 2 * DAY,
         };
     }
 
     const combos = {};
-    for (const c of fx.COMBOS) {
-        const items = c.items.map(([dishId, qty]) => ({ dishId: `dish_${dishId}`, qty }));
-        combos[`combo_${c.id}`] = {
-            id: `combo_${c.id}`,
-            name: c.name,
-            items,
-            discountType: 'fixed',
-            discountValue: Math.max(0, Math.round(c.original - c.price)),
-            disabled: c.active === false,
+    for (const [id, c] of Object.entries(live.combos)) {
+        combos[id] = {
+            ...c,
+            // The live windows are campaign dates; the demo must show every
+            // combo as running, otherwise the tab looks broken on most days.
+            disabled: false,
             startAt: NOW - 30 * DAY,
-            endAt: NOW + 60 * DAY,
-            maxRedemptions: c.cap || 0,
-            perCustomerLimit: 2,
-            perDayLimit: 0,
-            currentRedemptions: c.redeemed || 0,
-            image: svgImage(c.name, '#7C3AED'),
-            createdAt: NOW - 30 * DAY,
+            endAt: NOW + 365 * DAY,
+            createdAt: c.createdAt || NOW - 30 * DAY,
+            updatedAt: NOW - 2 * DAY,
         };
+        delete combos[id].sourceOid;
     }
 
-    return { categories, dishes, combos };
+    // The order generator below is written against the fixture ids d1..d14.
+    // Map each onto a real menu item (alphabetical, deterministic) so seeded
+    // history references live dish ids, names and prices.
+    const liveKeys = Object.keys(dishes).sort((a, b) => String(dishes[a].name).localeCompare(String(dishes[b].name)));
+    const dishMap = {};
+    fx.DISHES.forEach((d, i) => { dishMap[d.id] = liveKeys[i % liveKeys.length]; });
+
+    return { categories, dishes, combos, dishMap };
 }
 
 // ------------------------------------------------------------------- orders
@@ -225,7 +238,7 @@ const LINE_POOL = [
     [['d5', 1], ['d12', 2]],
 ];
 
-function buildOrders({ rnd, money, fx, dishes, discounts, customers }) {
+function buildOrders({ rnd, money, fx, dishes, dishMap, discounts, customers }) {
     const orders = {};
     const seqByDay = {};
     const discountUsage = {};
@@ -240,14 +253,16 @@ function buildOrders({ rnd, money, fx, dishes, discounts, customers }) {
     function nextSeq(ts) {
         const key = ddmmyy(ts);
         seqByDay[key] = (seqByDay[key] || 0) + 1;
-        return { key, seq: seqByDay[key], orderId: `BN-${key}-${seqByDay[key]}` };
+        return { key, seq: seqByDay[key], orderId: `DD-${key}-${seqByDay[key]}` };
     }
 
     function priceLines(specs) {
         return specs.map(([dishId, qty]) => {
-            const d = dishByKey[`dish_${dishId}`];
+            const key = dishMap[dishId];
+            const d = dishByKey[key];
+            if (!d) throw new Error(`seed dish map miss: ${dishId}`);
             return {
-                id: `dish_${dishId}`,
+                id: key,
                 name: d.name,
                 qty,
                 quantity: qty,
@@ -788,7 +803,7 @@ function buildInventory({ rnd, money, fx }) {
         inventory[`inv_${i.id}`] = {
             id: `inv_${i.id}`,
             name: i.name,
-            sku: `BN-${String(idx + 1).padStart(3, '0')}`,
+            sku: `DD-${String(idx + 1).padStart(3, '0')}`,
             unit: i.unit,
             stock: i.stock,
             threshold: i.min,
@@ -799,12 +814,12 @@ function buildInventory({ rnd, money, fx }) {
     });
 
     const logs = [
-        { itemId: 'inv_i2', delta: -1.5, prevStock: 10, newStock: 8.5, reason: 'Order #BN (demo)' },
+        { itemId: 'inv_i2', delta: -1.5, prevStock: 10, newStock: 8.5, reason: 'Order #DD (demo)' },
         { itemId: 'inv_i1', delta: 20, prevStock: 22, newStock: 42, reason: 'Purchase - Mumbai Mill Co.' },
         { itemId: 'inv_i5', delta: -2, prevStock: 8, newStock: 6, reason: 'Wastage' },
-        { itemId: 'inv_i9', delta: -0.4, prevStock: 2.5, newStock: 2.1, reason: 'Order #BN (demo)' },
-        { itemId: 'inv_i10', delta: -30, prevStock: 350, newStock: 320, reason: 'Order #BN (demo)' },
-        { itemId: 'inv_i7', delta: -1, prevStock: 6, newStock: 5, reason: 'Order #BN (demo)' },
+        { itemId: 'inv_i9', delta: -0.4, prevStock: 2.5, newStock: 2.1, reason: 'Order #DD (demo)' },
+        { itemId: 'inv_i10', delta: -30, prevStock: 350, newStock: 320, reason: 'Order #DD (demo)' },
+        { itemId: 'inv_i7', delta: -1, prevStock: 6, newStock: 5, reason: 'Order #DD (demo)' },
     ];
     logs.forEach((l, i) => {
         log[`log_demo_${i + 1}`] = {
@@ -1004,7 +1019,7 @@ function buildLoyalty({ rnd, money, fx, orders, byPhone, rankings, ordersByPhone
             reward_demo_1: {
                 rewardId: '10pct-off', label: '10% Off Next Order', code: 'RW-DEMO-4821', cost: burned,
                 status: 'redeemed', createdAt: NOW - 12 * DAY, redeemedAt: NOW - 9 * DAY,
-                redeemedOrderId: 'BN-DEMO',
+                redeemedOrderId: 'DD-DEMO',
             },
             reward_demo_2: {
                 rewardId: 'free-garlic-bread', label: 'Free Garlic Bread', code: 'RW-DEMO-9134', cost: 200,
@@ -1206,17 +1221,17 @@ const ALL_TABS = ['dashboard', 'orders', 'live', 'walkin', 'tables', 'promotions
 
 function buildSettings({ rnd, fx }) {
     const store = {
-        entityName: fx.DEMO_OUTLET.entity,
-        storeName: fx.DEMO_OUTLET.name,
+        entityName: DEMO_OUTLET_NAME,
+        storeName: DEMO_OUTLET_NAME,
         address: fx.DEMO_OUTLET.address,
         gstin: fx.DEMO_OUTLET.gstin,
         fssai: fx.DEMO_OUTLET.fssai,
-        tagline: fx.DEMO_OUTLET.tagline,
+        tagline: 'Live demo · every feature enabled · reseeded nightly',
         poweredBy: 'Powered by FoodHubbie',
         shopOpenTime: '11:00',
         shopCloseTime: '23:30',
         shopStatus: 'AUTO',
-        wifiName: 'BellaNapoli_Guest',
+        wifiName: 'DemoDashboard_Guest',
         wifiPass: 'demo1234',
         lat: '19.0596',
         lng: '72.8295',
@@ -1224,14 +1239,14 @@ function buildSettings({ rnd, fx }) {
         facebook: 'https://facebook.com/ (demo)',
         googleReviewLink: 'https://example.com/review (demo)',
         paymentQR: '',
-        customerMenuBgImage: svgImage('Bella Napoli', '#7C2D12'),
+        customerMenuBgImage: svgImage(DEMO_OUTLET_NAME, '#7C2D12'),
     };
 
     const delivery = {
         developerPhone: '919000000001',
         reportPhone: '919000000001',
         notifyPhone: '919000000001',
-        backupCode: 'DEMO-2026',
+        backupCode: '2026',
         slabs: [{ km: 3, fee: 29 }, { km: 6, fee: 49 }, { km: 10, fee: 69 }],
     };
 
@@ -1259,7 +1274,7 @@ function buildSettings({ rnd, fx }) {
         imgOut: svgImage('Out for delivery', '#0EA5E9'),
         imgDelivered: svgImage('Delivered', '#7C3AED'),
         imgFeedback: svgImage('Rate your order', '#DB2777'),
-        greetingImage: svgImage('Welcome to Bella Napoli', '#E84908'),
+        greetingImage: svgImage('Welcome to Demo Dashboard', '#E84908'),
         menuImage: svgImage('Our Menu', '#111827'),
     };
 
@@ -1303,9 +1318,12 @@ function buildSettings({ rnd, fx }) {
     const { money, fixtures: fx, cleanup } = await loadFixtures();
     const rnd = mulberry32(20261028);
 
-    const { categories, dishes, combos } = buildCatalog(fx);
+    const live = await loadLiveCatalog();
+    const { categories, dishes, combos, dishMap } = buildCatalog(live, fx);
+    console.log(`[demo-seed] catalog source  ${SOURCE_BID}/${SOURCE_OID} -> `
+        + `${Object.keys(categories).length} categories, ${Object.keys(dishes).length} dishes, ${Object.keys(combos).length} combos`);
     const discounts = buildDiscounts({ fx, money });
-    const orderData = buildOrders({ rnd, money, fx, dishes, discounts });
+    const orderData = buildOrders({ rnd, money, fx, dishes, dishMap, discounts });
     const staffData = buildStaff({ rnd, money, fx, moneyMath: money });
     const invData = buildInventory({ rnd, money, fx });
     const expData = buildExpenses({ rnd, money, fx });
@@ -1384,8 +1402,8 @@ function buildSettings({ rnd, fx }) {
     };
 
     const outlet = {
-        name: fx.DEMO_OUTLET.name,
-        outletNo: 'BN',
+        name: DEMO_OUTLET_NAME,
+        outletNo: 'DD',
         contactPhone: '919000000001',
         email: DEMO_EMAIL,
         disabled: false,

@@ -35,6 +35,10 @@ export function slugify(name) {
  * 
  * Slug includes sourceOid to prevent collisions when multiple outlets have
  * the same dish/category name. Each outlet's entry is uniquely addressable.
+ *
+ * Best-effort by design: the bank is a convenience mirror, so a rules denial
+ * (the public demo tenant may not pollute the shared bank) must never fail the
+ * outlet's own save — callers `await` this.
  */
 export function mirrorToMenuBank(db, ref, set, type, data, source) {
   const key = type === 'categories'
@@ -46,5 +50,10 @@ export function mirrorToMenuBank(db, ref, set, type, data, source) {
     sourceOid: source.oid,
     updatedAt: Date.now(),
   };
-  return set(ref(db, `menuBank/${type}/${key}`), entry);
+  return Promise.resolve()
+    .then(() => set(ref(db, `menuBank/${type}/${key}`), entry))
+    .catch((e) => {
+      console.warn('[menuBank] mirror skipped:', e?.message || e);
+      return null;
+    });
 }

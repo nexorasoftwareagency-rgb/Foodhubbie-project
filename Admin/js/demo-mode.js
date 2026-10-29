@@ -4,13 +4,12 @@
  * `/demo` serves this same Admin app, but:
  *   1. it signs the visitor into the synthetic `foodhubbie-demo` tenant
  *      (`demo@foodhubbie.in`, profile name "Demo Dashboard"), and
- *   2. every control / testing action opens the exact spec restriction modal
- *      instead of touching the database.
+ *   2. it lets them actually use the product: every write lands in the demo
+ *      tenant, which is reseeded nightly.
  *
- * The tenant is also read-only at the rules layer (`admins/{uid}.isDemo` blocks
- * `businesses/{bid}` writes), so this module is the UX layer, not the security
- * boundary — a write that slips past the click gate still fails and is turned
- * into the same modal by the showToast hook in ui-utils.js.
+ * Only actions with a side effect OUTSIDE that tenant stay blocked — creating
+ * real Firebase Auth users, sending WhatsApp/reset messages, changing the demo
+ * account password, or disabling the outlet itself.
  *
  * The static marketing replica lives at /demo/tour and is linked from the
  * normal login screen; it does not use this module.
@@ -34,57 +33,29 @@ export function isDemoLocation() {
 }
 
 // ---------------------------------------------------------------------------
-// Control actions. Everything here writes, sends, uploads or flips live state.
-// Read-only affordances (navigation, modals, filters, exports, printing, POS
-// cart edits) are deliberately NOT listed — the demo should feel alive.
+// The demo is a full sandbox: everything below writes only inside
+// businesses/foodhubbie-demo, which the nightly reseed replaces. What stays
+// blocked is anything with a side effect OUTSIDE that tenant.
 // ---------------------------------------------------------------------------
 const BLOCKED_ACTIONS = new Set([
-    'add-blocked-number',
-    'addCategory', 'addCategoryAddonField', 'addCombo',
-    'addDishAddonField', 'addFeeSlab', 'addSizeField',
-    'adjustStock', 'advanceTableOrder',
-    'approveExpense', 'assignRider', 'bulkQrPrint',
-    'cancelSessionForTable', 'clonePromoCampaign', 'confirmImport',
-    'confirmTableBillPayment', 'deleteCategory', 'deleteCombo', 'deleteDiscount',
-    'deleteDish', 'deleteExpense', 'deleteExpenseCategory', 'deleteInventoryItem',
-    'deleteRider', 'deleteRole', 'deleteTable', 'disableTable', 'enableTable',
-    'endShift', 'makePaymentForGroup', 'makePaymentForTable', 'markAsPaid',
-    'migrateAddons', 'mobSendToAdmin', 'pickPromoCsv', 'pickPromoMedia',
-    'recordWalkout', 'rejectExpense',
-    'requestBillForGroup', 'requestBillForTable', 'resetRiderPassword',
-    'resolveTableRequest', 'runImageMigration', 'saveDeliveredOrder', 'saveDiscount',
-    'saveExpenseSettings', 'saveRiderAccount', 'seedExpenseCategories',
-    'sendTestPromo', 'settleRider', 'stopPromoCampaign', 'submitWalkinSale',
-    'toggleCombo', 'toggleDish', 'toggleStatus', 'voidTableBill',
+    // Creates a real Firebase Auth user (staff + rider logins).
+    'saveRiderAccount', 'staffSubmitBtn',
+    // Sends a real password-reset email.
+    'resetRiderPassword',
+    // Deletes riders/{uid} AND root riderIndex/{uid}; root writes are denied,
+    // so the flow would half-succeed.
+    'deleteRider',
+    // WhatsApp send command; the demo outlet has no bot worker, so it can only
+    // end in a "no response" timeout.
+    'sendTestPromo',
 ]);
-// Deliberately NOT blocked (local-state previews that never touch the database):
-// addToWalkinCartFromModal, addComboToWalkinCart, adjustPOSModalQty,
-// applyWalkinCoupon, applyWalkinDiscount, applyOfferFromPanel,
-// applyTableBillCoupon, applyTableOfferFromPanel, billSplitMinus, billSplitPlus,
-// removeParent. Building a cart or a bill preview is the demo's best showcase;
-// the persistence step at the end of each flow is what gets blocked.
 
-// Buttons that persist/upload/send but carry no data-action.
+// Buttons that persist/send but carry no data-action.
 const BLOCKED_IDS = new Set([
-    'billConfirmBtn', 'btnAddAddonField', 'btnAddBlockedNumber', 'btnAddCatAddonField',
-    'btnAddCatEditAddon', 'btnAddFeeSlab', 'btnAddRole', 'btnAddSizeField',
-    'btnAddStaff', 'btnAddTaxRate', 'btnBlockContact', 'btnBulkDelete',
-    'btnBulkDisable', 'btnBulkEnable', 'btnChangeCatEditPhoto', 'btnChangeCatPhoto',
-    'btnChangeGreetingImg', 'btnChangeMenuImg', 'btnChangePassword', 'btnChangeQR',
-    'btnConfirmReauth', 'btnEndShift', 'btnLeaveSubmit', 'btnMigrateAddons',
-    'btnMigrateDishAddons', 'btnPayClose', 'btnPromoKillAll', 'btnPromoLaunch',
-    'btnQuickToggleOutlet', 'btnRiderReportWhatsApp', 'btnRunImageMigration',
-    'btnSaveCategory', 'btnSaveInventory', 'btnSaveSettings', 'btnSendPushNotif',
-    'btnSettleRiderAnalytics', 'btnShiftSave', 'btnTestNotif', 'btnUpdateDishPhoto',
-    'btnUploadAadhar', 'btnUploadRiderPhoto', 'chatSendBtn', 'discStepSave',
-    'forgotPasswordBtn', 'roleDeleteBtn', 'roleSaveBtn', 'saveDishBtn',
-    'saveRiderBtn', 'staffSubmitBtn', 'tableEditorSaveBtn', 'walkinSubmitBtn',
-]);
-
-// Toggles that write on `change` (no save button involved).
-const BLOCKED_CHANGE_IDS = new Set([
-    'promoKillSwitch', 'promoSendEnabled', 'toggleAvail', 'toggleStock',
-    'chkAvail', 'chkStock', 'settingShopStatus',
+    'btnChangePassword',   // would break the public demo account for everyone
+    'btnConfirmReauth',
+    'forgotPasswordBtn',   // password-reset email for the demo account
+    'btnQuickToggleOutlet',// outlets/{oid}/disabled is denied by rules
 ]);
 
 const CSS = `
@@ -124,7 +95,7 @@ function renderBanner() {
         <span class="dmb-dot" aria-hidden="true"></span>
         <div class="dmb-text">
             <b>Demo mode</b>
-            <span>Bella Napoli · synthetic data · read-only</span>
+            <span>Demo Dashboard · full sandbox · reseeded nightly</span>
         </div>
         <button type="button" class="dmb-exit" id="demoExitBtn" data-demo-allow="1">Exit demo</button>`;
     document.body.appendChild(el);
@@ -153,39 +124,14 @@ function onBlockedClick(e) {
 
     const actionEl = el.closest('[data-action]');
     const action = actionEl ? actionEl.getAttribute('data-action') : '';
-    if (action && !BLOCKED_ACTIONS.has(action)) return;          // read-only action
-    if (!action && el.id && !BLOCKED_IDS.has(el.id)) return;     // read-only button
-    if (!action && !el.id) {
-        // Unlisted plain button: allow pure-UI ones (tabs, views, closers, filters).
-        if (el.matches('[data-tab],[data-subtab],[data-sm-page],[data-view],[data-close],[data-close-modal],' +
-            '[data-filter],[data-range],.modal-close,.close-btn,.btn-icon-v4,.settings-subtab,.sm-subtab,' +
-            '.tab-btn,.seg-btn,.pill,.chip,[data-demo-allow]')) return;
-        if (el.type === 'submit' || /save|delete|remove|send|submit|upload|publish|launch|pay|settle|migrat/i.test(el.id + ' ' + el.className)) {
-            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-            restrict(labelFor(el), el);
-            return;
-        }
-        return;                                                  // unknown plain button: let it run
-    }
+    if (action && !BLOCKED_ACTIONS.has(action)) return;
+    if (!action && el.id && !BLOCKED_IDS.has(el.id)) return;
+    if (!action && !el.id) return;                               // plain UI button
 
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
     restrict(labelFor(el), el);
-}
-
-function onChange(e) {
-    const t = e.target;
-    if (!t) return;
-    const blocked = (t.id && BLOCKED_CHANGE_IDS.has(t.id))
-        || t.classList?.contains('discount-toggle')
-        || t.closest?.('.discount-toggle');
-    if (!blocked) return;
-    e.preventDefault();
-    e.stopPropagation();
-    // Restore the visual state the user just flipped.
-    if (t.type === 'checkbox') t.checked = !t.checked;
-    restrict(labelFor(t) || 'Live setting', t);
 }
 
 /**
@@ -225,7 +171,6 @@ export async function initDemoMode() {
     applyDemoIdentity();
     initRestrictDelegation();
     document.addEventListener('click', onBlockedClick, true);
-    document.addEventListener('change', onChange, true);
 
     const emailEl = document.getElementById('loginEmail');
     const passEl = document.getElementById('loginPassword');

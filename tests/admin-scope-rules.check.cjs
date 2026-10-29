@@ -22,6 +22,7 @@ const WAITER = 'a8dpkS7XfQfspJ99SaJsyeZYLr53'; // pizza, role waiter, businessId
 const CAKE_OWNER = '1bjwUZof19U55RuwiIi0YtZKAHC2'; // cake, role owner, businessId roshani-cake
 const E2E_MANAGER = 'vLdRU9ze2GePV19fLhg9daKU5Hn1'; // e2e outlet, manager
 const SUPER = 'ZoDidAOi3fUyOXNWn559r87dADo2'; // isSuper (no businessId)
+const DEMO = 'oAoW5tN0etX95EKHA50BFgzGkim1'; // foodhubbie-demo, isDemo
 
 let failures = 0;
 const out = [];
@@ -54,7 +55,9 @@ async function call(method, p, token, body) {
 }
 
 (async () => {
-  const [waiter, cake, e2e, superT] = await Promise.all([tokenFor(WAITER), tokenFor(CAKE_OWNER), tokenFor(E2E_MANAGER), tokenFor(SUPER)]);
+  const [waiter, cake, e2e, superT, demo] = await Promise.all([
+    tokenFor(WAITER), tokenFor(CAKE_OWNER), tokenFor(E2E_MANAGER), tokenFor(SUPER), tokenFor(DEMO),
+  ]);
 
   check('waiter reads own outlet orders', (await call('GET', 'businesses/roshani-pizza/outlets/pizza/orders?shallow=true', waiter)) === 200);
   check('waiter CANNOT read cake orders', (await call('GET', 'businesses/roshani-cake/outlets/cake/orders?shallow=true', waiter)) === 401);
@@ -73,6 +76,18 @@ async function call(method, p, token, body) {
 
   check('super reads admins collection', (await call('GET', 'admins', superT)) === 200);
   check('super reads audit log', (await call('GET', 'logs/audit?shallow=true', superT)) === 200);
+
+  // The public demo is a WRITABLE sandbox inside its own tenant (reseeded
+  // nightly), but it can never touch another tenant or disable itself.
+  check('demo reads own business', (await call('GET', 'businesses/foodhubbie-demo', demo)) === 200);
+  check('demo CANNOT read pizza business', (await call('GET', 'businesses/roshani-pizza', demo)) === 401);
+  check('demo CAN write its own outlet settings', (await call('PUT', 'businesses/foodhubbie-demo/outlets/demo/settings/__probe', demo, { ok: true })) === 200);
+  check('demo CAN delete its own outlet settings probe', (await call('DELETE', 'businesses/foodhubbie-demo/outlets/demo/settings/__probe', demo)) === 200);
+  check('demo CANNOT write outlet.whatsapp (bot spawn guard)', (await call('PUT', 'businesses/foodhubbie-demo/outlets/demo/whatsapp', demo, '919999999999')) === 401);
+  check('demo CANNOT write outlet.disabled', (await call('PUT', 'businesses/foodhubbie-demo/outlets/demo/disabled', demo, true)) === 401);
+  check('demo CANNOT write business root', (await call('PUT', 'businesses/foodhubbie-demo/__probe', demo, 1)) === 401);
+  check('demo CANNOT write another tenant', (await call('PUT', 'businesses/roshani-pizza/outlets/pizza/settings/__probe', demo, { ok: true })) === 401);
+  check('demo CANNOT clear its own isDemo flag', (await call('PATCH', `admins/${DEMO}`, demo, { isDemo: false })) === 401);
 
   // Self-write: businessId is immutable, normal field updates still work.
   check('waiter CANNOT repoint own businessId', (await call('PATCH', `admins/${WAITER}`, waiter, { businessId: 'roshani-cake' })) === 401);
