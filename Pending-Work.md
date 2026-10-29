@@ -40,6 +40,24 @@ This rule applies to:
 
 ---
 
+### ⏳ WebP Catalog Images — uncommitted, verify before commit/deploy
+- **Files:** `Admin/js/firebase.js` (`uploadImage(fileOrBlob, path, opts = {})` — `opts.webp` encodes via `canvas.toBlob('image/webp', 0.75)` and only resolves that blob when `blob.type === 'image/webp'`, otherwise falls back to `toDataURL('image/jpeg', 0.6)`), `Admin/js/features/catalog.js` (4 call sites pass `{ webp: true }`: `addCategory`, `saveDish`, `saveCategoryEdits`, `showComboModal`), `Admin/sw.js` (`v5.12.2` → `v5.12.3`)
+- **Stage:** `reviewing`
+- **Origin:** appeared in the working tree on 2026-10-29 while the demo/tour work was being shipped; it is NOT part of that work and was deliberately left uncommitted. Live admin host still serves the JPEG path at `v5.12.2`.
+- **Requirement:** shrink the base64 catalog images that ship in every QR-menu payload, without breaking WhatsApp image sends, the customer menu, or browsers that cannot encode WebP. Deliberately untouched: `uploadImage(blob, 'temp')` inside `runImageMigration()` and the rider/KYC call sites in `riders.js` (no `opts` → legacy JPEG).
+- **Verified:** (pending)
+- **OK:** (pending)
+- **Done:** (pending)
+- **Must verify before this ships:**
+  - [ ] **WhatsApp send still works.** `bot/index.js` normalises *any* `data:image` through Sharp before Baileys (`Pre-convert ANY image to JPEG buffer via Sharp so Baileys' extractImageThumb never chokes on WebP…`), so a WebP dish photo should send — prove it with one real send from an outlet whose dish/category photo was uploaded as WebP. `bot/promotions.js` sends promo media **raw** (`Buffer.from(base64)` with no conversion), so promotions must stay JPEG (they do — no `webp` flag on that path).
+  - [ ] **Customer menu renders it.** QR menu (`menu/`) and the delivery webview cart must show the new WebP data URL. `menu/sw.js` precache does not include dish images, so no cache-name bump should be needed — confirm.
+  - [ ] **It is actually smaller.** Compare `dataUrl.length` for the same photo at JPEG 0.6 vs WebP 0.75. WebP is not automatically smaller at these settings; if it is not, drop the change — payload size is the whole point.
+  - [ ] **Safari/iOS fallback.** `canvas.toBlob('image/webp')` yields a PNG on Safari; the code checks `blob.type` and falls back to JPEG. Not testable on Windows — needs a real iOS/Safari pass or an explicit "documented, not tested" acceptance.
+  - [ ] **Old images unaffected.** Existing JPEG dishes keep rendering (only new uploads change) and `deleteImage(oldImageUrl)` still fires on replace (`saveDish`) so no storage is orphaned.
+  - [ ] **Decide on `runImageMigration()`.** It still writes JPEG, so images converted by the migration will not match new uploads. Intentional or oversight?
+  - [ ] `node --check` both files, `npm run build:admin`, then deploy — and confirm the `v5.12.3` SW bump actually forces a clean re-cache (a stale shell would keep serving the old `uploadImage`).
+  - [ ] Consider a Playwright guard: upload a PNG through Add Dish, assert the stored `dishes/{id}/image` starts with `data:image/webp` and that the WhatsApp send path (Sharp) still accepts it.
+
 ### ✅ EC2 Git Metadata Reconciled to `main` (117 commits, zero restarts)
 - **File:** `/var/www/foodhubbie` (box only — no repo file changed)
 - **Stage:** `done`
