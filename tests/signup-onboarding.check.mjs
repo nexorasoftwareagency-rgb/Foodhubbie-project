@@ -39,21 +39,21 @@ await page.fill('#fAdminEmail', 'a@sg.com'); await page.fill('#fAdminName', 'Rah
 await page.fill('#fPassword', 'abcd1234'); await page.fill('#fPassword2', 'different1');
 await page.click('.radio-card[data-value="starter"]', { force: true });
 await page.evaluate(() => document.querySelectorAll('#signupForm [required]').forEach(e => e.removeAttribute('required'))); // bypass native bubbles to test our validation
-await page.locator('#submitBtn').click({ force: true });
+await page.evaluate(() => document.getElementById('signupForm').requestSubmit());
 ok(await page.locator('#fPassword2Err').isVisible(), 'mismatched passwords show inline error');
 ok(await page.locator('#fTermsErr').isVisible(), 'missing terms shows inline error');
 ok(calls.length === 0, 'no network call while invalid');
 
 // valid; first password save fails
-await page.fill('#fPassword2', 'abcd1234'); await page.check('#fTerms', { force: true });
-await page.locator('#submitBtn').click({ force: true });
+await page.fill('#fPassword2', 'abcd1234'); await page.locator('#fTerms').check(); // no force: force clicks a viewport-edge coordinate and silently misses
+await page.evaluate(() => document.getElementById('signupForm').requestSubmit());
 await page.waitForSelector('#formStatus:not(:empty)');
 ok(calls.join('|') === 'POST requests|PUT secrets -Kreq1', 'step1 then step2 attempted');
 ok((await page.inputValue('#fBusiness')) === 'Spice Garden', 'entered data preserved after failure');
 ok((await page.textContent('#submitBtn')) === 'Retry Submit', 'retry button shown');
 
 // retry must NOT create a second request
-await page.locator('#submitBtn').click({ force: true });
+await page.evaluate(() => document.getElementById('signupForm').requestSubmit());
 await page.waitForSelector('#signupForm.is-done');
 ok(calls.filter(c => c === 'POST requests').length === 1, 'retry reuses request (exactly one POST)');
 ok(calls.filter(c => c.startsWith('PUT secrets')).length === 2, 'retry re-sends only the password step');

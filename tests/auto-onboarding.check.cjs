@@ -4,7 +4,7 @@ const fs = require('fs'), assert = require('assert'), vm = require('vm');
 const src = fs.readFileSync('bot-control-api/server.js', 'utf8');
 const a = src.indexOf('class HttpError'), b = src.indexOf("app.post('/api/bot/stop/:bid/:oid'");
 let code = src.slice(a, b)
-  .replace(/app\.post\([\s\S]*?\n\}\);\n/, '')                  // drop the express route
+  .replace(/app\.post\([\s\S]*?\r?\n\}\);\r?\n/, '')                  // drop the express route (CRLF-tolerant: Windows checkouts)
   .replace('const SECRET_RETRY_MS = [3000, 10000, 30000, 90000]', 'const SECRET_RETRY_MS = [5, 5]')
   .replace(/^function startAutoApproval[\s\S]*$/m, '');          // watcher wiring is exercised separately
 
