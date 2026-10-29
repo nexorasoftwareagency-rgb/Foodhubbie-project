@@ -191,7 +191,7 @@ menu: [
     {
         icon: 'image',
         title: 'Dish Images',
-        body: 'Upload a dish image using the file picker in the editor. Images are resized and compressed client-side before uploading to Firebase Storage. Supported formats: JPG, PNG, WebP. A preview is shown after upload. Use the × button to remove and re-upload.'
+        body: 'Upload a dish image using the file picker in the editor. Images are resized and compressed client-side (converted to WebP where the browser supports it) before saving to the database. Supported formats: JPG, PNG, WebP. A preview is shown after upload. Use the × button to remove and re-upload.'
     },
     {
         icon: 'layers',

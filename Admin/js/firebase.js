@@ -154,7 +154,7 @@ window.forceOutlet = (name) => {
     if (window.diagnoseDatabase) window.diagnoseDatabase();
 };
 
-export async function uploadImage(fileOrBlob, path) {
+export async function uploadImage(fileOrBlob, path, opts = {}) {
     if (!fileOrBlob) return null;
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -175,8 +175,25 @@ export async function uploadImage(fileOrBlob, path) {
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-                resolve(dataUrl);
+                // Legacy JPEG path (riders/KYC/promotions all stay on this — WhatsApp media is JPEG/PNG only).
+                const jpegFallback = () => resolve(canvas.toDataURL('image/jpeg', 0.6));
+                if (opts.webp && canvas.toBlob) {
+                    // Chrome/Edge/Firefox encode webp natively. Safari's toBlob('image/webp')
+                    // silently yields PNG instead — check the honest blob.type and fall back to
+                    // JPEG rather than uploading a bloated PNG masquerading as a photo.
+                    canvas.toBlob((blob) => {
+                        if (blob && blob.type === 'image/webp') {
+                            const fr = new FileReader();
+                            fr.onload = () => resolve(fr.result);
+                            fr.onerror = () => jpegFallback();
+                            fr.readAsDataURL(blob);
+                        } else {
+                            jpegFallback();
+                        }
+                    }, 'image/webp', 0.75);
+                } else {
+                    jpegFallback();
+                }
             };
             img.onerror = () => reject(new Error("Image processing failed"));
         };
