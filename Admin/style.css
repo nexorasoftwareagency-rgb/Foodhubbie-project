@@ -7675,8 +7675,8 @@ body.pos-selection-mode .walkin-picker {
 /* Inventory Dish Grid */
 .inventory-dish-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 8px;
 }
 
 /* Inventory Dish Card */
@@ -7685,9 +7685,19 @@ body.pos-selection-mode .walkin-picker {
     padding: 6px;
     border-radius: 8px;
 }
-.inventory-dish-card .dish-img-container { margin-bottom: 6px; }
+.inventory-dish-card .dish-img-container { margin-bottom: 4px; }
 .inventory-dish-card .dish-info { padding: 0 2px 2px; }
-.inventory-dish-card .dish-info h4 { font-size: 11.5px; margin-bottom: 3px; }
+.inventory-dish-card .dish-info h4 { font-size: 10.5px; margin-bottom: 2px; }
+/* Compact density knobs (scoped to inventory cards — more items per screen) */
+.inventory-dish-card .dish-price-val { font-size: 10px; }
+.inventory-dish-card .avail-label, .inventory-dish-card .stock-label { font-size: 10px; }
+.inventory-dish-card .reorder-badge { font-size: 8px; padding: 1px 5px; margin-top: 2px; letter-spacing: 0.3px; }
+.inventory-dish-card .track-dish-btn { font-size: 9.5px !important; padding: 2px 6px !important; }
+.inventory-dish-card .toggle-switch-sm { width: 28px; height: 16px; }
+.inventory-dish-card .toggle-slider-sm::before { width: 12px; height: 12px; }
+.inventory-dish-card .toggle-switch-sm input:checked + .toggle-slider-sm::before { transform: translateX(12px); }
+.inventory-dish-card .stock-adjust-btn { width: 22px; height: 22px; border-radius: 6px; font-size: 12px; }
+.inventory-dish-card .stock-val-display { min-width: 22px; font-size: 11px; }
 
 /* Inventory-specific image aspect ratio (override global 1/1) */
 #inventoryMenuSection .dish-img-container {
@@ -7710,14 +7720,14 @@ body.pos-selection-mode .walkin-picker {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
+    padding: 4px 0;
     border-top: 1px solid #f1f5f9;
 }
 .inventory-stock-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
+    padding: 4px 0;
     border-top: 1px solid #f1f5f9;
 }
 .avail-label, .stock-label { font-size: 12px; font-weight: 600; color: var(--text-main); }

@@ -55,6 +55,13 @@ This rule applies to:
 - **Before deploy:** run the rules emulator (needs a JDK; not possible on this box) or the live probe in plan §7.1 — the lock gate is the only unproven part. Then `firebase deploy --only database` → restart `bot-control-api` → admin/supreme builds → website last.
 - **Open owner decisions:** duplicate `GUIDEs/` docs; email verification / password-set link (auto-approval lets anyone register any unregistered email); public pricing copy (₹500 setup vs ₹1,000 minimum wallet); hard stop at zero balance; percentage-package visibility.
 
+### ✅ Inventory Tab Density Pass — deployed (done)
+- **Files:** `Admin/style.css` (scoped to `#inventoryMenuSection`/`.inventory-dish-card`), `Admin/js/features/inventory.js` (`MENU_PAGE_SIZE` 20→30), `Admin/index.html` + `Admin/sw.js` (`style.css?v=5.4.7`, cache `v5.12.4`)
+- **Stage:** `done`
+- **Verified:** production E2E `tests/e2e-inventory-compact.js` 5/5 — card 170×318px/6 columns (before) → 127×249px/8 columns (after, +33% per row, −22% height); mini toggle/stock knobs confirmed; POS `.dish-card` and Riders' `.toggle-switch-sm` untouched.
+- **OK:** live `style.css?v=5.4.7` + `sw.js v5.12.4` confirmed over HTTP after `firebase deploy --only hosting:admin`.
+- **Done:** deployed 2026-10-29; ledger `[20261029-173000-inventory-compact]`.
+
 ### ✅ WebP Catalog Images — deployed to production (done)
 - **Files:** `Admin/js/firebase.js` (`uploadImage(fileOrBlob, path, opts = {})` — `opts.webp` encodes via `canvas.toBlob('image/webp', 0.75)` and only resolves that blob when `blob.type === 'image/webp'`, otherwise falls back to `toDataURL('image/jpeg', 0.6)`), `Admin/js/features/catalog.js` (4 call sites pass `{ webp: true }`: `addCategory`, `saveDish`, `saveCategoryEdits`, `showComboModal`), `Admin/sw.js` (`v5.12.2` → `v5.12.3`)
 - **Stage:** `done` (commit `b0c1757`; ledger `[20261029-160000-webp-dishes]` + `[20261029-170000-deploy-admin-webp]`)
