@@ -1,6 +1,6 @@
-# FoodHubbie ERP
+# FoodHubbie
 
-> Restaurant & cafe ERP: QR ordering, kitchen display, rider dispatch, WhatsApp ordering,
+> Restaurant & cafe software: QR ordering, kitchen display, rider dispatch, WhatsApp ordering,
 > promotions, POS, analytics — three apps (Admin, Customer Menu, Rider) on one realtime system.
 
 ## What it is

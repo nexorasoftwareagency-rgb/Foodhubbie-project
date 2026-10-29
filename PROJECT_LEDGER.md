@@ -2152,3 +2152,16 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Verification: report-catalog self-check OK; twins 5/5 (report-catalog has NO twin — Admin-only, correctly unguarded); encoding ok; `node --check` clean; build:admin clean (dist emits js/features/report-runner.js + shared/report-catalog.js); deployed hosting:admin (pre + post tiebreak fix).
 - Confidence: HIGH — live browser + DB-oracle evidence for every report and the gate.
 - Ended: 2026-10-27 ~04:00 UTC
+
+### [20261029-120000-seo-brand-sweep] Public brand sweep: FoodHubbie ERP -> FoodHubbie across the marketing site
+- TIER: 2 (public copy only; no app logic, no rules, no deploy)
+- STATUS: DONE (not deployed - awaiting owner authorization per master-prompt rule)
+- Scope: master-prompt mandatory branding rule - public brand is FoodHubbie, NOT FoodHubbie ERP. Technical identifiers (hosting targets, app dirs, package names, demo icon-erp-logo.png etc.) intentionally untouched.
+- website/*.html (24 pages) + index.html (committed earlier on this branch in d8fbab2): <em class="logo-tag">ERP</em> removed from nav logo; footer Food<span>Hubbie</span> ERP -> Food<span>Hubbie</span>; titles/og-titles/descriptions/H1/alt texts/JSON-LD names/WhatsApp CTA texts (incl. URL-encoded %20ERP variants) fixed. architecture title now "How FoodHubbie Restaurant Software Works", H1 "How FoodHubbie Works: From QR Scan to Bill"; contact "Contact FoodHubbie"; pricing/multi-outlet/signup og-titles without ERP; mailto subject FoodHubbie%20-%20Inquiry; contact "Business Name: FoodHubbie".
+- website/llms.txt: header FoodHubbie; "Restaurant & cafe ERP:" -> "Restaurant & cafe software:".
+- docs/BACKLINK-KIT.md + docs/OFFSITE-KIT.md (directory-submission copy): brand fixed everywhere.
+- LEGITIMATE ERP KEPT: best-software.html + compare.html "payroll/ERP integrations"/"deep ERP connectors" - these describe competitors' enterprise suites, not the FoodHubbie brand.
+- Guard fix: tools/check-copy-consistency.cjs existence-exemption extended demo -> demo|demo/tour (235397b added the /demo/tour sitemap entry + firebase rewrite but not the gitignored-mirror exemption, so the guard failed on a clean tree).
+- Verification: copy-consistency OK (30 files + 25 sitemap urls), domain-migration 0 stale refs (204 files), encoding ok, 32/32 JSON-LD blocks parse and are ERP-free, all wa.me CTA texts read naturally, spot-checked titles/H1s/nav/footer on 7 pages.
+- Pending owner actions: production deploy (firebase deploy --only hosting:website), GSC re-fetch for changed URLs.
+- Confidence: HIGH for repo state; live site still shows ERP until deploy.

@@ -81,10 +81,11 @@ for (const f of html) {
 }
 for (const slug of listed) {
   if (slug && !fs.existsSync(`${SITE}/${slug}.html`) && !fs.existsSync(`${SITE}/${slug}/index.html`)) {
-    // /demo is generated from Admin/dist by tools/build-demo-site.mjs and is
-    // gitignored, so a fresh clone has nothing to stat; tools/check-demo-nav.cjs
-    // proves the built mirror exists and is current.
-    if (slug !== 'demo') fail(`${SITE}/sitemap.xml`, `lists missing page ${slug}`);
+    // /demo and /demo/tour (rewrite to the same mirror) are generated from
+    // Admin/dist by tools/build-demo-site.mjs and are gitignored, so a fresh
+    // clone has nothing to stat; tools/check-demo-nav.cjs proves the built
+    // mirror exists and is current.
+    if (slug !== 'demo' && slug !== 'demo/tour') fail(`${SITE}/sitemap.xml`, `lists missing page ${slug}`);
   }
 }
 

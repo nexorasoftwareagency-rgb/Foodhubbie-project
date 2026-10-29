@@ -1,4 +1,4 @@
-# Off-site authority kit — FoodHubbie ERP
+# Off-site authority kit — FoodHubbie
 
 Everything the plan's "Build authority outside your website" section needs, ready to paste.
 Nothing here is a bulk-link or directory-spam play: **one accurate profile per platform**, plus
@@ -14,7 +14,7 @@ enforces the numbers (₹1–5 per order, ₹500 setup, one phone, one email) an
 
 | Field | Value |
 |---|---|
-| Brand | FoodHubbie ERP |
+| Brand | FoodHubbie |
 | Website | https://foodhubbie.in/ |
 | Phone / WhatsApp | +91 97246 49971 |
 | Email | nileshshah84870@gmail.com |
@@ -49,7 +49,7 @@ the ones that take prose. Priority order = highest search value first.
 
 ### Capterra / GetApp / G2 — description block (same copy, edit per platform)
 
-> FoodHubbie ERP is restaurant management software for restaurants and cafes. Orders are billed
+> FoodHubbie is restaurant management software for restaurants and cafes. Orders are billed
 > individually — ₹1 for a POS counter order, ₹2 for a QR table order, ₹5 for a WhatsApp Official
 > order (or 1% of that order's value) and ₹1 per promotional message — with a one-time ₹500 setup
 > and no monthly subscription, so a slow month costs almost nothing.
@@ -101,7 +101,7 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 > We built restaurant software for the part of the day that owners actually lose money on — the
 > gap between the order and the bill.
 >
-> FoodHubbie ERP does QR table ordering, kitchen display, POS billing, WhatsApp ordering and
+> FoodHubbie does QR table ordering, kitchen display, POS billing, WhatsApp ordering and
 > delivery riders in one system, and charges per order instead of per month: ₹1 for a counter
 > order, ₹2 for a QR table order, ₹5 for a WhatsApp order, ₹500 one-time setup, no monthly rent.
 > A slow month costs almost nothing, which is exactly why a busy cafe shouldn't pay for the slow
@@ -117,17 +117,17 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 
 **A (cost angle)**
 > Most restaurant software charges per month whether you serve 20 plates or 200.
-> FoodHubbie ERP charges per order: ₹1 POS, ₹2 QR table, ₹5 WhatsApp, ₹500 setup, no monthly fee.
+> FoodHubbie charges per order: ₹1 POS, ₹2 QR table, ₹5 WhatsApp, ₹500 setup, no monthly fee.
 > 32 sec: https://foodhubbie.in?utm_source=x&utm_medium=social&utm_campaign=x-cost
 
 **B (KDS angle)**
-> Paper KOTs lose orders. FoodHubbie ERP puts every order on a kitchen screen the moment it lands
+> Paper KOTs lose orders. FoodHubbie puts every order on a kitchen screen the moment it lands
 > — dine-in, QR or delivery — with the status visible to the counter and the owner.
 > https://foodhubbie.in/kds?utm_source=x&utm_medium=social&utm_campaign=x-kds
 
 ### Instagram / Facebook caption
 
-> Kitchen screen, table QR, one bill screen, rider app. FoodHubbie ERP runs a restaurant's whole
+> Kitchen screen, table QR, one bill screen, rider app. FoodHubbie runs a restaurant's whole
 > day in one system — and bills per order, not per month (₹1–5 per order, ₹500 setup, no
 > subscription). 32-second walkthrough in the bio. Free trial, no card.
 > #restaurantsoftware #QRordering #kitchenDisplay #POS #foodbusiness #smallbusiness
@@ -135,7 +135,7 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 ### YouTube (title / description)
 
 - Title: `Restaurant software in 32 seconds — QR ordering, kitchen display, POS & riders`
-- Description: `A full order flow in FoodHubbie ERP: a table QR order lands on the kitchen screen, the
+- Description: `A full order flow in FoodHubbie: a table QR order lands on the kitchen screen, the
   cashier bills the session, the rider takes it out with OTP handoff. Flat per-order pricing — ₹1 POS,
   ₹2 QR table, ₹5 WhatsApp order, ₹500 one-time setup, no monthly subscription. Free trial, no card:
   https://foodhubbie.in?utm_source=youtube&utm_medium=social&utm_campaign=youtube-demo`
@@ -158,7 +158,7 @@ it were a testimonial.
 
 **Ask a real customer (WhatsApp message to a restaurant you actually serve):**
 
-> Hi <name>, we run FoodHubbie ERP for <their outlet> since <month>. Would you be comfortable
+> Hi <name>, we run FoodHubbie for <their outlet> since <month>. Would you be comfortable
 > writing 3–4 lines about how it works for you — what changed since you started, and what you
 > would tell another owner? We may publish it on our site with your outlet name, or anonymously if
 > you prefer. Happy to send you the page first.

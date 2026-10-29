@@ -5,7 +5,7 @@ Do NOT spin up fake directory spam — one accurate profile per platform.
 
 ## Canonical facts (use verbatim everywhere — consistency = trust)
 
-- Business name: **FoodHubbie ERP**
+- Business name: **FoodHubbie**
 - Phone/WhatsApp: **+91 97246 49971**
 - Email: nileshshah84870@gmail.com
 - Website: https://foodhubbie.in/
@@ -14,7 +14,7 @@ Do NOT spin up fake directory spam — one accurate profile per platform.
 
 ## Short description (Google Business Profile, ~750 chars)
 
-FoodHubbie ERP is restaurant management software for restaurants and cafes: QR table
+FoodHubbie is restaurant management software for restaurants and cafes: QR table
 ordering, kitchen display system, POS counter billing, delivery dispatch with rider app and
 OTP handoff, WhatsApp ordering on the official Meta API, promotions and discount engine,
 inventory, analytics and multi-outlet reporting — in one realtime dashboard. Flat per-order
@@ -23,7 +23,7 @@ lock-in. https://foodhubbie.in/
 
 ## Long description (JustDial / IndiaMART)
 
-FoodHubbie ERP — run your restaurant on autopilot. Customers scan a table QR and order from
+FoodHubbie — run your restaurant on autopilot. Customers scan a table QR and order from
 their phone browser (no app download); the kitchen sees orders instantly on the KDS; riders
 are auto-assigned with live map tracking and OTP-secured handoff. Market with WhatsApp
 campaigns, coupons and combos from the same dashboard. Includes menu/catalog management,
