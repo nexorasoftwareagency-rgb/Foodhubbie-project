@@ -2191,3 +2191,8 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - Gotcha avoided: PowerShell Set-Content rewrote line endings on promo/*.md (whole-file CRLF diff) - reverted and redone with content-preserving edits (TRACKER.md diff is exactly 3 lines).
 - Verification: ffprobe both webp dims exact; copy-consistency OK; encoding ok; domain-migration 0 stale; repo-wide grep shows no live refs to the deleted PNGs.
 - Commit: cadaac7 (webp); brand sweep from the prior entry = 0c4db00
+
+### [20261029-140000-deploy-website] PRODUCTION DEPLOY: hosting:website (authorized)
+- Owner authorized ("DEPLOY."). `firebase deploy --only hosting:website` -> platform foodhubbie-10, target foodhubbie-web, 99 files found, 28 uploaded, release complete. Host: https://foodhubbie-web.web.app / canonical https://foodhubbie.in/ (301 www->apex verified intact). Ships BOTH pending changes: brand sweep (0c4db00) + webp/images (8d258f0).
+- LIVE VERIFICATION ALL PASS: / 200 ERP=0 logo-tag=0 poster=demo-poster.webp JSON-LD name=FoodHubbie; /architecture /contact /pricing /signup /multi-outlet /use-cases /qr-ordering all 200 ERP=0 tag=0. favicon.png now serves 48KB (was 794KB; 256x256). demo-poster.webp 200 image/webp 78.2KB; restaurant-os-1080x1350.webp 200 image/webp 311.5KB. /demo/tour still 200 with the demo shell.
+- Remaining owner actions unchanged: GSC re-fetch for changed URLs (priority 8), directory submissions, genuine social profiles then sameAs.
