@@ -8,8 +8,25 @@ A full-stack, multi-tenant ERP platform for WhatsApp-based food ordering. Custom
 
 ---
 
+## Live demo
+
+**https://foodhubbie-admins.web.app/demo** — also reachable as `https://www.foodhubbie.in/demo` (301 → apex → 302 → admin host).
+
+| | |
+|---|---|
+| What it is | The **real** Admin dashboard, not a mock-up. It auto-signs in as `demo@foodhubbie.in` on load; no credentials needed. |
+| Tenant | `businesses/foodhubbie-demo/outlets/demo` — "Demo Dashboard" (`outletNo: DD`), fully isolated from live restaurants. |
+| Data | Seeded from the live Roshani Pizza catalog: 6 categories, 22 dishes (real names, prices, sizes, photos), 4 combos, plus ~353 synthetic `DD-` orders, sessions, staff, riders, inventory and expenses. Rebuilt nightly at 03:00 IST. |
+| Writes | **Enabled** — visitors can add/edit dishes, place POS sales, change settings, manage tables and staff. Nothing leaves the demo tenant. |
+| Blocked | Only side effects that reach outside the tenant: creating real Firebase Auth users, password reset/change, deleting a rider, sending a promo test, and the outlet on/off switch. |
+
+The old static `/demo/tour` walkthrough replica was removed on 2026-10-29 because it showed a frozen dataset instead of the real product. `/demo/tour` now redirects to the live dashboard on both hosts, so existing links keep working.
+
+---
+
 ## Table of Contents
 
+- [Live demo](#live-demo)
 - [Tech Stack](#tech-stack)
 - [Architecture Overview](#architecture-overview)
 - [Firebase Database Schema](#firebase-database-schema)
