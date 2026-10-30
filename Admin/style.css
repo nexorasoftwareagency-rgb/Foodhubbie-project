@@ -10253,6 +10253,20 @@ body.pos-selection-mode .walkin-picker {
 #tab-categories .cat-card-actions .btn-action-v4 { width: 24px; height: 24px; border-radius: 6px; }
 #tab-categories .cat-card-actions .btn-action-v4 svg { width: 11px !important; height: 11px !important; }
 
+/* Phase 2 — right-sheet create drawer */
+.modal.modal-sheet-right { justify-content: flex-end; padding: 0; }
+.modal.modal-sheet-right .modal-content {
+    height: 100%; width: 100%; max-width: 480px;
+    border-radius: 16px 0 0 16px;
+    animation: sheetSlideInRight .28s cubic-bezier(.4,0,.2,1);
+}
+@keyframes sheetSlideInRight {
+    from { transform: translateX(60px); opacity: 0.4; }
+    to { transform: none; opacity: 1; }
+}
+.cat-order-stepper { display: flex; gap: 6px; align-items: center; }
+.cat-order-stepper .form-input { text-align: center; }
+
 @media (max-width: 1024px) {
     .menu-browser-layout {
         flex-direction: column;

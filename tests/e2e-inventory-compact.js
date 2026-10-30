@@ -161,9 +161,50 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     await page.waitForTimeout(400);
     const visibleCount = await page.evaluate(() => [...document.querySelectorAll('#categoryList .cat-card')].filter(c => c.style.display !== 'none').length);
     ok('categories search restores', visibleCount === cg.cards, `${visibleCount}/${cg.cards} visible after clearing`);
-    await page.evaluate(() => document.getElementById('tab-categories').scrollIntoView());
-    await page.waitForTimeout(600);
-    await page.screenshot({ path: path.join(T, 'categories-phase1.png') });
+
+    // ---- Phase 2: create-category drawer ----
+    await page.click('#btnOpenCatDrawer');
+    await page.waitForTimeout(700);
+    const dr1 = await page.evaluate(() => ({
+        active: document.getElementById('categoryCreateDrawer')?.classList.contains('active') || false,
+        visible: document.getElementById('categoryCreateDrawer')?.offsetHeight > 0 || false,
+        nameFocused: document.activeElement?.id === 'newCatName',
+    }));
+    ok('drawer opens from header button', dr1.active && dr1.visible && dr1.nameFocused, `active=${dr1.active} visible=${dr1.visible} focus=${dr1.nameFocused}`);
+    await page.fill('#newCatName', 'Pizza');
+    await page.waitForTimeout(300);
+    const dupShown = await page.evaluate(() => document.getElementById('catNameDupHint').style.display !== 'none');
+    ok('live duplicate-name hint fires', dupShown, '"Pizza" is an existing category');
+    await page.fill('#newCatName', 'E2E-CAT-DELETE-ME');
+    await page.waitForTimeout(300);
+    const dupGone = await page.evaluate(() => document.getElementById('catNameDupHint').style.display === 'none');
+    ok('duplicate hint clears on clean name', dupGone, 'E2E-CAT-DELETE-ME is new');
+    // stepper
+    await page.click('#catOrderPlus');
+    await page.click('#catOrderPlus');
+    const stepperVal = await page.evaluate(() => document.getElementById('newCatOrder').value);
+    ok('serial stepper works', stepperVal === '2', `order value after 2x plus = ${stepperVal}`);
+    await page.click('#catOrderMinus');
+    const stepperVal2 = await page.evaluate(() => document.getElementById('newCatOrder').value);
+    ok('serial stepper decrements', stepperVal2 === '1', `order value after minus = ${stepperVal2}`);
+    // create the category for real (drawer auto-closes on success)
+    await page.click('#btnAddCategory');
+    await page.waitForTimeout(3500);
+    const dr2 = await page.evaluate(() => ({
+        closed: !document.getElementById('categoryCreateDrawer')?.classList.contains('active'),
+        created: [...document.querySelectorAll('#categoryList .cat-card-name')].some(n => n.textContent.trim() === 'E2E-CAT-DELETE-ME'),
+        cardCount: document.querySelectorAll('#categoryList .cat-card').length,
+    }));
+    ok('drawer closes after save + card appears', dr2.closed && dr2.created, `cards now ${dr2.cardCount}`);
+    await page.screenshot({ path: path.join(T, 'category-drawer.png') });
+    // cleanup: delete the e2e category (it has no dishes -> cascade removes nothing else)
+    const delBtn = page.locator('#categoryList .cat-card', { hasText: 'E2E-CAT-DELETE-ME' }).first();
+    await delBtn.locator('.cat-card-actions .btn-action-v4.danger').click();
+    await page.waitForTimeout(700);
+    await page.locator('.dynamic-modal-overlay .btn-confirm').first().click();
+    await page.waitForTimeout(3500);
+    const gone = await page.evaluate(() => ![...document.querySelectorAll('#categoryList .cat-card-name')].some(n => n.textContent.trim() === 'E2E-CAT-DELETE-ME'));
+    ok('e2e category cleanup (deleted)', gone, 'category removed live');
 
     await browser.close();
     const fails = results.filter(r => !r.pass).length;

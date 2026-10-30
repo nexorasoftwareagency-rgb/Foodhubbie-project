@@ -58,7 +58,7 @@ async function collectTasks() {
         { id: 'category', required: true, done: hasCategories,
           title: 'Create a menu category',
           hint: 'Every dish lives inside a category — start with one like "Pizza" or "Starters".',
-          cta: { label: 'Add a category', tab: 'categories', open: '#btnAddCategory' } },
+          cta: { label: 'Add a category', tab: 'categories', open: '#btnOpenCatDrawer' } },
 
         { id: 'menu', required: true, done: hasDishes,
           title: 'Add your first dish',

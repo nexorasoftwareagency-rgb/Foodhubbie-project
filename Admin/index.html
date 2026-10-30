@@ -1344,6 +1344,8 @@
 
                             <input type="text" id="categorySearch" placeholder="Search categories..." class="search-input-group flex-1" aria-label="Search categories">
 
+                            <button id="btnOpenCatDrawer" class="btn-primary btn-small" title="Create a new category" aria-label="Add Category"><i data-lucide="plus" class="icon-16"></i> Add Category</button>
+
                             <button id="btnMigrateDishAddons" class="btn-secondary btn-secondary-xs"
 
                                 title="Force-sync dish-level add-ons into their categories (recovery tool)"
@@ -1381,71 +1383,6 @@
 
 </div>
 
-<div class="glass-card p-20 mt-16">
-
-    <h4 class="mb-14"><i data-lucide="plus-circle" class="icon-16"></i> Create New Category</h4>
-
-    <div class="flex-row flex-gap-10 flex-center mb-20 p-15 bg-ghost br-15">
-
-        <img id="catPreview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23E84908' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='white' font-size='12' font-family='Inter,sans-serif'%3ECategory%3C/text%3E%3C/svg%3E"
-
-            class="category-preview-img" alt="Category Preview">
-
-        <div class="flex-col flex-1">
-
-            <input type="file" id="catFile" accept="image/*" class="hidden"
-
-                title="Select category photo" aria-label="Select category photo">
-
-            <button id="btnChangeCatPhoto" class="btn-secondary btn-small mb-8">Change
-
-                Photo</button>
-
-            <div class="flex-row flex-gap-10 mt-10">
-
-                <input id="newCatName" placeholder="Category Name" class="form-input mb-0 flex-2"
-
-                    title="Category Name" aria-label="Category Name">
-
-                <input id="newCatOrder" type="number" placeholder="Serial" class="form-input mb-0 flex-1"
-
-                    title="Sorting Order (Lower numbers appear first)">
-
-            </div>
-
-        </div>
-
-    </div>
-
-    <div id="categoryAddonsContainer" class="category-addons-container mt-10">
-
-        <div class="flex-between flex-center mb-10">
-
-            <label class="form-label-small mb-0">Category Add-ons (Optional)</label>
-
-            <button id="btnAddCatAddonField" data-action="addCategoryAddonField" class="btn-secondary btn-small"
-
-                title="Add a new customization option for this category">+ Add
-
-                Addon</button>
-
-        </div>
-
-        <div id="categoryAddonsList">
-
-            <!-- Rows added here -->
-
-        </div>
-
-    </div>
-
-    <button id="btnAddCategory" data-action="addCategory"
-
-        class="btn-primary w-full mt-20 p-12 br-12 font-weight-700"
-
-        title="Save new category">🚀 Add Category</button>
-
-</div>
 
 </div>
 
@@ -7712,6 +7649,94 @@
             </div>
             <button id="btnSaveCategory" class="btn-primary w-full mt-14 p-12 br-12 font-weight-700">Save Category</button>
         </div>
+    </div>
+
+    <!-- CATEGORY CREATE DRAWER (Phase 2 — lives outside the hidden tab-content) -->
+
+    <div id="categoryCreateDrawer" class="modal modal-sheet-right" role="dialog" aria-modal="true" aria-label="Create Category">
+
+        <div class="modal-content glass-card">
+
+            <div class="modal-header">
+
+                <h2 class="modal-title">Create New Category</h2>
+
+                <button class="close-btn" id="btnCloseCatDrawer" aria-label="Close dialog"><i data-lucide="x" class="icon-18"></i></button>
+
+            </div>
+
+            <div class="modal-body p-20">
+
+                <div class="flex-row flex-gap-10 flex-center mb-20 p-15 bg-ghost br-15">
+
+                    <img id="catPreview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23E84908' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='white' font-size='12' font-family='Inter,sans-serif'%3ECategory%3C/text%3E%3C/svg%3E"
+
+                        class="category-preview-img" alt="Category Preview">
+
+                    <div class="flex-col flex-1">
+
+                        <input type="file" id="catFile" accept="image/*" class="hidden"
+
+                            title="Select category photo" aria-label="Select category photo">
+
+                        <button id="btnChangeCatPhoto" class="btn-secondary btn-small mb-8">Change Photo</button>
+
+                        <div class="flex-row flex-gap-10 mt-10">
+
+                            <input id="newCatName" placeholder="Category Name" class="form-input mb-0 flex-2"
+
+                                title="Category Name" aria-label="Category Name">
+
+                            <div class="cat-order-stepper flex-1" title="Sorting Order (Lower numbers appear first)">
+
+                                <button type="button" id="catOrderMinus" class="btn-secondary btn-small" aria-label="Decrease serial number">−</button>
+
+                                <input id="newCatOrder" type="number" placeholder="Serial" class="form-input mb-0"
+
+                                    title="Sorting Order (Lower numbers appear first)" aria-label="Serial order">
+
+                                <button type="button" id="catOrderPlus" class="btn-secondary btn-small" aria-label="Increase serial number">+</button>
+
+                            </div>
+
+                        </div>
+
+                        <small id="catNameDupHint" style="display:none;color:#dc2626;font-size:10px;font-weight:700;margin-top:4px;">⚠ A category with this name already exists</small>
+
+                    </div>
+
+                </div>
+
+                <div id="categoryAddonsContainer" class="category-addons-container mt-10">
+
+                    <div class="flex-between flex-center mb-10">
+
+                        <label class="form-label-small mb-0">Category Add-ons (Optional)</label>
+
+                        <button id="btnAddCatAddonField" data-action="addCategoryAddonField" class="btn-secondary btn-small"
+
+                            title="Add a new customization option for this category">+ Add Addon</button>
+
+                    </div>
+
+                    <div id="categoryAddonsList">
+
+                        <!-- Rows added here -->
+
+                    </div>
+
+                </div>
+
+                <button id="btnAddCategory" data-action="addCategory"
+
+                    class="btn-primary w-full mt-20 p-12 br-12 font-weight-700"
+
+                    title="Save new category">🚀 Add Category</button>
+
+            </div>
+
+        </div>
+
     </div>
 
     <!-- STAFF MANAGEMENT MODAL -->

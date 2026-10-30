@@ -157,6 +157,8 @@ export async function addCategory() {
         fileInput.value = "";
         if (previewImg) previewImg.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Crect width='100%25' height='100%25' fill='%23eee'/%3E%3C/svg%3E";
         showToast('Category added successfully!', 'success');
+        document.getElementById('categoryCreateDrawer')?.classList.remove('active');
+        document.getElementById('catNameDupHint')?.style.setProperty('display', 'none');
         logAudit("Catalog", `Added Category: ${name}`, "Global");
     } catch (err) {
         console.error(err);
@@ -1062,6 +1064,35 @@ window.__bulkDeleteCombos = async () => {
 };
 
 document.addEventListener('DOMContentLoaded', _initBulkActions);
+document.addEventListener('DOMContentLoaded', _initCategoryDrawer);
+
+// Phase 2: create-category drawer (right sheet). Edit keeps the dedicated categoryEditorModal.
+function _initCategoryDrawer() {
+    const drawer = document.getElementById('categoryCreateDrawer');
+    if (!drawer) return;
+    const close = () => drawer.classList.remove('active');
+    document.getElementById('btnOpenCatDrawer')?.addEventListener('click', () => {
+        drawer.classList.add('active');
+        setTimeout(() => document.getElementById('newCatName')?.focus(), 250);
+    });
+    document.getElementById('btnCloseCatDrawer')?.addEventListener('click', close);
+    drawer.addEventListener('mousedown', e => { if (e.target === drawer) close(); });
+
+    // Serial stepper
+    const orderInput = document.getElementById('newCatOrder');
+    const step = d => { if (orderInput) orderInput.value = Math.max(0, (parseInt(orderInput.value) || 0) + d); };
+    document.getElementById('catOrderMinus')?.addEventListener('click', () => step(-1));
+    document.getElementById('catOrderPlus')?.addEventListener('click', () => step(1));
+
+    // Live duplicate-name hint (hard check still in addCategory)
+    const nameInput = document.getElementById('newCatName');
+    const hint = document.getElementById('catNameDupHint');
+    nameInput?.addEventListener('input', () => {
+        const v = nameInput.value.trim().toLowerCase();
+        const dup = !!v && (state.categories || []).some(c => c.name.toLowerCase() === v);
+        if (hint) hint.style.display = dup ? '' : 'none';
+    });
+}
 
 export async function deleteCombo(id) {
     const comboSnap = await get(Outlet.ref(`combos/${id}`));

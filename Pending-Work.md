@@ -69,8 +69,8 @@ This rule applies to:
 
 ### ✅ Categories Tab Phase 2 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
 - **Stage:** Phase 2 (create drawer) `done` — Phases 3 (delete guard; WebP already shipped), 4 (mobile/a11y) `pending`
-- **Files:** `Admin/index.html` (right-sheet drawer beside modals + header Add Category button), `Admin/js/features/catalog.js` (`_initCategoryDrawer` + auto-close on save), `Admin/style.css` (`modal-sheet-right` + stepper); deploy also carried the onboarding agent's committed F1/F2 work (his cache `5.4.13`/`v5.12.10` was already next-in-line)
-- **Verified:** production E2E 28/28 — drawer open/close incl. backdrop, live dup hint, stepper, REAL create → card → delete-cleanup; 21 earlier checks regression-clean
+- **Files:** `Admin/index.html` (right-sheet drawer beside modals + header Add Category button + serial stepper), `Admin/js/features/catalog.js` (`_initCategoryDrawer`: open/close/backdrop/stepper/live-dup-hint + auto-close on save), `Admin/style.css` (`modal-sheet-right` + `cat-order-stepper`), `Admin/js/features/setup-checklist.js` (deep-link re-pointed `#btnAddCategory` → `#btnOpenCatDrawer`)
+- **Verified:** production E2E 28/28 × 2 deploys — drawer open/close/backdrop/focus, live dup hint, stepper ±, REAL create → card → delete-cleanup; 21 earlier checks regression-clean
 - **Deployed:** 2026-10-30; ledger `[20261030-140000-category-phase2]`
 
 ### ✅ Categories Tab Phase 1 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
