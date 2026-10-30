@@ -55,6 +55,12 @@ This rule applies to:
 - **Before deploy:** run the rules emulator (needs a JDK; not possible on this box) or the live probe in plan §7.1 — the lock gate is the only unproven part. Then `firebase deploy --only database` → restart `bot-control-api` → admin/supreme builds → website last.
 - **Open owner decisions:** duplicate `GUIDEs/` docs; email verification / password-set link (auto-approval lets anyone register any unregistered email); public pricing copy (₹500 setup vs ₹1,000 minimum wallet); hard stop at zero balance; percentage-package visibility.
 
+### ✅ Menu Browser + Combos Tab Density Pass — deployed (done)
+- **Files:** `Admin/style.css` (`#browserDishGrid:not(.list-view)` + `#tab-combos` compact blocks), `Admin/index.html` + `Admin/sw.js` (`style.css?v=5.4.11`, cache `v5.12.8`), `tests/e2e-inventory-compact.js` (battery now covers 5 surfaces)
+- **Stage:** `done`
+- **Verified:** production E2E 15/15 — browser tab cards 111×164px, ~7 columns on 834px, 24px buttons (stretch bug fixed via `align-content:start`: was 603px tall); combos checks conditional (e2e outlet has 0 combos); inventory + menu-tab regression clean on the same deploy.
+- **Done:** deployed 2026-10-30; ledger `[20261030-101500-browser-combo-compact]`.
+
 ### ✅ MenuTab Density Pass — deployed (done)
 - **Files:** `Admin/style.css` (`#menuGrid` compact block), `Admin/js/features/catalog.js` (chip modifier `main` → `single`, root-cause fix for the app-shell `.main` padding collision), `Admin/index.html` + `Admin/sw.js` (`style.css?v=5.4.9`, cache `v5.12.6`)
 - **Stage:** `done`

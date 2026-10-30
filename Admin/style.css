@@ -10171,6 +10171,53 @@ body.pos-selection-mode .walkin-picker {
     margin-right: 4px;
 }
 
+/* COMPACT DENSITY — Menu Browser grid view + Combos tab (browser-dish-card family; list-view & Menu Bank modal untouched) */
+#browserDishGrid.browser-dish-grid:not(.list-view) {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 6px;
+    padding: 10px;
+    align-content: start; /* flex:1 container — stop the single row stretching to panel height */
+}
+#browserDishGrid:not(.list-view) .browser-dish-img { margin-bottom: 4px; border-radius: 6px; }
+#browserDishGrid:not(.list-view) .browser-dish-stock { font-size: 8px; padding: 1px 5px; }
+#browserDishGrid:not(.list-view) .browser-dish-name {
+    font-size: 10.5px; font-weight: 700; margin: 0 0 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#browserDishGrid:not(.list-view) .browser-dish-category { font-size: 8.5px; padding: 1px 4px; margin-bottom: 2px; }
+#browserDishGrid:not(.list-view) .browser-dish-pricing { gap: 3px; margin-bottom: 4px; }
+#browserDishGrid:not(.list-view) .browser-price-chip {
+    font-size: 9.5px; font-weight: 800; color: var(--primary);
+    padding: 1px 4px; background: var(--bg-ghost); border-radius: 4px;
+}
+#browserDishGrid .browser-dish-actions { gap: 3px; padding-top: 4px; }
+#browserDishGrid .browser-dish-actions .btn-action-v4 { width: 24px; height: 24px; border-radius: 6px; }
+#browserDishGrid .browser-dish-actions .btn-action-v4 svg { width: 11px !important; height: 11px !important; }
+#browserDishGrid.list-view .browser-dish-actions { gap: 4px; }
+
+#tab-combos .combo-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+#tab-combos .browser-dish-card.combo-card { padding: 5px; }
+#tab-combos .combo-card .browser-dish-name {
+    font-size: 10.5px; font-weight: 700; margin: 0 0 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#tab-combos .combo-card .browser-dish-category {
+    font-size: 8.5px; padding: 1px 4px; margin-bottom: 2px; max-width: 100%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+#tab-combos .combo-card .browser-dish-pricing { gap: 3px; margin-bottom: 3px; }
+#tab-combos .browser-price-chip {
+    font-size: 9.5px; font-weight: 800; color: var(--primary);
+    padding: 1px 4px; background: var(--bg-ghost); border-radius: 4px;
+}
+#tab-combos .combo-price-final { background: inherit; color: var(--primary-dark); padding: 1px 4px; border-radius: 4px; box-shadow: none; }
+#tab-combos .combo-card .combo-meta { font-size: 8px !important; margin-bottom: 2px; }
+#tab-combos .combo-disc-chip { font-size: 8.5px; padding: 1px 6px; top: 5px; left: 5px; }
+#tab-combos .combo-card .browser-dish-actions { gap: 3px; padding-top: 4px; }
+#tab-combos .browser-dish-actions .combo-toggle { transform: scale(0.72); transform-origin: right center; margin-right: -8px; }
+#tab-combos .browser-dish-actions .btn-action-v4 { width: 24px; height: 24px; border-radius: 6px; }
+#tab-combos .browser-dish-actions .btn-action-v4 svg { width: 11px !important; height: 11px !important; }
+
 @media (max-width: 1024px) {
     .menu-browser-layout {
         flex-direction: column;
