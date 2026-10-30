@@ -40,20 +40,38 @@ This rule applies to:
 
 ---
 
-### 🔍 Onboarding setup checklist / auto-approval / wallet / percentage package — reviewed, awaiting merge decision
+### ✅ Onboarding setup checklist / auto-approval / wallet / percentage package — merged + deployed (done)
 - **Source:** `Fixes-and-Changes/Foodhubbie Onboarding PLAAN/` (6-commit mbox on base `a4392f1` + Guide.md + Change-Guide-Before-After.md)
-- **Stage:** `reviewing`
-- **Branch:** local `onboarding-setup-checklist` (`4c32061..b4a301a`, 7 commits incl. the two test fixes, based on `df45d29`) — **not merged, not deployed, no live data touched**
-- **Plan:** `docs/PLAN-ONBOARDING-WALLET-PERCENTAGE.md` (compatibility matrix, file map, findings, verification, phased rollout, rollback, live probes, open decisions)
-- **Verified:** `node shared/cost-math.js`, `tests/encoding-check.mjs`, `tests/check-imports.mjs`, `tests/auto-onboarding.check.cjs` 7/7, `tests/admin-wallet-checklist.check.mjs` 3 suites, `tests/signup-onboarding.check.mjs` 12/12, `tools/check-shared-twins.cjs` 5/5, `tools/check-copy-consistency.cjs`, `gate-verify.js` PASS, `build:admin`, `build:supreme`; real-browser boot of the built Admin (demo tenant) + Supreme, and setup mode 8/8 with `state.locked` injected through the module cache
-- **OK:** (pending — two P1 fixes first)
-- **Done:** (pending — merge + deploy)
-- **Must fix before merge:**
-  - [ ] **F1** `SETUP_TABS` in `Admin/js/ui.js` is missing `'chat'`, but the setup checklist's "Connect WhatsApp ordering" step links to it → the button opens the "Top up to go live" popup instead. Add `'chat'` (decide on `'discounts'`).
-  - [ ] **F2** `approveOnboardingRequest()` (bot-control-api/server.js) must write `outletIndex/{oid} = {bid, name, createdAt}` like the Supreme wizard does, or every auto-created outlet has no resolvable outlet key / QR menu link.
-  - [ ] **F5** bump `Admin/sw.js` `CACHE_NAME` at merge → `v5.12.4` (the WebP commit `b0c1757` already took `v5.12.3`).
-- **Before deploy:** run the rules emulator (needs a JDK; not possible on this box) or the live probe in plan §7.1 — the lock gate is the only unproven part. Then `firebase deploy --only database` → restart `bot-control-api` → admin/supreme builds → website last.
-- **Open owner decisions:** duplicate `GUIDEs/` docs; email verification / password-set link (auto-approval lets anyone register any unregistered email); public pricing copy (₹500 setup vs ₹1,000 minimum wallet); hard stop at zero balance; percentage-package visibility.
+- **Stage:** `done` — merged `c54522e`, docs `0bcfc98`, deployed 2026-10-30 (rules + admin/supreme/website hosting + EC2 `bot-control-api`)
+- **Branch:** `onboarding-setup-checklist` (`83f4fbb`, `9d3109f`, `7357102`) merged `--no-ff` into `seo-brand-consistency`; ledger `[20261030-onboarding-ship]`
+- **Plan:** `docs/PLAN-ONBOARDING-FLOW-HARDENING.md` (F1/F2/D2/D4/D6, verified facts V1–V11, AS-BUILT sections) + `docs/PLAN-ONBOARDING-WALLET-PERCENTAGE.md` (compatibility matrix, file map, findings, verification, phased rollout, rollback, live probes)
+- **Verified:** gate on the merged tree — encoding, imports, twins 5/5, cost-math/report-catalog/report-export/loyalty/payroll/money/discount self-checks, auto-onboarding 10/10, wallet-checklist 3 suites, signup-onboarding 12/12, `gate-verify.js` PASS, both builds. Live: admin `sw.js` `v5.12.10` + `style.css?v=5.4.13`, Supreme no-password copy, website `signup.html` 200, EC2 API listening on `:4000` with auto-onboarding + auto-settlement armed, built Admin `?demo=1` boots with 0 console errors and all five deep-link targets.
+- **Fixes shipped:** F1 setup mode (7 steps, required-step hero, deep links, `SETUP_TABS` +`discounts`, deliberately not `chat`/`promotions`); F2 tenant parity (`outletIndex/{oid}`, `outletNo` reused on retry, template defaults spread before identity/security, `adminLogin` = `{email, passwordUpdatedAt}` only); F5 single version bump above both branches.
+- **Not verified:** rules behaviour locally (no Java → no RTDB emulator) — run the live probe in plan §7.1; Supreme billing screens need a real super account; live auto-approval needs a real website signup.
+
+### 🔍 D2 — Email verification before promoting public sign-up
+- **Stage:** `reviewing` (plan §3; not started)
+- **Why:** auto-approval lets anyone register any unregistered email and immediately receive a working tenant.
+- **Answer on record:** Spark allows 1,000 verification emails/day, 10,000 links/day, 100 account creations/hour/IP — so the Firebase built-in email-verification flow is viable without Blaze.
+- **Plan:** `docs/PLAN-ONBOARDING-FLOW-HARDENING.md` §3 (`requireEmailVerification` was deliberately deferred out of the shipped change set).
+
+### 🔍 D4 — Wallet gates: stop the bot at 10%, stop QR ordering at 0
+- **Stage:** `reviewing` — blocked on the live ledger being settled
+- **Agreed behaviour:** at 10% remaining, stop the WhatsApp bot; at 0, stop QR table ordering and show a "Temporarily Unavailable" page on scan. POS never gated; demo tenant hard-skipped; flat ₹100 bot threshold; ₹0 closes ordering.
+- **Shipped groundwork:** wallet writer in observe mode (`enforce:false`) — it records state but gates nothing yet.
+- **Blocker:** `roshani-pizza/pizza` is at −₹72.14 (paid ₹117.86, used ₹190, 180 orders, `topUpDone:false`) — genuinely unpaid, not a math bug (91 cancelled orders are already excluded; the ₹500 setup charge is correctly excluded). Enforcement would take the live outlet offline the moment it flips, so the owner must top up first.
+- **Note:** a real HTTP 404 is impossible on Spark/Hosting (the SPA rewrite returns 200) — the stop screen is an in-app 200.
+
+### 🔍 D5 — Pricing / percentage-package marketing consistency
+- **Stage:** `reviewing` (verification only; no copy changed in the onboarding change set)
+- **Facts to hold:** ₹500 = setup assistance; ₹1,000 = minimum wallet balance to start taking orders. `shared/billing-defaults.js` is authoritative for rates (₹2 QR, ₹1 POS, ₹5 WhatsApp/webview, ₹1 promo).
+- **Check:** `tools/check-copy-consistency.cjs` already fails on any setup fee other than ₹500 — extend/re-run it when the wallet wording reaches `website/`.
+
+### ✅ Categories Tab Phase 2 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
+- **Stage:** Phase 2 (create drawer) `done` — Phases 3 (delete guard; WebP already shipped), 4 (mobile/a11y) `pending`
+- **Files:** `Admin/index.html` (right-sheet drawer beside modals + header Add Category button), `Admin/js/features/catalog.js` (`_initCategoryDrawer` + auto-close on save), `Admin/style.css` (`modal-sheet-right` + stepper); deploy also carried the onboarding agent's committed F1/F2 work (his cache `5.4.13`/`v5.12.10` was already next-in-line)
+- **Verified:** production E2E 28/28 — drawer open/close incl. backdrop, live dup hint, stepper, REAL create → card → delete-cleanup; 21 earlier checks regression-clean
+- **Deployed:** 2026-10-30; ledger `[20261030-140000-category-phase2]`
 
 ### ✅ Categories Tab Phase 1 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
 - **Stage:** Phase 1 (grid/header) `done` — Phases 2 (create/edit drawer), 3 (WebP images + delete guard), 4 (mobile/a11y) `pending`
