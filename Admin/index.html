@@ -177,7 +177,7 @@
     </script>
 
 
-    <link rel="stylesheet" href="style.css?v=5.4.12">
+    <link rel="stylesheet" href="style.css?v=5.4.13">
 
     <link rel="stylesheet" href="mobile-overrides.css?v=5.4.10">
 
@@ -908,6 +908,12 @@
 
             <div id="tab-dashboard" class="tab-content">
 
+                <!-- WALLET LOW-BALANCE ALERT (filled by features/wallet-alert.js) -->
+                <div id="walletAlert" class="panel mt-8 mb-16" style="display:none;" role="status"></div>
+
+                <!-- SETUP CHECKLIST (filled by features/setup-checklist.js) -->
+                <div id="setupChecklist" class="panel mt-8 mb-16" style="display:none;padding:14px 16px;border-radius:10px;"></div>
+
                 <!-- PROMOTIONS KILL-SWITCH WIDGET -->
 
                 <div id="promoKillWidget" class="panel mt-8 mb-16" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-radius:10px;">
@@ -984,7 +990,7 @@
 
                                     Priority Orders (Action Required)</h3>
 
-                                <button class="btn-text-primary-sm" data-action="switchTab" data-tab="orders">View
+                                <button class="btn-text-primary-sm setup-hide" data-action="switchTab" data-tab="orders">View
 
                                     All</button>
 
@@ -1119,7 +1125,7 @@
 
                                     </label>
 
-                                    <button data-tab="riders" data-action="switchTab" class="btn-text-primary-sm"
+                                    <button data-tab="riders" data-action="switchTab" class="btn-text-primary-sm setup-hide"
 
                                         title="Manage Delivery Staff and Status">
 
@@ -5269,7 +5275,8 @@
         <div class="costs-head">
 
             <div class="cost-subtabs">
-                <button class="cost-subtab active" data-cost-tab="overview">Overview</button>
+                <button class="cost-subtab active" data-cost-tab="wallet">Wallet</button>
+                <button class="cost-subtab" data-cost-tab="overview">Overview</button>
                 <button class="cost-subtab" data-cost-tab="breakdown">Breakdown</button>
                 <button class="cost-subtab" data-cost-tab="feed">Feed</button>
                 <button class="cost-subtab" data-cost-tab="connect">Connect</button>
@@ -5283,6 +5290,44 @@
                 <label class="costs-date"><span>From</span><input type="date" id="costDateFrom"></label>
                 <label class="costs-date"><span>To</span><input type="date" id="costDateTo"></label>
                 <span id="costMonthLabel" class="costs-month"></span>
+            </div>
+
+        </div>
+
+        <div data-cost-section="wallet" style="margin-top:12px;">
+
+            <div class="mob-card" id="walletHero" style="padding:20px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                    <div>
+                        <div class="text-muted-small">Wallet balance</div>
+                        <div id="walletBalance" style="font-size:36px;font-weight:800;line-height:1.2;">&#8377;0</div>
+                        <div id="walletStatus" class="text-muted-small" role="status">Loading&hellip;</div>
+                    </div>
+                    <button type="button" class="btn-primary" id="walletContactBtn">Top up via support</button>
+                </div>
+                <div class="cost-detail-grid" style="margin-top:16px;">
+                    <div><div class="cost-detail-label">Total topped up</div><div class="cost-detail-value" id="walletPaid">&#8377;0</div></div>
+                    <div><div class="cost-detail-label">Used (orders + promo)</div><div class="cost-detail-value" id="walletUsed">&#8377;0</div></div>
+                    <div><div class="cost-detail-label">Other charges</div><div class="cost-detail-value" id="walletCharges">&#8377;0</div></div>
+                </div>
+            </div>
+
+            <div class="mob-card" id="walletHow" style="padding:16px;margin-top:12px;">
+                <h4 class="section-card-heading"><i data-lucide="wallet" class="icon-14"></i> How to top up</h4>
+                <ol style="margin:8px 0 0 18px;padding:0;line-height:1.8;">
+                    <li>Tap <strong>Top up via support</strong> and ask for the payment details (UPI or bank transfer).</li>
+                    <li>Pay at least <strong id="walletMinLabel">&#8377;1,000</strong> and send the payment proof on WhatsApp.</li>
+                    <li>We add the balance here (you will see it in the history below). Your first top-up switches your restaurant live.</li>
+                </ol>
+                <div class="text-muted-small" style="margin-top:8px;">Each order, promotional message and any extra charge is deducted from this balance at the rates in <em>Breakdown</em>.</div>
+            </div>
+
+            <div class="mob-card mob-table-card" style="margin-top:12px;">
+                <h4 class="section-card-heading"><i data-lucide="receipt" class="icon-14"></i> Top-up history</h4>
+                <table>
+                    <thead><tr><th>Date</th><th>Method</th><th>Receipt</th><th>Amount</th></tr></thead>
+                    <tbody id="walletHistoryBody"><tr><td colspan="4">Loading&hellip;</td></tr></tbody>
+                </table>
             </div>
 
         </div>

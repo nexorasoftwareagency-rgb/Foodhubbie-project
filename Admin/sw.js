@@ -58,10 +58,10 @@ firebase.messaging().onBackgroundMessage((payload) => {
 // stale-while-revalidate, so mixed old/new module pairs can serve until the
 // name changes force a clean re-cache (settings subtab race fix + boot preload
 // removal so settings.js evaluates post-auth: js/ui.js).
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.12.9';
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.12.10';
 const ASSETS_TO_CACHE = [
   './index.html',
-  './style.css?v=5.4.12',
+  './style.css?v=5.4.13',
   './mobile-overrides.css?v=5.4.10',
   './branding.js?v=5.4.5',
   './firebase-config.js?v=5.4.5',

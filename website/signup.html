@@ -34,6 +34,14 @@
   .terms-check input{width:16px;height:16px;flex:none;margin-top:3px;accent-color:var(--brand)}
   .terms-check a{color:var(--brand-dark);font-weight:600}
 
+  .field-error{color:#b91c1c;font-size:13px;margin-top:4px;line-height:1.4}
+  input[aria-invalid="true"]{border-color:#b91c1c}
+  .form-status{font-size:14px;line-height:1.5;margin:14px 0 0;color:#b91c1c}
+  .form-status:empty{display:none}
+  .form-card.is-done .form-fields{display:none}
+  .success{display:none;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:12px;padding:18px 20px;line-height:1.6;font-size:15px}
+  .success.show{display:block}
+
   footer{margin-top:56px}
   footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
 </style>
@@ -81,12 +89,13 @@
     <a href="/" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;margin-bottom:28px">← Back to Home</a>
     <div class="kicker">New Restaurant Registration</div>
     <h1>Register Your Restaurant on FoodHubbie</h1>
-    <p class="sub">Fill in your details and our team will review your application. Once approved, you'll get access to your restaurant dashboard.</p>
+    <p class="sub">Fill in your details and we'll create your restaurant dashboard automatically. You can set up your menu and tables right away; to go live, add a minimum wallet balance of ₹1,000 by contacting us.</p>
   </div>
 </section>
 
 <div class="wrap">
   <form class="form-card" id="signupForm" onsubmit="return handleSubmit(event)">
+  <div class="form-fields">
     <div class="row">
       <div>
         <label for="fBusiness">Business Name *</label>
@@ -126,11 +135,11 @@
     <div class="row">
       <div>
         <label for="fPassword">Admin Password *</label>
-        <input type="password" id="fPassword" required minlength="6" placeholder="Min 6 characters">
+        <input type="password" id="fPassword" required minlength="8" autocomplete="new-password" placeholder="Min 8 characters">
       </div>
       <div>
         <label for="fPassword2">Confirm Password *</label>
-        <input type="password" id="fPassword2" required minlength="6" placeholder="Re-enter password">
+        <input type="password" id="fPassword2" required minlength="8" autocomplete="new-password" placeholder="Re-enter password">
       </div>
     </div>
 
@@ -171,12 +180,14 @@
       <span>I have read and agree to the <a href="/billing-policy" target="_blank" rel="noopener">Billing &amp; Cancellation</a>, <a href="/refund-policy" target="_blank" rel="noopener">Refund &amp; Termination</a>, <a href="/whatsapp-policy" target="_blank" rel="noopener">WhatsApp Messaging</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy</a> policies. *</span>
     </label>
 
-    <button type="submit" class="submit-btn" id="submitBtn">Submit Application</button>
+    <div class="form-status" id="formStatus" role="alert" aria-live="polite"></div>
+    <button type="submit" class="submit-btn" id="submitBtn">Register Restaurant</button>
+  </div>
 
-    <div class="success" id="successMsg">
-      ✅ <b>Application received!</b><br>
-      Our team will review your registration and contact you within 24 hours.<br>
-      Once approved, you can log in to your dashboard with the email and password you provided.
+    <div class="success" id="successMsg" role="status" tabindex="-1">
+      ✅ <b>Registration received!</b><br>
+      Your restaurant account is being created. In a few minutes you can log in to your dashboard with the email and password you chose.<br>
+      Set up your menu and tables first. To start taking orders, add a minimum wallet balance of ₹1,000 by contacting FoodHubbie support from the dashboard.
     </div>
   </form>
 </div>
@@ -220,88 +231,146 @@
     });
   });
 
+  var DB_URL = 'https://foodhubbie-10-default-rtdb.firebaseio.com';
+  // Submission state. A request is created at most once per page visit: if the
+  // password save (step 2) fails, a retry re-sends only step 2 for the same
+  // request instead of creating a duplicate application.
+  var _reqKey = null;
+  var _submitting = false;
+  var _done = false;
+
+  function fieldError(id, msg) {
+    var input = document.getElementById(id);
+    var errId = id + 'Err';
+    var old = document.getElementById(errId);
+    if (old) old.remove();
+    if (!input) return;
+    if (!msg) { input.removeAttribute('aria-invalid'); input.removeAttribute('aria-describedby'); return; }
+    var div = document.createElement('div');
+    div.className = 'field-error';
+    div.id = errId;
+    div.textContent = msg;
+    input.setAttribute('aria-invalid', 'true');
+    input.setAttribute('aria-describedby', errId);
+    input.insertAdjacentElement('afterend', div);
+  }
+
+  function validateForm(v) {
+    // Returns [{id, msg}] in DOM order. Mirrors database.rules.json limits.
+    var errs = [];
+    var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (v.businessName.length < 2) errs.push({ id: 'fBusiness', msg: 'Enter your business name (at least 2 characters).' });
+    if (v.outletName.length < 2) errs.push({ id: 'fOutlet', msg: 'Enter your outlet name (at least 2 characters).' });
+    var digits = v.contactPhone.replace(/[^0-9]/g, '');
+    if (digits.length < 10 || v.contactPhone.length > 15) errs.push({ id: 'fPhone', msg: 'Enter a valid phone number (10 to 15 digits).' });
+    if (!emailRe.test(v.contactEmail)) errs.push({ id: 'fEmail', msg: 'Enter a valid contact email address.' });
+    if (!emailRe.test(v.adminEmail)) errs.push({ id: 'fAdminEmail', msg: 'Enter a valid email address for your dashboard login.' });
+    if (v.adminName.length < 1) errs.push({ id: 'fAdminName', msg: 'Enter the admin name.' });
+    if (v.adminPassword.length < 8) errs.push({ id: 'fPassword', msg: 'Use at least 8 characters.' });
+    else if (v.adminPassword.length > 128) errs.push({ id: 'fPassword', msg: 'Use at most 128 characters.' });
+    if (v.adminPassword !== v.adminPassword2) errs.push({ id: 'fPassword2', msg: 'Passwords do not match.' });
+    if (!v.plan) errs.push({ id: 'planGroup', msg: 'Select a plan.' });
+    if (!v.whatsappConnect) errs.push({ id: 'planGroup', msg: 'Select a WhatsApp option.' });
+    if (!v.terms) errs.push({ id: 'fTerms', msg: 'Please accept the policies to continue.' });
+    return errs;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
-    var businessName = document.getElementById('fBusiness').value.trim();
-    var outletName = document.getElementById('fOutlet').value.trim();
-    var contactPhone = document.getElementById('fPhone').value.trim();
-    var contactEmail = document.getElementById('fEmail').value.trim();
-    var adminEmail = document.getElementById('fAdminEmail').value.trim();
-    var adminName = document.getElementById('fAdminName').value.trim();
-    var adminPassword = document.getElementById('fPassword').value;
-    var adminPassword2 = document.getElementById('fPassword2').value;
-    var plan = document.querySelector('input[name="plan"]:checked');
-    var whatsappConnect = document.querySelector('input[name="whatsapp"]:checked');
-    var terms = document.getElementById('fTerms');
+    if (_submitting || _done) return false;
 
-    if (!businessName || !outletName || !contactPhone || !contactEmail) return false;
-    if (!adminEmail || !adminName || !adminPassword) return false;
-    if (adminPassword !== adminPassword2) {
-      alert('Passwords do not match.');
-      return false;
-    }
-    if (!plan || !whatsappConnect) {
-      alert('Please select a plan and WhatsApp option.');
-      return false;
-    }
-    if (!terms || !terms.checked) {
-      alert('Please accept the billing, refund, WhatsApp and privacy policies.');
-      terms.focus();
+    var plan = document.querySelector('input[name="plan"]:checked');
+    var wa = document.querySelector('input[name="whatsapp"]:checked');
+    var v = {
+      businessName: document.getElementById('fBusiness').value.trim(),
+      outletName: document.getElementById('fOutlet').value.trim(),
+      contactPhone: document.getElementById('fPhone').value.trim(),
+      contactEmail: document.getElementById('fEmail').value.trim(),
+      adminEmail: document.getElementById('fAdminEmail').value.trim(),
+      adminName: document.getElementById('fAdminName').value.trim(),
+      adminPassword: document.getElementById('fPassword').value,
+      adminPassword2: document.getElementById('fPassword2').value,
+      plan: plan ? plan.value : '',
+      whatsappConnect: wa ? wa.value : '',
+      terms: document.getElementById('fTerms').checked
+    };
+
+    ['fBusiness','fOutlet','fPhone','fEmail','fAdminEmail','fAdminName','fPassword','fPassword2','planGroup','fTerms']
+      .forEach(function (id) { fieldError(id, ''); });
+    var status = document.getElementById('formStatus');
+    status.textContent = '';
+
+    var errs = validateForm(v);
+    if (errs.length) {
+      errs.forEach(function (er) {
+        // planGroup is a div, not an input: show its message in the status line instead.
+        if (er.id === 'planGroup') status.textContent = er.msg; else fieldError(er.id, er.msg);
+      });
+      var first = errs.find(function (er) { return er.id !== 'planGroup'; });
+      var target = document.getElementById(first ? first.id : 'planGroup');
+      if (target && target.focus) target.focus();
       return false;
     }
 
     var btn = document.getElementById('submitBtn');
+    _submitting = true;
     btn.disabled = true;
     btn.textContent = 'Submitting…';
 
     try {
-      // Step 1: public request WITHOUT the password (readable by Supreme reviewers).
-      var res = await fetch('https://foodhubbie-10-default-rtdb.firebaseio.com/onboardingRequests.json', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName: businessName,
-          outletName: outletName,
-          contactPhone: contactPhone,
-          contactEmail: contactEmail,
-          adminEmail: adminEmail,
-          adminName: adminName,
-          plan: plan.value,
-          whatsappConnect: whatsappConnect.value,
-          template: '',
-          source: 'website',
-          status: 'pending',
-          termsVersion: TERMS_VERSION,
-          termsAcceptedAt: Date.now(),
-          createdAt: Date.now()
-        })
-      });
-      if (!res.ok) throw new Error('Save failed: ' + res.status);
-      var saved = await res.json();
-      var reqKey = saved && saved.name;
-      if (!reqKey) throw new Error('Save returned no key');
-      // Step 2: password goes to the write-only secrets node (no client read rule —
-      // only the approval backend reads it via Admin SDK, then deletes it).
-      var secRes = await fetch('https://foodhubbie-10-default-rtdb.firebaseio.com/onboardingSecrets/' + encodeURIComponent(reqKey) + '.json', {
+      if (!_reqKey) {
+        // Step 1: the public request, WITHOUT the password (readable by Supreme reviewers).
+        var res = await fetch(DB_URL + '/onboardingRequests.json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            businessName: v.businessName,
+            outletName: v.outletName,
+            contactPhone: v.contactPhone,
+            contactEmail: v.contactEmail,
+            adminEmail: v.adminEmail,
+            adminName: v.adminName,
+            plan: v.plan,
+            whatsappConnect: v.whatsappConnect,
+            template: '',
+            source: 'website',
+            status: 'pending',
+            termsVersion: TERMS_VERSION,
+            termsAcceptedAt: Date.now(),
+            createdAt: Date.now()
+          })
+        });
+        if (!res.ok) throw new Error('Save failed: ' + res.status);
+        var saved = await res.json();
+        if (!saved || !saved.name) throw new Error('Save returned no key');
+        _reqKey = saved.name;
+      }
+      // Step 2: the password goes to the write-only secrets node (no client read rule;
+      // only the approval backend reads it via the Admin SDK, then deletes it).
+      var secRes = await fetch(DB_URL + '/onboardingSecrets/' + encodeURIComponent(_reqKey) + '.json', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: adminPassword, createdAt: Date.now() })
+        body: JSON.stringify({ password: v.adminPassword, createdAt: Date.now() })
       });
       if (!secRes.ok) throw new Error('Password save failed: ' + secRes.status);
     } catch (err) {
       console.warn('Save failed', err);
-      alert('Submission failed — please check your connection and try again.');
+      status.textContent = 'We could not submit your application. Your details are still filled in. Check your connection and press Submit again.';
+      _submitting = false;
       btn.disabled = false;
-      btn.textContent = 'Submit Application';
+      btn.textContent = _reqKey ? 'Retry Submit' : 'Register Restaurant';
       return false;
     }
 
-    document.getElementById('successMsg').classList.add('show');
-
-    setTimeout(function () {
-      btn.disabled = false;
-      btn.textContent = 'Submit Application';
-    }, 3000);
+    // Success: lock the form for good (no resubmission) and drop the passwords from the DOM.
+    _done = true;
+    _submitting = false;
+    document.getElementById('fPassword').value = '';
+    document.getElementById('fPassword2').value = '';
+    document.getElementById('signupForm').classList.add('is-done');
+    var ok = document.getElementById('successMsg');
+    ok.classList.add('show');
+    ok.focus();
     return false;
   }
 </script>

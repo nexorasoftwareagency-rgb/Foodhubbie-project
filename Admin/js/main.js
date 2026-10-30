@@ -141,15 +141,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (!action) return;
 
-            // --- Locked outlet gate ---
-            // When the outlet is locked, block all mutating actions.
-            const SAFE_ACTIONS = ['logout', 'toggleSidebar', 'switchOutlet', 'closeOrderDrawer', 'printReceiptById', 'chatOnWhatsapp', 'closeModal', 'closeDrawer'];
-            if (state.locked && !SAFE_ACTIONS.includes(action)) {
-                e.preventDefault();
-                e.stopPropagation();
-                import('./ui.js').then(u => u.showLockedScreen());
-                return;
-            }
+            // No action-level lock gate here on purpose: `switchTab` already keeps a locked
+            // outlet on the SETUP_TABS allowlist, and the database rules refuse order and
+            // session writes while `locked` is true. A second client-side gate only produced
+            // a paywall popup over setup buttons that are supposed to work.
 
             switch (action) {
 

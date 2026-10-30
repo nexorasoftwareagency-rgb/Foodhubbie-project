@@ -15,8 +15,10 @@
  * Pure math lives in ../../shared/cost-math.js (node-runnable self-check).
  * ============================================================================
  */
-import { Outlet, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
-import { DEFAULT_RATES, PROMO_RATE, sourceOf, feeOf, computeCostIndex } from '../../shared/cost-math.js';
+import { Outlet, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
+import { state } from '../state.js';
+import { SUPPORT_WA } from '../ui.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel } from '../../shared/cost-math.js';
 
 let _unsubs = [];
 let _orders = {};
@@ -28,6 +30,8 @@ let _subtabsWired = false;
 let _rangeWired = false;
 let _range = null;           // { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
 let _orderUnsubs = [];
+let _allOrders = null;       // all-time orders (one-time read) for the wallet balance; null = not loaded
+let _walletWired = false;
 
 function _wireSubtabs() {
     if (_subtabsWired) return;
@@ -104,7 +108,7 @@ const _rangeLabel = () => {
     return `${f.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – ${t.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 };
 const _rates = () => ({ ...DEFAULT_RATES, ...(_billing && typeof _billing === 'object' ? _billing.rates || {} : {}) });
-const _mode = () => (_billing && typeof _billing === 'object' && _billing.mode === 'commission_1pct') ? 'commission_1pct' : 'per_order';
+const _mode = () => normalizeMode(_billing && typeof _billing === 'object' ? _billing.mode : null);
 
 const LABELS = { QR: 'QR menu', POS: 'POS counter', webview_delivery: 'WhatsApp / webview', WA: 'WhatsApp', other: 'Other' };
 const _label = src => LABELS[src] || src;
@@ -124,6 +128,7 @@ function _render() {
     const mode = _mode();
     const idx = computeCostIndex(_orders, rates, mode);
 
+    _renderWallet();
     _setText('costMonthLabel', _rangeLabel());
 
     const idxEl = document.getElementById('costKpiIndex');
@@ -145,7 +150,7 @@ function _render() {
         const rows = Object.entries(idx.bySource);
         bb.innerHTML = rows.length ? rows.map(([src, v]) => `<tr>
             <td>${_label(src)}</td>
-            <td>${mode === 'commission_1pct' && src === 'webview_delivery' ? '1% of order' : _inr(rates[src] ?? rates.other)}</td>
+            <td>${rateLabel(src, mode, rates)}</td>
             <td>${v.orders}</td>
             <td>${_inr(v.cost)}</td>
         </tr>`).join('') : '<tr><td colspan="4">No orders in this range</td></tr>';
@@ -197,7 +202,7 @@ function _render() {
             const b = _billing;
             const rates = _rates();
             const mode = _mode();
-            const modeLabel = mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
+            const modeLabel = mode === 'percentage' ? 'Percentage package (1% of order value, 2% on WhatsApp orders)' : mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
             const setup = b.setup || {};
             const setupStatus = setup.status || 'non_refundable';
             const tp = b.tokenPacks || {};
@@ -238,7 +243,7 @@ function _render() {
                     <div style="margin-top:14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#64748b;">Per-source rates</div>
                     <div class="cost-rate-chips">
                         ${Object.keys(LABELS).filter(k => k in rates).map(k =>
-                            `<span class="cost-rate-chip">${_label(k)}: ${mode === 'commission_1pct' && k === 'webview_delivery' ? '1% of order' : '₹' + rates[k]}</span>`).join('')}
+                            `<span class="cost-rate-chip">${_label(k)}: ${rateLabel(k, mode, rates).replace('/order', '')}</span>`).join('')}
                     </div>
                 </div>`;
         }
@@ -264,11 +269,68 @@ function _render() {
     }
 }
 
+function _renderWallet() {
+    if (!document.getElementById('walletBalance')) return;
+    _setText('walletMinLabel', _inr(MIN_TOPUP));
+    if (_billing === false) {
+        _setText('walletBalance', '\u2014');
+        _setText('walletStatus', 'Wallet details are not available right now. Please try again or contact support.');
+        return;
+    }
+    if (_allOrders === false) {
+        // never show a balance computed without the usage side: it would be overstated
+        _setText('walletBalance', '\u2014');
+        _setText('walletStatus', 'Could not load your usage just now. Reload to see your balance.');
+        return;
+    }
+    if (_allOrders === null || _billing === null) { _setText('walletStatus', 'Calculating\u2026'); }
+    const w = computeWallet({ billing: _billing || {}, orders: _allOrders || {}, campaigns: _campaigns || {} });
+    const el = document.getElementById('walletBalance');
+    if (el) {
+        el.textContent = (w.balance < 0 ? '\u2212' : '') + _inr(Math.abs(w.balance));
+        el.style.color = w.balance < 0 ? '#dc2626' : '';
+    }
+    _setText('walletPaid', _inr(w.paid));
+    _setText('walletUsed', _inr(w.used));
+    _setText('walletCharges', _inr(w.charges));
+    if (_allOrders !== null && _billing !== null) {
+        let msg;
+        if (!w.topUpDone) msg = `Top up at least ${_inr(MIN_TOPUP)} to go live.`;
+        else if (state.locked) msg = 'Top-up received. Your restaurant is being switched live.';
+        else if (w.level === 'empty') msg = 'Your wallet balance is finished. Please top up now to avoid interruption.';
+        else if (w.level === 'low') msg = `Low balance: 25% or less of your top-ups is left. Please top up soon.`;
+        else msg = 'Your restaurant is live.';
+        _setText('walletStatus', msg);
+        const hero = document.getElementById('walletHero');
+        if (hero) hero.style.borderLeft = w.level === 'empty' ? '4px solid #dc2626' : w.level === 'low' ? '4px solid #f59e0b' : '';
+    }
+    const body = document.getElementById('walletHistoryBody');
+    if (body) {
+        const pays = Object.values((_billing && _billing.payments) || {})
+            .map(p => ({ ...p, ts: typeof p.createdAt === 'number' ? p.createdAt : Date.parse(p.createdAt) || 0 }))
+            .sort((a, b) => b.ts - a.ts);
+        const esc = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        body.innerHTML = pays.length ? pays.map(p => `<tr>
+            <td>${p.ts ? new Date(p.ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '\u2014'}</td>
+            <td>${esc(p.method || '\u2014')}</td>
+            <td>${esc(p.receiptNo || '\u2014')}</td>
+            <td>${_inr(p.amount)}</td>
+        </tr>`).join('') : '<tr><td colspan="4">No top-ups yet</td></tr>';
+    }
+}
+
+function _wireWallet() {
+    if (_walletWired) return;
+    _walletWired = true;
+    document.getElementById('walletContactBtn')?.addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+}
+
 export function loadCosts() {
     cleanupCosts();
     _wireSubtabs();
     _wireRange();
-    _billing = null; _campaigns = null;
+    _wireWallet();
+    _billing = null; _campaigns = null; _allOrders = null;
     _range = _range || _monthRange(0);
     _applyRange(_range);
 
@@ -277,6 +339,10 @@ export function loadCosts() {
         () => { _billing = false; _scheduleRender(); }));
     _unsubs.push(onValue(Outlet.ref('bot/promotions/campaigns'),
         s => { _campaigns = s.val(); _scheduleRender(); }, () => {}));
+
+    // All-time orders, read once per visit, so the wallet balance is lifetime paid minus lifetime usage.
+    get(Outlet.ref('orders')).then(snap => { _allOrders = snap.val() || {}; _scheduleRender(); })
+        .catch(() => { _allOrders = false; _scheduleRender(); }); // false = could not load
 
     _render();
 }

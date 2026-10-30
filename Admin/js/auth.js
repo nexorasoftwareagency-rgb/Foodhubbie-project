@@ -106,6 +106,10 @@ export function initAuth() {
                 loginBtn.innerHTML = '<span>Access Dashboard</span> <div class="btn-stitch-v4"></div>';
                 loginBtn.classList.remove('loading');
             }
+            // Logging out must not leave setup mode behind for the next account on this device.
+            state.locked = false;
+            state.currentActiveTab = null;
+            ui.leaveSetupMode();
             sessionStorage.removeItem('adminIsLoggedIn');
             window.hideLoader?.();
             return;
@@ -299,7 +303,7 @@ export function initAuth() {
                     ]));
                     if (lockedSnap && lockedSnap.exists() && lockedSnap.val() === true) {
                         state.locked = true;
-                        import('./ui.js').then(u => u.showLockedScreen());
+                        import('./ui.js').then(u => u.enterSetupMode());
                     }
                 } catch (e) {
                     console.warn("[Auth] Locked check failed:", e?.message || e);
@@ -346,11 +350,20 @@ export function initAuth() {
                 _lockedUnsub = onValue(ref(db, `businesses/${bid}/outlets/${oid}/locked`), (snap) => {
                     if (snap.exists() && snap.val() === true) {
                         state.locked = true;
+                        import('./ui.js').then(u => u.enterSetupMode());
                     } else {
+                        const wasLocked = state.locked;
                         state.locked = false;
-                        // If the locked screen is showing, reload to clear it
-                        const lockedEl = document.getElementById('locked-screen');
-                        if (lockedEl) window.location.reload();
+                        ui.leaveSetupMode();
+                        if (!wasLocked) return;
+                        // Unlocked while logged in (Supreme Admin recorded the top-up): reload so every
+                        // tab re-initialises — unless Settings has unsaved edits, which a reload would
+                        // silently throw away. Then the banner just disappears and a toast explains.
+                        if (state.settingsDirty) {
+                            showToast('You are live! Reload when you have saved your settings.', 'success');
+                            return;
+                        }
+                        window.location.reload();
                     }
                 });
             }
