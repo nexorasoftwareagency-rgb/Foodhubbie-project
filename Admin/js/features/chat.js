@@ -380,7 +380,6 @@ export function loadChat() {
 let _pairUnsub = null;
 
 function _checkBotStatus() {
-    const outlet = Outlet.current;
     if (_pairUnsub) { _pairUnsub(); _pairUnsub = null; }
     let pair = null;
     let waActive = false;
@@ -390,7 +389,7 @@ function _checkBotStatus() {
         if ((pair && pair.status === 'connected') || waActive) _hideOnboarding();
         else _showOnboarding(pair);
     };
-    const unsubPair = onValue(Outlet.ref(`bot/${outlet}/pair`), (snap) => {
+    const unsubPair = onValue(Outlet.ref('bot/pair'), (snap) => {
         pair = snap.val();
         apply();
     }, (err) => {
