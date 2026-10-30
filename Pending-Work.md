@@ -55,6 +55,12 @@ This rule applies to:
 - **Before deploy:** run the rules emulator (needs a JDK; not possible on this box) or the live probe in plan §7.1 — the lock gate is the only unproven part. Then `firebase deploy --only database` → restart `bot-control-api` → admin/supreme builds → website last.
 - **Open owner decisions:** duplicate `GUIDEs/` docs; email verification / password-set link (auto-approval lets anyone register any unregistered email); public pricing copy (₹500 setup vs ₹1,000 minimum wallet); hard stop at zero balance; percentage-package visibility.
 
+### ✅ Categories Tab Phase 1 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
+- **Stage:** Phase 1 (grid/header) `done` — Phases 2 (create/edit drawer), 3 (WebP images + delete guard), 4 (mobile/a11y) `pending`
+- **Files:** `Admin/index.html` (KPI ribbon + `category-card-grid` + form below), `Admin/js/features/catalog.js` (cat-card renderer + KPI fill), `Admin/style.css` (`#tab-categories` block), `Admin/sw.js` (`style.css?v=5.4.12`, cache `v5.12.9`)
+- **Verified:** production E2E 21/21 (categories: cards 152×157px, 24px buttons, KPI populated, search filter ladder); all 5 earlier density sections regression-clean on the same deploy
+- **Deployed:** 2026-10-30; ledger `[20261030-120000-category-phase1]`
+
 ### ✅ Menu Browser + Combos Tab Density Pass — deployed (done)
 - **Files:** `Admin/style.css` (`#browserDishGrid:not(.list-view)` + `#tab-combos` compact blocks), `Admin/index.html` + `Admin/sw.js` (`style.css?v=5.4.11`, cache `v5.12.8`), `tests/e2e-inventory-compact.js` (battery now covers 5 surfaces)
 - **Stage:** `done`

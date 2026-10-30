@@ -10218,6 +10218,41 @@ body.pos-selection-mode .walkin-picker {
 #tab-combos .browser-dish-actions .btn-action-v4 { width: 24px; height: 24px; border-radius: 6px; }
 #tab-combos .browser-dish-actions .btn-action-v4 svg { width: 11px !important; height: 11px !important; }
 
+/* CATEGORY TAB — Phase 1 redesign (KPI ribbon + compact card grid; create form below, drawer arrives in Phase 2) */
+#tab-categories .cat-kpi-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+#tab-categories .cat-kpi-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    background: var(--bg-ghost); padding: 4px 10px; border-radius: 20px;
+}
+#tab-categories .cat-kpi-pill b { color: var(--text-main); font-size: 12px; }
+#tab-categories .cat-kpi-pill .icon-16 { width: 13px; height: 13px; }
+#tab-categories .category-card-grid {
+    display: grid; gap: 8px; margin-bottom: 4px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    align-content: start;
+}
+#tab-categories .cat-card {
+    background: #ffffff; border: 1px solid var(--glass-border); border-radius: 10px;
+    padding: 6px; display: flex; flex-direction: column;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+#tab-categories .cat-card:hover { border-color: rgba(249, 115, 22, 0.35); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+#tab-categories .cat-card-img { aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; margin-bottom: 4px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04); }
+#tab-categories .cat-card-img img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+#tab-categories .cat-card-name {
+    font-size: 10.5px; font-weight: 700; color: var(--text-main); margin: 0 0 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#tab-categories .cat-card-meta {
+    font-size: 8.5px; color: var(--text-muted); margin-bottom: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#tab-categories .cat-card-actions { display: flex; gap: 4px; margin-top: auto; padding-top: 4px; border-top: 1px solid var(--border-color); }
+#tab-categories .cat-card-actions .btn-action-v4 { width: 24px; height: 24px; border-radius: 6px; }
+#tab-categories .cat-card-actions .btn-action-v4 svg { width: 11px !important; height: 11px !important; }
+
 @media (max-width: 1024px) {
     .menu-browser-layout {
         flex-direction: column;

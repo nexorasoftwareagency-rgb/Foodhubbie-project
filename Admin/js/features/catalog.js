@@ -43,31 +43,37 @@ cats.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
             });
         }
 
+        // KPI ribbon (Phase 1: categories / mapped dishes / unmapped)
+        const dishTotal = (state.dishes || []).length;
+        const mappedCount = cats.reduce((s, c) => s + (dishCounts[c.name] || 0), 0);
+        const unmappedCount = dishTotal - mappedCount;
+        const _set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        _set('catKpiCats', cats.length);
+        _set('catKpiMapped', mappedCount);
+        _set('catKpiUnmapped', unmappedCount);
+        const unmappedPill = document.getElementById('catKpiUnmappedPill');
+        if (unmappedPill) unmappedPill.style.display = unmappedCount > 0 ? '' : 'none';
+
         cats.forEach(cat => {
             const div = document.createElement('div');
-            div.className = "premium-row-v4 p-10 flex-row flex-center flex-gap-10 br-12";
-            div.style.border = "1px solid rgba(0,0,0,0.02)";
+            div.className = "cat-card";
 
             const addonCount = cat.addons ? Object.keys(cat.addons).length : 0;
             const dishCount = dishCounts[cat.name] || 0;
-            const subParts = [`Serial: ${cat.order || 0}`];
-            if (dishCount > 0) subParts.push(`${dishCount} dish${dishCount !== 1 ? 'es' : ''}`);
-            if (addonCount > 0) subParts.push(`${addonCount} addon${addonCount !== 1 ? 's' : ''}`);
+            const metaParts = [`#${cat.order || 0}`];
+            if (dishCount > 0) metaParts.push(`${dishCount} dish${dishCount !== 1 ? 'es' : ''}`);
+            if (addonCount > 0) metaParts.push(`${addonCount} addon${addonCount !== 1 ? 's' : ''}`);
 
             div.innerHTML = `
-                <div class="identity-chip-v4" style="flex: 1;">
-                    <img src="${cat.image || 'https://placehold.co/100/orange/white?text=Category'}" class="identity-avatar-v4" style="width:40px; height:40px;">
-                    <div class="identity-info-v4">
-                        <span class="name" style="font-size:13px;">${escapeHtml(cat.name)}</span>
-                        <span class="sub" style="font-size:10px;">${subParts.join(' · ')}</span>
-                    </div>
-                </div>
-                <div class="action-group-v4">
+                <div class="cat-card-img"><img src="${cat.image || 'https://placehold.co/150/orange/white?text=Category'}" loading="lazy" alt="${escapeHtml(cat.name)}"></div>
+                <div class="cat-card-name" title="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</div>
+                <div class="cat-card-meta" title="${metaParts.join(' · ')}">${metaParts.join(' · ')}</div>
+                <div class="cat-card-actions">
                     <button data-action="editCategory" data-id="${cat.id}" class="btn-action-v4" title="Edit Category" aria-label="Edit Category">
-                         <i data-lucide="pencil" style="width:12px;"></i>
+                        <i data-lucide="pencil" style="width:11px;"></i>
                     </button>
                     <button data-action="deleteCategory" data-id="${cat.id}" class="btn-action-v4 danger" title="Delete Category" aria-label="Delete Category">
-                         <i data-lucide="trash-2" style="width:12px;"></i>
+                        <i data-lucide="trash-2" style="width:11px;"></i>
                     </button>
                 </div>
             `;

@@ -177,7 +177,7 @@
     </script>
 
 
-    <link rel="stylesheet" href="style.css?v=5.4.11">
+    <link rel="stylesheet" href="style.css?v=5.4.12">
 
     <link rel="stylesheet" href="mobile-overrides.css?v=5.4.10">
 
@@ -1340,9 +1340,11 @@
 
                             <button id="btnMigrateDishAddons" class="btn-secondary btn-secondary-xs"
 
-                                title="Force sync of dish-level add-ons to their respective categories">
+                                title="Force-sync dish-level add-ons into their categories (recovery tool)"
 
-                                <i data-lucide="refresh-cw"></i> Migrate
+                                aria-label="Migrate dish add-ons to categories" style="width:34px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;">
+
+                                <i data-lucide="refresh-cw" class="icon-16"></i>
 
                             </button>
 
@@ -1352,111 +1354,93 @@
 
 
 
-                    <div class="dashboard-grid">
-
-                        <!-- Left: Add Category Form -->
-
-                        <div class="flex-col">
-
-                            <div class="glass-card p-20">
-
-                                <h4 class="mb-14"><i data-lucide="plus-circle" class="icon-16"></i> Create New Category</h4>
-
-                                <div class="flex-row flex-gap-10 flex-center mb-20 p-15 bg-ghost br-15">
-
-                                    <img id="catPreview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23E84908' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='white' font-size='12' font-family='Inter,sans-serif'%3ECategory%3C/text%3E%3C/svg%3E"
-
-                                        class="category-preview-img" alt="Category Preview">
-
-                                    <div class="flex-col flex-1">
-
-                                        <input type="file" id="catFile" accept="image/*" class="hidden"
-
-                                            title="Select category photo" aria-label="Select category photo">
-
-                                        <button id="btnChangeCatPhoto" class="btn-secondary btn-small mb-8">Change
-
-                                            Photo</button>
-
-                                        <div class="flex-row flex-gap-10 mt-10">
-
-                                            <input id="newCatName" placeholder="Category Name" class="form-input mb-0 flex-2"
-
-                                                title="Category Name" aria-label="Category Name">
-
-                                            <input id="newCatOrder" type="number" placeholder="Serial" class="form-input mb-0 flex-1"
-
-                                                title="Sorting Order (Lower numbers appear first)">
-
-                                        </div>
-
-                                    </div>
-
-                                </div>
-
-
-
-                                <div id="categoryAddonsContainer" class="category-addons-container mt-10">
-
-                                    <div class="flex-between flex-center mb-10">
-
-                                        <label class="form-label-small mb-0">Category Add-ons (Optional)</label>
-
-                                        <button id="btnAddCatAddonField" data-action="addCategoryAddonField" class="btn-secondary btn-small"
-
-                                            title="Add a new customization option for this category">+ Add
-
-                                            Addon</button>
-
-                                    </div>
-
-                                    <div id="categoryAddonsList">
-
-                                        <!-- Rows added here -->
-
-                                    </div>
-
-                                </div>
-
-
-
-                                <button id="btnAddCategory" data-action="addCategory"
-
-                                    class="btn-primary w-full mt-20 p-12 br-12 font-weight-700"
-
-                                    title="Save new category">🚀 Add Category</button>
-
-                            </div>
-
-                        </div>
-
-
-
-                        <!-- Right: Category List -->
-
-                        <div class="flex-col">
-
-                            <div class="glass-card p-20">
-
-                                <h4 class="mb-14">📂 Active Categories</h4>
-
-                                <div id="categoryList" class="category-grid">
-
-                                    <div class="skeleton-row-flex" style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:16px;border:1px solid var(--glass-border);margin-bottom:10px"><div class="skeleton" style="width:48px;height:48px;border-radius:12px;flex-shrink:0"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="skeleton skeleton-text" style="width:50%;margin:0"></div><div class="skeleton skeleton-text" style="width:30%;margin:0"></div></div></div>
-
-                                    <div class="skeleton-row-flex" style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:16px;border:1px solid var(--glass-border);margin-bottom:10px"><div class="skeleton" style="width:48px;height:48px;border-radius:12px;flex-shrink:0"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="skeleton skeleton-text" style="width:40%;margin:0"></div><div class="skeleton skeleton-text" style="width:25%;margin:0"></div></div></div>
-
-                                    <div class="skeleton-row-flex" style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:16px;border:1px solid var(--glass-border);margin-bottom:10px"><div class="skeleton" style="width:48px;height:48px;border-radius:12px;flex-shrink:0"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="skeleton skeleton-text" style="width:55%;margin:0"></div><div class="skeleton skeleton-text" style="width:20%;margin:0"></div></div></div>
-
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
                 </div>
+<div id="catKpiStrip" class="cat-kpi-strip" aria-live="polite">
+
+    <span class="cat-kpi-pill"><i data-lucide="folder-tree" class="icon-16"></i> Categories <b id="catKpiCats">0</b></span>
+
+    <span class="cat-kpi-pill"><i data-lucide="check-check" class="icon-16"></i> Dishes mapped <b id="catKpiMapped">0</b></span>
+
+    <span class="cat-kpi-pill" id="catKpiUnmappedPill"><i data-lucide="alert-triangle" class="icon-16"></i> Unmapped dishes <b id="catKpiUnmapped">0</b></span>
+
+</div>
+
+<div id="categoryList" class="category-card-grid">
+
+    <div class="skeleton" style="aspect-ratio:4/3;border-radius:10px"></div>
+
+    <div class="skeleton" style="aspect-ratio:4/3;border-radius:10px"></div>
+
+    <div class="skeleton" style="aspect-ratio:4/3;border-radius:10px"></div>
+
+</div>
+
+<div class="glass-card p-20 mt-16">
+
+    <h4 class="mb-14"><i data-lucide="plus-circle" class="icon-16"></i> Create New Category</h4>
+
+    <div class="flex-row flex-gap-10 flex-center mb-20 p-15 bg-ghost br-15">
+
+        <img id="catPreview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23E84908' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='white' font-size='12' font-family='Inter,sans-serif'%3ECategory%3C/text%3E%3C/svg%3E"
+
+            class="category-preview-img" alt="Category Preview">
+
+        <div class="flex-col flex-1">
+
+            <input type="file" id="catFile" accept="image/*" class="hidden"
+
+                title="Select category photo" aria-label="Select category photo">
+
+            <button id="btnChangeCatPhoto" class="btn-secondary btn-small mb-8">Change
+
+                Photo</button>
+
+            <div class="flex-row flex-gap-10 mt-10">
+
+                <input id="newCatName" placeholder="Category Name" class="form-input mb-0 flex-2"
+
+                    title="Category Name" aria-label="Category Name">
+
+                <input id="newCatOrder" type="number" placeholder="Serial" class="form-input mb-0 flex-1"
+
+                    title="Sorting Order (Lower numbers appear first)">
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="categoryAddonsContainer" class="category-addons-container mt-10">
+
+        <div class="flex-between flex-center mb-10">
+
+            <label class="form-label-small mb-0">Category Add-ons (Optional)</label>
+
+            <button id="btnAddCatAddonField" data-action="addCategoryAddonField" class="btn-secondary btn-small"
+
+                title="Add a new customization option for this category">+ Add
+
+                Addon</button>
+
+        </div>
+
+        <div id="categoryAddonsList">
+
+            <!-- Rows added here -->
+
+        </div>
+
+    </div>
+
+    <button id="btnAddCategory" data-action="addCategory"
+
+        class="btn-primary w-full mt-20 p-12 br-12 font-weight-700"
+
+        title="Save new category">🚀 Add Category</button>
+
+</div>
+
 </div>
 
             

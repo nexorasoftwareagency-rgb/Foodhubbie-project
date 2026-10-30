@@ -2255,3 +2255,14 @@ eturn cached || fetchPromise) - it serves the cached shell and only revalidates 
 - PROCESS BUG CAUGHT BY GUARD: the PowerShell one-shot cache-bump (`Get-Content | Set-Content -Encoding UTF8`) corrupted Admin/index.html + sw.js (mojibake + BOM + C1 controls) — reverted via git checkout, re-applied with the edit tool; the encoding-check gate caught it before any build/deploy. NEVER edit repo files with PowerShell text cmdlets.
 - Cache: style.css?v=5.4.11, shell v5.12.8. Commit on seo-brand-consistency (see hash line).
 - SEE ALSO: PLAN-CATEGORY-REDESIGN.md created this session (full UI/UX redesign plan for the Categories tab — awaiting owner go; phased P1 grid/header, P2 create/edit drawer, P3 image+delete-guard, P4 mobile/a11y).
+
+### [20261030-120000-category-phase1] Categories tab Phase 1 redesign (PLAN-CATEGORY-REDESIGN.md §3-P1) — owner "START PHASE 1"
+- TIER: 1 (UI restructure of #tab-categories; renderer-only JS, no data-model/listener changes)
+- STATUS: DONE + deployed (hosting:admin) + verified live
+- Gone: the two-column `.dashboard-grid` layout (create-form 50% width + category ROWS crammed into a 130px `category-grid`).
+- In: KPI ribbon (Categories count / Dishes mapped / Unmapped — pill hidden when unmapped = 0), compact CARD grid (minmax 150px, 16:9 image, 10.5px name + ellipsis, meta "#serial · dishes · addons", 24px edit/delete `btn-action-v4` family, `align-content:start` — the Menu Browser stretch lesson applied by construction), create-form glass-card stacked BELOW the grid (all ids unchanged: catPreview/catFile/newCatName/newCatOrder/addons builder/btnAddCategory — Phase 3 P2 moves it into a drawer). Migrate (addon sync) demoted to a 34px icon button with recovery-tool tooltip. `#categorySearch` stays wired (filterCategories keeps matching `#categoryList > div` — cards are still divs).
+- Renderer (catalog.js loadCategories): cat-card markup + KPI fill; `updateActiveDishModalCategories()` fan-out + `_categoriesUnsub` listener untouched. data-action=editCategory/deleteCategory ids unchanged.
+- Large index.html restructure was spliced by Node line-based replace (splice script in %TEMP%/opencode/) with pre-anchor assertions after the edit tool hit an exact-whitespace mismatch on the 100-line block; everything else used the edit tool. Encoding gate passed after splice (fs utf8, EOL preserved).
+- MEASURED in production (battery now 6 sections, tests/e2e-inventory-compact.js): see RESULT line below; screenshot %TEMP%/opencode/categories-phase1.png. Search ladder: no-match hides all, clear restores.
+- Cache: style.css?v=5.4.12, shell v5.12.9. Commits on seo-brand-consistency (hash follows).
+- RESULT: 21/21 (6 surfaces) — categories cards 152x157px, 24px action buttons, KPI ribbon cats=1 mapped=4 unmapped=2 (e2e outlet truth), search no-match hides all / clear restores. Inventory 5, menu 4, browser 3, combos 3 sections all regression-clean on the same deploy.

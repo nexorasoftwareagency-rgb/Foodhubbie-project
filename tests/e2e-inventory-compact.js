@@ -129,6 +129,42 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     ok('combos tab action buttons compact', co.none || co.cards === 0 || (co.btnW === 0 || co.btnW <= 26), `edit/delete btn ${co.btnW}px`);
     await page.screenshot({ path: path.join(T, 'combos-compact.png') });
 
+    // ---- Categories tab (Phase 1 redesign) ----
+    await page.locator('.nav-btn[data-tab="categories"]').first().click();
+    await page.waitForTimeout(2500);
+    const cg = await page.evaluate(() => {
+        const list = document.getElementById('categoryList');
+        const cards = [...list.querySelectorAll('.cat-card')];
+        const rect = list.getBoundingClientRect();
+        return {
+            cards: cards.length,
+            cardW: cards[0] ? Math.round(cards[0].getBoundingClientRect().width) : 0,
+            cardH: cards[0] ? Math.round(cards[0].getBoundingClientRect().height) : 0,
+            stepX: cards.length > 1 ? Math.round(cards[1].getBoundingClientRect().x - cards[0].getBoundingClientRect().x) : 0,
+            gridWidth: Math.round(rect.width),
+            btnW: (list.querySelector('.cat-card-actions .btn-action-v4') || {}).offsetWidth || 0,
+            kpiCats: document.getElementById('catKpiCats')?.textContent || '',
+            kpiMapped: document.getElementById('catKpiMapped')?.textContent || '',
+            kpiUnmapped: document.getElementById('catKpiUnmapped')?.textContent || '',
+        };
+    });
+    ok('categories tab cards render', cg.cards > 0, `${cg.cards} cat cards`);
+    ok('categories tab cards compact', cg.cardW > 0 && cg.cardW < 170 && cg.cardH < 400, `card ${cg.cardW}x${cg.cardH}px -> ~${cg.stepX ? Math.round(cg.gridWidth / cg.stepX) : 1} columns on ${cg.gridWidth}px`);
+    ok('categories tab action buttons compact', cg.btnW === 0 || cg.btnW <= 26, `edit/delete btn ${cg.btnW}px`);
+    ok('categories KPI ribbon populated', cg.kpiCats !== '' && Number(cg.kpiCats) === cg.cards, `cats=${cg.kpiCats} mapped=${cg.kpiMapped} unmapped=${cg.kpiUnmapped}`);
+    // live search filter
+    await page.fill('#categorySearch', 'zzz-no-match');
+    await page.waitForTimeout(600);
+    const hiddenCount = await page.evaluate(() => [...document.querySelectorAll('#categoryList .cat-card')].filter(c => c.style.display === 'none').length);
+    ok('categories search filters live', hiddenCount === cg.cards, `${hiddenCount}/${cg.cards} hidden on no-match`);
+    await page.fill('#categorySearch', '');
+    await page.waitForTimeout(400);
+    const visibleCount = await page.evaluate(() => [...document.querySelectorAll('#categoryList .cat-card')].filter(c => c.style.display !== 'none').length);
+    ok('categories search restores', visibleCount === cg.cards, `${visibleCount}/${cg.cards} visible after clearing`);
+    await page.evaluate(() => document.getElementById('tab-categories').scrollIntoView());
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: path.join(T, 'categories-phase1.png') });
+
     await browser.close();
     const fails = results.filter(r => !r.pass).length;
     console.log(`\nRESULT: ${results.length - fails}/${results.length} passed`);
