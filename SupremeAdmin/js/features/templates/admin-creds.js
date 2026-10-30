@@ -1,5 +1,9 @@
 /**
  * Admin credentials templates (view + inline edit)
+ *
+ * The password is NEVER stored in the database — `adminLogin` inherits
+ * businesses/{bid}/.read, which every staff role of the tenant can read.
+ * It lives in Firebase Auth only; "Update password" sets it there.
  */
 
 import { escapeHtml } from '/js/utils.js';
@@ -10,19 +14,16 @@ function copyBtn(text, label) {
   return `<button class="btn btn-ghost btn-sm" data-action="copy-credential" data-copy="${escapeHtml(text)}" title="Copy ${label}" aria-label="Copy ${label}" style="padding:3px 6px;min-width:0"><svg data-lucide="copy" style="width:12px;height:12px"></svg></button>`;
 }
 
-const eyeToggle = `<button class="btn btn-ghost btn-sm" data-action="toggle-password-visibility" title="Show / hide password" aria-label="Show / hide password" style="padding:3px 6px;min-width:0"><svg data-lucide="eye" style="width:12px;height:12px"></svg></button>`;
-
 export function renderAdminCreds(creds) {
-  if (!creds.email && !creds.password) {
-    return `<div style="color:var(--text-secondary)">No admin login stored yet — this restaurant's staff sign in to the Restaurant Admin panel with email + password. Add it here so it's on record.</div>
+  if (!creds.email) {
+    return `<div style="color:var(--text-secondary)">No admin email on record for this outlet. The email is set when the restaurant is created in Supreme Admin → Add Restaurant; for an older outlet it has to be recorded before a password can be set.</div>
       <div style="margin-top:6px"><span style="color:var(--text-secondary)">Admin app:</span> <a href="${ADMIN_APP_URL}" target="_blank" rel="noopener">${ADMIN_APP_URL}</a></div>`;
   }
 
   const rows = [];
-  if (creds.email) rows.push(`<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--text-secondary)">Username:</span> <span class="mono">${escapeHtml(creds.email)}</span>${copyBtn(creds.email, 'username')}</div>`);
-  if (creds.password) rows.push(`<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--text-secondary)">Password:</span> <span class="mono admin-pass-masked" data-raw="${escapeHtml(creds.password)}" style="letter-spacing:2px">••••••••</span>${eyeToggle}${copyBtn(creds.password, 'password')}</div>`);
+  rows.push(`<div style="display:flex;align-items:center;gap:6px"><span style="color:var(--text-secondary)">Username:</span> <span class="mono">${escapeHtml(creds.email)}</span>${copyBtn(creds.email, 'username')}</div>`);
+  rows.push(`<div><span style="color:var(--text-secondary)">Password:</span> not stored for security — use <strong>Update password</strong> to set a new one.</div>`);
   rows.push(`<div><span style="color:var(--text-secondary)">Admin app:</span> <a href="${ADMIN_APP_URL}" target="_blank" rel="noopener">${ADMIN_APP_URL}</a></div>`);
-  if (!rows.length) return '';
   return `<div style="color:var(--text-primary);line-height:2">${rows.join('')}</div>`;
 }
 

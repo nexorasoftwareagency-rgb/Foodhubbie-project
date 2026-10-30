@@ -326,7 +326,9 @@ app.post('/api/admin/update-password', requireSuperOnly, async (req, res) => {
         email, outlet: oid, name: outletName, role: 'owner', businessId: bid,
       });
     }
-    await admin.database().ref(`businesses/${bid}/outlets/${oid}/adminLogin`).set({ email, password: newPassword });
+    // Record only the email. The password lives in Firebase Auth; storing it here would leak
+    // it to every staff role (adminLogin inherits businesses/{bid}/.read).
+    await admin.database().ref(`businesses/${bid}/outlets/${oid}/adminLogin`).set({ email, passwordUpdatedAt: Date.now() });
     res.json({ ok: true, uid });
   } catch (err) {
     console.error('update-password failed', err);
@@ -344,7 +346,7 @@ const httpError = (status, message) => new HttpError(status, message);
 // the outlet (locked: true until the first wallet top-up is recorded). Throws
 // HttpError for expected failures; any other throw is unexpected.
 async function approveOnboardingRequest(reqKey, f, reviewerUid) {
-  const { businessName, outletName, contactPhone, contactEmail, adminEmail, plan, template, whatsappConnect } = f;
+  const { businessName, outletName, contactPhone, contactEmail, adminEmail, adminName, plan, template, whatsappConnect } = f;
     // Verify the request is still pending
     const reqSnap = await admin.database().ref(`onboardingRequests/${reqKey}`).get();
     const reqData = reqSnap.val();
@@ -365,25 +367,47 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
       throw httpError(422, 'Password secret missing or too short — ask the applicant to re-submit.');
     }
 
-    // Check for duplicate admin email
+    // Ids are decided here but only STAMPED after the duplicate-email check: the stamp is the
+    // "this request may own an Auth user" marker. Stamping before the check would let a first
+    // attempt that dies on a duplicate leave a marker behind, and attempt 2 would then adopt a
+    // stranger's account instead of rejecting it.
+    const isRetry = Boolean(reqData.bid && reqData.oid);
+    const bid = reqData.bid || admin.database().ref('businesses').push().key.toLowerCase();
+    const oid = reqData.oid || admin.database().ref(`businesses/${bid}/outlets`).push().key.toLowerCase();
+
+    // Duplicate admin email — a first attempt is always rejected (the account may belong to a
+    // rider or a previous tenant). Only a retry of THIS request may reuse the Auth user it
+    // already created, otherwise a real signup dies with an orphan account.
     try {
-      const existing = await admin.auth().getUserByEmail(adminEmail);
-      throw httpError(409, `Admin email ${adminEmail} already exists (uid: ${existing.uid})`);
+      await admin.auth().getUserByEmail(adminEmail);
+      if (!isRetry) throw httpError(409, `Admin email ${adminEmail} already exists`);
     } catch (err) {
+      if (err instanceof HttpError) throw err;
       if (err.code !== 'auth/user-not-found') throw err;
     }
 
-    // Generate bid/oid
-    const bid = admin.database().ref('businesses').push().key.toLowerCase();
-    const oid = admin.database().ref(`businesses/${bid}/outlets`).push().key.toLowerCase();
+    // Stamp bid/oid BEFORE creating anything. A retry after a mid-flight failure then reuses the
+    // same ids instead of minting a second tenant.
+    if (!isRetry) {
+      await admin.database().ref(`onboardingRequests/${reqKey}`).update({ bid, oid }).catch((e) => {
+        console.warn('[approve-onboarding] id stamp failed (non-fatal):', e.message);
+      });
+    }
 
-    // Allocate outlet number
+    // Outlet number: reuse the one a previous attempt already assigned, otherwise allocate
+    // once. A retry must never burn a second number on a successful first attempt.
     let outletNo = null;
-    try {
-      const noSnap = await admin.database().ref('meta/outletCounter').runTransaction(cur => (cur || 0) + 1);
-      outletNo = String(noSnap.snapshot.val() || '').padStart(2, '0') || null;
-    } catch (e) {
-      console.warn('[approve-onboarding] outletCounter failed (non-fatal):', e.message);
+    if (isRetry) {
+      const noSnap = await admin.database().ref(`businesses/${bid}/outlets/${oid}/outletNo`).get().catch(() => null);
+      outletNo = (noSnap && noSnap.val()) || null;
+    }
+    if (!outletNo) {
+      try {
+        const noSnap = await admin.database().ref('meta/outletCounter').runTransaction(cur => (cur || 0) + 1);
+        outletNo = String(noSnap.snapshot.val() || '').padStart(2, '0') || null;
+      } catch (e) {
+        console.warn('[approve-onboarding] outletCounter failed (non-fatal):', e.message);
+      }
     }
 
     // Read template defaults
@@ -432,7 +456,7 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
     const curAdmin = (await admin.database().ref(`admins/${uid}`).get()).val();
     await admin.database().ref(`admins/${uid}`).update({
       email: adminEmail, outlet: oid, businessId: bid, role: 'owner',
-      ...(curAdmin ? {} : { name: outletName }),
+      ...(curAdmin ? {} : { name: adminName || outletName }),
     });
 
     // Write outlet with locked: true
@@ -450,14 +474,22 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
             contactPhone: contactPhone || null,
             createdAt: now,
             ...(outletNo ? { outletNo } : {}),
-            whatsapp: { status: 'pending' },
-            locked: true,
+            // Template data first, identity/security fields after it: a stray key in a
+            // template must never be able to unlock a new outlet or rewrite its login.
             ...(tplDefaults || {}),
-billing: getBillingDefaults(),
+            whatsapp: { status: 'pending', ...(whatsappConnect ? { requestedConnect: whatsappConnect } : {}) },
+            locked: true,
+            // Email only. The password lives in Firebase Auth and nowhere else — this node
+            // inherits businesses/{bid}/.read, which every staff role of the tenant can read.
+            adminLogin: { email: adminEmail, updatedAt: now },
+            billing: getBillingDefaults(),
             settings: { ...(tplDefaults?.settings || {}), features: { ...(tplDefaults?.settings?.features || {}), discountApproval: false } },
           },
         },
       },
+      // Required by the admins/{uid} create rule and the riderIndex validate — without it the
+      // owner cannot add staff or riders (the write fails AFTER the Auth user is created).
+      [`outletIndex/${oid}`]: { bid, name: outletName, createdAt: now },
       ...bankUpdates,
     });
 
@@ -481,12 +513,12 @@ billing: getBillingDefaults(),
 
 // Manual approval (Supreme Admin UI). Unchanged contract: same body, same response.
 app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => {
-  const { reqKey, businessName, outletName, contactPhone, contactEmail, adminEmail, plan, template, whatsappConnect } = req.body || {};
+  const { reqKey, businessName, outletName, contactPhone, contactEmail, adminEmail, adminName, plan, template, whatsappConnect } = req.body || {};
   if (!reqKey || !businessName || !outletName || !adminEmail) {
     return res.status(400).json({ error: 'reqKey, businessName, outletName, adminEmail are required' });
   }
   try {
-    const r = await approveOnboardingRequest(reqKey, { businessName, outletName, contactPhone, contactEmail, adminEmail, plan, template, whatsappConnect }, req.auth?.uid);
+    const r = await approveOnboardingRequest(reqKey, { businessName, outletName, contactPhone, contactEmail, adminEmail, adminName, plan, template, whatsappConnect }, req.auth?.uid);
     res.json({ ok: true, ...r, loginUrl: 'https://foodhubbie-admins.web.app' });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -515,9 +547,18 @@ let _autoChain = Promise.resolve(); // serialise: outletCounter + duplicate-emai
 
 async function notifySupreme(title, message, extra = {}) {
   try {
+    // Shape must satisfy database.rules.json `inquiries/$id` or Supreme can never mark it read
+    // (a client write re-validates the whole record): source must be exactly 'website', phone
+    // needs 5–15 chars, and an absent `status` already means "new" in the Supreme UI.
+    const phone = String(extra.phone || '').trim();
     await admin.database().ref('inquiries').push({
-      name: title, phone: extra.phone || '', type: 'New restaurant signup', message,
-      store: extra.store || '', status: 'new', source: 'auto-onboarding', createdAt: Date.now(),
+      name: String(title).slice(0, 80),
+      phone: phone.length >= 5 && phone.length <= 15 ? phone : '0000000000',
+      type: 'New restaurant signup',
+      message: String(message).slice(0, 2000),
+      store: String(extra.store || '').slice(0, 80),
+      source: 'website',
+      createdAt: Date.now(),
     });
   } catch (e) { console.warn('[auto-onboarding] notify failed (non-fatal):', e.message); }
 }
@@ -540,7 +581,6 @@ async function autoApproveOne(reqKey, attempt = 0) {
   try {
     const out = await approveOnboardingRequest(reqKey, r, 'auto-onboarding');
     _autoRecent.push(Date.now());
-    await admin.database().ref(`onboardingRequests/${reqKey}`).update({ autoApproved: true });
     await notifySupreme(`New restaurant: ${r.businessName}`, `${r.outletName} signed up (${r.adminEmail}) and was created automatically. It is locked until its first wallet top-up (min ₹1,000) is recorded.`, { phone: r.contactPhone, store: r.outletName });
     console.log(`[auto-onboarding] approved ${reqKey} -> ${out.bid}/${out.oid}`);
   } catch (err) {

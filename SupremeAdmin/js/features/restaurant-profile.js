@@ -471,21 +471,6 @@ registerAction('copy-credential', async (btn) => {
   }
 });
 
-registerAction('toggle-password-visibility', (btn) => {
-  const card = btn.closest('.glass-card') || btn.closest('[id]') || document;
-  const span = card.querySelector('.admin-pass-masked');
-  if (!span) return;
-  const raw = span.dataset.raw;
-  if (!raw) return;
-  const isHidden = span.textContent === '••••••••';
-  span.textContent = isHidden ? raw : '••••••••';
-  span.style.letterSpacing = isHidden ? 'normal' : '2px';
-  // swap eye icon
-  const svg = btn.querySelector('svg');
-  if (svg) svg.setAttribute('data-lucide', isHidden ? 'eye-off' : 'eye');
-  refreshIcons(btn);
-});
-
 registerAction('toggle-section', (btn) => {
   const targetId = btn.dataset.target;
   if (!targetId) return;
