@@ -106,6 +106,10 @@ export function initAuth() {
                 loginBtn.innerHTML = '<span>Access Dashboard</span> <div class="btn-stitch-v4"></div>';
                 loginBtn.classList.remove('loading');
             }
+            // Logging out must not leave setup mode behind for the next account on this device.
+            state.locked = false;
+            state.currentActiveTab = null;
+            ui.leaveSetupMode();
             sessionStorage.removeItem('adminIsLoggedIn');
             window.hideLoader?.();
             return;
@@ -350,8 +354,16 @@ export function initAuth() {
                     } else {
                         const wasLocked = state.locked;
                         state.locked = false;
-                        // Unlocked while logged in (Supreme Admin recorded the top-up): reload so every tab re-initialises.
-                        if (wasLocked || document.getElementById('locked-banner') || document.getElementById('locked-screen')) window.location.reload();
+                        ui.leaveSetupMode();
+                        if (!wasLocked) return;
+                        // Unlocked while logged in (Supreme Admin recorded the top-up): reload so every
+                        // tab re-initialises — unless Settings has unsaved edits, which a reload would
+                        // silently throw away. Then the banner just disappears and a toast explains.
+                        if (state.settingsDirty) {
+                            showToast('You are live! Reload when you have saved your settings.', 'success');
+                            return;
+                        }
+                        window.location.reload();
                     }
                 });
             }

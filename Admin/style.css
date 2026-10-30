@@ -11143,3 +11143,216 @@ body.pos-selection-mode .walkin-picker {
     to { transform: rotate(360deg); }
 }
 
+
+/* ============================================================================
+   SETUP MODE — dashboard checklist + locked-outlet chrome
+   Consumed by Admin/js/features/setup-checklist.js and Admin/js/ui.js.
+   Kept self-contained so it never collides with the dashboard grid rules.
+   ========================================================================== */
+.setup-hero {
+    position: relative;
+    padding: 16px 18px 16px 20px;
+    margin-bottom: 14px;
+    border-radius: 12px;
+    background: var(--bg-ghost, #f8fafc);
+    border: 1px solid var(--border, rgba(232, 73, 8, 0.12));
+    border-left: 4px solid var(--primary-color, #E84908);
+}
+.setup-hero--done {
+    border-left-color: #22c55e;
+    background: rgba(34, 197, 94, 0.07);
+}
+.setup-hero__eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--primary-color, #E84908);
+    margin-bottom: 4px;
+}
+.setup-hero__title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.35;
+}
+.setup-hero__hint {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-width: 62ch;
+}
+.setup-hero__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+.setup-hero__blocked {
+    margin: 10px 0 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.setup-progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 4px 0 10px;
+}
+.setup-progress__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.setup-progress__bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 8px;
+    background: rgba(128, 128, 128, 0.18);
+    overflow: hidden;
+}
+.setup-progress__fill {
+    display: block;
+    height: 100%;
+    border-radius: 8px;
+    background: #22c55e;
+    transition: width 0.4s ease;
+}
+
+.setup-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.setup-steps > li + li {
+    border-top: 1px solid var(--border, rgba(128, 128, 128, 0.16));
+}
+.setup-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 8px;
+    background: none;
+    border: 0;
+    border-radius: 8px;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: background 0.15s ease;
+}
+.setup-step:hover:not(:disabled) {
+    background: var(--bg-ghost, #f8fafc);
+}
+.setup-step:disabled {
+    cursor: default;
+}
+/* Completed steps stay legible; only steps you cannot act on yet are dimmed. */
+.setup-step:disabled:not(.is-done) {
+    opacity: 0.55;
+}
+.setup-step.is-locked {
+    opacity: 0.7;
+}
+.setup-step:focus-visible {
+    outline: 2px solid var(--primary-color, #E84908);
+    outline-offset: -2px;
+}
+.setup-step[aria-current="step"] {
+    background: rgba(232, 73, 8, 0.06);
+}
+.setup-step.is-done .setup-step__title {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+/* Drawn in CSS so Windows/mobile never substitute a different emoji font. */
+.setup-step__mark {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(100, 116, 139, 0.45);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+}
+.setup-step__mark[data-state="done"] {
+    background: #16a34a;
+    border-color: #16a34a;
+}
+.setup-step__mark[data-state="done"]::after {
+    content: "\2713";
+}
+.setup-step__mark[data-state="unknown"] {
+    border-style: dashed;
+    color: var(--text-secondary);
+}
+.setup-step__mark[data-state="unknown"]::after {
+    content: "?";
+}
+.setup-step__body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.setup-step__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.setup-step__tag {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+.setup-step__hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+/* Momentary highlight on the exact control a checklist step deep-links to. */
+.setup-flash {
+    animation: setupFlash 2.2s ease-out 1;
+    border-radius: 8px;
+}
+@keyframes setupFlash {
+    0%, 55% { box-shadow: 0 0 0 3px rgba(232, 73, 8, 0.55); }
+    100% { box-shadow: 0 0 0 3px rgba(232, 73, 8, 0); }
+}
+
+/* Operational widgets that make no sense before go-live. */
+body.setup-mode #promoKillWidget,
+body.setup-mode .setup-hide {
+    display: none !important;
+}
+
+/* Sections that stay closed until the outlet goes live. Still clickable — the popup explains. */
+.is-setup-locked {
+    opacity: 0.4;
+}
+
+@media (max-width: 768px) {
+    /* The fixed mobile header would swallow a sticky banner — let it scroll with the page. */
+    #locked-banner {
+        position: static !important;
+    }
+    .setup-hero__actions .btn {
+        flex: 1 1 auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .setup-progress__fill { transition: none; }
+    .setup-flash { animation: none; box-shadow: 0 0 0 3px rgba(232, 73, 8, 0.55); }
+}

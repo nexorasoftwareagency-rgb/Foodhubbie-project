@@ -3,7 +3,7 @@ import { escapeHtml } from '../../shared/dom/escape.js';
 import { state } from './state.js';
 import { auth, db, serverTimestamp, ref, push, set } from './firebase.js';
 import { switchOutlet, openOutletInNewTab } from './branding.js';
-import { switchTab, toggleSidebar, toggleMobileCart, loadLucide, SETUP_TABS } from './ui.js';
+import { switchTab, toggleSidebar, toggleMobileCart, loadLucide } from './ui.js';
 import { initGestures } from './gestures.js';
 import { initAuth, userLogout } from './auth.js';
 import { initDemoMode } from './demo-mode.js';
@@ -141,17 +141,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (!action) return;
 
-            // --- Locked outlet gate ---
-            // When the outlet is locked, block all mutating actions.
-            const SAFE_ACTIONS = ['logout', 'toggleSidebar', 'switchOutlet', 'closeOrderDrawer', 'printReceiptById', 'chatOnWhatsapp', 'closeModal', 'closeDrawer'];
-            // Setup tabs (menu, tables, settings...) stay editable while locked; the database rules
-            // separately refuse order writes, so this gate only needs to cover the operations tabs.
-            if (state.locked && !SAFE_ACTIONS.includes(action) && !SETUP_TABS.includes(state.currentActiveTab)) {
-                e.preventDefault();
-                e.stopPropagation();
-                import('./ui.js').then(u => u.showLockedScreen());
-                return;
-            }
+            // No action-level lock gate here on purpose: `switchTab` already keeps a locked
+            // outlet on the SETUP_TABS allowlist, and the database rules refuse order and
+            // session writes while `locked` is true. A second client-side gate only produced
+            // a paywall popup over setup buttons that are supposed to work.
 
             switch (action) {
 

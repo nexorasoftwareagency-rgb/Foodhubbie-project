@@ -68,8 +68,10 @@ const ALL_TABS = TAB_DEFS.map(t => t[0]);
 
 // Tabs usable while the outlet is locked ("setup mode": new restaurant before its first wallet top-up).
 // Everything that takes orders or spends money (POS, orders, kitchen, riders, promotions, chat...) is excluded.
+// Discounts is in: offers can be prepared before go-live and the tab has no side effects.
+// Chat is NOT in: it is the customer-conversation tab, and the WhatsApp connection is done by Supreme.
 // The database rules also refuse order/table-session writes while locked; this list is the friendly UI layer.
-export const SETUP_TABS = ['dashboard', 'menu', 'categories', 'combos', 'menu-browser', 'tables', 'inventory', 'settings', 'costs', 'notifications'];
+export const SETUP_TABS = ['dashboard', 'menu', 'categories', 'combos', 'menu-browser', 'tables', 'discounts', 'inventory', 'settings', 'costs', 'notifications'];
 const _allExcept = (skip) => ALL_TABS.filter(t => !skip.includes(t));
 
 // Built-in matrix — the default for every outlet until an admin saves a
@@ -470,7 +472,10 @@ tableObserver.observe(observerTarget, { childList: true, subtree: true });
 
 export const toggleMobileCart = (state) => import('./features/pos.js').then(m => m.toggleMobileCart(state));
 
-export const SUPPORT_WA = 'https://wa.me/919724649971?text=' + encodeURIComponent('Hi FoodHubbie Team! I want to top up my wallet (minimum \u20B9' + MIN_TOPUP + ') and go live.');
+const SUPPORT_NUMBER = '919724649971';
+// Build a prefilled support link so every hand-off says what the owner actually needs.
+export const supportWa = (text) => `https://wa.me/${SUPPORT_NUMBER}?text=${encodeURIComponent(text)}`;
+export const SUPPORT_WA = supportWa(`Hi FoodHubbie Team! I want to top up my wallet (minimum \u20B9${MIN_TOPUP}) and go live.`);
 const LOCK_MSG = `Your restaurant is in <strong>setup mode</strong>. You can set up your menu, tables and settings now. To start taking orders, add a minimum wallet balance of <strong>\u20B9${MIN_TOPUP.toLocaleString('en-IN')}</strong>. Contact FoodHubbie support and we will add it once your payment is received.`;
 
 // Dismissible popup shown when a locked outlet tries something that needs go-live.
@@ -506,6 +511,7 @@ export function showLockedScreen() {
 // Called once the outlet is known to be locked: show a slim persistent banner and make sure
 // we are not sitting on an operations tab.
 export function enterSetupMode() {
+    document.body.classList.add('setup-mode');
     if (!document.getElementById('locked-banner')) {
         const b = document.createElement('div');
         b.id = 'locked-banner';
@@ -515,12 +521,23 @@ export function enterSetupMode() {
         (document.querySelector('.main') || document.body).prepend(b);
         b.querySelector('#lockedBannerBtn').addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
     }
-    if (state.currentActiveTab && !SETUP_TABS.includes(state.currentActiveTab)) switchTab('dashboard', true);
+    if (state.currentActiveTab && !SETUP_TABS.includes(state.currentActiveTab)) {
+        switchTab('dashboard', true);
+        // Keep the URL in step, otherwise a refresh deep-links straight back to the blocked tab.
+        history.replaceState({ tabId: 'dashboard' }, '', '#dashboard');
+    }
+    // Dim the sections that cannot be used yet, so the sidebar shows what is actually open
+    // instead of offering seven paywalls. They stay clickable — the popup explains why.
+    document.querySelectorAll('.nav-btn[data-tab], .nav-item[data-tab]').forEach((b) => {
+        b.classList.toggle('is-setup-locked', !SETUP_TABS.includes(b.dataset.tab));
+    });
 }
 
 export function leaveSetupMode() {
+    document.body.classList.remove('setup-mode');
     document.getElementById('locked-banner')?.remove();
     document.getElementById('locked-screen')?.remove();
+    document.querySelectorAll('.is-setup-locked').forEach((b) => b.classList.remove('is-setup-locked'));
 }
 
 export const ui = {

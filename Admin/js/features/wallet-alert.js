@@ -8,6 +8,7 @@
  * checklist covers them) so new outlets cost no extra read.
  */
 import { Outlet, get } from '../firebase.js';
+import { state } from '../state.js';
 import { canAccessTab, SUPPORT_WA } from '../ui.js';
 import { computeWallet, LOW_BALANCE_RATIO } from '../../shared/cost-math.js';
 
@@ -41,6 +42,9 @@ export async function loadWalletAlert() {
     const el = document.getElementById(PANEL_ID);
     if (!el) return;
     el.style.display = 'none';
+    // Setup mode: the checklist already explains the wallet step, and a negative balance
+    // there means "not unlocked yet", not "you are about to be cut off".
+    if (state.locked) return;
     // Same audience as the Cost tab; staff without access don't manage money.
     if (!canAccessTab('costs')) return;
     try {
