@@ -69,6 +69,11 @@ This rule applies to:
 - **Facts to hold:** ₹500 = setup assistance; ₹1,000 = minimum wallet balance to start taking orders. `shared/billing-defaults.js` is authoritative for rates (₹2 QR, ₹1 POS, ₹5 WhatsApp/webview, ₹1 promo).
 - **Check:** `tools/check-copy-consistency.cjs` already fails on any setup fee other than ₹500 — extend/re-run it when the wallet wording reaches `website/`.
 
+### 🔄 Custom-domain migration (PLAN-DOMAIN-MIGRATION.md) — planning done, P1 waiting on owner
+- **Stage:** plan written + committed (`a87280b` branch, NOT on main yet); P1 (console + DNS) is owner-hands — 4 domains to connect + GoDaddy CNAMEs
+- **Next agent step:** after P1 DNS verifies, run P2 code cutover sweep (URL inventory already mapped in the plan, incl. the `firebase deploy --only auth` authorizedDomains-wipe hazard and the `settings/qrBaseUrl` runtime knob)
+- **Open decision:** retire the orphan `foodhubbie-delivery` hosting site (stale since Aug, no firebase.json block, nothing references it)
+
 ### ✅ Categories Tab Phase 4 (PLAN-CATEGORY-REDESIGN.md) — deployed (done — PLAN COMPLETE)
 - **Stage:** Phase 4 (mobile/a11y) `done` — **PLAN-CATEGORY-REDESIGN P1-P4 complete**
 - **Files:** `Admin/style.css` (`.btn-action-v4:focus-visible` at the shared class, drawer focus rings, @640px touch targets 40px for category/browser/combo action buttons, full-bleed phone drawer), `Admin/index.html`+`Admin/sw.js` (`style.css?v=5.4.14`)
