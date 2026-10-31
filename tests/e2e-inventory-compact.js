@@ -233,6 +233,38 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     ok('cancelled guard leaves category intact', pizzaAlive, 'Pizza + its 4 dishes untouched (END)');
     await page.screenshot({ path: path.join(T, 'category-delete-guard.png') });
 
+    // ---- Phase 4: mobile 375px (same session, resized) ----
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.waitForTimeout(900);
+    await page.evaluate(() => { document.querySelector('.nav-btn[data-tab="categories"]')?.click(); });
+    await page.waitForTimeout(1800);
+    const mob = await page.evaluate(() => {
+        const grid = document.getElementById('categoryList');
+        const cards = [...grid.querySelectorAll('.cat-card')];
+        const btn = grid.querySelector('.cat-card-actions .btn-action-v4');
+        return {
+            overflow: document.documentElement.scrollWidth - window.innerWidth,
+            cardW: cards[0] ? Math.round(cards[0].getBoundingClientRect().width) : 0,
+            btnW: btn ? Math.round(btn.getBoundingClientRect().width) : 0,
+            kpiVisible: !!document.getElementById('catKpiStrip')?.offsetHeight,
+        };
+    });
+    ok('mobile: no horizontal overflow', mob.overflow <= 1, `scrollWidth - innerWidth = ${mob.overflow}px`);
+    ok('mobile: cards still compact', mob.cardW >= 120 && mob.cardW < 200, `card ${mob.cardW}px wide at 375px viewport`);
+    ok('mobile: touch targets >= 40px', mob.btnW === 0 || mob.btnW >= 39, `card action btn ${mob.btnW}px`);
+    ok('mobile: KPI ribbon renders', mob.kpiVisible);
+    // drawer full-bleed on phone
+    await page.click('#btnOpenCatDrawer');
+    await page.waitForTimeout(600);
+    const moDrawer = await page.evaluate(() => {
+        const r = document.querySelector('#categoryCreateDrawer .modal-content').getBoundingClientRect();
+        return { active: document.getElementById('categoryCreateDrawer').classList.contains('active'), w: Math.round(r.width) };
+    });
+    ok('mobile: drawer opens full-width', moDrawer.active && moDrawer.w >= 340, `sheet width ${moDrawer.w}px at 375px viewport`);
+    await page.screenshot({ path: path.join(T, 'category-mobile.png') });
+    await page.click('#btnCloseCatDrawer');
+    await page.waitForTimeout(400);
+
     await browser.close();
     const fails = results.filter(r => !r.pass).length;
     console.log(`\nRESULT: ${results.length - fails}/${results.length} passed`);

@@ -10282,6 +10282,26 @@ body.pos-selection-mode .walkin-picker {
 .cat-order-stepper { display: flex; gap: 6px; align-items: center; }
 .cat-order-stepper .form-input { text-align: center; }
 
+/* Phase 4 — a11y + mobile (kept in this file, not mobile-overrides.css: one cache chain) */
+.btn-action-v4:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+#categoryCreateDrawer .form-input:focus-visible,
+#categoryCreateDrawer button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+}
+@media (max-width: 640px) {
+    /* touch targets: 24px desktop knobs become 40px on phones */
+    #tab-categories .cat-card-actions .btn-action-v4 { width: 40px; height: 40px; border-radius: 8px; }
+    #tab-categories .browser-dish-actions .btn-action-v4,
+    #browserDishGrid .browser-dish-actions .btn-action-v4,
+    #tab-combos .browser-dish-actions .btn-action-v4 { width: 40px; height: 40px; border-radius: 8px; }
+    #categoryCreateDrawer .cat-order-stepper button { min-width: 40px; min-height: 40px; }
+    #categoryCreateDrawer .modal-content { border-radius: 0; } /* full-bleed sheet on phones */
+    #tab-categories .category-preview-img { width: 72px; height: 72px; }
+    #tab-categories .cat-kpi-strip { gap: 6px; }
+    #tab-categories .cat-kpi-pill { font-size: 10.5px; padding: 4px 9px; }
+}
+
 @media (max-width: 1024px) {
     .menu-browser-layout {
         flex-direction: column;

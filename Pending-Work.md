@@ -67,6 +67,12 @@ This rule applies to:
 - **Facts to hold:** ₹500 = setup assistance; ₹1,000 = minimum wallet balance to start taking orders. `shared/billing-defaults.js` is authoritative for rates (₹2 QR, ₹1 POS, ₹5 WhatsApp/webview, ₹1 promo).
 - **Check:** `tools/check-copy-consistency.cjs` already fails on any setup fee other than ₹500 — extend/re-run it when the wallet wording reaches `website/`.
 
+### ✅ Categories Tab Phase 4 (PLAN-CATEGORY-REDESIGN.md) — deployed (done — PLAN COMPLETE)
+- **Stage:** Phase 4 (mobile/a11y) `done` — **PLAN-CATEGORY-REDESIGN P1-P4 complete**
+- **Files:** `Admin/style.css` (`.btn-action-v4:focus-visible` at the shared class, drawer focus rings, @640px touch targets 40px for category/browser/combo action buttons, full-bleed phone drawer), `Admin/index.html`+`Admin/sw.js` (`style.css?v=5.4.14`)
+- **Verified:** production E2E 37/37 — mobile 375px: 0px horizontal overflow, cards 172px, action buttons 44px, KPI visible, drawer full-width; 32 prior checks regression-clean
+- **Deployed:** 2026-10-31; ledger `[20261031-110000-category-phase4]`
+
 ### ✅ Categories Tab Phase 3 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
 - **Stage:** Phase 3 (typed delete guard) `done` — Phase 4 (mobile/a11y) `pending`
 - **Files:** `Admin/js/ui-utils.js` (`showDeleteConfirm` optional `requireText` — live match sync, JS-set placeholder, focus to input; 6 existing call sites untouched), `Admin/js/features/catalog.js` (`deleteCategory`: count dishes up-front, guard only when dishCount>0, count-driven message), `Admin/style.css` (dark-theme `.dynamic-modal-input`), `Admin/index.html`+`Admin/sw.js` (`style.css?v=5.4.14`, cache `v5.12.11`)
