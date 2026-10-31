@@ -27,6 +27,7 @@ export function render() {
       <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="pending">Pending</button>
       <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="approved">Approved</button>
       <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="rejected">Rejected</button>
+      <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="expired">Expired</button>
       <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="all">All</button>
     </div>
 
@@ -69,6 +70,7 @@ function renderAll() {
   const pending = state.requests.filter((r) => r.status === 'pending').length;
   const approved = state.requests.filter((r) => r.status === 'approved').length;
   const rejected = state.requests.filter((r) => r.status === 'rejected').length;
+  const expired = state.requests.filter((r) => r.status === 'expired').length;
 
   document.getElementById('ob-kpis').innerHTML = `
     <div class="glass-card kpi-tile">
@@ -82,6 +84,10 @@ function renderAll() {
     <div class="glass-card kpi-tile">
       <div class="kpi-label">Rejected</div>
       <div class="kpi-value">${rejected}</div>
+    </div>
+    <div class="glass-card kpi-tile">
+      <div class="kpi-label">Expired</div>
+      <div class="kpi-value">${expired}</div>
     </div>
     <div class="glass-card kpi-tile">
       <div class="kpi-label">Total</div>
@@ -103,7 +109,7 @@ function renderAll() {
 
   tbody.innerHTML = filtered.map((r) => {
     const date = r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-    const statusColor = r.status === 'approved' ? 'var(--status-online,#16a34a)' : r.status === 'rejected' ? 'var(--status-offline,#dc2626)' : 'var(--status-degraded,#d97706)';
+    const statusColor = r.status === 'approved' ? 'var(--status-online,#16a34a)' : r.status === 'rejected' ? 'var(--status-offline,#dc2626)' : r.status === 'expired' ? 'var(--text-secondary,#6b7280)' : 'var(--status-degraded,#d97706)';
     return `
       <tr>
         <td><strong>${escapeHtml(r.businessName || '—')}</strong></td>
@@ -143,6 +149,7 @@ function viewRequest(key) {
         <strong>Date:</strong> ${date}<br>
         <strong>Status:</strong> ${escapeHtml(r.status)}
         ${r.rejectReason ? `<br><strong>Reject Reason:</strong> ${escapeHtml(r.rejectReason)}` : ''}
+        ${r.expireReason ? `<br><strong>Expired:</strong> ${escapeHtml(r.expireReason)}` : ''}
       </div>
     `,
     confirmLabel: 'Close',

@@ -856,10 +856,30 @@ registerAction('unlock-outlet', async () => {
   const name = outlet?.name || outlet?.settings?.Store?.storeName || 'this outlet';
   const ok = await showConfirm({
     title: `Unlock "${name}"?`,
-    body: 'Grants the restaurant admin full access to all features. They can already log in but are currently locked.',
+    body: 'Grants the restaurant admin full access to all features. They can already log in but are currently locked. The owner must have verified their login email first.',
     confirmLabel: 'Unlock',
   });
   if (!ok) return;
+  // D2: an auto-onboarded owner must have clicked the Firebase verification link
+  // before the restaurant can go live. Legacy outlets have no adminLogin email
+  // (emailVerified: null) and are never gated.
+  try {
+    const token = await firebase.auth().currentUser.getIdToken();
+    const res = await fetch(`${TUNNEL_URL}/api/admin/outlet-admin-status?bid=${encodeURIComponent(currentBid)}&oid=${encodeURIComponent(currentOid)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const st = await res.json();
+      if (st.email && st.emailVerified !== true) {
+        return showToast(`${st.email} hasn't verified their email yet — ask the owner to click the link Firebase sent them, then unlock.`, 'error');
+      }
+    } else if (res.status !== 404) {
+      showToast(`Could not check email verification (${res.status}) — unlocking anyway.`, 'warning');
+    }
+  } catch (e) {
+    console.warn('email verification check failed', e);
+    showToast('Could not check email verification — unlocking anyway.', 'warning');
+  }
   try {
     await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}`).update({
       locked: false,

@@ -527,6 +527,35 @@ app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => 
   }
 });
 
+// D2: email-verification state of a restaurant's owner account. Supreme calls this
+// before unlocking an outlet — an auto-onboarded tenant must prove the admin email
+// is real before it can go live. emailVerified: null means the outlet predates the
+// adminLogin record, so there is no gate to apply (never trap a legacy tenant).
+async function outletAdminStatus(bid, oid) {
+  const snap = await admin.database().ref(`businesses/${bid}/outlets/${oid}/adminLogin/email`).get();
+  const email = snap.val() || null;
+  if (!email) return { email: null, emailVerified: null };
+  let user = null;
+  try {
+    user = await admin.auth().getUserByEmail(email);
+  } catch (err) {
+    if (err.code !== 'auth/user-not-found') throw err;
+  }
+  if (!user) return { email, emailVerified: false, missing: true };
+  return { email, emailVerified: user.emailVerified === true, uid: user.uid, disabled: user.disabled === true };
+}
+
+app.get('/api/admin/outlet-admin-status', requireSuperOnly, async (req, res) => {
+  const { bid, oid } = req.query;
+  if (!bid || !oid) return res.status(400).json({ error: 'bid and oid are required' });
+  try {
+    res.json(await outletAdminStatus(bid, oid));
+  } catch (err) {
+    console.error('outlet-admin-status failed', err);
+    res.status(500).json({ error: `Status check failed — ${err.message}` });
+  }
+});
+
 // ---- Auto-approval of website sign-ups --------------------------------------
 // New restaurants are created automatically (no manual review). The owner is
 // notified via an `inquiries` record (shows in Supreme > Notifications) and the
@@ -609,6 +638,78 @@ function startAutoApproval() {
     setTimeout(() => { _autoChain = _autoChain.then(() => autoApproveOne(key)).catch((e) => console.error('[auto-onboarding]', e)); }, 2000);
   }, (e) => console.error('[auto-onboarding] listener error:', e.message));
   console.log(`[auto-onboarding] watching new sign-ups (cap ${AUTO_APPROVE_MAX_PER_HOUR}/hour)`);
+}
+
+// ---- D2 cleanup: unverified auto-onboarded tenants --------------------------
+// A tenant created by auto-approval whose owner never verified the admin email is
+// deleted after 72h so the address is free for its real owner. Log-only unless
+// ONBOARDING_CLEANUP=enforce. Never touches manual approvals, the demo tenant, or
+// a tenant that already has an order or a payment (activity = a real restaurant).
+const CLEANUP_ENFORCE = String(process.env.ONBOARDING_CLEANUP || '').toLowerCase() === 'enforce';
+const UNVERIFIED_TTL_MS = 72 * 60 * 60 * 1000;
+
+async function markRequestExpired(key, reason) {
+  await admin.database().ref(`onboardingRequests/${key}`).update({
+    status: 'expired', expiredAt: Date.now(), expireReason: reason,
+  }).catch((e) => console.warn('[onboarding-cleanup] mark expired failed (non-fatal):', e.message));
+}
+
+async function runUnverifiedCleanup() {
+  const snap = await admin.database().ref('onboardingRequests').orderByChild('status').equalTo('approved').get();
+  const requests = snap.val() || {};
+  const now = Date.now();
+  let candidates = 0, deleted = 0;
+
+  for (const [key, r] of Object.entries(requests)) {
+    if (!r || r.reviewedBy !== 'auto-onboarding' || !r.bid || !r.oid) continue;
+    if (r.bid === 'foodhubbie-demo') continue;
+    const reviewedAt = Number(r.reviewedAt);
+    if (!Number.isFinite(reviewedAt) || now - reviewedAt < UNVERIFIED_TTL_MS) continue;
+
+    const base = `businesses/${r.bid}/outlets/${r.oid}`;
+    const [orders, payments] = await Promise.all([
+      admin.database().ref(`${base}/orders`).limitToFirst(1).get(),
+      admin.database().ref(`${base}/billing/payments`).limitToFirst(1).get(),
+    ]);
+    if (orders.exists() || payments.exists()) continue;
+
+    const outlet = (await admin.database().ref(base).get()).val();
+    if (!outlet) { await markRequestExpired(key, 'Tenant already gone'); continue; }
+
+    const email = (outlet.adminLogin && outlet.adminLogin.email) || r.adminEmail;
+    let user = null;
+    try {
+      user = await admin.auth().getUserByEmail(email);
+    } catch (err) {
+      if (err.code !== 'auth/user-not-found') throw err;
+    }
+    if (user && user.emailVerified === true) continue; // verified — keep the tenant
+
+    candidates++;
+    if (!CLEANUP_ENFORCE) {
+      console.log(`[onboarding-cleanup] would delete ${r.bid}/${r.oid} (${email}) — unverified for ${Math.round((now - reviewedAt) / 3600000)}h`);
+      continue;
+    }
+
+    if (user) {
+      const row = (await admin.database().ref(`admins/${user.uid}`).get()).val() || {};
+      // Only remove the mirror row while it still belongs to this tenant.
+      if (row.outlet === r.oid && row.businessId === r.bid) {
+        await admin.database().ref(`admins/${user.uid}`).remove();
+      }
+      await admin.auth().deleteUser(user.uid);
+    }
+    const outletKeys = Object.keys(((await admin.database().ref(`businesses/${r.bid}/outlets`).get()).val()) || {});
+    if (outletKeys.length <= 1) await admin.database().ref(`businesses/${r.bid}`).remove();
+    else await admin.database().ref(base).remove();
+    await admin.database().ref(`outletIndex/${r.oid}`).remove();
+    await markRequestExpired(key, 'Unverified after 72h');
+    deleted++;
+    console.log(`[onboarding-cleanup] deleted ${r.bid}/${r.oid} (${email}) — unverified after 72h`);
+  }
+
+  console.log(`[onboarding-cleanup] ${candidates} unverified candidate(s), ${deleted} deleted${CLEANUP_ENFORCE ? '' : ' (observe mode — set ONBOARDING_CLEANUP=enforce to delete)'}`);
+  return { candidates, deleted };
 }
 
 app.post('/api/bot/stop/:bid/:oid', requireSuperOnly, async (req, res) => {
@@ -1301,6 +1402,17 @@ setInterval(() => {
 }, 60 * 60 * 1000).unref();
 
 console.log(`[Auto-Settlement] Daily scheduler armed for ${SETTLEMENT_HOUR}:00 server time`);
+
+// D2: once a day, expire auto-onboarded tenants whose email was never verified.
+// First pass 10 minutes after boot, then every 24h. Log-only unless
+// ONBOARDING_CLEANUP=enforce.
+setTimeout(() => {
+  runUnverifiedCleanup().catch((err) => console.error('[onboarding-cleanup] failed:', err));
+  setInterval(() => {
+    runUnverifiedCleanup().catch((err) => console.error('[onboarding-cleanup] failed:', err));
+  }, 24 * 60 * 60 * 1000).unref();
+}, 10 * 60 * 1000).unref();
+console.log(`[onboarding-cleanup] armed — 72h unverified TTL, ${CLEANUP_ENFORCE ? 'ENFORCING' : 'observe mode'}`);
 
 // ================================================================
 

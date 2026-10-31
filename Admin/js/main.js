@@ -535,6 +535,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const demoMode = await initDemoMode();
     initAuth();
+    // D2: unverified owners see the "verify your email to go live" banner. Safe to
+    // start before auth resolves — it subscribes to onAuthStateChanged itself.
+    import('./features/email-verify.js').then((m) => m.initEmailVerification())
+        .catch((e) => console.warn('[EmailVerify] init failed:', e && e.message));
     if (demoMode) console.log('[Demo] live demo mode active');
     (await useMod('rider-analytics')).initRiderAnalytics();
     (await useMod('inventory')).initInventory();

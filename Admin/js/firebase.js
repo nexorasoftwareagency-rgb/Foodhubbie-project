@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, onValue, onChildAdded, onChildChanged, set, update, remove, push, runTransaction, query, orderByChild, orderByKey, equalTo, limitToLast, startAt, endAt, endBefore, serverTimestamp, child, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getAuth, setPersistence, browserLocalPersistence, browserSessionPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, EmailAuthProvider, sendPasswordResetEmail, createUserWithEmailAndPassword, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, browserSessionPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, EmailAuthProvider, sendPasswordResetEmail, sendEmailVerification, createUserWithEmailAndPassword, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 import { showToast } from './ui-utils.js';
 
@@ -233,5 +233,6 @@ export {
     setPersistence, browserSessionPersistence,
     onAuthStateChanged, EmailAuthProvider,
     sendPasswordResetEmail, createUserWithEmailAndPassword,
+    sendEmailVerification,
     reauthenticateWithCredential
 };
