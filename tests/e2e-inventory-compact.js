@@ -206,6 +206,33 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     const gone = await page.evaluate(() => ![...document.querySelectorAll('#categoryList .cat-card-name')].some(n => n.textContent.trim() === 'E2E-CAT-DELETE-ME'));
     ok('e2e category cleanup (deleted)', gone, 'category removed live');
 
+    // ---- Phase 3: type-the-name delete guard (non-destructive: cancel at the end) ----
+    // "Pizza" carries 4 dishes -> deleting it would cascade the customer menu: guard requires
+    // typing the exact name. Empty categories keep the plain confirm (covered by the test above).
+    const pizzaCard = page.locator('#categoryList .cat-card', { hasText: 'Pizza' }).first();
+    await pizzaCard.locator('.cat-card-actions .btn-action-v4.danger').click();
+    await page.waitForTimeout(600);
+    const g1 = await page.evaluate(() => {
+        const ov = document.querySelector('.dynamic-modal-overlay');
+        const input = ov?.querySelector('.dynamic-modal-input');
+        const btn = ov?.querySelector('.btn-confirm');
+        return { open: !!ov, hasInput: !!input, btnDisabled: btn ? btn.disabled : null, text: ov?.querySelector('.dynamic-modal-text')?.innerText || '' };
+    });
+    ok('populated-category delete shows typed confirm', g1.open && g1.hasInput, `confirm disabled initially: ${g1.btnDisabled} — "${g1.text}"`);
+    await page.fill('.dynamic-modal-input', 'Pizz');
+    await page.waitForTimeout(250);
+    const stillDisabled = await page.evaluate(() => document.querySelector('.dynamic-modal-overlay .btn-confirm').disabled);
+    ok('partial name keeps Delete disabled', stillDisabled, '"Pizz" rejected');
+    await page.fill('.dynamic-modal-input', 'pizza');
+    await page.waitForTimeout(250);
+    const enabled = await page.evaluate(() => !document.querySelector('.dynamic-modal-overlay .btn-confirm').disabled);
+    ok('exact name enables Delete', enabled, '"pizza" matches case-insensitively');
+    await page.locator('.dynamic-modal-overlay .btn-cancel').click();
+    await page.waitForTimeout(500);
+    const pizzaAlive = await page.evaluate(() => [...document.querySelectorAll('#categoryList .cat-card-name')].some(n => n.textContent.trim() === 'Pizza'));
+    ok('cancelled guard leaves category intact', pizzaAlive, 'Pizza + its 4 dishes untouched (END)');
+    await page.screenshot({ path: path.join(T, 'category-delete-guard.png') });
+
     await browser.close();
     const fails = results.filter(r => !r.pass).length;
     console.log(`\nRESULT: ${results.length - fails}/${results.length} passed`);

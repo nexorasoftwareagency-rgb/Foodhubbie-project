@@ -1714,6 +1714,21 @@ tr.premium-row-v4:focus-visible {
     font-size: 13px;
     font-weight: 600;
 }
+.dynamic-modal-input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid #333;
+    background: #111;
+    color: #fff;
+    font-size: 14px;
+    text-align: center;
+    margin-bottom: 20px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.dynamic-modal-input:focus { border-color: var(--error); }
+.dynamic-modal-input::placeholder { color: #777; }
 .dynamic-modal-actions {
     display: flex;
     gap: 12px;

@@ -148,7 +148,7 @@ export const showPinPrompt = (message, title = "Manager Approval") => {
     });
 };
 
-export const showDeleteConfirm = (itemName, message = "This action cannot be undone.") => {
+export const showDeleteConfirm = (itemName, message = "This action cannot be undone.", requireText = null) => {
     return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.className = 'dynamic-modal-overlay';
@@ -158,6 +158,7 @@ export const showDeleteConfirm = (itemName, message = "This action cannot be und
                 <div class="dynamic-modal-icon">🗑️</div>
                 <h3 class="dynamic-modal-title">Delete <span class="highlight-name"></span>?</h3>
                 <p class="dynamic-modal-text"></p>
+                ${requireText ? '<input class="dynamic-modal-input" type="text" autocomplete="off" aria-label="Type the name to confirm">' : ''}
                 <div class="dynamic-modal-actions">
                     <button class="btn-cancel">Cancel</button>
                     <button class="btn-confirm danger">Delete</button>
@@ -167,6 +168,16 @@ export const showDeleteConfirm = (itemName, message = "This action cannot be und
         document.body.appendChild(overlay);
         overlay.querySelector('.highlight-name').innerText = itemName;
         overlay.querySelector('.dynamic-modal-text').innerText = message;
+
+        const confirmBtn = overlay.querySelector('.btn-confirm');
+        if (requireText) {
+            const input = overlay.querySelector('.dynamic-modal-input');
+            input.placeholder = `Type "${requireText}" to confirm`;
+            const sync = () => { confirmBtn.disabled = input.value.trim().toLowerCase() !== String(requireText).toLowerCase(); };
+            sync();
+            input.addEventListener('input', sync);
+            setTimeout(() => input.focus(), 80);
+        }
 
         const cleanup = (val) => {
             overlay.style.opacity = '0';

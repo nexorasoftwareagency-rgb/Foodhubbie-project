@@ -67,6 +67,12 @@ This rule applies to:
 - **Facts to hold:** ₹500 = setup assistance; ₹1,000 = minimum wallet balance to start taking orders. `shared/billing-defaults.js` is authoritative for rates (₹2 QR, ₹1 POS, ₹5 WhatsApp/webview, ₹1 promo).
 - **Check:** `tools/check-copy-consistency.cjs` already fails on any setup fee other than ₹500 — extend/re-run it when the wallet wording reaches `website/`.
 
+### ✅ Categories Tab Phase 3 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
+- **Stage:** Phase 3 (typed delete guard) `done` — Phase 4 (mobile/a11y) `pending`
+- **Files:** `Admin/js/ui-utils.js` (`showDeleteConfirm` optional `requireText` — live match sync, JS-set placeholder, focus to input; 6 existing call sites untouched), `Admin/js/features/catalog.js` (`deleteCategory`: count dishes up-front, guard only when dishCount>0, count-driven message), `Admin/style.css` (dark-theme `.dynamic-modal-input`), `Admin/index.html`+`Admin/sw.js` (`style.css?v=5.4.14`, cache `v5.12.11`)
+- **Verified:** production E2E 32/32 — guard on the real "Pizza" (4 dishes): input shown, Delete disabled until typed (partial "Pizz" rejected, case-insensitive match accepted), Cancel leaves category+dishes intact; plain confirm for empty categories proven by the create/delete lifecycle; 28 earlier checks regression-clean
+- **Deployed:** 2026-10-31; ledger `[20261031-093000-category-phase3]`
+
 ### ✅ Categories Tab Phase 2 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
 - **Stage:** Phase 2 (create drawer) `done` — Phases 3 (delete guard; WebP already shipped), 4 (mobile/a11y) `pending`
 - **Files:** `Admin/index.html` (right-sheet drawer beside modals + header Add Category button + serial stepper), `Admin/js/features/catalog.js` (`_initCategoryDrawer`: open/close/backdrop/stepper/live-dup-hint + auto-close on save), `Admin/style.css` (`modal-sheet-right` + `cat-order-stepper`), `Admin/js/features/setup-checklist.js` (deep-link re-pointed `#btnAddCategory` → `#btnOpenCatDrawer`)

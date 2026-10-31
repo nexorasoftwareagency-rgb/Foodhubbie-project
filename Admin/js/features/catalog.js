@@ -179,41 +179,49 @@ export async function deleteCategory(id) {
     if (!category) return showToast("Category not found", "error");
 
     const catName = category.name;
-    if (!(await showDeleteConfirm(`${catName} and ALL associated dishes`, "Delete this category and ALL associated dishes? This cannot be undone."))) return;
 
     try {
-            const catImage = category.image;
+        const catImage = category.image;
 
-            const dishesSnap = await get(Outlet.ref('dishes'));
-            const dishes = dishesSnap.val() || {};
+        const dishesSnap = await get(Outlet.ref('dishes'));
+        const dishes = dishesSnap.val() || {};
 
-            const updates = {};
-            updates[`categories/${id}`] = null;
+        const updates = {};
+        updates[`categories/${id}`] = null;
 
-            const imagesToDelete = [];
-            if (catImage) imagesToDelete.push(catImage);
+        const imagesToDelete = [];
+        if (catImage) imagesToDelete.push(catImage);
 
-            Object.keys(dishes).forEach(dishId => {
-                if (dishes[dishId].category === catName) {
-                    updates[`dishes/${dishId}`] = null;
-                    if (dishes[dishId].image) {
-                        imagesToDelete.push(dishes[dishId].image);
-                    }
+        let dishCount = 0;
+        Object.keys(dishes).forEach(dishId => {
+            if (dishes[dishId].category === catName) {
+                dishCount++;
+                updates[`dishes/${dishId}`] = null;
+                if (dishes[dishId].image) {
+                    imagesToDelete.push(dishes[dishId].image);
                 }
-            });
+            }
+        });
 
-            await Outlet.multiUpdate(updates);
+        // Trust boundary: populated categories take the customer menu down with them —
+        // require typing the exact name (empty categories keep the plain confirm).
+        const message = dishCount > 0
+            ? `This deletes the category and ${dishCount} dish${dishCount !== 1 ? 'es' : ''} in it, including images. This cannot be undone.`
+            : "Delete this category? This action cannot be undone.";
+        if (!(await showDeleteConfirm(dishCount > 0 ? `${catName} and its ${dishCount} dish${dishCount !== 1 ? 'es' : ''}` : catName, message, dishCount > 0 ? catName : null))) return;
 
-            imagesToDelete.forEach(img => {
-                deleteImage(img).catch(err => console.warn("[Catalog] Image deletion failed:", img, err));
-            });
+        await Outlet.multiUpdate(updates);
 
-            logAudit("Catalog", `Deleted Category and associated dishes: ${catName}`, id);
-            showToast(`Category "${catName}" and all its items deleted.`, 'success');
-        } catch (err) {
-            console.error("[Catalog] Delete failed:", err);
-            showToast("Operation failed: " + err.message, "error");
-        }
+        imagesToDelete.forEach(img => {
+            deleteImage(img).catch(err => console.warn("[Catalog] Image deletion failed:", img, err));
+        });
+
+        logAudit("Catalog", `Deleted Category and associated dishes: ${catName}`, id);
+        showToast(`Category "${catName}" and all its items deleted.`, 'success');
+    } catch (err) {
+        console.error("[Catalog] Delete failed:", err);
+        showToast("Operation failed: " + err.message, "error");
+    }
 }
 
 
