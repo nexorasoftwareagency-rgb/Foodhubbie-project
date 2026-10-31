@@ -50,10 +50,10 @@ This rule applies to:
 - **Not verified:** rules behaviour locally (no Java → no RTDB emulator) — run the live probe in plan §7.1; Supreme billing screens need a real super account; live auto-approval needs a real website signup.
 
 ### ✅ D2 — Email verification before promoting public sign-up
-- **Stage:** `done` — commit `c1e7a67` (branch `onboarding-email-verify`), deployed 2026-10-31: `firebase deploy --only database,hosting:admin,hosting:supreme,hosting:website` + EC2 `bot-control-api/server.js` (backup `server.js.bak-20261031-*`, pm2 id 2 restarted)
+- **Stage:** `done` — commit `d92bb3b` (branch `onboarding-email-verify`), deployed 2026-10-31: `firebase deploy --only database,hosting:admin,hosting:supreme,hosting:website` + EC2 `bot-control-api/server.js` (backup `server.js.bak-20261031-*`, pm2 id 2 restarted)
 - **Why:** auto-approval let anyone register any unregistered email and immediately receive a working tenant.
 - **Shipped:** unverified owners see a self-contained "verify your email to go live" banner (auto-send once per device, 60 s resend countdown, Check again via `user.reload`); Supreme's Unlock calls `GET /api/admin/outlet-admin-status` and refuses an explicitly unverified owner (legacy outlets and API outages are never gated); a daily 72 h cleanup of auto-onboarded unverified tenants (observe mode unless `ONBOARDING_CLEANUP=enforce`); `onboardingRequests.status` gains `expired` + `expiredAt`/`expireReason`; Supreme requests UI gains an Expired filter/KPI.
-- **Verified:** auto-onboarding 16/16; live E2E 8/8 (banner, auto-send stamp, throttle, not-verified, hides after verification, 0 page errors); demo boot 0 errors + no banner; shell `v5.12.11`; EC2 log `[onboarding-cleanup] armed — 72h unverified TTL, observe mode`; endpoint 401 without a token.
+- **Verified:** auto-onboarding 16/16; live E2E 8/8 (banner, auto-send stamp, throttle, not-verified, hides after verification, 0 page errors); demo boot 0 errors + no banner; shell `v5.12.12`; EC2 log `[onboarding-cleanup] armed — 72h unverified TTL, observe mode`; endpoint 401 without a token.
 - **Note:** a custom `sendEmailVerification` continue URL fails with `auth/unauthorized-continue-uri` unless the host is added to Auth → Authorized domains, so the default action page is used. Cleanup stays observe mode until the owner wants deletions.
 - **Plan:** `docs/PLAN-ONBOARDING-FLOW-HARDENING.md` §3.4 (as built).
 
@@ -77,7 +77,7 @@ This rule applies to:
 
 ### ✅ Categories Tab Phase 3 (PLAN-CATEGORY-REDESIGN.md) — deployed (done)
 - **Stage:** Phase 3 (typed delete guard) `done` — Phase 4 (mobile/a11y) `pending`
-- **Files:** `Admin/js/ui-utils.js` (`showDeleteConfirm` optional `requireText` — live match sync, JS-set placeholder, focus to input; 6 existing call sites untouched), `Admin/js/features/catalog.js` (`deleteCategory`: count dishes up-front, guard only when dishCount>0, count-driven message), `Admin/style.css` (dark-theme `.dynamic-modal-input`), `Admin/index.html`+`Admin/sw.js` (`style.css?v=5.4.14`, cache `v5.12.11`)
+- **Files:** `Admin/js/ui-utils.js` (`showDeleteConfirm` optional `requireText` — live match sync, JS-set placeholder, focus to input; 6 existing call sites untouched), `Admin/js/features/catalog.js` (`deleteCategory`: count dishes up-front, guard only when dishCount>0, count-driven message), `Admin/style.css` (dark-theme `.dynamic-modal-input`), `Admin/index.html`+`Admin/sw.js` (`style.css?v=5.4.14`, cache `v5.12.12`)
 - **Verified:** production E2E 32/32 — guard on the real "Pizza" (4 dishes): input shown, Delete disabled until typed (partial "Pizz" rejected, case-insensitive match accepted), Cancel leaves category+dishes intact; plain confirm for empty categories proven by the create/delete lifecycle; 28 earlier checks regression-clean
 - **Deployed:** 2026-10-31; ledger `[20261031-093000-category-phase3]`
 
