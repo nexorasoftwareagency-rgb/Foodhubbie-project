@@ -49,11 +49,13 @@ This rule applies to:
 - **Fixes shipped:** F1 setup mode (7 steps, required-step hero, deep links, `SETUP_TABS` +`discounts`, deliberately not `chat`/`promotions`); F2 tenant parity (`outletIndex/{oid}`, `outletNo` reused on retry, template defaults spread before identity/security, `adminLogin` = `{email, passwordUpdatedAt}` only); F5 single version bump above both branches.
 - **Not verified:** rules behaviour locally (no Java → no RTDB emulator) — run the live probe in plan §7.1; Supreme billing screens need a real super account; live auto-approval needs a real website signup.
 
-### 🔍 D2 — Email verification before promoting public sign-up
-- **Stage:** `reviewing` (plan §3; not started)
-- **Why:** auto-approval lets anyone register any unregistered email and immediately receive a working tenant.
-- **Answer on record:** Spark allows 1,000 verification emails/day, 10,000 links/day, 100 account creations/hour/IP — so the Firebase built-in email-verification flow is viable without Blaze.
-- **Plan:** `docs/PLAN-ONBOARDING-FLOW-HARDENING.md` §3 (`requireEmailVerification` was deliberately deferred out of the shipped change set).
+### ✅ D2 — Email verification before promoting public sign-up
+- **Stage:** `done` — commit `c1e7a67` (branch `onboarding-email-verify`), deployed 2026-10-31: `firebase deploy --only database,hosting:admin,hosting:supreme,hosting:website` + EC2 `bot-control-api/server.js` (backup `server.js.bak-20261031-*`, pm2 id 2 restarted)
+- **Why:** auto-approval let anyone register any unregistered email and immediately receive a working tenant.
+- **Shipped:** unverified owners see a self-contained "verify your email to go live" banner (auto-send once per device, 60 s resend countdown, Check again via `user.reload`); Supreme's Unlock calls `GET /api/admin/outlet-admin-status` and refuses an explicitly unverified owner (legacy outlets and API outages are never gated); a daily 72 h cleanup of auto-onboarded unverified tenants (observe mode unless `ONBOARDING_CLEANUP=enforce`); `onboardingRequests.status` gains `expired` + `expiredAt`/`expireReason`; Supreme requests UI gains an Expired filter/KPI.
+- **Verified:** auto-onboarding 16/16; live E2E 8/8 (banner, auto-send stamp, throttle, not-verified, hides after verification, 0 page errors); demo boot 0 errors + no banner; shell `v5.12.11`; EC2 log `[onboarding-cleanup] armed — 72h unverified TTL, observe mode`; endpoint 401 without a token.
+- **Note:** a custom `sendEmailVerification` continue URL fails with `auth/unauthorized-continue-uri` unless the host is added to Auth → Authorized domains, so the default action page is used. Cleanup stays observe mode until the owner wants deletions.
+- **Plan:** `docs/PLAN-ONBOARDING-FLOW-HARDENING.md` §3.4 (as built).
 
 ### 🔍 D4 — Wallet gates: stop the bot at 10%, stop QR ordering at 0
 - **Stage:** `reviewing` — blocked on the live ledger being settled

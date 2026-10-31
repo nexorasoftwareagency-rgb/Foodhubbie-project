@@ -245,6 +245,17 @@ Optional live rules probe (client idTokens): a throwaway outlet without `outletI
 - 1,000/day is plenty for onboarding; resend is client-throttled.
 - This does not stop someone from verifying an email they control — it stops them from claiming an email they do not control.
 
+### 3.4 As built (2026-10-31) — commit `c1e7a67`, deployed
+
+Shipped as planned, with four changes forced by the live run:
+
+- **No continue URL.** `sendEmailVerification(user)` uses Firebase's default action page. `{ url: 'https://foodhubbie-admins.web.app/' }` failed every send with `auth/unauthorized-continue-uri` — that host is not in Auth → Settings → Authorized domains. The default page always works and needs no account config; the banner's "Check again" is the return path.
+- **Banner is self-contained** (`Admin/js/features/email-verify.js`): the module creates `#emailVerifyBanner` and its inline styles, so `Admin/index.html` and `Admin/style.css` were not touched. It auto-sends once per device (`localStorage` `fh:emailVerifySent:{uid}`), then shows a 60 s countdown on **Resend** (the countdown must also start after the automatic send — the first live E2E caught it missing), and **Check again** calls `user.reload()`. Hidden for `isSuper`/`isSupreme`/`isDemo` and in demo mode.
+- **Unlock gate** (`SupremeAdmin/js/features/restaurant-profile.js` → `GET /api/admin/outlet-admin-status?bid&oid`, `requireSuperOnly`): refuses only on an explicit `emailVerified: false`; `null` (no `adminLogin.email` — every legacy outlet) is never gated; a network/5xx answer warns and unlocks, so an API outage cannot trap a tenant. `missing: true` (Auth user gone) counts as unverified.
+- **Cleanup** (`runUnverifiedCleanup`): first pass 10 min after boot, then every 24 h, `unref()`ed. Observe mode by default (`ONBOARDING_CLEANUP=enforce` deletes). Removes the Auth user, the `admins/{uid}` row **only while it still points at that outlet**, the outlet (or the business when it is the only outlet) and `outletIndex/{oid}`, then marks the request `expired`. Skips manual approvals, the demo tenant, and any tenant with an order or a payment; a tenant that is already gone only gets its request marked.
+
+Verified: `tests/auto-onboarding.check.cjs` 16/16 (status helper, observe, enforce, every spare rule, sibling outlet, re-pointed mirror); live E2E 8/8 on the deployed Admin with a throwaway unverified user (banner + address, auto-send stamp, 60 s throttle, "not verified yet", banner hides after `emailVerified:true`, 0 page errors; user and `admins` row deleted); built `?demo=1` boots with 0 console errors and no banner; shell `v5.12.11`; EC2 logs `[onboarding-cleanup] armed — 72h unverified TTL, observe mode`.
+
 ---
 
 ## 4. D4 — Wallet gates: pause the bot at 10%, close ordering at 0
