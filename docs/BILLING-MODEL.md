@@ -209,13 +209,9 @@ Then extend `computeWallet()` in `shared/cost-math.js` to subtract `metaCostPais
 
 ---
 
-## 7. Decisions still open
+## 7. Solution Partner deep-research (recorded 2026-11-01)
 
-1. **Is the 3 % / 1 % inclusive of Meta's per-message cost?** The 2026-11-01 decision says yes (it "covers message cost"). Â§4 shows that holds for order notifications but not for chatty tenants or promos â€” so decide whether heavy-chat outlets need a cap, a fair-use clause, or a separate top-up.
-2. **Do we pursue Solution Partner status now** (long lead, ~months), or run S2 for the first N tenants?
-3. **Per-tenant monthly spend cap** â€” default value?
-4. **Who signs off** on a tenant exceeding their cap â€” automatic block, or owner override?
-5. **Does promo stay at â‚¹1/message** now that the marketing rate is confirmed to be in the same range?
+See docs/BILLING-MODEL.md section 7 (replaced with full S1 deep-research) for eligibility, docs, debit/UPI/card verification, timeline, liability comparison, open items.
 
 ---
 

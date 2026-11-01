@@ -31,7 +31,7 @@ let currentTab = 'overview'; // 'overview' | 'analytics' — in-page tab rail st
 // Draft for the Billing card inputs (token qty/price, setup status) — same
 // idea as detailEdit: survives the live re-render ticks so a half-typed
 // grant form isn't wiped by an incoming botStatus/usage update.
-let billingDraft = null; // { qty, priceRs, setup }
+let billingDraft = null; // { qty, priceRs }
 
 function reRenderProfile() {
   const biz = lastRaw?.[currentBid];
@@ -1013,19 +1013,7 @@ registerAction('billing-set-mode', async (btn) => {
   }
 });
 
-registerAction('billing-save-setup', async () => {
-  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
-  const status = document.getElementById('billingSetupStatus')?.value;
-  if (!status) return;
-  try {
-    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}/billing/setup`).update({ status });
-    if (billingDraft) billingDraft.setup = status;
-    showToast('Setup status saved.', 'success');
-  } catch (err) {
-    console.error('billing setup save failed', err);
-    showToast('Setup save failed — check the console.', 'error');
-  }
-});
+
 
 registerAction('billing-grant-tokens', async () => {
   if (isReadOnly()) return showToast("Your account is view-only.", 'error');
