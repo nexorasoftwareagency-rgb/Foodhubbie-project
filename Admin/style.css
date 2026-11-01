@@ -1729,6 +1729,9 @@ tr.premium-row-v4:focus-visible {
 }
 .dynamic-modal-input:focus { border-color: var(--error); }
 .dynamic-modal-input::placeholder { color: #777; }
+.login-demo-link-v4 { margin: 4px 0 14px; text-align: center; }
+.login-demo-link-v4 a { font-size: 12px; font-weight: 600; color: #64748b; text-decoration: none; border-bottom: 1px dashed rgba(100,116,139,.45); padding-bottom: 1px; }
+
 .dynamic-modal-actions {
     display: flex;
     gap: 12px;
@@ -9300,8 +9303,11 @@ body.pos-selection-mode .walkin-picker {
     cursor: pointer; transition: background .15s ease; color: #fff; border: none;
 }
 .btn-action-green { background: #16a34a; } .btn-action-green:hover { background: #15803d; }
+.btn-action-green:focus-visible { outline: 2px solid #16a34a; outline-offset: 2px; }
 .btn-action-orange { background: #f59e0b; } .btn-action-orange:hover { background: #d97706; }
+.btn-action-orange:focus-visible { outline: 2px solid #f59e0b; outline-offset: 2px; }
 .btn-action-blue { background: #2563eb; } .btn-action-blue:hover { background: #1d4ed8; }
+.btn-action-blue:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 
 /* Table requests banner */
 .table-requests-banner {
