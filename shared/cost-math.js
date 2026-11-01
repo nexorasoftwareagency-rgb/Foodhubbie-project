@@ -18,7 +18,9 @@ export const FREE_PROMO_TOKENS = 15;
 export const COMMISSION_PCT = 0.01;
 // Minimum first wallet top-up before a restaurant goes live (paid to FoodHubbie directly by UPI/bank;
 // Supreme Admin records it under billing/payments).
-export const MIN_TOPUP = 1000;
+export const MIN_TOPUP = 1000; // first-time wallet top-up without WhatsApp
+export const MIN_TOPUP_WITH_WA = 1500; // with WhatsApp bot
+export const MIN_BALANCE = 250; // maintain always
 // Low-balance warning: balance at or below this share of everything topped up so far.
 export const LOW_BALANCE_RATIO = 0.25;
 
