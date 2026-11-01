@@ -81,13 +81,17 @@ This rule applies to:
 - **Next agent step:** after P1 DNS verifies, run P2 code cutover sweep (URL inventory already mapped in the plan, incl. the `firebase deploy --only auth` authorizedDomains-wipe hazard and the `settings/qrBaseUrl` runtime knob)
 - **Open decision:** retire the orphan `foodhubbie-delivery` hosting site (stale since Aug, no firebase.json block, nothing references it)
 
-### ✅ Admin Dashboard UI/UX Audit — RECALLED / COMPLETE (2026-11-01)
-- **Status:** Verified → Done (no structural findings; 3 optional cosmetic fixes noted)
-- **Method:** `design-taste-frontend` (app-screen rules: quiet borders, no gradient/glow/emoji/index/hairline) + `ui-ux-pro-max` (icon/hover/contrast/spacing checklist) + `web-design-guidelines` + direct `Admin/` code inspection (all tabs)
-- **Covered 100%:** inventory/menu/browser/combos/categories/dashboard/orders/live/walkin/tables/promotions/discounts/settings/staff/report
-- **Phase 1–4 category redesign (4 phases)**: all RESOLVED (`cc4145c`/`1ffbb9e`/`efc2d82`/`11c94ec`), 37/37 battery
-- **TINY residuals (optional, non-blocking)**: (1) `Admin/index.html:375` demo banner inline style → `.login-demo-link-v4` CSS; (2) `style.css` `.btn-action-green/orange/blue:focus-visible` missing; (3) verify `.main` removed (Phase 1 already replaced with `.single` at 2 hits)
-- **No spacing/size/logic inconsistency remains** across any tab; mobile 40px touch targets + drawer full-bleed + focus-visible applied globally
+### ✅ Admin Dashboard UI/UX Audit — RECALLED / COMPLETE (2026-11-01) — **UPDATED** (this subagent audit)
+- **Status:** Done (PASS; clean-up required — see `docs/UI-AUDIT-COMPLETE.md` for full tables + evidence).
+- **Method:** `design-taste-frontend` (app-screen rules: no gradient/glow/index/hairline/emoji/monospace-except-code) + `ui-ux-pro-max` (spacing/contrast) + `web-design-guidelines` + direct `Admin/` file/code inspection (no Playwright available; code-level verification for all tabs).
+- **Twin-check (F):** `node tools/check-shared-twins.cjs` → 5/5 OK (combo-math, format-order-id, loyalty-math, money-math, discount-rules). Payroll twin intentionally absent (Admin-only).
+- **Key violations (design-taste):** (a) `.status` badges use 5 `linear-gradient` fills + `pulse-status-v4` continuous scale; (b) `box-shadow-at-rest` on `.dish-card`, `.status`, `.glass-card`; (c) thin 1px hairline borders; (d) `body` radial-gradient background. **Fix T1 = replace gradient/status with solid colors; T2 = make pulse one-shot; T3 = reduce shadow at rest.**
+- **Fluctuation (D):** `status` continuous keyframe (scale) + image cards without fixed width/height = shift risk.
+- **Freezing (E):** drawer rapid-click guard missing; search inputs (`orderSearch` etc.) have no debounce (200ms needed).
+- **Cross-agent:** setup-checklist `#btnOpenCatDrawer` deep-link verified; demo banner (`demo-mode.js`) consistent; restrict modal (`restrict.js`) z-index 100000; `firebase.json` targets match deployed admin/supreme/website.
+- **Files written:** `docs/UI-AUDIT-COMPLETE.md` (created); `Pending-Work.md` (updated).
+- Committed: `UI/UX audit complete (deep): size/viewpoint/space/fluctuation/freezing + cross-agent verified`.
+- Next action: commit pushed (NOT pushed). Report line count: ~320.
 
 ### ✅ Domain Migration — P1 + P2 — Done / Verified (2026-11-01)
 - **Status:** Done (deployed, 4 hosts 200, .web.app fallback preserved)
