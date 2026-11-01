@@ -367,7 +367,7 @@ registerAction('install-wa-template', async (btn) => {
   }
 });
 
-const ADMIN_APP_URL = 'https://foodhubbie-admins.web.app';
+const ADMIN_APP_URL = 'https://app.foodhubbie.in';
 
 
 

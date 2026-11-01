@@ -458,17 +458,17 @@
       "redirects": [
         {
           "source": "/demo",
-          "destination": "https://foodhubbie-admins.web.app/demo",
+          "destination": "https://app.foodhubbie.in/demo",
           "type": 302
         },
         {
           "source": "/demo/",
-          "destination": "https://foodhubbie-admins.web.app/demo",
+          "destination": "https://app.foodhubbie.in/demo",
           "type": 302
         },
         {
           "source": "/demo/tour",
-          "destination": "https://foodhubbie-admins.web.app/demo",
+          "destination": "https://app.foodhubbie.in/demo",
           "type": 302
         }
       ],

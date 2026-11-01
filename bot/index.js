@@ -19,7 +19,7 @@ const OUTLET_EMOJI = '🏪';
 const DEVELOPER_NUMBER = "9724649971";
 
 // WhatsApp delivery webview — served from the QR menu hosting target.
-const WEBVIEW_DELIVERY_HOST = "https://foodhubbie-qrmenu.web.app";
+const WEBVIEW_DELIVERY_HOST = (process.env.WEBVIEW_DELIVERY_HOST || "https://menu.foodhubbie.in").replace(/\/$/, "");
 const WEBVIEW_BOT_PHONE = process.env.WA_BOT_PHONE || "";
 
 const fs = require('fs');

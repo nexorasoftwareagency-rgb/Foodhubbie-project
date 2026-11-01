@@ -1,7 +1,7 @@
 // e2e-inventory-compact.js — verify the Inventory tab density pass (UI-only change).
 const path = require('path');
 const { chromium } = require('D:/Foodhubbie Project/node_modules/playwright');
-const BASE = process.env.E2E_ADMIN_BASE || 'https://foodhubbie-admins.web.app/';
+const BASE = process.env.E2E_ADMIN_BASE || 'https://app.foodhubbie.in/';
 const T = 'C:/Users/2nile/AppData/Local/Temp/opencode';
 const results = [];
 const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`  ${pass ? 'PASS' : 'FAIL'}: ${name}${detail ? ' — ' + detail : ''}`); };

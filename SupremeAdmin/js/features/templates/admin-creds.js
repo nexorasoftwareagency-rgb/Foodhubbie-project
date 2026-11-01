@@ -8,7 +8,7 @@
 
 import { escapeHtml } from '/js/utils.js';
 
-const ADMIN_APP_URL = 'https://foodhubbie-admins.web.app';
+const ADMIN_APP_URL = 'https://app.foodhubbie.in';
 
 function copyBtn(text, label) {
   return `<button class="btn btn-ghost btn-sm" data-action="copy-credential" data-copy="${escapeHtml(text)}" title="Copy ${label}" aria-label="Copy ${label}" style="padding:3px 6px;min-width:0"><svg data-lucide="copy" style="width:12px;height:12px"></svg></button>`;

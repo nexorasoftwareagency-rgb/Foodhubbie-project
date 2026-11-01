@@ -41,7 +41,8 @@ const DASHBOARD_ORIGINS = (process.env.DASHBOARD_ORIGIN || '')
   .split(',')
   .map(o => o.trim())
   .filter(Boolean)
-  .concat(['https://foodhubbie-admins.web.app', 'https://foodhubbie-supremeadmin.web.app']);
+  .concat(['https://foodhubbie-admins.web.app', 'https://foodhubbie-supremeadmin.web.app',
+    'https://app.foodhubbie.in', 'https://control.foodhubbie.in']);
 
 // Uses the same Firebase project as the dashboard and bot workers.
 // Set GOOGLE_APPLICATION_CREDENTIALS or pass a service account explicitly.
@@ -519,7 +520,7 @@ app.post('/api/admin/approve-onboarding', requireSuperOnly, async (req, res) => 
   }
   try {
     const r = await approveOnboardingRequest(reqKey, { businessName, outletName, contactPhone, contactEmail, adminEmail, adminName, plan, template, whatsappConnect }, req.auth?.uid);
-    res.json({ ok: true, ...r, loginUrl: 'https://foodhubbie-admins.web.app' });
+    res.json({ ok: true, ...r, loginUrl: 'https://app.foodhubbie.in' });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('approve-onboarding failed', err);
@@ -1252,7 +1253,7 @@ app.post('/tenant-api/notify', async (req, res) => {
       return res.json({ ok: true, sent: 0, inbox: 0, message: 'No subscribers for this outlet' });
     }
 
-    const menuOrigin = (process.env.MENU_WEB_ORIGIN || 'https://foodhubbie-qrmenu.web.app').replace(/\/$/, '');
+    const menuOrigin = (process.env.MENU_WEB_ORIGIN || 'https://menu.foodhubbie.in').replace(/\/$/, '');
     const link = `${menuOrigin}/${encodeURIComponent(req.outlet)}/delivery.html?o=${encodeURIComponent(req.outlet)}&b=${encodeURIComponent(req.businessId)}&tab=notifications`;
 
     // Persist an in-app inbox entry per subscribed phone, independent of FCM

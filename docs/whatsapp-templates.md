@@ -237,7 +237,7 @@ Why this is NOT Marketing (defense if Meta reviews):
 
 Cost: ₹0.1357 / delivered greeting (utility). Per session, not per message. Inside 24h window: if customer initiates, reply is service (free first 1,000/mo); if bot initiates greeting outside window = utility (charged). With ES v4, greeting is sent inside the session window (customer just started chat), so it falls under service/free tier when possible — but template stays UTILITY-classified regardless.
 
-Integration (Foodhubbie): bot/index.js sends greeting via sendOrderFlow(..., withMenu=false) — uses image + welcome text currently (plainWelcome removed per 2026-10-18). When greeting_welcome_utility approved, swap to sendTemplate with {{1}} = storeName, {{2}} = welcomePhrase from DB (businesses/{bid}/outlets/{oid}/settings/storeName or default from catalog). No button needed unless the restaurant opts into greeting_order_link later.
+Integration (Foodhubbie): bot/index.js sends greeting via sendOrderFlow(..., withMenu=false) — uses image + welcome text currently (plainWelcome removed per 2026-10-18). When greeting_welcome_utility approved, swap to sendTemplate using header (image URL = store.greetingImage) + body variables {{1}} (storeName), {{2}} (welcomePhrase) — one UTILITY message combining image + welcome. Optional greeting_order_link (button) stays separate.
 
 Action: Submit new greeting_welcome_utility UTILITY template via Meta Business Suite / App Dashboard -> Templates -> Create. Old greeting_welcome (MARKETING) stays unwired; do not reuse.
 

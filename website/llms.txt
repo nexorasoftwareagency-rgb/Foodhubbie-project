@@ -63,8 +63,8 @@
 - https://foodhubbie.in/best-software — 2026 software buyer's guide
 
 ## Live apps
-- Admin: https://foodhubbie-admins.web.app
-- Customer menu: https://foodhubbie-qrmenu.web.app
-- Rider: https://foodhubbie-riderapp.web.app
+- Admin: https://app.foodhubbie.in
+- Customer menu: https://menu.foodhubbie.in
+- Rider: https://rider.foodhubbie.in
 
 

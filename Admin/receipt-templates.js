@@ -58,7 +58,7 @@ window.ReceiptTemplates = {
         itemsHtml += `<tr><td colspan="3" style="border-top:1px dashed #000;"></td></tr>`;
 
         // Generate dynamic feedback link using base URL from settings or default
-        const baseUrl = store.reviewUrl || `https://foodhubbie-qrmenu.web.app/feedback`;
+        const baseUrl = store.reviewUrl || `https://menu.foodhubbie.in/feedback`;
         const feedbackUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}order=${order.orderId}&outlet=${window.currentOutlet || 'default'}`;
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(feedbackUrl)}`;
 

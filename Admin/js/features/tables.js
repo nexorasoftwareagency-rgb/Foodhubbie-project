@@ -2421,9 +2421,9 @@ async function _dineInBaseUrl() {
             get(_settingsRef('qrBaseUrl')),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
         ]);
-        _dineInBaseUrlCache = snap.exists() ? snap.val() : 'https://foodhubbie-qrmenu.web.app/';
+        _dineInBaseUrlCache = snap.exists() ? snap.val() : 'https://menu.foodhubbie.in/';
     } catch {
-        _dineInBaseUrlCache = 'https://foodhubbie-qrmenu.web.app/';
+        _dineInBaseUrlCache = 'https://menu.foodhubbie.in/';
     }
     return _dineInBaseUrlCache;
 }

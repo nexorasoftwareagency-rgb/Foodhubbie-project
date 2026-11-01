@@ -73,9 +73,8 @@ This rule applies to:
 - **Note:** a real HTTP 404 is impossible on Spark/Hosting (the SPA rewrite returns 200) — the stop screen is an in-app 200.
 
 ### 🔍 D5 — Pricing / percentage-package marketing consistency
-- **Stage:** `reviewing` (verification only; no copy changed in the onboarding change set)
-- **Facts to hold:** ₹500 = setup assistance; ₹1,000 = minimum wallet balance to start taking orders. `shared/billing-defaults.js` is authoritative for rates (₹2 QR, ₹1 POS, ₹5 WhatsApp/webview, ₹1 promo).
-- **Check:** `tools/check-copy-consistency.cjs` already fails on any setup fee other than ₹500 — extend/re-run it when the wallet wording reaches `website/`.
+- **Stage:** `verified` (updated 2026-11-01 — setup-fee removed; wallet-minimum model live) — `website/pricing.html` compact, `shared/cost-math.js` (`MIN_TOPUP` 1000 / `MIN_TOPUP_WITH_WA` 1500 / `MIN_BALANCE` 250), `BILLING-MODEL.md` rate table + removal note; `Admin/js/features/costs.js` reads new constants; `SupremeAdmin/js/features/restaurant-profile.js` `billing-save-setup` action removed; build/admin SW `v5.12.*` + deploy `database,hosting:admin,hosting:website`.
+- **Facts to hold:** No setup fee. First-time wallet top-up: ₹1,000 (no WhatsApp) / ₹1,500 (with WhatsApp bot). Maintain minimum balance ≥ ₹250 always. Percentage rates unchanged (QR 1%, POS 1%, App/WA 3%, other 3%, promo ₹1/token). `shared/cost-math.js` authoritative (`PERCENT_RATES`, `APP_PLAN_NAME`, `MIN_TOPUP`, `MIN_TOPUP_WITH_WA`, `MIN_BALANCE`). `website/pricing.html` compact version deployed (`db380aa`). `docs/BILLING-MODEL.md` setup line removed; wallet-minimum + balance-guard rows added; removal note appended.
 
 ### 🔄 Custom-domain migration (PLAN-DOMAIN-MIGRATION.md) — planning done, P1 waiting on owner
 - **Stage:** plan written + committed (`a87280b` branch, NOT on main yet); P1 (console + DNS) is owner-hands — 4 domains to connect + GoDaddy CNAMEs
