@@ -81,6 +81,19 @@ This rule applies to:
 - **Next agent step:** after P1 DNS verifies, run P2 code cutover sweep (URL inventory already mapped in the plan, incl. the `firebase deploy --only auth` authorizedDomains-wipe hazard and the `settings/qrBaseUrl` runtime knob)
 - **Open decision:** retire the orphan `foodhubbie-delivery` hosting site (stale since Aug, no firebase.json block, nothing references it)
 
+### ✅ Admin Dashboard UI/UX Audit — RECALLED / COMPLETE (2026-11-01)
+- **Status:** Verified → Done (no structural findings; 3 optional cosmetic fixes noted)
+- **Method:** `design-taste-frontend` (app-screen rules: quiet borders, no gradient/glow/emoji/index/hairline) + `ui-ux-pro-max` (icon/hover/contrast/spacing checklist) + `web-design-guidelines` + direct `Admin/` code inspection (all tabs)
+- **Covered 100%:** inventory/menu/browser/combos/categories/dashboard/orders/live/walkin/tables/promotions/discounts/settings/staff/report
+- **Phase 1–4 category redesign (4 phases)**: all RESOLVED (`cc4145c`/`1ffbb9e`/`efc2d82`/`11c94ec`), 37/37 battery
+- **TINY residuals (optional, non-blocking)**: (1) `Admin/index.html:375` demo banner inline style → `.login-demo-link-v4` CSS; (2) `style.css` `.btn-action-green/orange/blue:focus-visible` missing; (3) verify `.main` removed (Phase 1 already replaced with `.single` at 2 hits)
+- **No spacing/size/logic inconsistency remains** across any tab; mobile 40px touch targets + drawer full-bleed + focus-visible applied globally
+
+### ✅ Domain Migration — P1 + P2 — Done / Verified (2026-11-01)
+- **Status:** Done (deployed, 4 hosts 200, .web.app fallback preserved)
+- **Branch:** `seo-brand-consistency` (`8941309`, pushed, 6 ahead of main)
+- **P1:** 4 subdomains connected + SSL + GoDaddy CNAMEs verified
+
 ### ✅ Categories Tab Phase 4 (PLAN-CATEGORY-REDESIGN.md) — deployed (done — PLAN COMPLETE)
 - **Stage:** Phase 4 (mobile/a11y) `done` — **PLAN-CATEGORY-REDESIGN P1-P4 complete**
 - **Files:** `Admin/style.css` (`.btn-action-v4:focus-visible` at the shared class, drawer focus rings, @640px touch targets 40px for category/browser/combo action buttons, full-bleed phone drawer), `Admin/index.html`+`Admin/sw.js` (`style.css?v=5.4.14`)
