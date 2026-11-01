@@ -5550,46 +5550,59 @@ body {
 }
 
 .status.Placed, .status.New, .status.Pending {
-    background: linear-gradient(135deg, #FFF1F2, #FFE4E6) !important;
+    background: #FFE4E6 !important;
     color: #E11D48 !important;
     border: 1px solid #FECDD3 !important;
-    animation: pulse-status-v4 2s infinite !important;
+    animation: pulse-status-v4 2s ease 2 !important;
+    box-shadow: none !important;
 }
 
 .status.Confirmed {
-    background: linear-gradient(135deg, #F0FDF4, #DCFCE7) !important;
+    background: #DCFCE7 !important;
     color: #16A34A !important;
     border: 1px solid #BBF7D0 !important;
+    animation: pulse-status-v4 2s ease 2 !important;
+    box-shadow: none !important;
 }
 
 .status.Preparing, .status.InKitchen {
-    background: linear-gradient(135deg, #FFFBEB, #FEF3C7) !important;
+    background: #FEF3C7 !important;
     color: #D97706 !important;
     border: 1px solid #FDE68A !important;
+    animation: pulse-status-v4 2s ease 2 !important;
+    box-shadow: none !important;
 }
 
 .status.Cooked, .status.Ready {
-    background: linear-gradient(135deg, #EFF6FF, #DBEAFE) !important;
+    background: #DBEAFE !important;
     color: #2563EB !important;
     border: 1px solid #BFDBFE !important;
+    animation: pulse-status-v4 2s ease 2 !important;
+    box-shadow: none !important;
 }
 
 .status.OutforDelivery, .status.PickedUp, .status.Dispatched {
-    background: linear-gradient(135deg, #FAF5FF, #F3E8FF) !important;
+    background: #F3E8FF !important;
     color: #9333EA !important;
     border: 1px solid #E9D5FF !important;
+    animation: pulse-status-v4 2s ease 2 !important;
+    box-shadow: none !important;
 }
 
 .status.Delivered {
-    background: linear-gradient(135deg, #F9FAFB, #F3F4F6) !important;
+    background: #F3F4F6 !important;
     color: #4B5563 !important;
     border: 1px solid #E5E7EB !important;
+    animation: pulse-status-v4 2s ease 2 !important;
+    box-shadow: none !important;
 }
 
 .status.Served {
-    background: linear-gradient(135deg, #F0FDF4, #DCFCE7) !important;
+    background: #DCFCE7 !important;
     color: #16A34A !important;
     border: 1px solid #BBF7D0 !important;
+    animation: pulse-status-v4 2s ease 2 !important;
+    box-shadow: none !important;
 }
 
 .status.Cancelled {
@@ -5599,9 +5612,9 @@ body {
 }
 
 @keyframes pulse-status-v4 {
-    0% { transform: scale(1); box-shadow: 0 2px 6px rgba(225, 29, 72, 0.1); }
-    50% { transform: scale(1.05); box-shadow: 0 4px 12px rgba(225, 29, 72, 0.2); }
-    100% { transform: scale(1); box-shadow: 0 2px 6px rgba(225, 29, 72, 0.1); }
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
 }
 
 /* 2. PREMIUM DISH CARDS (CATALOG) */

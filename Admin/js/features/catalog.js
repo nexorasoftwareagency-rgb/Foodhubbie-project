@@ -65,7 +65,7 @@ cats.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
             if (addonCount > 0) metaParts.push(`${addonCount} addon${addonCount !== 1 ? 's' : ''}`);
 
             div.innerHTML = `
-                <div class="cat-card-img"><img src="${cat.image || 'https://placehold.co/150/orange/white?text=Category'}" loading="lazy" alt="${escapeHtml(cat.name)}"></div>
+                <div class="cat-card-img"><img src="${cat.image || 'https://placehold.co/150/orange/white?text=Category'}" loading="lazy" alt="${escapeHtml(cat.name)}" style="width:100%;height:100%;object-fit:cover;"></div>
                 <div class="cat-card-name" title="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</div>
                 <div class="cat-card-meta" title="${metaParts.join(' · ')}">${metaParts.join(' · ')}</div>
                 <div class="cat-card-actions">

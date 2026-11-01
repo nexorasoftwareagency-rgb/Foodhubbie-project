@@ -9,6 +9,8 @@ import { loadLucide } from '../ui.js';
 let inventoryListener = null;
 let _invData = [];
 let _invSearch = '';
+let _invDebounce = null;
+function debounceInvSearch(fn, term) { clearTimeout(_invDebounce); _invDebounce = setTimeout(() => fn(term), 200); }
 let _invSortField = 'name', _invSortDir = 'asc';
 let _menuPage = 1;
 let _menuAllRows = [];
@@ -206,8 +208,7 @@ function renderInventoryTable(data) {
 }
 
 export function setInventorySearch(term) {
-    _invSearch = term || '';
-    _renderInvTable();
+    debounceInvSearch(t => { _invSearch = t || ''; _renderInvTable(); }, term || '');
 }
 
 export async function adjustStock(id, delta) {
