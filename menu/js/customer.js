@@ -1042,6 +1042,13 @@ export function minSpendAfterRedemptionRs() {
     return Number(_loyaltyConfig && _loyaltyConfig.minSpendAfterRedemption) || 0;
 }
 
+// R10: Zomato-style per-order cap — tender can never exceed this % of the
+// order's subtotal. 0/absent = no cap (pre-R10 behavior).
+export function maxRedeemPercentOfOrder() {
+    const v = Number(_loyaltyConfig && _loyaltyConfig.maxRedeemPercentOfOrder);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
 export async function saveOrderRating(orderId, rating, comment = '') {
     if (!hasIdentity() || !orderId) return false;
     const cleanRating = Number(rating);

@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WhatsApp Ordering System for Restaurants | FoodHubbie</title>
-<meta name="description" content="Customers order from your WhatsApp: menu, customizations, delivery status and rider details in one thread. Official Meta API — ₹5 per order or 1% of sales.">
+<meta name="description" content="Customers order from your WhatsApp: menu, customizations, delivery status and rider details in one thread. Official Meta API - 3% of each order, notifications included.">
 <link rel="canonical" href="https://foodhubbie.in/whatsapp-ordering">
 <link rel="icon" href="/favicon.png" type="image/png" sizes="any">
 <link rel="apple-touch-icon" href="/favicon.png">
 <meta name="theme-color" content="#E84908">
 <meta property="og:type" content="website">
 <meta property="og:title" content="WhatsApp Ordering System for Restaurants | FoodHubbie">
-<meta property="og:description" content="Menu, customizations, order status and rider details — all in the chat your customers already use. No app to install, no commission on the order value.">
+<meta property="og:description" content="Menu, customizations, order status and rider details — all in the chat your customers already use. No app to install, and 3% of the order instead of an aggregator's 20-30%.">
 <meta property="og:image" content="https://foodhubbie.in/assets/shots/whatsapp-bot.webp">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,7 +48,7 @@
 {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://foodhubbie.in/"},{"@type":"ListItem","position":2,"name":"WhatsApp Ordering","item":"https://foodhubbie.in/whatsapp-ordering"}]}
 </script>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-22","mainEntity":[{"@type":"Question","name":"Do customers need to install an app to order on WhatsApp?","acceptedAnswer":{"@type":"Answer","text":"No. They message the restaurant's WhatsApp number and the bot replies with the menu. Ordering, customizations and delivery updates all happen in the same chat they already have installed."}},{"@type":"Question","name":"Is my WhatsApp number at risk if I send order updates?","acceptedAnswer":{"@type":"Answer","text":"Order updates are transactional messages about an order already in progress. On the WhatsApp Official plan they go out through Meta's Cloud API with approved message templates — the route Meta supports for business messaging. On an unofficial connection the software switches promotional sending off, and that number carries the same risk any unofficial WhatsApp connection carries. Either way Meta decides delivery, template approval and account standing: no provider can guarantee a number is never restricted."}},{"@type":"Question","name":"Can I send offers and promotions on WhatsApp?","acceptedAnswer":{"@type":"Answer","text":"Yes, on the WhatsApp Official plans — campaigns go out as approved marketing templates at ₹1 per message, only to customers who opted in, and STOP is always honoured. Promotional campaigns are disabled on any non-official connection."}},{"@type":"Question","name":"Does the customer see delivery status in the chat?","acceptedAnswer":{"@type":"Answer","text":"Yes. Order confirmation, preparation and out-for-delivery updates are sent as WhatsApp messages, and the rider's name and phone number reach the customer when the order is assigned."}},{"@type":"Question","name":"How is WhatsApp ordering billed?","acceptedAnswer":{"@type":"Answer","text":"Orders on the WhatsApp Official plan are ₹5 per order, or 1% of total sales if you prefer the commission model. Promotional messages are ₹1 each, and the one-time setup is ₹500. QR and POS-only plans bill ₹1–2 per order and do not include WhatsApp."}}]}
+{"@context":"https://schema.org","@type":"FAQPage","dateModified":"2026-10-22","mainEntity":[{"@type":"Question","name":"Do customers need to install an app to order on WhatsApp?","acceptedAnswer":{"@type":"Answer","text":"No. They message the restaurant's WhatsApp number and the bot replies with the menu. Ordering, customizations and delivery updates all happen in the same chat they already have installed."}},{"@type":"Question","name":"Is my WhatsApp number at risk if I send order updates?","acceptedAnswer":{"@type":"Answer","text":"Order updates are transactional messages about an order already in progress. On the WhatsApp Official plan they go out through Meta's Cloud API with approved message templates — the route Meta supports for business messaging. On an unofficial connection the software switches promotional sending off, and that number carries the same risk any unofficial WhatsApp connection carries. Either way Meta decides delivery, template approval and account standing: no provider can guarantee a number is never restricted."}},{"@type":"Question","name":"Can I send offers and promotions on WhatsApp?","acceptedAnswer":{"@type":"Answer","text":"Yes, on the WhatsApp Official plans — campaigns go out as approved marketing templates at ₹1 per message, only to customers who opted in, and STOP is always honoured. Promotional campaigns are disabled on any non-official connection."}},{"@type":"Question","name":"Does the customer see delivery status in the chat?","acceptedAnswer":{"@type":"Answer","text":"Yes. Order confirmation, preparation and out-for-delivery updates are sent as WhatsApp messages, and the rider's name and phone number reach the customer when the order is assigned."}},{"@type":"Question","name":"How is WhatsApp ordering billed?","acceptedAnswer":{"@type":"Answer","text":"Orders placed through the WhatsApp bot are billed at 3% of the order value, and POS counter and QR table orders at 1%. Promotional messages are ₹1 each, and the one-time setup is ₹500."}}]}
 </script>
 </head>
 <body>
@@ -136,13 +136,13 @@
 
   <section>
     <h2>WhatsApp ordering vs an aggregator</h2>
-    <p class="lead">Aggregators bring discovery and take a commission on every order. Your own WhatsApp channel brings repeat customers at a flat per-order fee — the two do different jobs.</p>
+    <p class="lead">Aggregators bring discovery and take a commission on every order. Your own WhatsApp channel brings repeat customers at 3% of the order instead of an aggregator commission — the two do different jobs.</p>
     <div class="cmp-wrap">
       <table class="cmp">
         <thead><tr><th>&nbsp;</th><th>Aggregator app</th><th>Your WhatsApp ordering</th></tr></thead>
         <tbody>
           <tr><td>New customer discovery</td><td class="yes">Yes — their main advantage</td><td class="no">No — relies on your own customers</td></tr>
-          <tr><td>Cost per order</td><td class="no">Commission on order value</td><td class="yes">₹5 flat, or 1% if you prefer</td></tr>
+          <tr><td>Cost per order</td><td class="no">Commission on order value</td><td class="yes">3% of the order value</td></tr>
           <tr><td>Who owns the customer</td><td class="no">The platform</td><td class="yes">You — the chat is yours</td></tr>
           <tr><td>Menu control</td><td class="no">Their listing rules</td><td class="yes">Your menu, changed when you want</td></tr>
           <tr><td>Offers to past customers</td><td class="no">Limited, platform-priced</td><td class="yes">₹1 per message, opt-in list</td></tr>
@@ -159,7 +159,7 @@
       <details><summary>Is my WhatsApp number at risk if I send order updates?</summary><p>Order updates are transactional messages about an order already in progress. On the WhatsApp Official plan they go out through Meta's Cloud API with approved message templates — the route Meta supports for business messaging. On an unofficial connection the software switches promotional sending off, and that number carries the same risk any unofficial WhatsApp connection carries. Either way Meta decides delivery, template approval and account standing: no provider can guarantee a number is never restricted.</p></details>
       <details><summary>Can I send offers and promotions on WhatsApp?</summary><p>Yes, on the WhatsApp Official plans — campaigns go out as approved marketing templates at ₹1 per message, only to customers who opted in, and STOP is always honoured. Promotional campaigns are disabled on any non-official connection.</p></details>
       <details><summary>Does the customer see delivery status in the chat?</summary><p>Yes. Order confirmation, preparation and out-for-delivery updates are sent as WhatsApp messages, and the rider's name and phone number reach the customer when the order is assigned.</p></details>
-      <details><summary>How is WhatsApp ordering billed?</summary><p>Orders on the WhatsApp Official plan are ₹5 per order, or 1% of total sales if you prefer the commission model. Promotional messages are ₹1 each, and the one-time setup is ₹500. QR and POS-only plans bill ₹1–2 per order and do not include WhatsApp.</p></details>
+      <details><summary>How is WhatsApp ordering billed?</summary><p>Orders placed through the WhatsApp bot are billed at 3% of the order value, and POS counter and QR table orders at 1%. Promotional messages are ₹1 each, and the one-time setup is ₹500.</p></details>
     </div>
   </section>
 

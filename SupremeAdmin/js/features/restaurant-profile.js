@@ -987,9 +987,9 @@ registerAction('scan-baileys', async () => {
 
 // ---- Billing & promo tokens ----------------------------------------------
 const BILLING_MODE_INFO = {
-  per_order: { label: 'flat per-order billing', body: (b) => `Every source is billed at flat per-order rates (QR \u20B9${b.rates?.QR ?? 2} \u00B7 POS \u20B9${b.rates?.POS ?? 1} \u00B7 WhatsApp \u20B9${b.rates?.WA ?? 5}).` },
-  percentage: { label: 'the percentage package', body: () => 'Every order is billed as a share of its value: 1% on QR, POS and all other features, 2% on WhatsApp-based ordering. Cancelled and refunded orders are not billed. Promo messages stay per token.' },
-  commission_1pct: { label: '1% of sales (WhatsApp only)', body: () => 'WhatsApp delivery orders are billed at 1% of order value. QR, POS and other sources stay per-order.' },
+  percentage: { label: 'the percentage plan', body: () => 'Foodhubbi-App Orders 3% (delivery app orders + every status notification sent on the app) \u00B7 WhatsApp bot ordering 3% \u00B7 POS counter and QR menu 1%. Cancelled and refunded orders are not billed. Promo messages stay at \u20B91.' },
+  per_order: { label: 'legacy flat per-order billing', body: (b) => `Legacy model: every source is billed at a flat rupee rate (QR \u20B9${b.rates?.QR ?? 2} \u00B7 POS \u20B9${b.rates?.POS ?? 1} \u00B7 WhatsApp \u20B9${b.rates?.WA ?? 5}). Superseded by the percentage plan on 2026-11-01.` },
+  commission_1pct: { label: 'legacy 1% of sales (WhatsApp only)', body: () => 'Legacy: WhatsApp delivery orders billed at 1% of order value, QR/POS/other stayed per-order. Superseded by the percentage plan on 2026-11-01.' },
 };
 registerAction('billing-set-mode', async (btn) => {
   if (isReadOnly()) return showToast("Your account is view-only.", 'error');

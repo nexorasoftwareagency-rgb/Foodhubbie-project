@@ -12,12 +12,13 @@ let step = 0;
 
 // Plan tiers keep the stored values (starter/growth/enterprise) that the
 // Restaurants list filter and profile editor already use — only the
-// presentation is new. Pricing shown once above the cards: billing rates
-// (₹1–5/order, ₹500 setup) are identical on every tier.
+// presentation is new. Pricing shown once above the cards: the percentage plan
+// (Foodhubbi-App Orders 3% · WhatsApp bot 3% · POS + QR menu 1%, ₹500 setup)
+// is identical on every tier.
 const PLANS = [
   {
     value: 'starter', name: 'Starter', tag: 'Single outlet',
-    desc: 'Launch one outlet with the full core stack — QR ordering, POS and reports. Pay per order, no monthly lock-in.',
+    desc: 'Launch one outlet with the full core stack — QR ordering, POS and reports. A share of each order, no monthly lock-in.',
     bullets: ['QR menu & table ordering', 'POS billing + kitchen display', 'Reports & analytics', 'Standard onboarding'],
   },
   {
@@ -71,7 +72,7 @@ export async function render() {
 
         <section data-step="1" hidden>
           <h2 style="font-size:16px;margin:0 0 4px">Plan &amp; starting menu</h2>
-          <div class="panel-sub" style="margin-bottom:6px">Flat <strong>₹1–5 per order</strong> on every plan · one-time setup <strong>₹500</strong> — non-refundable, adjusted in your first bill.</div>
+          <div class="panel-sub" style="margin-bottom:6px">Foodhubbi-App Orders <strong>3%</strong> · WhatsApp bot <strong>3%</strong> · POS &amp; QR menu <strong>1%</strong> of each order · one-time setup <strong>₹500</strong> — non-refundable, adjusted in your first bill.</div>
           <div class="panel-sub" style="margin-bottom:14px">Pick the service tier that fits how this restaurant will operate. You can change it later from the profile.</div>
           <div class="obw-grid" style="margin-bottom:16px">
             ${PLANS.map((p, i) => `

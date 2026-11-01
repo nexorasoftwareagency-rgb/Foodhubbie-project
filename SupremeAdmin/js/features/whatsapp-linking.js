@@ -17,7 +17,7 @@
 import { showToast } from '/js/utils.js';
 
 const META_APP_ID = '1894358871543574';           // Meta App ID (from DEPLOYMENT-PROGRESS.md)
-const META_CONFIG_ID = '1624840945941910';        // WhatsApp Embedded Signup configuration ID (created 2026-08-17)
+const META_CONFIG_ID = '1089451087291012';        // WhatsApp Embedded Signup configuration ID ("Agent Control") — created with system-user token, v4 product-scoped (verified 2026-11-01)
 
 let fbSdkLoaded = false;
 let fbSdkLoadingPromise = null;
@@ -41,7 +41,7 @@ export async function launchWhatsAppSignup(bid, oid, { onComplete } = {}) {
       config_id: META_CONFIG_ID,
       response_type: 'code',
       override_default_response_type: true,
-      extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+      extras: { setup: {}, featureType: 'cloud_api', sessionInfoVersion: '4' },
     }
   );
 }

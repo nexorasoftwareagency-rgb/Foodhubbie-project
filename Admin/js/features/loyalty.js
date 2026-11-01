@@ -13,8 +13,7 @@
 // ============================================================================
 
 import { escapeHtml, showToast, showConfirm } from '../utils.js';
-import { get, set } from '../firebase.js';
-import { Outlet } from '../firebase.js';
+import { get, set, runTransaction, auth, Outlet, BUSINESS_ID } from '../firebase.js';
 import { logger } from '../utils/logger.js';
 
 const TIER_KEYS = ['bronze', 'silver', 'gold'];
@@ -28,6 +27,9 @@ const DEFAULTS = {
   // R9: optional minimum spend AFTER redemption — a bill below this cannot
   // use reward tender. 0 = disabled.
   minSpendAfterRedemption: 0,
+  // R10: Zomato-style per-order cap — one bill's tender can never exceed
+  // this % of its own subtotal. 0 = no cap (pre-R10 behavior).
+  maxRedeemPercentOfOrder: 0,
   // Toggles (Phase 2): master earn switch, dine-in settlement earn, and
   // clawback on cancellation/void.
   earnEnabled: true,
@@ -111,6 +113,7 @@ function cloneConfig(c) {
         redeemValuePaisePerPoint: (Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
             ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
         minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
+        maxRedeemPercentOfOrder: Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0)),
         earnEnabled: c.earnEnabled !== false,
         dineInEarnEnabled: c.dineInEarnEnabled !== false,
         clawbackEnabled: c.clawbackEnabled !== false,
@@ -129,6 +132,7 @@ function buildConfigPayload(overrides = {}) {
         redeemValuePaisePerPoint: (Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
             ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
         minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
+        maxRedeemPercentOfOrder: Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0)),
         earnEnabled: c.earnEnabled !== false,
         dineInEarnEnabled: c.dineInEarnEnabled !== false,
         clawbackEnabled: c.clawbackEnabled !== false,
@@ -244,6 +248,7 @@ function renderConfigForm() {
     const redeemRs = ((Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
         ? c.redeemValuePaisePerPoint : DEFAULTS.redeemValuePaisePerPoint) / 100;
     const minSpendRs = Number(c.minSpendAfterRedemption) || 0;
+    const maxPct = Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0));
     const earnOn = c.earnEnabled !== false;
     const dineInOn = c.dineInEarnEnabled !== false;
     const clawbackOn = c.clawbackEnabled !== false;
@@ -279,9 +284,14 @@ function renderConfigForm() {
                     <input type="number" id="loyalty-min-spend" min="0" step="10"
                         value="${minSpendRs}" class="mob-input-reward" style="max-width:140px;">
                 </div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Max tender (% of order)</label>
+                    <input type="number" id="loyalty-max-redeem-pct" min="0" max="100" step="1"
+                        value="${maxPct}" class="mob-input-reward" style="max-width:140px;">
+                </div>
                 <button type="button" data-action="loyalty-save-config" class="btn-primary">Save program settings</button>
             </div>
-            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum).</div>
+            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum). Max tender 0 = no cap; e.g. 10 caps one bill's redemption at 10% of its own subtotal (Zomato-style), protecting margin on large orders.</div>
             <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;">
                 ${toggle('loyalty-earn-enabled', earnOn, 'Points earning', 'Turn off to pause all earning')}
                 ${toggle('loyalty-dinein-earn-enabled', dineInOn, 'Dine-in earning', 'Award points when a table bill is paid')}
@@ -412,6 +422,18 @@ function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsRec, ordersSn
                 </div>
             </div>
             <div style="margin-top:10px;">${progress}</div>
+            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--mob-line);">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Adjust points (±)</label>
+                    <input type="number" id="loyalty-adj-delta" step="1" class="mob-input-reward" style="max-width:120px;" placeholder="e.g. -50 or 25">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:220px;">
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Reason (required)</label>
+                    <input type="text" id="loyalty-adj-reason" class="mob-input-reward" maxlength="200" placeholder="e.g. goodwill / recovering a lost order">
+                </div>
+                <button type="button" data-action="loyalty-adjust-points" data-phone="${escapeHtml(phone)}" class="btn-primary btn-small">Apply</button>
+            </div>
+            <div class="mob-td-sub" style="margin-top:4px;">Adjusts the spendable balance only — tier and lifetime points stay as earned. Every change is logged under loyalty/adjustments.</div>
             ${redeemed.length ? `
             <table class="mob-data-table" style="margin-top:10px;">
                 <thead><tr><th>Redeemed reward</th><th class="mob-th-center">Code</th><th class="mob-th-center">Redeemed on</th><th class="mob-th-center">Status</th></tr></thead>
@@ -468,6 +490,13 @@ async function saveConfig() {
         minSpendEl.focus();
         return;
     }
+    const pctEl = document.getElementById('loyalty-max-redeem-pct');
+    const maxPct = Math.max(0, Math.min(100, parseFloat(pctEl.value) || 0));
+    if (parseFloat(pctEl.value) > 100) {
+        showToast('Max tender cannot exceed 100% of the order', 'error');
+        pctEl.focus();
+        return;
+    }
     const tiers = {};
     let ok = true;
     for (const tk of TIER_KEYS) {
@@ -492,6 +521,7 @@ async function saveConfig() {
         earnRatePaisePerPoint: Math.round(rateRs * 100),
         redeemValuePaisePerPoint: Math.round(redeemRs * 100),
         minSpendAfterRedemption: minSpendRs,
+        maxRedeemPercentOfOrder: maxPct,
         earnEnabled: document.getElementById('loyalty-earn-enabled').checked,
         dineInEarnEnabled: document.getElementById('loyalty-dinein-earn-enabled').checked,
         clawbackEnabled: document.getElementById('loyalty-clawback-enabled').checked,
@@ -556,6 +586,87 @@ async function deleteReward(id) {
     }
 }
 
+// KPI: points ever issued (Σ lifetimePoints over the rankings mirror) and
+// how many customers are ranked. Uses the owner-scoped rankings read —
+// customers still cannot bulk-read the leaderboard (per-phone rows only).
+async function refreshKpis() {
+    const issuedEl = document.getElementById('loyalty-kpi-issued');
+    const membersEl = document.getElementById('loyalty-kpi-members');
+    if (!issuedEl || !membersEl) return;
+    try {
+        const snap = await get(Outlet.ref('loyalty/rankings'));
+        const rows = snap && snap.exists() ? Object.values(snap.val() || {}) : [];
+        const lifetime = rows.reduce((s, r) => s + (Number(r && r.lifetimePoints) || 0), 0);
+        const valueRs = Math.round((lifetime * (Number(_config && _config.redeemValuePaisePerPoint) || DEFAULTS.redeemValuePaisePerPoint)) / 100);
+        issuedEl.textContent = lifetime > 0
+            ? `${lifetime.toLocaleString('en-IN')} pts · ${money(valueRs)} value`
+            : '0 pts';
+        membersEl.textContent = String(rows.length);
+    } catch (e) {
+        console.warn('[Loyalty] KPI read failed:', e);
+        issuedEl.textContent = '\u2014';
+        membersEl.textContent = '\u2014';
+    }
+}
+
+// Manual point adjustment: moves ONLY the spendable balance (tier and
+// lifetime points stay as earned), guarded by a transaction, with a
+// mandatory reason, an audit row under loyalty/adjustments and a
+// lastAdjustment mirror on the row itself.
+async function adjustPoints(phone) {
+    const deltaEl = document.getElementById('loyalty-adj-delta');
+    const reasonEl = document.getElementById('loyalty-adj-reason');
+    if (!deltaEl || !reasonEl) return;
+    const delta = Math.round(parseFloat(deltaEl.value));
+    const reason = reasonEl.value.trim();
+    if (!Number.isFinite(delta) || delta === 0) {
+        showToast('Enter a non-zero whole number of points (e.g. -50 or 25)', 'error');
+        deltaEl.focus();
+        return;
+    }
+    if (reason.length < 3) {
+        showToast('Give a short reason for the adjustment', 'error');
+        reasonEl.focus();
+        return;
+    }
+    const sure = await showConfirm(`Adjust ${phone} by ${delta > 0 ? '+' : ''}${delta} points?`, 'Apply adjustment');
+    if (!sure) return;
+    const btn = document.querySelector('[data-action="loyalty-adjust-points"]');
+    if (btn) btn.disabled = true;
+    const now = Date.now();
+    const uid = (auth && auth.currentUser && auth.currentUser.uid) || '';
+    const bid = BUSINESS_ID();
+    try {
+        const result = await runTransaction(Outlet.ref(`customers/${phone}/loyalty`), (cur) => {
+            const c = cur || null;
+            const curPoints = c && Number.isFinite(Number(c.points)) ? Number(c.points) : 0;
+            const newPoints = Math.max(0, curPoints + delta);
+            if (c && c.phone) {
+                return { ...c, points: newPoints, updatedAt: now, lastAdjustment: { delta, reason, by: uid, at: now } };
+            }
+            return {
+                phone, outlet: Outlet.current, business: bid,
+                points: newPoints, lifetimePoints: 0, totalSpent: 0, orderCount: 0,
+                tier: 'bronze', tierReachedAt: null, lastOrderAt: null, updatedAt: now,
+                lastAdjustment: { delta, reason, by: uid, at: now }
+            };
+        });
+        if (!result.committed) throw new Error('transaction aborted — row changed underneath');
+        const after = Number((result.snapshot && result.snapshot.val() && result.snapshot.val().points) || 0);
+        await set(Outlet.ref(`loyalty/adjustments/${now}_${phone}`), {
+            phone, outlet: Outlet.current, business: bid,
+            delta, pointsAfter: after, reason, createdBy: uid, createdAt: now
+        });
+        showToast(`Adjusted ${phone} to ${after} points`, 'success');
+        logger.info('LOYALTY', 'Manual adjustment', { outlet: Outlet.current, delta, pointsAfter: after });
+        await lookupCustomer();
+    } catch (e) {
+        console.error('[Loyalty] adjustment failed:', e);
+        showToast('Adjustment failed. Try again.', 'error');
+        if (btn) btn.disabled = false;
+    }
+}
+
 async function lookupCustomer() {
     const raw = document.getElementById('loyalty-lookup-phone').value;
     const phone = normPhone(raw);
@@ -612,6 +723,14 @@ function renderAll() {
                     <span class="mob-td-sub">Rewards in catalog</span>
                     <span class="mob-td-strong">${((_config && _config.rewards) || DEFAULTS.rewards).length}</span>
                 </div>
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                    <span class="mob-td-sub">Ranked members</span>
+                    <span class="mob-td-strong" id="loyalty-kpi-members">…</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:2px;">
+                    <span class="mob-td-sub">Points ever issued</span>
+                    <span class="mob-td-strong" id="loyalty-kpi-issued">…</span>
+                </div>
                 <div style="margin-left:auto;display:flex;flex-direction:column;gap:2px;text-align:right;">
                     <span class="mob-td-sub">Outlet</span>
                     <span class="mob-td-sub" style="font-size:11px;text-transform:uppercase;">${escapeHtml(Outlet.current)}</span>
@@ -629,7 +748,7 @@ function renderAll() {
             <div style="padding:16px;">
                 <div style="display:flex;gap:8px;align-items:flex-end;">
                     <input type="text" id="loyalty-lookup-phone" maxlength="15" placeholder="98765 43210" class="mob-input-reward" style="max-width:220px;">
-                    <button type="button" data-action="loyalty-search-customer" class="btn-primary">Look up</button>
+                    <button type="button" id="loyalty-search-customer" data-action="loyalty-search-customer" class="btn-primary">Look up</button>
                 </div>
                 <div class="mob-td-sub" style="margin-top:4px;">Enter the customer's registered mobile number.</div>
                 <div id="loyalty-customer-result"></div>
@@ -689,6 +808,10 @@ function attachFormListeners() {
             await deleteReward(rewardId);
             return;
         }
+        if (action === 'loyalty-adjust-points') {
+            await adjustPoints(btn.getAttribute('data-phone'));
+            return;
+        }
     });
     container.addEventListener('input', (e) => {
         const field = e.target.closest('[data-field]');
@@ -724,4 +847,5 @@ export async function loadLoyalty() {
     }
     renderAll();
     attachFormListeners();
+    refreshKpis();
 }

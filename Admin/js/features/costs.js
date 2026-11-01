@@ -4,10 +4,10 @@
  * Live "cost of running the software" index for a selectable date range
  * (default: current month; From/To date inputs + This/Last month chips):
  *   - every new order (onChildAdded) is identified by source and priced:
- *       QR ₹2 · POS counter ₹1 · webview_delivery (WhatsApp flow) ₹5 · other ₹2
- *       (commission_1pct mode → 1% of order total instead, Official pack)
+ *       QR menu 1% Â· POS counter 1% Â· Foodhubbie-App Orders 3% Â· WhatsApp bot 3% Â· other 3%
+ *       (flat â‚¹ per-order rates survive only as the legacy 'per_order' mode)
  *   - cancelled/refunded orders are excluded from billing
- *   - promo token balance KPI + promo usage cost = sent tokens × ₹1 (campaigns totalSent)
+ *   - promo token balance KPI + promo usage cost = sent tokens Ã— â‚¹1 (campaigns totalSent)
  *
  * Data: businesses/{bid}/outlets/{oid}/orders/{id}   (existing)
  *       businesses/{bid}/outlets/{oid}/billing/*     (seeded, rules-gated)
@@ -89,12 +89,12 @@ function _subscribeOrders() {
     _orderUnsubs = [];
     _orders = {}; _lastIndex = 0;
     // end bound: day + U+F8FF (highest BMP char) = inclusive prefix upper bound
-    const q = query(Outlet.ref('orders'), orderByChild('createdAt'), startAt(_range.from), endAt(_range.to + ''));
+    const q = query(Outlet.ref('orders'), orderByChild('createdAt'), startAt(_range.from), endAt(_range.to + 'ï£¿'));
     _orderUnsubs.push(onChildAdded(q, s => { _orders[s.key] = s.val(); _scheduleRender(); }));
     _orderUnsubs.push(onChildChanged(q, s => { _orders[s.key] = s.val(); _scheduleRender(); }));
 }
 
-const _inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const _inr = n => 'â‚¹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const _dayStr = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const _monthRange = off => {
     const n = new Date();
@@ -105,12 +105,12 @@ const _rangeLabel = () => {
     if (!_range) return '';
     const f = new Date(_range.from + 'T00:00:00'), t = new Date(_range.to + 'T00:00:00');
     if (_range.from.slice(0, 7) === _range.to.slice(0, 7)) return f.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-    return `${f.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} – ${t.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    return `${f.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} â€“ ${t.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 };
 const _rates = () => ({ ...DEFAULT_RATES, ...(_billing && typeof _billing === 'object' ? _billing.rates || {} : {}) });
 const _mode = () => normalizeMode(_billing && typeof _billing === 'object' ? _billing.mode : null);
 
-const LABELS = { QR: 'QR menu', POS: 'POS counter', webview_delivery: 'WhatsApp / webview', WA: 'WhatsApp', other: 'Other' };
+const LABELS = { QR: 'QR menu', POS: 'POS counter', webview_delivery: 'Foodhubbie-App Orders', WA: 'WhatsApp bot', other: 'Other' };
 const _label = src => LABELS[src] || src;
 
 function _setText(id, txt) {
@@ -136,9 +136,9 @@ function _render() {
         idxEl.textContent = _inr(idx.total);
         if (idx.total > _lastIndex) {
             idxEl.animate([{ background: 'rgba(22,163,74,.25)' }, { background: 'transparent' }], { duration: 900 });
-            _setText('costKpiIndexTrend', `+${_inr(idx.total - _lastIndex)} — updated on new order`);
+            _setText('costKpiIndexTrend', `+${_inr(idx.total - _lastIndex)} â€” updated on new order`);
         } else if (_lastIndex > 0 && idx.total < _lastIndex) {
-            _setText('costKpiIndexTrend', `−${_inr(_lastIndex - idx.total)} — order cancelled/excluded`);
+            _setText('costKpiIndexTrend', `âˆ’${_inr(_lastIndex - idx.total)} â€” order cancelled/excluded`);
         }
         _lastIndex = idx.total;
     }
@@ -178,7 +178,7 @@ function _render() {
 
     // --- promo token balance KPI ---
     const bal = _billing && typeof _billing === 'object' ? _billing.tokens?.balance : undefined;
-    _setText('costKpiTokens', bal == null ? '—' : String(bal));
+    _setText('costKpiTokens', bal == null ? 'â€”' : String(bal));
     const w = _billing && typeof _billing === 'object' ? _billing.tokenPacks?.welcome : null;
     if (w && bal === w.qty) _setText('costKpiTokensTrend', 'free welcome pack untouched');
 
@@ -187,7 +187,7 @@ function _render() {
     if (_campaigns) for (const c of Object.values(_campaigns)) used += Number(c?.totalSent || 0);
     _setText('costPromoUsed', String(used));
     _setText('costKpiPromo', _inr(used * PROMO_RATE));
-    _setText('costKpiPromoTrend', `${used} token${used === 1 ? '' : 's'} used × ₹${PROMO_RATE}`);
+    _setText('costKpiPromoTrend', `${used} token${used === 1 ? '' : 's'} used Ã— â‚¹${PROMO_RATE}`);
 
     // --- billing configuration breakdown (read-only) ---
     const billingDiv = document.getElementById('costBillingBreakdown');
@@ -196,13 +196,15 @@ function _render() {
             billingDiv.innerHTML = `
                 <div class="mob-card mob-table-card" style="margin-top:12px;">
                     <h4 class="section-card-heading"><i data-lucide="wallet" class="icon-14"></i> Billing configuration</h4>
-                    <div style="color:#64748b;padding:8px;">Not seeded — run <code class="mono" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">tools/seed-billing-defaults.cjs</code> to initialize.</div>
+                    <div style="color:#64748b;padding:8px;">Not seeded â€” run <code class="mono" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">tools/seed-billing-defaults.cjs</code> to initialize.</div>
                 </div>`;
         } else {
             const b = _billing;
             const rates = _rates();
             const mode = _mode();
-            const modeLabel = mode === 'percentage' ? 'Percentage package (1% of order value, 2% on WhatsApp orders)' : mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
+            const modeLabel = mode === 'percentage'
+                ? 'Foodhubbie-App Orders 3% Â· WhatsApp bot 3% Â· POS + QR menu 1%'
+                : mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total) â€” legacy' : 'Per-order flat rates â€” legacy';
             const setup = b.setup || {};
             const setupStatus = setup.status || 'non_refundable';
             const tp = b.tokenPacks || {};
@@ -237,7 +239,7 @@ function _render() {
                         </div>
                         <div>
                             <div class="cost-detail-label">Promo rate</div>
-                            <div class="cost-detail-value">₹${PROMO_RATE} / token</div>
+                            <div class="cost-detail-value">â‚¹${PROMO_RATE} / token</div>
                         </div>
                     </div>
                     <div style="margin-top:14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#64748b;">Per-source rates</div>
@@ -263,7 +265,7 @@ function _render() {
                 <td>#${o.orderId || id}${excluded ? ' <span class="cost-excluded-tag">(excluded)</span>' : ''}</td>
                 <td><span class="cost-src-chip">${_label(src)}</span></td>
                 <td>${_inr(o.total)}</td>
-                <td>${fee === null ? '—' : _inr(fee)}</td>
+                <td>${fee === null ? 'â€”' : _inr(fee)}</td>
             </tr>`;
         }).join('') : '<tr><td colspan="4">No orders in this range</td></tr>';
     }

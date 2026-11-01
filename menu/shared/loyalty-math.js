@@ -17,6 +17,8 @@
  *       reduces the amount payable, never the taxable value.
  *   R9  optional minimum spend AFTER redemption: tender is capped at
  *       totalDue − minSpend.
+ *   R10 optional per-order redemption cap (Zomato-Piggybank): tender can
+ *       never exceed maxRedeemPercentOfOrder% of the order's subtotal.
  *
  * Money units: order fields are RUPEES; tender/min-spend math is PAISE
  * (integers) so redemption never loses or invents a paisa.
@@ -66,18 +68,29 @@ export function tierForPoints(points, tiers) {
 }
 
 /**
- * R2/R9 tender value in PAISE for redeeming `points` against a bill.
- * tender = min(points × pointValue, totalDue − minSpendAfterRedemption),
- * floored at 0 — a bill below the minimum spend cannot be redeemed against.
+ * R2/R9/R10 tender value in PAISE for redeeming `points` against a bill.
+ * tender = min(points × pointValue, totalDue − minSpendAfterRedemption,
+ *              subtotal × maxRedeemPercentOfOrder/100),
+ * floored at 0 — a bill below the minimum spend cannot be redeemed against,
+ * and (R10, Zomato-Piggybank style) one bill can never be tendered for more
+ * than the configured % of its own order value. The cap beats on SUBTOTAL
+ * (pre-tax order value), matching the earn base. maxRedeemPercentOfOrder is
+ * optional: 0/absent = no cap (pre-R10 behavior), so legacy callers are
+ * untouched.
  */
-export function computeTenderPaise({ points, redeemValuePaisePerPoint = 100, totalDuePaise = 0, minSpendAfterRedemptionPaise = 0 } = {}) {
+export function computeTenderPaise({ points, redeemValuePaisePerPoint = 100, totalDuePaise = 0, minSpendAfterRedemptionPaise = 0, subtotalPaise = null, maxRedeemPercentOfOrder = 0 } = {}) {
     const pts = Math.floor(Number(points) || 0);
     const val = Number(redeemValuePaisePerPoint);
     if (pts <= 0 || !Number.isFinite(val) || val <= 0) return 0;
     const due = Math.max(0, Math.round(Number(totalDuePaise) || 0));
     const minSpend = Math.max(0, Math.round(Number(minSpendAfterRedemptionPaise) || 0));
-    const room = Math.max(0, due - minSpend);
-    return Math.min(pts * Math.round(val), room);
+    let tender = Math.min(pts * Math.round(val), Math.max(0, due - minSpend));
+    const pct = Number(maxRedeemPercentOfOrder) || 0;
+    const sub = Number(subtotalPaise);
+    if (pct > 0 && Number.isFinite(sub) && sub > 0) {
+        tender = Math.min(tender, Math.floor((sub * pct) / 100));
+    }
+    return Math.max(0, tender);
 }
 
 /**
@@ -129,6 +142,12 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('loyalty-math'
         assert.strictEqual(computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 8000, minSpendAfterRedemptionPaise: 10000 }), 0, 'bill below min spend → no redemption');
         assert.strictEqual(computeTenderPaise({ points: 0, redeemValuePaisePerPoint: 100, totalDuePaise: 50000 }), 0);
         assert.strictEqual(computeTenderPaise({ points: 10, redeemValuePaisePerPoint: 0, totalDuePaise: 50000 }), 0);
+        // R10 order-value cap (Zomato-Piggybank): tender ≤ pct% of subtotal; absent/0 = disabled
+        assert.strictEqual(computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 50000, subtotalPaise: 29900, maxRedeemPercentOfOrder: 10 }), 2990, 'cap 10% of ₹299 beats the ₹50 balance');
+        assert.strictEqual(computeTenderPaise({ points: 10, redeemValuePaisePerPoint: 100, totalDuePaise: 50000, subtotalPaise: 29900, maxRedeemPercentOfOrder: 10 }), 1000, 'cap floors at the balance, never invents');
+        assert.strictEqual(computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 50000, subtotalPaise: 29900 }), 50000, 'no pct configured = uncapped');
+        assert.strictEqual(computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 50000, subtotalPaise: 29900, maxRedeemPercentOfOrder: 0 }), 50000, 'pct 0 = uncapped');
+        assert.strictEqual(computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 50000, subtotalPaise: 0, maxRedeemPercentOfOrder: 10 }), 50000, 'zero subtotal skips the cap');
         // bill-discount distribution: exact sum, proportional, largest-remainder
         const shares = distributeBillDiscountPaise(100, [500, 300, 200]);
         assert.strictEqual(shares.reduce((s, x) => s + x, 0), 10000, 'shares sum to the bill discount exactly');

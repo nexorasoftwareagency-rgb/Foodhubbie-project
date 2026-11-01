@@ -1,8 +1,11 @@
 # FoodHubbie - Pricing, Terms & Technical Implementation
 
-> **Version:** 1.0  
-> **Last Updated:** August 2026  
-> **Status:** Active
+> **Version:** 2.0  
+> **Last Updated:** 2026-11-01  
+> **Status:** Active — percentage pricing in force since 2026-11-01
+>
+> Pricing source of truth: `shared/cost-math.js` (`PERCENT_RATES`, `APP_PLAN_NAME`).
+> Recorded model: `docs/BILLING-MODEL.md`. Public copy: `website/pricing.html`.
 
 ---
 
@@ -20,49 +23,61 @@ FoodHubbie is a complete Restaurant ERP platform providing:
 
 ## 💰 Pricing Structure
 
-### Base Plan — Restaurant Operations Core
-| Model | Price | Best For |
-|-------|-------|----------|
-| **Per-Customer** | **₹1 / customer** (orders placed) | New/growing restaurants, <750 orders/mo |
-| **Fixed Monthly** | **₹750/mo** (after 3-month intro @ ₹500/mo) | Established restaurants, >750 orders/mo |
+**Percentage plan (in force 2026-11-01).** Charged on the value of each completed order. No monthly
+subscription on any channel, no per-outlet licence.
 
-**Break-even:** 750 orders/month. Restaurant chooses model at signup; can switch monthly.
+| Plan / channel | Rate | What it covers |
+|---|---|---|
+| **Foodhubbi-App Orders** | **3%** of order value | Delivery-app orders **plus every status notification sent to the customer on the app** |
+| **WhatsApp bot ordering** | **3%** of order value | Orders placed through the outlet's own WhatsApp bot |
+| **POS counter** | **1%** of order value | Walk-in / counter billing |
+| **QR menu** | **1%** of order value | Dine-in table ordering |
+| Unclassified / legacy (`other`, unknown source string) | 3% | Anything not tagged with a channel |
+| **Promotional message** | **₹1** per message | WhatsApp marketing templates to opted-in customers |
+| **Setup** | **₹500** one-time, **non-refundable**, adjusted in the first bill | Onboarding |
+| **Minimum first top-up** | **₹1,000** | Prepaid wallet |
+| **Free promo tokens** | 15 | Welcome pack |
 
-**What's Included:**
-- POS (walk-in, dine-in, takeaway)
-- QR Table Ordering (unlimited tables, QR codes)
-- Table Management (groups, splits, billing, KOT/KDS)
-- Inventory basics, tax/GST, service charges
-- Staff accounts (cashier, captain, kitchen, manager)
-- Basic analytics (sales, items, categories, lost sales)
-- Inventory tracking (stock alerts, wastage)
-- Customer database (walk-in + QR + WhatsApp)
-- Basic reports (daily, weekly, monthly, CSV/PDF)
-- Multi-language (English, Hindi, regional)
-- Multi-outlet (per outlet pricing)
+- Cancelled and refunded orders are **never** billed.
+- The wallet is **prepaid**: order usage plus manual charges are deducted from top-ups. Balance is
+  computed over the outlet's whole order history, so changing a billing mode **re-prices history** —
+  announce it before migrating a paying outlet.
+- **Superseded model:** flat ₹1–5 per order (POS ₹1 · QR ₹2 · WhatsApp ₹5) and the `commission_1pct`
+  option. Both remain readable as **legacy** modes so old rows still compute; no new outlet uses them.
+
+**Included on every channel** (no add-on modules):
+- POS (walk-in, dine-in, takeaway) and QR table ordering (unlimited tables, printed QR codes)
+- Table management: sessions, groups/splits, KOT/KDS, table requests
+- Inventory, GST/tax, service charges
+- Staff accounts and roles, attendance/shifts/leave/payroll
+- Customer database, loyalty points, discounts/combos with happy-hour windows
+- Rider dispatch, rider app, live tracking, daily settlements
+- Reports (sales, tax, customers, staff) with CSV/Excel/PDF export
+- Promotions campaigns (₹1/message) and analytics
 
 ---
 
-### Premium Plan — WhatsApp Automation Suite
-**₹1,250/month + Meta WhatsApp API rates (pass-through)**
+### WhatsApp cost model — the platform pays Meta
 
-| Component | Pricing | Notes |
-|-----------|---------|-------|
-| **WhatsApp Ordering Bot** | Included | 24/7 automated ordering via WhatsApp |
-| **Promotional Campaigns** | Meta WhatsApp API rates (pass-through) | Marketing/Utility/Authentication categories per Meta pricing |
-| **Rider Delivery App** | Included | Restaurant's own riders use app; dispatch, tracking, OTP |
-| **Promotional Campaign Manager** | Included | Templates, scheduling, targeting, ROI tracking |
-| **Advanced Analytics** | Included | Cohort, LTV, retention, lost sales, rider performance |
+Each restaurant owns **its own WhatsApp Business Account (WABA), phone number and templates**. The
+platform never adds tenant numbers to a FoodHubbie-owned WABA.
 
-**WhatsApp Message Categories & Meta Rates (India, indicative):**
-| Category | Rate/Message | Use Case |
-|----------|--------------|----------|
+**Meta's WhatsApp Business Platform usage is charged to FoodHubbie's main Facebook account**, not to
+each restaurant (decision recorded 2026-11-01). So the 1%/3% order rates and the ₹1 promo price must
+cover Meta's per-message cost. Indicative Meta rates for India (they change quarterly):
+
+| Category | Rate/message | Use case |
+|---|---|---|
 | **Utility** | ~₹0.50–0.80 | Order confirmations, status updates, OTP |
 | **Authentication** | ~₹0.50–0.80 | Login OTP, verification |
 | **Marketing** | ~₹1.50–2.50 | Promotions, offers, re-engagement |
 | **Service** | ~₹0.50 | Customer support conversations |
 
-> **Note:** Meta rates change quarterly. Restaurant pays actual Meta invoice + ₹1,250/mo platform fee. No markup.
+> **Open risk (recorded, not modelled in code):** there is no `metaCost` ledger yet, so true margin
+> per outlet is unknown. QR dine-in customers never open a 24-hour service window, so **every status
+> notification to them is a billable out-of-window utility message** — check the 1% QR rate against
+> that cost before scaling QR dine-in, and note that ₹1/marketing message may be at or below cost.
+> Full analysis: `docs/BILLING-MODEL.md`.
 
 ---
 
@@ -82,13 +97,12 @@ FoodHubbie is a complete Restaurant ERP platform providing:
 - **Term:** Month-to-month, auto-renewal
 - **Cancellation:** 30 days written notice; no refund for partial month
 - **Data Ownership:** Restaurant owns all customer, order, menu data. FoodHubbie claims no IP.
-- **Data Export:** Full CSV/JSON export anytime via Admin Dashboard; API access on Premium
+- **Data Export:** Full CSV/JSON export anytime via Admin Dashboard; API access on request
 
 ### 2. Service Level Agreement (SLA)
 | Tier | Uptime | Support Response | Support Hours |
 |------|--------|------------------|---------------|
-| Base | 99.5% | 24h (business hours) | Mon–Sat 9am–7pm IST |
-| Premium | 99.9% | 4h (business hours) + WhatsApp | Mon–Sun 9am–10pm IST |
+| All outlets (single plan) | 99.5% | 24h (business hours) | Mon–Sat 9am–7pm IST |
 
 **Exclusions:** Force majeure, Meta/WhatsApp API outages, restaurant internet/power issues.
 
@@ -100,11 +114,14 @@ FoodHubbie is a complete Restaurant ERP platform providing:
 - **GDPR/PDPB Ready:** Right to deletion, export, consent management
 
 ### 4. Payments & Billing
-- **Billing Cycle:** Monthly in advance (1st of month)
-- **Payment Methods:** UPI, Card, Net Banking, Wallet (Razorpay/Stripe)
-- **Auto-retry:** 3 attempts over 7 days; then suspension
-- **Invoices:** GST-compliant, auto-generated, emailed + dashboard
-- **Late Fee:** 2%/month after 15 days overdue
+- **Billing model:** Prepaid wallet. Order usage and manual charges are deducted from top-ups; there is no monthly invoice cycle.
+- **Minimum top-up:** ₹1,000 (first top-up is required before an outlet goes live).
+- **Setup fee:** ₹500 one-time, non-refundable, adjusted in the first bill.
+- **Low balance:** warning when the remaining balance reaches 25% of everything topped up so far.
+- **Payment methods:** UPI / bank transfer, recorded in Supreme Admin (Usage & Payments → Record payment).
+- **Invoices:** printable receipt generated from the payment record (save as PDF from the browser).
+- **Mode changes:** switching a live outlet from a legacy flat-rate mode to `percentage` recalculates usage across its **entire order history**, so the wallet balance moves on migration.
+- **Cancelled/refunded orders:** never billed.
 
 ### 5. Intellectual Property
 - FoodHubbie owns platform code, UI, algorithms
@@ -260,12 +277,13 @@ cd SupremeAdmin && npm run dev
 
 ## 🌐 Website Updates Required
 
-### 1. Pricing Page (`/pricing`)
-- [ ] Two-column comparison (Base vs Premium)
-- [ ] Toggle: Per-Customer vs Fixed Monthly
-- [ ] Break-even calculator (₹1 × orders vs ₹750)
-- [ ] Premium: WhatsApp rate estimator (orders/mo × ₹0.50–2.50)
-- [ ] FAQ accordion (data ownership, Meta rates, rider costs)
+### 1. Pricing Page (`/pricing`) — ✅ rewritten 2026-11-01
+- [x] Five rate cards: POS 1% · QR menu 1% · Foodhubbi-App Orders 3% · WhatsApp bot 3% · promo ₹1/message
+- [x] Worked months (₹2,300 / ₹2,100 / ₹7,200) and a 4-column comparison incl. aggregator at 25%
+- [x] Visible FAQ + FAQPage JSON-LD kept in sync (8 questions)
+- [x] Same rate card propagated to index, compare, best-software, pos-billing, qr-ordering,
+      whatsapp-ordering, signup, use-cases, riders, kds, inventory, table-management,
+      restaurant-analytics, multi-outlet, billing-policy
 
 ### 2. Features Page (`/features`)
 - [ ] Tabbed: Base vs Premium
@@ -313,18 +331,17 @@ cd SupremeAdmin && npm run dev
 
 ## 📞 Support & Escalation
 
-| Channel | Base | Premium |
-|---------|------|---------|
-| Email | support@foodhubbie.com | priority@foodhubbie.com |
-| WhatsApp | — | +91-XXXXX-XXXXX (business hours) |
-| Phone | — | +91-XXXXX-XXXXX (Mon–Sun 9am–10pm) |
-| Portal | Dashboard → Help | Dashboard → Help → Priority |
+| Channel | Contact |
+|---------|---------|
+| Email | support@foodhubbie.com |
+| WhatsApp | Support line (business hours) |
+| Portal | Dashboard → Help |
 
 **Escalation Matrix:**
 1. L1: Support bot + knowledge base (instant)
-2. L2: Email/Chat (Base: 24h, Premium: 4h)
-3. L3: Senior Engineer (Premium: 2h)
-4. L4: Engineering Lead + Product (Critical only)
+2. L2: Email/Chat (24h business hours)
+3. L3: Senior Engineer (critical issues)
+4. L4: Engineering Lead + Product (critical only)
 
 ---
 
@@ -333,10 +350,10 @@ cd SupremeAdmin && npm run dev
 | Metric | Target |
 |--------|--------|
 | **Activation Rate** | >60% complete onboarding in 7 days |
-| **Monthly Churn** | <3% (Base), <1.5% (Premium) |
+| **Monthly Churn** | <3% |
 | **Net Revenue Retention** | >110% |
 | **Support CSAT** | >4.5/5 |
-| **Platform Uptime** | >99.9% (Premium), >99.5% (Base) |
+| **Platform Uptime** | >99.5% |
 | **API Latency (p95)** | <200ms |
 
 ---

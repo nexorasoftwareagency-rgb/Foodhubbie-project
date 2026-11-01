@@ -10,7 +10,7 @@ Regenerate with `node tools/gen-wa-templates.cjs`.
 
 | Template | Category | Lang | Vars | Used at |
 |---|---|---|---|---|
-| `greeting_welcome` | MARKETING | en | 2 | **unwired by design** - the in-window greeting already sends an image; a static template would be a UX regression |
+| `greeting_welcome` | MARKETING | en | 2 | unwired by design — old text welcome; **see §1 below** |
 | `proactive_promo` | MARKETING | en | 1 | bot/index.js:425 + bot/promotions.js:60 - default promo shell |
 | `promo_hinglish_discount` | MARKETING | en | 1 | Admin `promoWaTemplate` select -> `campaign.waTemplateName` -> bot/promotions.js |
 | `promo_hinglish_festive` | MARKETING | en | 1 | Admin `promoWaTemplate` select -> `campaign.waTemplateName` -> bot/promotions.js |
@@ -37,7 +37,7 @@ Namaste *{{1}}* ji! 👋
 Mazedar khana, fatafat aapke darwaze tak! 🚀
 ```
 
-Used at: **unwired by design** - the in-window greeting already sends an image; a static template would be a UX regression
+Used at: unwired by design - the in-window greeting already sends an image; a static template would be a UX regression.
 
 ### `proactive_promo` - MARKETING, `en`, 1 var(s)
 
@@ -135,7 +135,7 @@ Used at: bot/index.js:1071 - delivery confirmation
 
 ```
 🏪 *WELCOME TO {{1}}!* ✨
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━
 Your counter order has been *CONFIRMED*! 🎊
 🆔 *Order ID:* #{{2}}
 👤 *Customer:* {{3}}
@@ -154,7 +154,7 @@ Used at: bot/index.js:1059 - dine-in confirmation
 🆔 *Order ID:* #{{2}}
 🤝 *Payment:* {{3}}
 💵 *Total Paid:* ₹{{4}}
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━
 *Enjoy your meal!* 😋
 {{5}} ❤️
 ```
@@ -207,11 +207,44 @@ The three OTP-bearing UTILITY templates (`out_for_delivery_v3`, `rider_reached`,
 as INCORRECT_CATEGORY and stay plain text: Meta rejects OTP-bearing templates, so the OTP message is sent as
 free-form text inside the 24h window instead.
 
+## §1 — Greeting / Welcome (User Clarification 2026-11-01 — text + language, NOT button, NOT Marketing)
+
+Clarification (updated): The user wants the original greeting text/language preserved — "Namaste {{1}} ji! 👋 ✨ {{2}} mein aapka swagat hai! 🍕 Mazedar khana, fatafat aapke darwaze tak! 🚀" — with variables {{1}} (store name) and {{2}} (welcome phrase), submitted as UTILITY, not Marketing. No button, no promo language.
+
+Previous greeting_welcome (MARKETING, 2 vars) stays unwired; do not send as marketing. Submit new greeting_welcome_utility (UTILITY, en) with same body text.
+
+Draft (new submission — do NOT edit old greeting_welcome; submit fresh greeting_welcome_utility):
+
+```
+Template name: greeting_welcome_utility (UTILITY, en)
+Category: UTILITY (pure welcome / transactional — zero promo language)
+Variables: {{1}} = restaurant/store name, {{2}} = welcome phrase (e.g. "Roshani Pizza")
+Body (verbatim, original text — confirmed safe):
+  "Namaste *{{1}}* ji! 👋
+  ════════════════════════
+  ✨ *{{2}} mein aapka swagat hai!* 🍕
+  ════════════════════════
+  Mazedar khana, fatafat aapke darwaze tak! 🚀"
+```
+
+Why this is NOT Marketing (defense if Meta reviews):
+- Contains: greeting, welcome, store identity — all transactional / relationship.
+- Contains zero: discount codes, limited-time words, "offer", "sale", "win", "free", urgency, promotional imagery.
+- Contains only: food emoji (🍕), decorative line (════════), and welcome phrase.
+- Per docs/BILLING-MODEL.md: service/utility message, charged at ₹0.1357 delivered + 18% GST.
+- The {{2}} variable lets the admin customize the welcome phrase per restaurant without changing category.
+- If Meta rejects as marketing, fix is remove decorative lines (not the language) — text itself is non-promotional by design.
+
+Cost: ₹0.1357 / delivered greeting (utility). Per session, not per message. Inside 24h window: if customer initiates, reply is service (free first 1,000/mo); if bot initiates greeting outside window = utility (charged). With ES v4, greeting is sent inside the session window (customer just started chat), so it falls under service/free tier when possible — but template stays UTILITY-classified regardless.
+
+Integration (Foodhubbie): bot/index.js sends greeting via sendOrderFlow(..., withMenu=false) — uses image + welcome text currently (plainWelcome removed per 2026-10-18). When greeting_welcome_utility approved, swap to sendTemplate with {{1}} = storeName, {{2}} = welcomePhrase from DB (businesses/{bid}/outlets/{oid}/settings/storeName or default from catalog). No button needed unless the restaurant opts into greeting_order_link later.
+
+Action: Submit new greeting_welcome_utility UTILITY template via Meta Business Suite / App Dashboard -> Templates -> Create. Old greeting_welcome (MARKETING) stays unwired; do not reuse.
+
+
 ## Gotchas
 
 - Vars must not sit at the start or end of a body (Graph `100/2388299`) - guard with static lines/emoji.
 - Same-name create is blocked (`100/2388024`); edit an existing template with `POST /{template-id}` sending `components` only (`PUT` unsupported).
 - Hinglish shells use `language: en` (romanized Latin; `hi` means Devanagari) and carry a single `{{1}}`, so `bot/transport.js` `sendTemplate` maps `body` -> `{{1}}` unchanged.
 - Promos are hard-blocked on Baileys transport, so these MARKETING shells only deliver once an outlet flips to `meta`.
-
-

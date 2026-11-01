@@ -1,0 +1,79 @@
+﻿- main [ref=e241]:
+  - generic [ref=e242]:
+    - generic "Toggle Sidebar Navigation View" [ref=e243]
+    - generic [ref=e246]:
+      - heading "Orders" [level=2] [ref=e526]
+      - generic [ref=e248]: Foodhubbie
+    - generic [ref=e249]:
+      - 'generic "Firebase: Connected" [ref=e250]'
+      - generic "Signed-in role and name" [ref=e251]: Admin â€” Super Admin
+      - text: Foodhubbiepizza@gmail.com
+      - button "Logout" [ref=e252] [cursor=pointer]
+      - button "How to use this page" [ref=e253] [cursor=pointer]
+  - generic [ref=e531]:
+    - generic [ref=e532]:
+      - heading "Order History" [level=3] [ref=e533]
+      - generic [ref=e534]:
+        - textbox "Filter orders from date" [ref=e535]: 2026-10-17
+        - textbox "Filter orders to date" [ref=e536]: 2026-10-18
+        - textbox "Search orders" [ref=e538]:
+          - /placeholder: Search ID or name
+    - table [ref=e540]:
+      - rowgroup [ref=e541]:
+        - row [ref=e542]:
+          - columnheader "Order ID" [ref=e543]
+          - columnheader "Customer" [ref=e544]
+          - columnheader "Address" [ref=e545]
+          - columnheader "Total" [ref=e546]
+          - columnheader "Payment" [ref=e547]
+          - columnheader "Status" [ref=e548]
+          - columnheader "Actions" [ref=e549]
+      - rowgroup [ref=e550]:
+        - row [ref=e551]:
+          - cell "#06-171026-1 10/17/2026" [ref=e552]:
+            - generic [ref=e559]:
+              - generic [ref=e560]: "#06-171026-1"
+              - generic [ref=e561]: 10/17/2026
+          - cell "E2E Tester Guest" [ref=e562]:
+            - generic [ref=e563]:
+              - generic [ref=e564]: E2E Tester
+              - generic [ref=e565]: Guest
+          - cell "Dine-in" [ref=e567]
+          - cell "â‚¹152.74" [ref=e570]
+          - cell "Cash" [ref=e571]
+          - cell "Served" [ref=e576]
+          - cell "Served Paid Print Receipt" [ref=e578]:
+            - generic [ref=e579]:
+              - generic [ref=e580]: Served
+              - generic [ref=e581]: Paid
+              - button "Print Receipt" [ref=e585] [cursor=pointer]
+      - generic [ref=e590]: All 1 orders loaded
+  - text: â–²
+  - option "Choose Category..." [selected]
+  - generic:
+    - generic:
+      - generic:
+        - heading "Table â€”" [level=3]
+        - generic:
+          - generic: â€”
+          - generic: â€”
+      - button "Close table details"
+    - generic:
+      - generic:
+        - generic:
+          - generic: Capacity
+          - strong: â€”
+        - generic:
+          - generic: Session Started
+          - strong: â€”
+        - generic:
+          - generic: Running Time
+          - strong: â€”
+      - generic:
+        - heading "Table QR Code" [level=5]
+        - paragraph: Customers scan this code to order from this table. Use "View QR" above to print or copy the link.
+  - option "Each" [selected]
+  - option "Grams (g)"
+  - option "Kilograms (kg)"
+  - option "Milliliters (ml)"
+  - option "Liters (l)"

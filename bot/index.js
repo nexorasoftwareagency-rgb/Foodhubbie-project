@@ -1138,6 +1138,12 @@ async function _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBa
         itemCount: order.itemCount || Object.keys(order.items || {}).length
     });
 
+    // Tier-up news through the in-app channel (silver/gold only — a bronze
+    // regression pushes nothing). Fire-and-forget: must never delay the accrual.
+    if (newTier !== currentTier && phone) {
+        notifyTierUp(phone, newTier, currentTier, outlet, bid).catch(() => {});
+    }
+
     return pointsEarned;
 }
 
@@ -1409,6 +1415,54 @@ async function notifyCustomerApp(orderId, order, status) {
         }));
     } catch (e) {
         console.error('[FCM] notifyCustomerApp error:', e.message);
+    }
+}
+
+// Tier-up push: when an earn promotes a customer to silver/gold, drop a
+// pushInbox entry + FCM multicast through the SAME channel notifyCustomerApp
+// uses (in-app by design — tier news is marketing-adjacent, never WhatsApp).
+// Best-effort only — a failed push must never break the accrual.
+async function notifyTierUp(phone, newTier, oldTier, outlet, bid) {
+    try {
+        const label = newTier === 'gold' ? 'Gold' : newTier === 'silver' ? 'Silver' : '';
+        if (!label || !/^[6-9]\d{9}$/.test(String(phone))) return;
+        const subsSnap = await db.ref(resolvePath('pushSubscriptions', outlet)).once('value').catch(() => null);
+        const subs = subsSnap ? (subsSnap.val() || {}) : {};
+        const entries = Object.entries(subs).filter(([, sub]) => sub && sub.token && String(sub.phone || '') === phone);
+        if (entries.length === 0) return;
+
+        const title = `🎉 You're now ${label}`;
+        const body = `Loyalty tier reached: ${label} earns ${(newTier === 'gold') ? '1.5×' : '1.25×'} points on every order from now on.`;
+        const url = `${WEBVIEW_DELIVERY_HOST}/${outlet}/delivery.html?b=${bid}&o=${outlet}&tab=account`;
+        const inboxRef = db.ref(resolvePath(`pushInbox/${phone}/tier_${newTier}_${Date.now()}`, outlet));
+        await inboxRef.set({
+            title,
+            body,
+            type: 'loyalty',
+            status: newTier,
+            sentAt: Date.now(),
+            url
+        }).catch(e => console.error('[FCM] Tier-up inbox write failed:', e.message));
+
+        await prunePushInbox(db.ref(resolvePath(`pushInbox/${phone}`, outlet)));
+
+        const response = await admin.messaging().sendEachForMulticast({
+            tokens: entries.map(([, sub]) => sub.token),
+            data: { title, body, type: 'loyalty', tier: newTier, url, outlet, business: bid },
+            android: { priority: 'high' },
+            webpush: { fcmOptions: { link: url } }
+        });
+        // Same dead-token hygiene as order pushes.
+        await Promise.all(response.responses.map(async (r, i) => {
+            if (r.success) return;
+            const code = r.error?.code || '';
+            if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token') {
+                await db.ref(resolvePath(`pushSubscriptions/${entries[i][0]}`, outlet)).remove().catch(() => {});
+            }
+        }));
+        console.log(`[LOYALTY] Tier-up push ${oldTier || 'bronze'} → ${newTier} for ${phone}`);
+    } catch (e) {
+        console.error('[FCM] notifyTierUp error:', e.message);
     }
 }
 
@@ -1856,11 +1910,17 @@ async function verifyRewardTender(orderId, order, OUTLET) {
             return;
         }
         const total = Number(order.total) || 0;
+        // R10 cap base: the order's own pre-tax value (subtotal − discount,
+        // legacy fallback total) — one bill can never be tendered for more
+        // than maxRedeemPercentOfOrder% of itself.
+        const capBaseRs = loyaltyMath.computeEarnBase(order);
         const tenderPaise = loyaltyMath.computeTenderPaise({
             points: Number(reward.cost) || 0,
             redeemValuePaisePerPoint: config.redeemValuePaisePerPoint,
             totalDuePaise: Math.round(total * 100),
-            minSpendAfterRedemptionPaise: Math.round((Number(config.minSpendAfterRedemption) || 0) * 100)
+            minSpendAfterRedemptionPaise: Math.round((Number(config.minSpendAfterRedemption) || 0) * 100),
+            subtotalPaise: Math.round(capBaseRs * 100),
+            maxRedeemPercentOfOrder: Number(config.maxRedeemPercentOfOrder) || 0
         });
         if (tenderPaise <= 0) {
             console.warn(`[LoyaltyTender] ${orderId}: tender computes to ₹0 (bill ₹${total} vs minSpend ₹${config.minSpendAfterRedemption || 0}) — code left active.`);

@@ -17,7 +17,7 @@ import { computeOrderTotals } from '../../shared/money-math.js';
 import { validateCoupon } from './discount.js';
 import { placeDeliveryOrder } from './delivery-order.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
-import { initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab, validateRewardCode, redeemValuePaisePerPoint, minSpendAfterRedemptionRs } from './customer.js';
+import { initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab, validateRewardCode, redeemValuePaisePerPoint, minSpendAfterRedemptionRs, maxRedeemPercentOfOrder } from './customer.js';
 
 const M = {
     categories: [], dishes: [], combos: [],
@@ -624,6 +624,9 @@ function _tenderFor(points) {
         redeemValuePaisePerPoint: redeemValuePaisePerPoint(),
         totalDuePaise: Math.round(_currentTotalRs() * 100),
         minSpendAfterRedemptionPaise: Math.round(minSpendAfterRedemptionRs() * 100),
+        // R10: same cap basis the bot enforces server-side (subtotal − discount).
+        subtotalPaise: Math.round(Math.max(0, cartSubtotal() - (M.appliedDiscount && M.appliedDiscount.amount > 0 ? M.appliedDiscount.amount : 0)) * 100),
+        maxRedeemPercentOfOrder: maxRedeemPercentOfOrder(),
     });
     return round2(paise / 100);
 }

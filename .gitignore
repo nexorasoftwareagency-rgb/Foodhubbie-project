@@ -129,6 +129,22 @@ tools/run-popup.js
 tools/ssm-*.txt
 tools/ssm-*.json
 tools/ssm-*.ps1
+
+# One-off fix scripts — ad-hoc, never commit (delivery/combo/pill fixes live here)
+tools/fixes/
+
+# Scraper scripts — ad-hoc data collection, never commit
+tools/scrapers/
+
+# Site-modification tools — out-of-band HTML rewrites, never commit
+tools/site-tools/
+
+# Inspection scripts — read-only probes, never commit
+tools/inspection/
+
+# Scraper output data — regenerable, never commit
+poland-restaurants.csv
+poland-restaurants.json
 .pw-profile/
 
 # Stray empty file
