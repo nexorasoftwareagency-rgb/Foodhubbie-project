@@ -1,4 +1,4 @@
-import { Outlet, get } from '../firebase.js';
+import { Outlet, get, remove } from '../firebase.js';
 import { escapeHtml, showToast } from '../utils.js';
 import { logger } from '../utils/logger.js';
 import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
@@ -68,13 +68,33 @@ function _renderCustomerTable() {
                     </div>
                 </div>
             </td>
-            <td>${waLink}</td>
+            <td>${waLink}${phone.length === 10 ? `<div><button type="button" class="mob-reset-lock" data-reset-lock="${escapeHtml(phone)}" title="Use when the customer lost or changed their phone: the next phone to open the app with this number becomes the owner.">Reset phone lock</button></div>` : ''}</td>
             <td><span class="mob-addr-text" title="${escapeHtml(addrFull)}">${escapeHtml(addr)}</span>${mapLink}</td>
             <td class="mob-th-center"><span class="mob-order-count">${c.orderCount || 0}</span><div class="mob-td-sub">purchases</div></td>
             <td class="mob-th-center"><span style="color:${tierColor};font-weight:700;text-transform:uppercase;font-size:11px;">${tierLabel}</span><div class="mob-td-sub">${fmtMoney(c.loyaltyPoints || 0)} pts</div></td>
             <td class="mob-th-right"><span class="mob-td-total">${fmtMoney(c.ltv || 0)}</span></td>
         </tr>`;
     }).join('');
+
+    if (!tbody.dataset.lockWired) {
+        tbody.dataset.lockWired = '1';
+        tbody.addEventListener('click', async (e) => {
+            const btn = e.target.closest('[data-reset-lock]');
+            if (!btn) return;
+            const ph = btn.dataset.resetLock;
+            if (!window.confirm(`Reset the phone lock for ${ph}?\n\nThe customer's phone(s) will be forgotten. The NEXT phone that opens the app with this number becomes the owner, so only do this when the customer asks (lost or new phone).`)) return;
+            btn.disabled = true;
+            try {
+                await remove(Outlet.ref(`customers/${ph}/devices`));
+                await remove(Outlet.ref(`customers/${ph}/link`));
+                showToast('Phone lock reset. Ask the customer to open the app now.', 'success');
+            } catch (err) {
+                logger.warn('CUSTOMERS', 'reset lock failed', err);
+                showToast('Could not reset the lock.', 'error');
+            }
+            btn.disabled = false;
+        });
+    }
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }

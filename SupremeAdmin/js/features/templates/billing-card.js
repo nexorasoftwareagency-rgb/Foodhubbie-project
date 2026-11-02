@@ -38,7 +38,7 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
     ${header}
     <div class="collapsible-body${collapsed ? ' collapsed' : ''}" id="billing-body">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">
-        <div class="detail-cell"><div class="detail-label">Pricing mode</div><div class="detail-value">${mode === 'percentage' ? 'Percentage package (1% / 2% WhatsApp)' : mode === 'commission_1pct' ? '1% of sales' : 'Per order'}</div></div>
+        <div class="detail-cell"><div class="detail-label">Pricing mode</div><div class="detail-value">${mode === 'percentage' ? 'Foodhubbie package (1% QR/POS · 3% App orders)' : mode === 'commission_1pct' ? '1% of sales' : 'Per order'}</div></div>
         <div class="detail-cell"><div class="detail-label">Setup fee</div><div class="detail-value">₹${b.setup?.amount ?? 500} · ${escapeHtml(String(b.setup?.status || '—'))}</div></div>
         <div class="detail-cell"><div class="detail-label">Promo token balance</div><div class="detail-value mono">${bal}</div></div>
       </div>
@@ -57,7 +57,7 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
         </button>`}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
-        ${[['per_order', 'Flat per-order'], ['percentage', 'Percentage package (1% / 2% WhatsApp)'], ['commission_1pct', 'WhatsApp 1% only']]
+        ${[['per_order', 'Flat per-order'], ['percentage', 'Foodhubbie package (1% QR/POS · 3% App orders)'], ['commission_1pct', 'WhatsApp 1% only']]
           .filter(([m]) => m !== mode)
           .map(([m, label]) => `<button class="btn btn-ghost btn-sm" data-action="billing-set-mode" data-mode="${m}" ${ro} title="${roTitle}">Switch to ${label}</button>`).join('\n        ')}
         <select id="billingSetupStatus" class="text-input" style="width:auto" data-billing-draft="setup" ${ro}>

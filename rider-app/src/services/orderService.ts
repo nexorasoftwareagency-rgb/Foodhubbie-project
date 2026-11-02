@@ -141,7 +141,8 @@ export function subscribeAvailableOrders(
   const emit = () => {
     cleanupCache(); // Run cleanup on each emit
     const list: AvailableOrder[] = Object.values(cache)
-      .filter((entry) => entry.data.status === "Ready" && !entry.data.assignedRider && !isGhostOrder(entry.data.createdAt, false))
+      // Pickup orders (restaurant app, collected at the counter) are never delivery jobs.
+      .filter((entry) => entry.data.status === "Ready" && !entry.data.assignedRider && (entry.data as { type?: string }).type !== "Pickup" && !isGhostOrder(entry.data.createdAt, false))
       .map((entry) => ({
         id: entry.data.id,
         outlet: entry.data.outlet,

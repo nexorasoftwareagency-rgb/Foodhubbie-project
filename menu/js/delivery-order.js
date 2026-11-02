@@ -115,6 +115,10 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         outlet: OUTLET,
         type: 'Online',
         source: 'webview_delivery',   // bot finalization hook keys on this; src=wa/qr is UI-only
+        // Orders placed in the restaurant's own app (anonymous token minted at checkout, no bot link) are
+        // the billable "Foodhubbie-App Orders" channel (3% in the percentage package). Bot/WhatsApp-issued
+        // tokens stay un-tagged. Read by shared/cost-math.js billingSourceOf().
+        channel: String(webviewToken || '').startsWith('anon') ? 'app' : null,
         webviewToken: webviewToken || null,
         sessionId: sessionId || null,
         botPhone: botPhone || null,

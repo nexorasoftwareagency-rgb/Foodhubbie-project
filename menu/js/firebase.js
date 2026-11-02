@@ -102,4 +102,15 @@ export async function mintAnonWebviewToken() {
     return token;
 }
 
+// Anonymous sign-in for the restaurant app's own orders. The orders rule for
+// source 'APP' requires an anonymous-auth caller and appUid == auth.uid, so a
+// stray unauthenticated script cannot create orders. No customer login is
+// involved (the phone number remains the customer's identifier).
+export async function ensureAnonAuth() {
+    const auth = getAuth(app);
+    if (auth.currentUser) return auth.currentUser;
+    const cred = await signInAnonymously(auth);
+    return cred.user;
+}
+
 export { ref, get, onValue, set, push, update, runTransaction };

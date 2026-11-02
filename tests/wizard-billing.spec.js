@@ -118,7 +118,7 @@ test.describe('wizard billing regression', () => {
 
       // The regression itself: stale monthly-plan model had none of this.
       expect(billing.monthlyRate).toBeUndefined();
-      expect(billing.mode).toBe('per_order');
+      expect(billing.mode).toBe('percentage'); // new restaurants start on the Foodhubbie package
       expect(billing.rates).toEqual(EXPECTED_RATES);
       expect(billing.setup).toMatchObject({ amount: 500, status: 'non_refundable' });
       expect(billing.tokens && billing.tokens.balance).toBe(15);

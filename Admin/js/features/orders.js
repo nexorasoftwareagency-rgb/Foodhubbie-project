@@ -38,6 +38,8 @@ function isRiderFresh(r) {
 export const STATUS_SEQUENCES = {
     'Online': ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Delivered"],
     'Dine-in': ["Placed", "Confirmed", "Ready", "Served"],
+    // Restaurant-app pickup: no rider. "Served" = handed over to the customer (payment collected then).
+    'Pickup': ["Placed", "Confirmed", "Ready", "Served"],
     'Default': ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Delivered"]
 };
 const LIVE_STATUSES = ["Placed", "Confirmed", "Ready", "Pending", "New", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Dispatched"];
@@ -606,7 +608,7 @@ export async function renderOrders(snap) {
                 <td data-label="Rider">
                     <div class="flex-row flex-center flex-gap-8">
                         <i data-lucide="bike" style="width:14px;" class="text-muted"></i>
-                        <select data-action="assignRider" data-id="${id}" class="status-select-mini" aria-label="Assign rider" ${o.type === 'Dine-in' ? 'disabled' : ''}>
+                        <select data-action="assignRider" data-id="${id}" class="status-select-mini" aria-label="Assign rider" ${(o.type === 'Dine-in' || o.type === 'Pickup') ? 'disabled' : ''}>
                             <option value="">Assign</option>
                             ${riderOptions}
                         </select>
@@ -660,7 +662,7 @@ export async function renderOrders(snap) {
                     <span class="status ${safeStatusClass}">${safeStatus}</span>
                 </td>
                 <td data-label="Rider">
-                    <select data-action="assignRider" data-id="${id}" class="status-select-mini" ${o.type === 'Dine-in' ? 'disabled' : ''}>
+                    <select data-action="assignRider" data-id="${id}" class="status-select-mini" ${(o.type === 'Dine-in' || o.type === 'Pickup') ? 'disabled' : ''}>
                         <option value="">Assign</option>
                         ${riderOptions}
                     </select>
@@ -1054,7 +1056,20 @@ export async function updateStatus(id, status) {
     let paymentMethod = order.paymentMethod || "Cash";
     let paymentStatus = order.paymentStatus || "Pending";
 
-    if (status === "Delivered") {
+    if (type === 'Pickup' && status === 'Served') {
+        // Pickup handover: collect payment now (cash / UPI / card at the counter).
+        let method = order.paymentMethod;
+        if (!method) {
+            const picked = await showPaymentPicker(order.total);
+            if (!picked) {
+                renderOrders(state.lastOrdersSnap);
+                return; // Cancelled payment selection
+            }
+            method = picked;
+        }
+        paymentMethod = method;
+        paymentStatus = "Paid";
+    } else if (status === "Delivered") {
         let method = order.paymentMethod || "Cash";
         // For non-POS orders without a preset method, ask the admin/rider
         if (order.tableNo && !order.paymentMethod) {

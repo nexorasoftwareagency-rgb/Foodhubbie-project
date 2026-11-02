@@ -1,9 +1,9 @@
 /**
  * FoodHubbie ERP | COST MATH (pure — no imports, runnable in node or browser)
  *
- * PRICING (decided 2026-11-01 — percentage of order value, no flat per-order fees):
- *   "Foodhubbie-App Orders"  3%  — delivery app orders + every status notification sent on the app
- *   WhatsApp bot ordering   3%
+ * PRICING (final, 2026-11-02 — percentage of order value, no flat per-order fees):
+ *   WhatsApp-based orders   3%  — bot ordering + WhatsApp delivery links
+ *   Customer App orders     2%  — source 'APP' / channel 'app'
  *   POS counter + QR menu   1%
  *   Unclassified / legacy   3%  (`other`, and any unknown source string)
  *   Promo (marketing) message = ₹1 · cancelled/refunded orders never bill
@@ -26,12 +26,13 @@ export const LOW_BALANCE_RATIO = 0.25;
 
 // Billing modes (outlet billing.mode): 'percentage' (default — share of order value per channel),
 // 'per_order' (legacy flat ₹ rates) and 'commission_1pct' (legacy: 1% on WhatsApp delivery only).
-export const PERCENT_RATES = { QR: 0.01, POS: 0.01, webview_delivery: 0.03, WA: 0.03, other: 0.03, default: 0.03 };
+// FINAL rates (owner, 2026-11-02): WhatsApp-based 3% · Customer App 2% · QR/POS 1% · unknown 3%.
+export const PERCENT_RATES = { QR: 0.01, POS: 0.01, app: 0.02, webview_delivery: 0.03, WA: 0.03, other: 0.03, default: 0.03 };
 export const APP_PLAN_NAME = 'Foodhubbie-App Orders';
 // Meta-cost planning slots (S2 / S1 track — not a billing behavior).
 // Meta charges per Message (utility / marketing / auth / service) and has a
 // 1,000 / month / phone-number free tier for service messages (reset monthly,
-// does not roll over; per WABA — NOT per business). Per BILLING-MODEL.md Â§4.
+// does not roll over; per WABA — NOT per business). Per BILLING-MODEL.md §4.
 // These fields are placeholders for the cost-ledger to track — they do NOT
 // change restaurant-facing pricing (percentage plan stays). See docs/BILLING-MODEL.md.
 export const META_COST_PLANNING = { tierCandidate: 'TechProvider', serviceFreeTierPerMonth: 1000, serviceFreeResetsMonthly: true, metaCurrency: 'INR' };
@@ -113,8 +114,17 @@ export function sourceOf(order) {
     return (order.type === 'Dine-in' || order.type === 'Walk-in') ? 'POS' : 'other';
 }
 
+/** Source used for billing: in the percentage package, orders placed in the restaurant's own app
+ *  (source 'APP', written by menu/js/app-checkout.js; or channel 'app' on the older delivery-page path)
+ *  are their own channel and bill at the Customer App rate (2%). Other modes keep the original source,
+ *  so legacy flat-rate restaurants are not re-priced. */
+export function billingSourceOf(order, mode = 'per_order') {
+    if (mode === 'percentage' && order && (order.channel === 'app' || String(order.source || '').toUpperCase() === 'APP')) return 'app';
+    return sourceOf(order);
+}
+
 export function feeOf(order, rates = DEFAULT_RATES, mode = 'percentage') {
-    const src = sourceOf(order);
+    const src = billingSourceOf(order, mode);
     if (mode === 'percentage') {
         return Math.round((Number(order.total) || 0) * percentOf(src) * 100) / 100;
     }
@@ -129,7 +139,7 @@ export function computeCostIndex(orders, rates = DEFAULT_RATES, mode = 'percenta
     let total = 0, count = 0;
     for (const o of Object.values(orders || {})) {
         if (!o || EXCLUDED.has(o.status)) continue;
-        const src = sourceOf(o);
+        const src = billingSourceOf(o, mode);
         const fee = feeOf(o, rates, mode);
         const b = bySource[src] || (bySource[src] = { orders: 0, cost: 0 });
         b.orders += 1; b.cost += fee;
@@ -144,8 +154,9 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     const o = (total, source, status) => ({ total, source, status: status || 'Delivered' });
 
     // --- current pricing (percentage is the default mode) ---
-    assert.equal(percentOf('webview_delivery'), 0.03, 'Foodhubbie-App Orders 3%');
+    assert.equal(percentOf('webview_delivery'), 0.03, 'WhatsApp delivery links 3%');
     assert.equal(percentOf('WA'), 0.03, 'WhatsApp bot ordering 3%');
+    assert.equal(percentOf('app'), 0.02, 'Customer App orders 2%');
     assert.equal(percentOf('QR'), 0.01, 'QR menu 1%');
     assert.equal(percentOf('POS'), 0.01, 'POS counter 1%');
     assert.equal(percentOf('other'), 0.03, 'unclassified 3%');
@@ -153,8 +164,8 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     assert.equal(APP_PLAN_NAME, 'Foodhubbie-App Orders');
     const pk = computeCostIndex({ a: o(1000, 'QR'), b: o(500, 'POS'), c: o(1000, 'webview_delivery'), d: o(200, 'WA'), e: o(100, 'other'), f: o(9999, 'QR', 'Cancelled'), g: o(9999, 'QR', 'Refunded') });
     assert.equal(pk.count, 5, 'cancelled + refunded excluded');
-    assert.equal(pk.total, 10 + 5 + 30 + 6 + 3, '1% QR/POS + 3% app/WhatsApp/other');
-    assert.equal(pk.bySource.webview_delivery.cost, 30, 'app order ₹1000 → ₹30');
+    assert.equal(pk.total, 10 + 5 + 30 + 6 + 3, '1% QR/POS + 3% WhatsApp/other');
+    assert.equal(pk.bySource.webview_delivery.cost, 30, 'WhatsApp delivery ₹1000 → ₹30');
     assert.equal(feeOf({ total: 333.33, source: 'QR' }), 3.33, 'rounded to paise');
     assert.equal(sourceOf({ source: 'wa' }), 'WA', 'lowercase wa canonicalised (2 live orders)');
     assert.equal(sourceOf({ source: 'WEBVIEW_DELIVERY' }), 'webview_delivery', 'case-insensitive source');
@@ -165,6 +176,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     assert.equal(normalizeMode('per_order'), 'per_order', 'legacy mode still selectable');
     assert.equal(normalizeMode('commission_1pct'), 'commission_1pct');
     assert.equal(rateLabel('webview_delivery'), '3% of order');
+    assert.equal(rateLabel('app'), '2% of order');
     assert.equal(rateLabel('QR'), '1% of order');
     assert.equal(PROMO_RATE, 1, 'promo ₹1/token');
 
@@ -187,8 +199,22 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     assert.equal(w.balance, 1287, 'paid - used - charges'); assert.equal(w.topUpDone, true);
     assert.equal(computeWallet({ billing: { payments: { a: { amount: 999 } } } }).topUpDone, false, 'below minimum');
     assert.equal(computeWallet({}).balance, 0, 'empty is zero');
-    const wp = computeWallet({ billing: { payments: { a: { amount: 1000 } } }, orders: { a: o(1000, 'webview_delivery') } });
-    assert.equal(wp.used, 30, 'wallet defaults to the 3% app-orders rate');
+    // percentage package: 1% QR/POS, 3% WhatsApp, 2% Customer App; cancelled still excluded
+    const pkPct = computeCostIndex({ a: o(1000, 'QR'), b: o(500, 'POS'), c: o(1000, 'webview_delivery'), d: o(200, 'WA'), e: o(100, 'other'), f: o(9999, 'QR', 'Cancelled') }, DEFAULT_RATES, 'percentage');
+    assert.equal(pkPct.total, 10 + 5 + 30 + 6 + 3, '1% QR/POS + 3% WhatsApp/other');
+    assert.equal(feeOf({ total: 333.33, source: 'QR' }, DEFAULT_RATES, 'percentage'), 3.33, 'rounded to paise');
+    assert.equal(normalizeMode('percentage'), 'percentage'); assert.equal(normalizeMode('junk'), 'percentage'); assert.equal(normalizeMode('commission_1pct'), 'commission_1pct');
+    assert.equal(rateLabel('webview_delivery', 'percentage'), '3% of order'); assert.equal(rateLabel('QR', 'percentage'), '1% of order'); assert.equal(rateLabel('QR', 'per_order'), '\u20B92/order');
+    // Customer App: 2%, only in the percentage package; flat/legacy modes unchanged
+    const ap = computeCostIndex({ a: { total: 1000, source: 'webview_delivery', channel: 'app', status: 'Delivered' }, b: o(1000, 'QR') }, DEFAULT_RATES, 'percentage');
+    assert.equal(ap.total, 20 + 10, '2% app order + 1% QR'); assert.equal(ap.bySource.app.cost, 20);
+    assert.equal(feeOf({ total: 1000, source: 'webview_delivery', channel: 'app' }, DEFAULT_RATES, 'per_order'), 5, 'flat mode not re-priced');
+    assert.equal(rateLabel('app', 'percentage'), '2% of order');
+    assert.equal(feeOf({ total: 500, source: 'APP', type: 'Pickup' }, DEFAULT_RATES, 'percentage'), 10, 'source APP (delivery or pickup) = 2%');
+    assert.equal(feeOf({ total: 500, source: 'app' }, DEFAULT_RATES, 'percentage'), 10, 'lowercase source app = 2%');
+    assert.equal(feeOf({ total: 500, source: 'APP' }, DEFAULT_RATES, 'per_order'), 5, 'flat mode: app orders use the legacy webview rate');
+    const wp = computeWallet({ billing: { mode: 'percentage', payments: { a: { amount: 1000 } } }, orders: { a: o(1000, 'webview_delivery'), b: { total: 1000, source: 'APP', status: 'Delivered' } } });
+    assert.equal(wp.used, 50, 'wallet: 3% WhatsApp + 2% Customer App');
     // low balance: <= 25% of everything topped up
     assert.equal(walletLevel({ paid: 0 }), 'none'); assert.equal(walletLevel({ paid: 1000, used: 500 }), 'ok');
     assert.equal(walletLevel({ paid: 1000, used: 750 }), 'low', 'exactly 25% left'); assert.equal(walletLevel({ paid: 1000, used: 749 }), 'ok');

@@ -1058,3 +1058,61 @@ body.onb-open{ overflow:hidden; }
 .reward-btn:active{ transform:scale(.96); }
 .reward-btn:disabled{ opacity:.5; cursor:not-allowed; background:var(--border); color:var(--text-sub); }
 
+
+/* ===== Direct mode: sign-in + order chooser ===== */
+.signin-card { max-width: 420px; margin: 0 auto; padding: 56px 22px 32px; display: flex; flex-direction: column; gap: 8px; }
+.signin-brand { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--primary, #E84908); }
+.signin-title { font-size: 26px; line-height: 1.2; margin: 4px 0 0; font-weight: 800; }
+.signin-sub { margin: 0 0 14px; color: #64748b; font-size: 14px; }
+.signin-label { font-size: 13px; font-weight: 700; margin-top: 8px; }
+.signin-opt { font-weight: 500; color: #94a3b8; }
+.signin-input { width: 100%; padding: 14px; font-size: 16px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.signin-input:focus { outline: 2px solid var(--primary, #E84908); border-color: transparent; }
+.signin-error { color: #b91c1c; font-size: 13px; margin-top: 6px; }
+.signin-btn { display: block; text-align: center; margin-top: 18px; padding: 15px; border: 0; border-radius: 12px; background: var(--primary, #E84908); color: #fff; font-size: 16px; font-weight: 800; text-decoration: none; cursor: pointer; }
+.signin-btn:disabled { opacity: .6; }
+.co-wrap { max-width: 520px; margin: 0 auto; padding: 14px 16px 90px; }
+.co-switch { display: flex; gap: 8px; margin-bottom: 12px; }
+.co-switch-btn { flex: 1; padding: 11px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; font-weight: 800; font-size: 14px; cursor: pointer; }
+.co-switch-btn.active { background: var(--primary, #E84908); color: #fff; border-color: transparent; }
+.co-locate { width: 100%; padding: 12px; border: 1px dashed var(--primary, #E84908); border-radius: 12px; background: #fff7f3; color: var(--primary, #E84908); font-weight: 800; font-size: 14px; cursor: pointer; }
+.co-loc-status { margin: 8px 0 12px; font-size: 12.5px; color: #64748b; }
+.co-error { color: #b91c1c !important; }
+.co-pay-note { margin: 10px 0 4px; font-size: 12.5px; color: #64748b; }
+/* ===== Orders / Payments switch + payment rows ===== */
+.orders-switch { display: flex; gap: 8px; padding: 12px 16px 0; }
+.orders-switch-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+.orders-switch-btn.active { background: var(--primary, #E84908); color: #fff; border-color: transparent; }
+.pay-list { display: flex; flex-direction: column; gap: 8px; }
+.pay-row { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; }
+.pay-row summary { display: flex; justify-content: space-between; gap: 10px; cursor: pointer; list-style: none; }
+.pay-row summary::-webkit-details-marker { display: none; }
+.pay-main, .pay-amt { display: flex; flex-direction: column; gap: 2px; }
+.pay-amt { text-align: right; font-weight: 800; }
+.pay-main small, .pay-amt small { font-weight: 600; font-size: 12px; color: #64748b; }
+.pay-pill-paid { color: #15803d !important; }
+.pay-pill-pending { color: #b45309 !important; }
+.pay-pill-refunded, .pay-pill-void { color: #64748b !important; }
+.pay-detail { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.pay-detail > div { display: flex; justify-content: space-between; gap: 12px; }
+.pay-detail > div > span:first-child { color: #64748b; }
+.pay-note { margin: 12px 0 0; font-size: 12px; color: #94a3b8; }
+
+/* ===== Order tracking (dedicated app) ===== */
+.trk-steps { list-style: none; display: flex; justify-content: space-between; gap: 4px; margin: 12px 0 4px; padding: 0; font-size: 11px; color: #94a3b8; }
+.trk-steps li { flex: 1; text-align: center; position: relative; }
+.trk-steps li span { display: block; width: 12px; height: 12px; margin: 0 auto 4px; border-radius: 50%; background: #e2e8f0; }
+.trk-steps li.done { color: #15803d; } .trk-steps li.done span { background: #22c55e; }
+.trk-steps li.now { color: var(--primary, #E84908); font-weight: 800; } .trk-steps li.now span { background: var(--primary, #E84908); box-shadow: 0 0 0 4px rgba(232,73,8,.18); }
+.trk-rider { margin-top: 8px; font-size: 13px; }
+.trk-otp { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #fff7ed; border: 1px solid #fed7aa; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+.trk-otp strong { font-size: 20px; letter-spacing: .15em; }
+.trk-otp small { color: #9a3412; }
+.trk-cancelled { margin-top: 8px; font-size: 13px; color: #b91c1c; }
+.trk-cancel { padding: 8px 12px; border: 1px solid #fecaca; border-radius: 10px; background: #fff; color: #b91c1c; font-weight: 700; font-size: 13px; cursor: pointer; }
+
+/* ---- device link card (phone privacy) ---- */
+.access-card { display:flex; flex-direction:column; gap:10px; align-items:stretch; }
+.access-title { font-weight:700; font-size:15px; }
+.access-text { margin:0; font-size:13px; line-height:1.45; opacity:.8; }
+.access-code { font-size:28px; font-weight:800; letter-spacing:4px; text-align:center; padding:10px 0; font-variant-numeric:tabular-nums; }

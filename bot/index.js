@@ -40,6 +40,7 @@ const { resolveOutletId, resolveBusinessIdFor, initializeOutletBusinessIndex } =
 const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
 const discountEngine = require('./discount-engine');
 const redeem = require('./redeem');
+const paymentSync = require('./payment-sync');
 
 // Pure order-totals math shared with the menu checkout and Admin POS (same
 // repo checkout that ships to EC2, so a relative require reaches it).
@@ -959,6 +960,14 @@ async function sendFCMToRider(riderId, title, body, data = {}, outlet = 'pizza')
 // Transactional order updates for the customer app (menu PWA). Mirrors the
 // rider push: data-only FCM so the menu service worker owns the notification.
 // Best-effort - WhatsApp remains the source of truth if no device is linked.
+// Orders written straight from a customer browser: the delivery webview (bot
+// link) and the restaurant's own app (source 'APP'). Both are finalized
+// server-side by the child_added hook (discount re-check, reward tender,
+// stock, customer profile).
+function isWebOrderSource(order) {
+    return !!order && (order.source === 'webview_delivery' || order.source === 'APP');
+}
+
 const CUSTOMER_APP_STATUS = {
     'placed': { title: 'Order received', body: 'We received your order and will confirm it shortly.' },
     'confirmed': { title: 'Order confirmed', body: 'The kitchen is preparing your order.' },
@@ -969,8 +978,18 @@ const CUSTOMER_APP_STATUS = {
     'out for delivery': { title: 'Out for delivery', body: 'Your rider is on the way. Share the delivery OTP when they arrive.' },
     'reached drop location': { title: 'Rider has arrived', body: 'Your rider is at your location. Share the delivery OTP to receive your order.' },
     'delivered': { title: 'Delivered', body: 'Enjoy your meal! Thank you for ordering.' },
+    'served': { title: 'Order collected', body: 'Thank you for ordering!' },
     'cancelled': { title: 'Order cancelled', body: 'Your order was cancelled. Contact the restaurant if this looks wrong.' }
 };
+
+// Pickup orders have no rider: the ready/collected messages differ from delivery.
+function appStatusCopy(statusLower, order) {
+    if (order && order.type === 'Pickup') {
+        if (statusLower === 'ready') return { title: 'Ready for pickup', body: 'Your order is ready. Please collect it at the counter.' };
+        if (statusLower === 'served') return { title: 'Order collected', body: 'Thank you for ordering!' };
+    }
+    return CUSTOMER_APP_STATUS[statusLower];
+}
 
 function customerAppPhone(order) {
     const digits = String(order.phone || '').replace(/\D/g, '');
@@ -1000,7 +1019,8 @@ async function getLoyaltyConfig(outlet) {
     const config = (snap && snap.val()) || {};
     return {
         ...config,
-        earnRatePaisePerPoint: config.earnRatePaisePerPoint || 2000, // 5 points per ₹100
+        earnRatePaisePerPoint: config.earnRatePaisePerPoint || 5000, // 1 point per ₹50 (~2% back at ₹1/pt)
+        expiryDays: Number(config.expiryDays) > 0 ? Number(config.expiryDays) : 0, // 0 = never (older configs)
         tiers: config.tiers || {
             bronze: { min: 0, multiplier: 1 },
             silver: { min: 1000, multiplier: 1.25 },
@@ -1085,15 +1105,22 @@ async function _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBa
     await loyaltyRef.transaction((cur) => {
         const c = cur || {};
         if (c.lastAccruedOrderId === String(orderId)) return undefined;
+        // Inactivity expiry: a lapsed balance is written off by marking it all
+        // spent (tier stays on lifetime). Without carrying pointsSpent forward
+        // this tx used to WIPE it, handing redeemed points back on every earn.
+        const lapsed = redeem.pointsLapsed(c.lastOrderAt, config.expiryDays, now);
+        const spent = lapsed ? (c.lifetimePoints || 0) : (c.pointsSpent || 0);
+        const lifetime = (c.lifetimePoints || 0) + pointsEarned;
         return {
+            pointsSpent: spent,
             phone,
             outlet,
             business: bid,
             // points = spendable balance (what the customer app displays).
             // The tx REPLACES the whole node — omitting this field wiped the
             // customer's balance on every earn (found in live E2E).
-            points: (c.points || 0) + pointsEarned,
-            lifetimePoints: (c.lifetimePoints || 0) + pointsEarned,
+            points: Math.max(0, lifetime - spent),
+            lifetimePoints: lifetime,
             totalSpent: (c.totalSpent || 0) + total,
             orderCount: (c.orderCount || 0) + 1,
             tier: newTier,
@@ -1123,7 +1150,10 @@ async function _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBa
     });
 
     // Order record with points earned (customer reads this for history).
-    await db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet)).set({
+    // MERGE (update), not replace: a set() here used to wipe the placement-time
+    // fields (createdAt, itemsSummary, table, paymentStatus) from the customer's
+    // order history. Payment fields come from the order itself.
+    await db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet)).update({
         orderId: String(orderId),
         outlet,
         business: bid,
@@ -1135,7 +1165,9 @@ async function _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBa
         deliveredAt: now,
         pointsEarned,
         source: order.source || 'QR',
-        itemCount: order.itemCount || Object.keys(order.items || {}).length
+        itemCount: order.itemCount || Object.keys(order.items || {}).length,
+        ...(order.paymentStatus ? { paymentStatus: String(order.paymentStatus) } : {}),
+        ...(order.paymentMethod ? { paymentMethod: String(order.paymentMethod) } : {})
     });
 
     // Tier-up news through the in-app channel (silver/gold only — a bronze
@@ -1363,7 +1395,7 @@ async function notifyCustomerApp(orderId, order, status) {
     try {
         if (!order || order.type === 'dine-in' || order.isDineIn || order.tableId) return;
         const statusLower = String(status || order.status || '').toLowerCase();
-        const copy = CUSTOMER_APP_STATUS[statusLower];
+        const copy = appStatusCopy(statusLower, order);
         const phone = customerAppPhone(order);
         if (!copy || !phone) return;
 
@@ -1695,7 +1727,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
                 msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${formatOrderId(order.orderId || id)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")} ❤️`;
                 img = botSettings.imgReadyPng || botSettings.imgReady || fallbackImg;
 
-                if (!isDineIn) {
+                if (!isDineIn && order.type !== 'Pickup') {
                     // Only notify if a rider is actually assigned (has riderId)
                     if (order.riderId && order.riderPhone) {
                         await riderNotify.notifyRiderPickup(sock, order, addInAppNotification);
@@ -1768,6 +1800,11 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
 
             const prevStatus = currentProcessedStatus?.status || "None";
             console.log(`[BOT] 🔔 Status Change for #${formatOrderId(order.orderId || id)}: ${prevStatus} -> ${currentStatus} (${jid ? 'Valid JID' : 'NO JID'})`);
+
+            // Restaurant-app customers are served in the app (push + Orders tab);
+            // no WhatsApp message is sent to them (WhatsApp ordering is a separate,
+            // upcoming feature and these customers never opted in to it).
+            if (order.source === 'APP') { msg = ''; templateName = null; templateComponents = null; }
 
             let sendResult = false;
             // Template path only when the transport actually supports it
@@ -2283,7 +2320,13 @@ async function startBot() {
     }
 
     initCommandListener(sock);
-    redeem.initRedeemListener({ db, resolvePath, OUTLET });
+    redeem.initRedeemListener({
+        db, resolvePath, OUTLET,
+        sendText: async (phone, text) => {
+            try { await sock.sendMessage(`91${phone}@s.whatsapp.net`, { text }); return true; }
+            catch (e) { console.warn('[Redeem] OTP send failed:', e.message); return false; }
+        }
+    });
 
     // Heartbeat & Cleanup & Report Scheduling
     if (reportInterval) clearInterval(reportInterval);
@@ -2380,6 +2423,24 @@ async function sendDailyReportSafely(dateOverride = null) {
             // accrual or clawback. Idempotent per orderId, so extra events
             // are cheap no-ops. Independent of currentSock on purpose.
             if (order) processLoyalty(snap.key, order).catch(e => console.error("[LOYALTY] processLoyalty error:", e.message));
+            // Restaurant-app orders: every status goes to the customer in the app
+            // (push + inbox) whether or not WhatsApp is connected. Deduped per status.
+            if (order && order.source === 'APP') notifyCustomerApp(snap.key, order, order.status).catch(() => {});
+            // Customer payment history (Payments tab): mirror status/payment fields.
+            if (order) {
+                const _o = order.outlet || OUTLET;
+                const _st = String(order.status || '').toLowerCase();
+                const _onTheWay = _st === 'picked up' || _st === 'out for delivery' || _st === 'reached drop location';
+                Promise.all([dineInPhoneFor(order, _o), _onTheWay ? resolveRider(order) : null])
+                    .then(([ph, rider]) => paymentSync.syncCustomerPayment({
+                        db, resolvePath, phone: ph, orderId: snap.key, order, outlet: _o,
+                        extra: {
+                            rider,
+                            otp: (_st === 'out for delivery' || _st === 'reached drop location') ? (order.deliveryOTP || order.otp || order.otpCode || null) : null,
+                        },
+                    }))
+                    .catch(e => console.error("[PAYSYNC] error:", e.message));
+            }
             const now = Date.now();
             const last = _recentChildChanged.get(snap.key);
             const sameStatusRecently = last && last.status === order?.status && (now - last.ts) < CHILD_CHANGED_DEBOUNCE_MS;
@@ -2409,7 +2470,7 @@ async function sendDailyReportSafely(dateOverride = null) {
             // outage silently drops tenders and stock. Every sock-dependent
             // call below guards itself (notifyAdmin, handleOrderStatusUpdate,
             // deductInventoryStock's alert).
-            const isWebviewFinalize = order.source === "webview_delivery" && !order.stockDeducted;
+            const isWebviewFinalize = isWebOrderSource(order) && !order.stockDeducted;
             if (!currentSock && !isWebviewFinalize) return;
 
         // Only handle "new" orders if they were created after the bot started
@@ -2428,7 +2489,7 @@ async function sendDailyReportSafely(dateOverride = null) {
             // straight to Firebase (no chat round-trip). The side effects
             // (stock deduction, customer profile save, discount usage logging)
             // are handled inline here before the "Order Placed" message.
-            if (order.source === "webview_delivery" && !order.stockDeducted) {
+            if (isWebOrderSource(order) && !order.stockDeducted) {
                 try {
                     // --- SAFEST-FIRST: server-side discount re-validation ---
                     // This order was written directly by the customer's browser
@@ -2560,6 +2621,8 @@ async function sendDailyReportSafely(dateOverride = null) {
             }
 
         }
+        // Restaurant-app order just placed: tell the customer in the app too.
+        if (isNewOrder && order.source === 'APP') notifyCustomerApp(snap.key, order, order.status).catch(() => {});
         // ALWAYS call handleOrderStatusUpdate with isNew=true for new orders.
         // initFCMWatcher's _fcmSent write triggers child_changed which can
         // pre-cache status before child_added finishes, so we must not gate

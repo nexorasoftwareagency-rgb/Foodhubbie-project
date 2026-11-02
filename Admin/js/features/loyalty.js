@@ -21,7 +21,11 @@ const TIER_LABEL = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' };
 const TIER_COLOUR = { bronze: '#8a6d3b', silver: '#a8a8a8', gold: '#c5a005' };
 
 const DEFAULTS = {
-  earnRatePaisePerPoint: 2000,
+  // 5000 paise = 1 point per ₹50; at ₹1/point that is ~2% back, the usual
+  // restaurant-points range (was 5%, which can erase a 3-8% margin).
+  earnRatePaisePerPoint: 5000,
+  // Points lapse after this many days without a paid order. 0 = never.
+  expiryDays: 180,
   // R2: 1 point redeems for ₹1 of tender (100 paise). Admin-tunable.
   redeemValuePaisePerPoint: 100,
   // R9: optional minimum spend AFTER redemption — a bill below this cannot
@@ -114,6 +118,7 @@ function cloneConfig(c) {
             ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
         minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
         maxRedeemPercentOfOrder: Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0)),
+        expiryDays: c.expiryDays != null && Number.isFinite(Number(c.expiryDays)) ? Math.max(0, Math.round(Number(c.expiryDays))) : DEFAULTS.expiryDays,
         earnEnabled: c.earnEnabled !== false,
         dineInEarnEnabled: c.dineInEarnEnabled !== false,
         clawbackEnabled: c.clawbackEnabled !== false,
@@ -133,6 +138,7 @@ function buildConfigPayload(overrides = {}) {
             ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
         minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
         maxRedeemPercentOfOrder: Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0)),
+        expiryDays: c.expiryDays != null && Number.isFinite(Number(c.expiryDays)) ? Math.max(0, Math.round(Number(c.expiryDays))) : DEFAULTS.expiryDays,
         earnEnabled: c.earnEnabled !== false,
         dineInEarnEnabled: c.dineInEarnEnabled !== false,
         clawbackEnabled: c.clawbackEnabled !== false,
@@ -249,6 +255,7 @@ function renderConfigForm() {
         ? c.redeemValuePaisePerPoint : DEFAULTS.redeemValuePaisePerPoint) / 100;
     const minSpendRs = Number(c.minSpendAfterRedemption) || 0;
     const maxPct = Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0));
+    const expiryDays = c.expiryDays != null && Number.isFinite(Number(c.expiryDays)) ? Math.max(0, Math.round(Number(c.expiryDays))) : DEFAULTS.expiryDays;
     const earnOn = c.earnEnabled !== false;
     const dineInOn = c.dineInEarnEnabled !== false;
     const clawbackOn = c.clawbackEnabled !== false;
@@ -289,9 +296,14 @@ function renderConfigForm() {
                     <input type="number" id="loyalty-max-redeem-pct" min="0" max="100" step="1"
                         value="${maxPct}" class="mob-input-reward" style="max-width:140px;">
                 </div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Points expire after (days idle)</label>
+                    <input type="number" id="loyalty-expiry-days" min="0" step="30"
+                        value="${expiryDays}" class="mob-input-reward" style="max-width:140px;">
+                </div>
                 <button type="button" data-action="loyalty-save-config" class="btn-primary">Save program settings</button>
             </div>
-            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum). Max tender 0 = no cap; e.g. 10 caps one bill's redemption at 10% of its own subtotal (Zomato-style), protecting margin on large orders.</div>
+            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum). Max tender 0 = no cap; e.g. 10 caps one bill's redemption at 10% of its own subtotal (Zomato-style), protecting margin on large orders. Expiry 0 = points never lapse; 180 days is the default. Redeeming a reward needs a code sent to the customer's WhatsApp.</div>
             <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;">
                 ${toggle('loyalty-earn-enabled', earnOn, 'Points earning', 'Turn off to pause all earning')}
                 ${toggle('loyalty-dinein-earn-enabled', dineInOn, 'Dine-in earning', 'Award points when a table bill is paid')}
@@ -522,6 +534,7 @@ async function saveConfig() {
         redeemValuePaisePerPoint: Math.round(redeemRs * 100),
         minSpendAfterRedemption: minSpendRs,
         maxRedeemPercentOfOrder: maxPct,
+        expiryDays: Math.max(0, Math.round(parseFloat(document.getElementById('loyalty-expiry-days').value) || 0)),
         earnEnabled: document.getElementById('loyalty-earn-enabled').checked,
         dineInEarnEnabled: document.getElementById('loyalty-dinein-earn-enabled').checked,
         clawbackEnabled: document.getElementById('loyalty-clawback-enabled').checked,

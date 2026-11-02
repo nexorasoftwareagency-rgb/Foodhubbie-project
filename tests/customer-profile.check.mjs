@@ -53,10 +53,10 @@ assert.match(server, /prunePushInbox/);
 assert.match(bot, /prunePushInbox/);
 
 // --- loyalty: canonical record path + earn rate (5 points per ₹100) ---
-assert.match(bot, /earnRatePaisePerPoint \|\| 2000/, 'bot earn rate must default to 2000 paise/point (5 per ₹100)');
+assert.match(bot, /earnRatePaisePerPoint \|\| 5000/, "bot earn rate must default to 5000 paise/point (1 point per Rs 50, about 2% back)");
 assert.match(bot, /customers\/\$\{phone\}\/loyalty/, 'bot must write the canonical loyalty record');
 assert.doesNotMatch(bot, /`loyalty\/customers/, 'loyalty/customers is dead — nothing reads it');
-assert.match(customer, /earnRatePaisePerPoint: 2000/, 'customer fallback config must match the bot');
+assert.match(customer, /earnRatePaisePerPoint: 5000/, "customer fallback config must match the bot");
 assert.match(customer, /loyalty\/rankings\/\$\{_profile\.phone\}/, 'customer must read only its own ranking entry');
 assert.doesNotMatch(customer, /outletRef\('loyalty\/rankings'\)/, 'bulk leaderboard read leaks other customers');
 

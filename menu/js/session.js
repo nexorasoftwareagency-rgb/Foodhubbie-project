@@ -37,12 +37,25 @@ function getTokenFromUrl() {
 // fails validation and falls through to the normal invalid-QR screen.
 const LAST_TABLE_KEY = `fh_last_table:${OUTLET}`;
 
+// A remembered table only counts for the same dining visit. Without a limit an
+// installed app opened at home would still jump to last week's table instead of
+// the restaurant's menu (direct mode).
+const LAST_TABLE_AT_KEY = `fh_last_table_at:${OUTLET}`;
+export const TABLE_MEMORY_MS = 4 * 60 * 60 * 1000;
+
 function rememberTableToken(token) {
-    try { localStorage.setItem(LAST_TABLE_KEY, token); } catch { /* private mode */ }
+    try {
+        localStorage.setItem(LAST_TABLE_KEY, token);
+        localStorage.setItem(LAST_TABLE_AT_KEY, String(Date.now()));
+    } catch { /* private mode */ }
 }
 
 function recallTableToken() {
-    try { return localStorage.getItem(LAST_TABLE_KEY); } catch { return null; }
+    try {
+        const at = Number(localStorage.getItem(LAST_TABLE_AT_KEY)) || 0;
+        if (!at || Date.now() - at > TABLE_MEMORY_MS) return null;
+        return localStorage.getItem(LAST_TABLE_KEY);
+    } catch { return null; }
 }
 
 /**
@@ -198,6 +211,8 @@ export async function initSession() {
         }
     }
 
+    // No ?t= and no recent table: not an error — the app opens in direct mode.
+    if (!table && !token) return { ok: false, reason: 'no-table' };
     if (!table) return { ok: false, reason: 'invalid-token' };
 
     rememberTableToken(token);

@@ -1,185 +1,38 @@
-# Final Verification Report — FoodHubbie Admin v5.3.6 (Spark Plan)
+# FoodHubbie — Final Verification Report (2026-11-02)
 
-**Date:** 2026-09-27  
-**Environment:** Production — `https://foodhubbie-admins.web.app`  
-**Firebase Project:** `foodhubbie-10` (Spark Plan)  
-**Deployed:** 2026-09-27  
-**Status:** ✅ **PRODUCTION READY**
+Honesty rule: only what is marked **RAN** was actually executed in this session. Nothing was deployed or pushed.
 
----
+## A. Source of truth
+- Re-fetched GitHub: `origin/main` = `26322b8` (unchanged). Branch `final/integrated` = main + 9 commits (loyalty + app chain + privacy + merge fix). 32 files changed, ~1,900 lines added.
 
-## ✅ Verification Summary
+## B. Checks that RAN and PASSED on `final/integrated`
+| Check | What it proves |
+|---|---|
+| `node shared/cost-math.js` | billing maths incl. APP 3%, 1% default, flat mode |
+| `node tests/payment-sync.check.cjs` | bot mirrors payment, rider, delivery code; idempotent; bot source guards |
+| `node tests/loyalty-redeem.check.cjs` | WhatsApp-code redemption, expiry, wrong-code counter, no double deduction |
+| `node tests/auto-onboarding.check.cjs` | onboarding cleanup rules |
+| `node tools/check-shared-twins.cjs` | `shared/` and `menu/shared/` files identical |
+| `node tests/customer-profile.check.mjs` | customer profile wiring (test updated to 5000 earn default) |
+| `node tests/signup-onboarding.check.mjs`, `encoding-check`, `check-imports`, `admin-wallet-checklist` | unchanged areas still pass |
+| `node tests/direct-mode.check.mjs` (real Chromium, stubbed Firebase) | 18 scenarios: sign-in, menu first, tabs, payments view, **pickup order, delivery order (slab fee, GST, COD), validation, tracking + delivery code, cancel, privacy first-owner, privacy locked + link code, link-code creation, table app unchanged** |
+| `node --check` on every JS/MJS/CJS file | no syntax errors; `database.rules.json` is valid JSON |
+| `foodhubbie-ALL-IN-ONE.patch` applied to a fresh copy of `origin/main` | applied with no conflicts; cost-math, payment-sync, loyalty-redeem, shared-twins, customer-profile and all 18 browser scenarios passed there too |
 
-### Pre-Deployment Checks
-| Check | Status | Notes |
-|-------|--------|-------|
-| `npm run build` passes | ✅ | `node tools/build.mjs --admin` |
-| `firebase deploy --only database` | ✅ | Rules syntax valid |
-| `firebase deploy --only hosting:admin` | ✅ | 70 files uploaded |
-| Live site loads | ✅ | HTTP 200 |
-| Manual page accessible | ✅ | HTTP 200 |
-| Console errors | ✅ None |
+## C. NOT verified (be careful)
+1. **Firebase rules were never run in the emulator** (the emulator download is blocked here). 60 cases exist in `tests/rules.emulator.mjs` (16 `app:` + 19 `privacy:` are new); they are written but unrun. Run them before deploying (command in the guide). This is the most important open item: the rules decide who can read/write customer data and place app orders.
+2. **Production build and Playwright suite** (`npm ci` is blocked): rider app, Admin and SupremeAdmin bundles were not built; only syntax-checked.
+3. **No live Firebase, WhatsApp, Razorpay or real phones.** Browser tests use a stubbed database, so real latency, real anonymous auth and iOS behaviour are untested.
+4. These existing checks need npm packages that could not be installed, so they could not run here (they fail the same way on untouched `origin/main`): `admin-scope-rules`, `phase5-*-isolation`, `check-sw`, `discount-evaluator`, `attribution-check`, `notify-dedupe-check`, `optimistic-ui-check`, `fcm-push-check`. `admin-mirror-guard-check` fails on untouched `origin/main` as well (pre-existing).
+5. Concurrency edge: two phones claiming the same brand-new number in the same instant could both register (rare).
 
----
+## D. Integration findings (found by merging everything together)
+- Merge conflict in `menu/js/customer.js` imports (resolved: both `update` and `ensureAnonAuth` imported).
+- **Bug found and fixed:** after a wrong WhatsApp code the browser tried to clear an error flag that the database rules forbid it to write, so the next attempt would have shown "Wrong code" instantly. Now the bot counts `wrongTries` and the app waits for the counter to rise (test added).
+- Test expectation updated: earn default is 5000 paise/point (approved loyalty change), the old check still said 2000.
+- Reward redemption requests (`bot/redeemQueue`) and the new privacy rules are independent; redemption still works because the bot (admin access) writes the reward record and the owner device reads it.
 
-## ✅ Feature Verification (Spark Plan)
-
-### 🔐 Authentication & Access
-| Feature | Status | Tested |
-|---------|--------|--------|
-| Email/Password Login | ✅ | Verified |
-| Forgot Password | ✅ | Email sent via Firebase |
-| Change Password | ✅ | Re-auth required, real-time match hint |
-| Session Persistence | ✅ | browserLocalPersistence |
-| Role-Based Access | ✅ | DB Rules + Client check |
-| Supreme/Super Admin | ✅ | Tiered access |
-| Owner/Manager/Staff | ✅ | Per-outlet isolation |
-
-### 💰 Expenses Module
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Today Tab (Rapid Entry) | ✅ | Category chips, live total |
-| History (Filters) | ✅ | Date, Category, Status, Search |
-| Categories Management | ✅ | CRUD, budgets, alerts, seed |
-| Reports (4 charts) | ✅ | Monthly, Category, Outlet, Trend |
-| Settings | ✅ | Auto-approve, receipt threshold, currency |
-| Receipts (Base64) | ✅ | Multi-file, 500KB limit, preview/download |
-| Ceiling Integration | ✅ | Shares Discount Ceiling |
-| Export CSV/PDF | ✅ | Branded, branded footer |
-| Soft Delete | ✅ | `deletedAt`, excluded from reports |
-| Audit Trail | ✅ | `auditLogs/expenses` |
-| Budget Alerts | ✅ | Nightly Cloud Function (doc) |
-
-### 👥 Staff Management
-| Feature | Status |
-|---------|--------|
-| Create Staff (Auth first) | ✅ |
-| Edit/Delete Staff | ✅ |
-| Role Hierarchy | ✅ (Supreme > Super > Owner > Manager) |
-| Counter PIN Shifts | ✅ |
-| Counter PIN Reverse Index | ✅ (`counterPinIndex/{hash}`) |
-| Email Index (SHA-256) | ✅ |
-| Bulk Operations | ✅ |
-| Audit Trail | ✅ |
-
-### 🔐 Security Features
-| Feature | Status |
-|---------|--------|
-| Manager PIN Gate | ✅ (Role check before PIN) |
-| Counter PIN Gate | ✅ (Reverse index, timing-safe) |
-| Void PIN | ✅ (Same PIN) |
-| Expense Ceiling | ✅ (Per-person + outlet fallback) |
-| Receipt Size Limit | 500KB/file, 3 max |
-| Soft Delete | ✅ (audit trail) |
-| Soft Delete (Categories) | ✅ (reassign to Misc) |
-
-### 📊 Reports & Analytics
-| Report | Status |
-|--------|--------|
-| Monthly Summary | ✅ (Bar: Actual vs Budget) |
-| Category Breakdown | ✅ (Doughnut + % budget) |
-| Outlet Comparison | ✅ (Horizontal bar) |
-| Trend Lines | ✅ (Daily line chart) |
-| Export CSV/PDF | ✅ |
-
-### 🛡 Security Rules (Database)
-| Path | Status |
-|------|--------|
-| `counterPinIndex` | ✅ Inside `outlets/{outletId}` |
-| `emailIndex` | ✅ SHA-256 hash keys |
-| `expenses` | ✅ `receiptUrls` max 3, size check |
-| `expenseCategories` | ✅ Budgets, alerts |
-| `discountApprovals` | ✅ `approverUid == auth.uid` |
-| `emailIndex` regex | `/^[a-f0-9]+$/i` |
-| `counterPinIndex` write | Owner + Manager |
-| `dineinSettings` | `projectedDailyRevenue` added |
-
----
-
-## 🚫 Blaze Plan Features (Removed from Code, Documented)
-
-| Feature | Status | Location |
-|---------|--------|----------|
-| Custom Claims for Roles | ❌ Removed | `docs/FUTURE-PLAN-BLAZE.md` |
-| Server-side PIN Verification | ❌ Removed | `docs/FUTURE-PLAN-BLAZE.md` |
-| Server-side Expense Ceiling | ❌ Removed | `docs/FUTURE-PLAN-BLAZE.md` |
-| Server-side OTP Rate Limiting | ❌ Removed | `docs/FUTURE-PLAN-BLAZE.md` |
-
----
-
-## 📋 Verification Checklist (Manual)
-
-| Test | Status |
-|-------|--------|
-| Login with valid credentials | ☐ |
-| Login with invalid credentials | ☐ |
-| Forgot Password flow | ☐ |
-| Change Password (Settings) | ☐ |
-| Create Expense (Today tab) | ☐ |
-| Upload Receipt (multi-file) | ☐ |
-| Ceiling Guard Trigger | ☐ |
-| History Filtering | ☐ |
-| Bulk Actions (Approve/Delete) | ☐ |
-| Category CRUD | ☐ |
-| Reports Generation (CSV/PDF) | ☐ |
-| Staff Create/Edit/Delete | ☐ |
-| Counter PIN Sign-in | ☐ |
-| Counter PIN Reverse Index | ☐ |
-| Security Audit Run | ☐ |
-| Auto-fix Actions | ☐ |
-| Settings Save | ☐ |
-| Change Password (Settings) | ☐ |
-| Password Match Hint | ☐ |
-| Receipt Preview/Download | ☐ |
-| Expense Ceiling Guard | ☐ |
-| Export CSV/PDF | ☐ |
-| Soft Delete | ☐ |
-| Audit Log | ☐ |
-
----
-
-## 🌐 Live Verification
-
-| URL | Status |
-|-----|--------|
-| Admin Dashboard | https://foodhubbie-admins.web.app |
-| Manual | https://foodhubbie-admins.web.app/manual.html |
-| Expenses Manual Section | https://foodhubbie-admins.web.app/manual.html#expenses-module |
-
----
-
-## 📦 Deployment Artifacts
-
-| Artifact | Location |
-|----------|----------|
-| Admin Build | `Admin/dist/` |
-| Database Rules | `database.rules.json` |
-| Source Code | `Admin/js/` |
-| Documentation | `docs/` |
-
----
-
-## 📝 Post-Deployment Notes
-
-1. **Manual Testing Required:** Run through the checklist above manually
-2. **Monitor:** Check Firebase Console > Functions > Logs for any errors
-3. **Monitor:** Check Hosting > Logs for any 4xx/5xx
-4. **Budget Alert:** Set up budget alert in Firebase Console ($10/month)
-4. **Rollback Plan:** Previous version available in Hosting versions
-
----
-
-## 📅 Next Steps
-
-1. [ ] Run manual verification checklist
-2. [ ] Monitor error rates for 24h
-3. [ ] Schedule Blaze plan upgrade meeting
-4. [ ] Document Custom Claims migration plan
-
----
-
-**Sign-off:**  
-**Developer:** _________________ **Date:** ___________  
-**QA Lead:** _________________ **Date:** ___________  
-**Product Owner:** _________________ **Date:** ___________
-
+## E. Decisions you may want to revisit
+- Phone privacy: kept "no OTP" as you asked; trade-offs listed in the guide (first-phone-wins, iPhone storage split).
+- Pickup/delivery payment: pay on delivery / at the counter only (no online payment in the app yet).
+- Item prices are client-supplied (existing behaviour).

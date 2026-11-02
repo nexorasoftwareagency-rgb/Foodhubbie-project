@@ -59,6 +59,72 @@
     </div>
 
     <!-- ============== SCREEN 3: MENU CATEGORIES ============== -->
+    <!-- ============== SIGN IN (direct mode, first open) ============== -->
+    <div id="screenSignIn" class="screen">
+        <form id="signInForm" class="signin-card" novalidate>
+            <div class="signin-brand" id="signInBrand">Welcome</div>
+            <h1 class="signin-title">Order from your favourite kitchen</h1>
+            <p class="signin-sub">Enter your mobile number to continue. No OTP, no password.</p>
+            <label class="signin-label" for="signInPhone">Mobile number</label>
+            <input id="signInPhone" class="signin-input" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="10-digit mobile number">
+            <label class="signin-label" for="signInName">Your name <span class="signin-opt">(optional, for greetings)</span></label>
+            <input id="signInName" class="signin-input" type="text" autocomplete="given-name" maxlength="60" placeholder="e.g. Rahul">
+            <div id="signInError" class="signin-error hidden" role="alert"></div>
+            <button id="btnSignIn" type="submit" class="signin-btn">Continue to menu</button>
+        </form>
+    </div>
+
+    <!-- ============== CHECKOUT (dedicated app: delivery or pickup) ============== -->
+    <div id="screenCheckout" class="screen">
+        <div class="topbar">
+            <button class="topbar-back" id="btnCoBack" aria-label="Back to cart">
+                <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span class="topbar-logo" style="margin:0 auto;">Checkout</span>
+            <span style="width:38px;"></span>
+        </div>
+        <div class="co-wrap">
+            <div class="co-switch" role="tablist" aria-label="How do you want your order?">
+                <button type="button" class="co-switch-btn active" data-co-mode="delivery" role="tab" aria-selected="true">Delivery</button>
+                <button type="button" class="co-switch-btn" data-co-mode="pickup" role="tab" aria-selected="false">Pickup</button>
+            </div>
+            <div class="form-group-mini">
+                <label for="coName">Your Name <span style="color:var(--error)">*</span></label>
+                <input type="text" id="coName" autocomplete="name" placeholder="e.g. Rohan" maxlength="60">
+            </div>
+            <div class="form-group-mini">
+                <label for="coPhone">Mobile Number <span style="color:var(--error)">*</span></label>
+                <input type="tel" id="coPhone" autocomplete="tel" placeholder="e.g. 98765 43210" maxlength="14" inputmode="numeric">
+            </div>
+            <div id="coAddressWrap">
+                <div class="form-group-mini">
+                    <label for="coAddress">Delivery Address <span style="color:var(--error)">*</span></label>
+                    <textarea id="coAddress" autocomplete="street-address" placeholder="House / Street / Landmark" rows="2" maxlength="200"></textarea>
+                </div>
+                <button type="button" class="co-locate" id="btnCoLocate">📍 Share my location</button>
+                <div id="coLocStatus" class="co-loc-status">Location is used only to work out your delivery fee.</div>
+            </div>
+            <div id="coPickupNote" class="co-loc-status hidden">You will collect this order from the restaurant. We will notify you as soon as it is ready.</div>
+            <div class="form-group-mini">
+                <label for="coNote">Special Note (Optional)</label>
+                <textarea id="coNote" placeholder="e.g. Extra spicy, no onion…" rows="2" maxlength="200"></textarea>
+            </div>
+            <div class="form-group-mini">
+                <label for="coDiscountInput">Discount or Reward Code (Optional)</label>
+                <div class="discount-input-row">
+                    <input type="text" id="coDiscountInput" placeholder="e.g. WELCOME20" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    <button type="button" class="btn-apply-discount" id="btnCoApply">Apply</button>
+                </div>
+                <div class="discount-msg hidden" id="coDiscountMsg"></div>
+            </div>
+            <div class="cart-summary" id="coSummary">
+                <div id="coLines"></div>
+                <div class="co-pay-note" id="coPayNote"></div>
+                <button class="btn-place-order" id="btnCoPlace">PLACE ORDER</button>
+            </div>
+        </div>
+    </div>
+
     <div id="screenMenu" class="screen">
         <div class="topbar">
             <div class="topbar-brand">
@@ -533,6 +599,26 @@
         </div>
     </div>
 
+    <!-- ============== SCREEN: ORDERS (dedicated app tab) ============== -->
+    <div id="screenOrders" class="screen">
+        <div class="topbar">
+            <span class="topbar-logo" style="margin:0 auto;">Your Orders</span>
+        </div>
+        <div class="orders-switch" role="tablist" aria-label="Orders or payments">
+            <button type="button" class="orders-switch-btn active" data-orders-view="orders" role="tab">Orders</button>
+            <button type="button" class="orders-switch-btn" data-orders-view="payments" role="tab">Payments</button>
+        </div>
+        <div id="ordersScreenBody" class="account-wrap"></div>
+    </div>
+
+    <!-- ============== SCREEN: LOYALTY (dedicated app tab) ============== -->
+    <div id="screenLoyalty" class="screen">
+        <div class="topbar">
+            <span class="topbar-logo" style="margin:0 auto;">Loyalty Card</span>
+        </div>
+        <div id="loyaltyScreenBody" class="account-wrap"></div>
+    </div>
+
     <!-- ============== BOTTOM NAVIGATION ============== -->
     <nav id="bottomNav" class="bottom-nav hidden">
         <button class="bottom-nav-item" data-bottom-tab="screenMenu">
@@ -546,6 +632,14 @@
             </span>
             <span>Cart</span>
         </button>
+        <button class="bottom-nav-item direct-only hidden" data-bottom-tab="screenOrders">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>Orders</span>
+        </button>
+        <button class="bottom-nav-item direct-only hidden" data-bottom-tab="screenLoyalty">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            <span>Loyalty</span>
+        </button>
         <button class="bottom-nav-item" data-bottom-tab="screenTracking">
             <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
             <span>Status</span>
@@ -556,7 +650,7 @@
         </button>
         <button class="bottom-nav-item" data-bottom-tab="screenPromotions">
             <svg class="icon" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
-            <span>Promos</span>
+            <span id="navPromosLabel">Promos</span>
         </button>
     </nav>
 

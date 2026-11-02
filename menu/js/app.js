@@ -12,7 +12,8 @@ import * as UI from './ui.js';
 import { haptic } from './ui.js';
 import { esc } from './ui.js';
 import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
-import { initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
+import { initAppCheckout, openCheckout, cancelAppOrder } from './app-checkout.js';
+import { ensureDeviceAccess, renderOrdersTab, renderLoyaltyTab, openAccountTab, signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
 
 // ---------------------------------------------------------------
 // Module state for menu browsing
@@ -109,6 +110,13 @@ async function boot() {
             initSession().catch((e) => ({ ok: false, reason: 'error', error: e })),
             new Promise(resolve => setTimeout(() => resolve({ ok: false, reason: 'timeout' }), 8000))
         ]);
+
+        // No table at all (installed app / bare link): open as the restaurant's
+        // own app — sign in once, then the full menu.
+        if (!result.ok && result.reason === 'no-table') {
+            await bootDirect();
+            return;
+        }
 
         if (!result.ok) {
             console.warn('[Boot] initSession failed — reason:', result.reason, result.error || '');
@@ -252,6 +260,89 @@ async function boot() {
     }
 }
 
+// ---------------------------------------------------------------
+// DIRECT MODE (no table): sign in once with phone (+ optional name), then the
+// full menu is always the first screen. Ordering happens in-app (delivery or
+// pickup) via js/app-checkout.js — no table and no WhatsApp link needed.
+// ---------------------------------------------------------------
+async function bootDirect() {
+    M.direct = true;
+    document.body.classList.add('direct-mode');
+    // No table: hide table chips and the table-only tabs.
+    document.querySelectorAll('#menuTableChip').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[data-bottom-tab="screenTracking"], [data-bottom-tab="screenHistory"]').forEach(el => el.classList.add('hidden'));
+    // Dedicated-app tabs: Menu · Cart · Orders · Loyalty · Account
+    document.querySelectorAll('#bottomNav .direct-only').forEach(el => el.classList.remove('hidden'));
+    const promosLabel = document.getElementById('navPromosLabel');
+    if (promosLabel) promosLabel.textContent = 'Account';
+    document.getElementById('cartHeaderTitle').textContent = 'Your Cart';
+
+    try {
+        const brandSnap = await get(outletRef('settings/Store/storeName'));
+        if (brandSnap.exists() && brandSnap.val()) {
+            UI.applyBrand(brandSnap.val());
+            const b = document.getElementById('signInBrand');
+            if (b) b.textContent = String(brandSnap.val());
+        }
+    } catch (e) { console.warn('[Direct] brand fetch failed:', e?.message || e); }
+
+    await loadMenu();
+    initCustomer({ mode: 'dine-in' });
+    document.getElementById('loadingOverlay').style.display = 'none';
+    _bootReady = true;
+
+    if (isSignedIn()) {
+        const p = getProfile();
+        if (p?.name && p.name !== 'Guest') UI.updateGreeting(p.name);
+        UI.showScreen('screenMenu');
+    } else {
+        UI.showScreen('screenSignIn');
+    }
+}
+
+document.getElementById('signInForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('signInError');
+    const res = signInWithPhone(
+        document.getElementById('signInName').value,
+        document.getElementById('signInPhone').value
+    );
+    if (!res.ok) {
+        errEl.textContent = res.error;
+        errEl.classList.remove('hidden');
+        return;
+    }
+    errEl.classList.add('hidden');
+    if (res.profile?.name && res.profile.name !== 'Guest') UI.updateGreeting(res.profile.name);
+    UI.showScreen('screenMenu');
+    // Privacy check runs in the background: if another phone already owns this
+    // number, tell the customer how to link this one (details live in Account).
+    ensureDeviceAccess(res.profile.phone).then((st) => {
+        if (st === 'taken') UI.showToast('This number is already used on another phone. Open Account to enter its link code.', 'error');
+    });
+});
+
+document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-cancel-order]');
+    if (!btn) return;
+    if (!window.confirm('Cancel this order?')) return;
+    btn.disabled = true;
+    try {
+        await cancelAppOrder(btn.dataset.cancelOrder);
+        UI.showToast('Order cancelled', 'success');
+        renderOrdersTab();
+    } catch (err) {
+        btn.disabled = false;
+        UI.showToast('Too late to cancel — the restaurant has already started on it. Please call them.', 'error');
+    }
+});
+
+// Direct mode checkout: delivery or pickup, placed inside this app (js/app-checkout.js).
+initAppCheckout({
+    onBack: () => { renderCartScreen(); UI.showScreen('screenCart'); },
+    onPlaced: () => { renderOrdersTab(); UI.showScreen('screenOrders'); },
+});
+
 let _postBootStarted = false;
 function _afterBoot() {
     if (_postBootStarted) return;
@@ -275,7 +366,8 @@ function _afterBoot() {
         renderPromotionsScreen();
     }
 
-    if (!params.get('order') && params.get('tab') !== 'notifications') {
+    // Direct mode replaces the identity step with the sign-in screen.
+    if (!M.direct && !params.get('order') && params.get('tab') !== 'notifications') {
         maybeStartOnboarding({ mode: 'dine-in' });
     }
 
@@ -919,7 +1011,8 @@ document.getElementById('btnAddToOrder')?.addEventListener('click', async () => 
             UI.showToast('Cannot add items — bill already requested for this group');
             return;
         }
-        const sessResult = await ensureSession();
+        // Direct mode has no table session: the cart is local until checkout.
+        const sessResult = M.direct ? { ok: true } : await ensureSession();
         if (!sessResult.ok) {
             UI.showToast('Could not start session. Please scan the QR code again.');
             return;
@@ -1044,6 +1137,7 @@ document.getElementById('btnGuestPlus')?.addEventListener('click', () => { hapti
 document.getElementById('btnPlaceOrder')?.addEventListener('click', async () => {
     if (M._placing) return;
     if (cartIsEmpty()) { UI.showToast('Your cart is empty'); return; }
+    if (M.direct) { openCheckout(); return; }
     M._placing = true;
     const btn = document.getElementById('btnPlaceOrder');
     btn.disabled = true;
@@ -1180,7 +1274,12 @@ document.querySelectorAll('#bottomNav .bottom-nav-item').forEach(btn => {
         if (target === 'screenCart') renderCartScreen();
         if (target === 'screenTracking') renderTrackingOrEmptyState();
         if (target === 'screenHistory') renderHistoryScreen();
-        if (target === 'screenPromotions') renderPromotionsScreen();
+        if (target === 'screenOrders') renderOrdersTab();
+        if (target === 'screenLoyalty') renderLoyaltyTab();
+        if (target === 'screenPromotions') {
+            if (M.direct) openAccountTab();   // the "Account" tab of the dedicated app
+            renderPromotionsScreen();
+        }
         UI.showScreen(target);
     });
 });

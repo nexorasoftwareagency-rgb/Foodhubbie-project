@@ -10,7 +10,7 @@
  * The FCM token itself is never stored in localStorage - it only lives in
  * the outlet's pushSubscriptions record (see pwa-install.js).
  */
-import { outletRef, get, set, push, onValue, OUTLET, BUSINESS_ID } from './firebase.js';
+import { outletRef, get, set, push, update, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
 import * as UI from './ui.js';
 import { esc } from './ui.js';
 import {
@@ -121,6 +121,7 @@ function syncProfile(profile) {
     if (!profile?.phone || !profile?.name) return Promise.resolve(false);
     const path = `customers/${profile.phone}/app`;
     const write = async () => {
+        if ((await ensureDeviceAccess(profile.phone)) === 'taken') return false;
         let existing = null;
         try {
             const snap = await get(outletRef(path));
@@ -192,6 +193,141 @@ function setPrefs(partial, { sync = true } = {}) {
     return _prefs;
 }
 
+// ---------------------------------------------------------------
+// Phone privacy without OTP: "first phone to use a number owns it".
+// Typing a number is not proof it is yours, so the customer's data
+// (profile, orders, loyalty, rewards, delivery code) is readable only by
+// devices registered under customers/{phone}/devices/{uid}. The first device
+// registers itself; another phone joins with an 8-digit code made on the
+// first one (Account > Link another phone), or the restaurant resets the lock.
+// States: 'owner' | 'taken' (another device owns it) | 'error' (rules not
+// deployed yet / offline: behave as before, nothing is lost).
+// ---------------------------------------------------------------
+let _access = { phone: null, state: 'unknown', pending: null };
+
+export function getAccessState() { return _access.state; }
+
+export function ensureDeviceAccess(phone) {
+    const p = normalizePhone(phone);
+    if (!p) return Promise.resolve('error');
+    if (_access.phone === p && _access.pending) return _access.pending;
+    const rec = { phone: p, state: 'unknown', pending: null };
+    _access = rec;
+    rec.pending = (async () => {
+        let state = 'error';
+        try {
+            const user = await ensureAnonAuth();
+            const mine = outletRef(`customers/${p}/devices/${user.uid}`);
+            let registered = null;
+            try { registered = (await get(mine)).exists(); } catch (e) { registered = null; } // old rules: no devices node
+            if (registered === true) state = 'owner';
+            else if (registered === false) {
+                try { await set(mine, { at: Date.now() }); state = 'owner'; } catch (e) { state = 'taken'; }
+            }
+        } catch (e) { state = 'error'; }
+        rec.state = state;
+        if (_initialized) { try { renderAccount(); } catch (e) { /* DOM not ready */ } }
+        return state;
+    })();
+    return rec.pending;
+}
+
+// Owner device: make a short-lived code to add another phone.
+export async function createLinkCode() {
+    const p = _profile?.phone;
+    if (!p || (await ensureDeviceAccess(p)) !== 'owner') throw new Error('not-owner');
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    const code = String(buf[0] % 100000000).padStart(8, '0');
+    const exp = Date.now() + 10 * 60 * 1000;
+    await set(outletRef(`customers/${p}/link`), { code, exp });
+    return { code, exp };
+}
+
+// New device: prove you hold the other phone by typing its code.
+export async function linkThisDevice(phone, code) {
+    const p = normalizePhone(phone);
+    const c = String(code || '').replace(/\D/g, '');
+    if (!p) return { ok: false, error: 'Enter a valid 10-digit mobile number.' };
+    if (c.length !== 8) return { ok: false, error: 'Enter the 8-digit code shown on your other phone.' };
+    try {
+        const user = await ensureAnonAuth();
+        await set(outletRef(`customers/${p}/devices/${user.uid}`), { at: Date.now(), code: c });
+    } catch (e) {
+        return { ok: false, error: 'That code is wrong or has expired. Make a new one on your other phone.' };
+    }
+    _access = { phone: p, state: 'owner', pending: Promise.resolve('owner') };
+    set(outletRef(`customers/${p}/link`), null).catch(() => {});
+    if (_profile?.phone === p) { hydrateProfile(); loadCustomerData().catch(() => {}); }
+    if (_initialized) { try { renderAccount(); } catch (e) { /* DOM not ready */ } }
+    return { ok: true };
+}
+
+function lockedPanelHtml() {
+    return `<div class="account-empty">This number is already set up on another phone, so your orders and points are hidden here. Open the <strong>Account</strong> tab and enter the 8-digit link code from your other phone, or ask the restaurant to reset it.</div>`;
+}
+
+function accessCardHtml() {
+    if (!_profile?.phone) return '';
+    if (_access.state === 'taken') {
+        return `<div class="account-card access-card" id="accessCard">
+            <div class="access-title">This number is already set up on another phone</div>
+            <p class="access-text">To keep your orders and points private, they are shown only on a phone you have linked. On your other phone open <strong>Account &rarr; Link another phone</strong> and type the 8-digit code here. Lost that phone? Ask the restaurant to reset it.</p>
+            <input class="onb-input" id="linkCodeInput" type="tel" inputmode="numeric" maxlength="8" placeholder="8-digit code" autocomplete="one-time-code">
+            <button type="button" class="account-save" id="btnLinkDevice">Link this phone</button>
+        </div>`;
+    }
+    if (_access.state === 'owner') {
+        return `<div class="account-card access-card" id="accessCard">
+            <div class="access-title">Use this number on another phone</div>
+            <p class="access-text">Make a code, then type it on the other phone. It works once, for 10 minutes.</p>
+            <div id="linkCodeOut" class="access-code hidden" aria-live="polite"></div>
+            <button type="button" class="account-save" id="btnMakeLinkCode">Link another phone</button>
+        </div>`;
+    }
+    return '';
+}
+
+function bindAccessCard() {
+    document.getElementById('btnLinkDevice')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        const res = await linkThisDevice(_profile?.phone, document.getElementById('linkCodeInput')?.value);
+        btn.disabled = false;
+        if (!res.ok) return UI.showToast(res.error, 'error');
+        UI.showToast('Phone linked. Your orders and points are back.', 'success');
+    });
+    document.getElementById('btnMakeLinkCode')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+            const { code } = await createLinkCode();
+            const out = document.getElementById('linkCodeOut');
+            if (out) { out.textContent = code.replace(/(\d{4})(\d{4})/, '$1 $2'); out.classList.remove('hidden'); }
+        } catch (err) {
+            UI.showToast('Could not make a code. Check your connection and try again.', 'error');
+        }
+        btn.disabled = false;
+    });
+}
+
+// Direct-mode sign-in: phone is the key, name is optional (greeting only).
+// No OTP by owner decision. The server-side profile node requires a 2+ char
+// name, so a blank name is stored as 'Guest'.
+export function signInWithPhone(name, phone) {
+    const cleanPhone = normalizePhone(phone);
+    if (!cleanPhone) return { ok: false, error: 'Enter a valid 10-digit mobile number.' };
+    const typed = String(name || '').trim();
+    if (typed && !validName(typed)) return { ok: false, error: 'Name must be 2-60 characters (or leave it empty).' };
+    const res = saveIdentity(typed || 'Guest', cleanPhone, { source: 'signin' });
+    if (res.ok) markOnboarded();
+    return res;
+}
+
+export function isSignedIn() {
+    return !!_profile?.phone;
+}
+
 export function getProfile() {
     return _profile ? { ..._profile, prefs: { ..._prefs } } : null;
 }
@@ -208,6 +344,7 @@ export function rememberIdentity(name, phone) {
 
 async function hydrateProfile() {
     if (!_profile?.phone) return;
+    if ((await ensureDeviceAccess(_profile.phone)) === 'taken') { try { renderAccount(); } catch (e) { /* DOM not ready */ } return; }
     try {
         const snap = await get(outletRef(`customers/${_profile.phone}/app`));
         const server = snap.val();
@@ -707,6 +844,7 @@ function renderPwaCards() {
 }
 
 function renderAccount() {
+    renderTabPanels();
     const card = document.getElementById('accountProfileCard');
     if (!card) return;
 
@@ -748,10 +886,12 @@ function renderAccount() {
         ${installAvailable ? `<button type="button" class="account-install" id="btnAcctInstall">${isIOS() ? 'How to install this app' : 'Install this app'}</button>` : ''}
         <button type="button" class="account-clear" id="btnAcctClear">Forget me on this device</button>
         <p class="account-note">Your number is used for order updates and offers only. It is never shown publicly.</p>
+        ${accessCardHtml()}
         ${renderCustomerStatsAndHistory()}
     `;
 
     bindAccountRatings();
+    bindAccessCard();
 
     document.getElementById('btnAcctSave')?.addEventListener('click', () => {
         const saved = saveIdentity(
@@ -915,9 +1055,9 @@ async function loadLoyaltyConfig() {
     }
     if (!_loyaltyConfig) {
         _loyaltyConfig = {
-            // Same default as the bot (bot/index.js): 2000 paise per point
-            // = 5 points per ₹100 spent. Admin can override via loyalty/config.
-            earnRatePaisePerPoint: 2000,
+            // Same default as the bot (bot/index.js): 5000 paise per point
+            // = 1 point per ₹50 spent (~2% back). Admin can override via loyalty/config.
+            earnRatePaisePerPoint: 5000,
             tiers: {
                 bronze: { min: 0, label: 'Bronze', multiplier: 1 },
                 silver: { min: 1000, label: 'Silver', multiplier: 1.25 },
@@ -978,6 +1118,10 @@ function loyaltyPoints() {
     if (!_loyalty) return 0;
     const lifetime = Number(_loyalty.lifetimePoints) || 0;
     const spent = Number(_loyalty.pointsSpent) || 0;
+    // Same inactivity rule as the bot: lapsed points show as 0.
+    const days = Number(_loyaltyConfig && _loyaltyConfig.expiryDays) || 0;
+    const last = Number(_loyalty.lastOrderAt) || 0;
+    if (days > 0 && last > 0 && Date.now() - last > days * 86400000) return 0;
     return Math.max(0, lifetime - spent);
 }
 
@@ -1077,6 +1221,7 @@ export async function writeCustomerOrder(order) {
     if (!order || !order.customerPhone || !order.orderId || !order.outlet) return false;
     const phone = String(order.customerPhone);
     try {
+        if ((await ensureDeviceAccess(phone)) === 'taken') return false; // not this phone's number
         await set(outletRef(`customers/${phone}/orders/${String(order.orderId)}`), {
             orderId: String(order.orderId),
             outlet: order.outlet,
@@ -1093,7 +1238,8 @@ export async function writeCustomerOrder(order) {
             orderGroupId: order.orderGroupId || '',
             paymentStatus: order.paymentStatus || 'Pending',
             itemCount: order.itemCount || 0,
-            itemsSummary: order.itemsSummary || []
+            itemsSummary: order.itemsSummary || [],
+            ...(order.orderMode ? { orderMode: String(order.orderMode) } : {})
         });
         return true;
     } catch (e) {
@@ -1101,22 +1247,48 @@ export async function writeCustomerOrder(order) {
     }
 }
 
-function waitForRedemption(phone, reqKey, ms = 15000) {
+// Resolves with the reward record once `pred(record)` is true. The bot writes
+// status 'otp_required' (code sent to WhatsApp), 'rejected', or the final
+// active record with the redemption code.
+function waitForReward(phone, reqKey, pred, ms = 15000) {
     return new Promise((resolve, reject) => {
         const r = outletRef(`customers/${phone}/rewards/${reqKey}`);
         let stop = null;
         const timer = setTimeout(() => { if (stop) stop(); reject(new Error('timeout')); }, ms);
         stop = onValue(r, (snap) => {
             if (!snap.exists()) return;
+            const v = snap.val();
+            if (!pred(v)) return;
             clearTimeout(timer);
             if (stop) stop();
-            resolve(snap.val());
+            resolve(v);
         }, () => {
             clearTimeout(timer);
             if (stop) stop();
             reject(new Error('read failed'));
         });
     });
+}
+
+// Ask for the WhatsApp code (up to 3 tries) and wait for the bot's verdict.
+async function completeRedemptionWithOtp(reqRef, phone, key) {
+    // The bot counts wrong codes in the reward record (wrongTries). The customer's
+    // browser cannot clear a stale error (rules), so each attempt waits for the
+    // counter to go UP instead of looking at a leftover message.
+    let seen = 0;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const otp = window.prompt('We sent a 6-digit code to your WhatsApp. Enter it to redeem:');
+        if (!otp || !/^\d{6}$/.test(otp.trim())) {
+            // (rules forbid clients deleting a request; the bot expires it)
+            throw new Error('cancelled');
+        }
+        await update(reqRef, { otp: otp.trim() });
+        const rec = await waitForReward(phone, key, v => v.status === 'active' || v.status === 'rejected' || (Number(v.wrongTries) || 0) > seen, 20000);
+        if (rec.status === 'active' || rec.status === 'rejected') return rec;
+        seen = Number(rec.wrongTries) || seen + 1;
+        UI.showToast('Wrong code. Try again.', 'error');
+    }
+    throw new Error('rejected');
 }
 
 function orderItemNames(order) {
@@ -1156,6 +1328,12 @@ function bindAccountRatings() {
     if (_ratingsDocBound) return;
     _ratingsDocBound = true;
     document.addEventListener('click', async (e) => {
+        const viewBtn = e.target.closest('[data-orders-view]');
+        if (viewBtn) {
+            _ordersView = viewBtn.dataset.ordersView === 'payments' ? 'payments' : 'orders';
+            renderTabPanels();
+            return;
+        }
         const star = e.target.closest('.rating-star');
         if (star) {
             const card = star.closest('[data-order-id]');
@@ -1205,13 +1383,18 @@ function bindAccountRatings() {
                 });
                 // The bot is the only writer of a redemption (server-minted code,
                 // points deducted); the reply lands on this request's own key.
-                const rec = await waitForRedemption(_profile.phone, reqRef.key);
+                let rec = await waitForReward(_profile.phone, reqRef.key, () => true);
+                if (rec.status === 'otp_required') {
+                    rec = await completeRedemptionWithOtp(reqRef, _profile.phone, reqRef.key);
+                }
+                if (rec.status === 'rejected') throw new Error('rejected');
                 await loadCustomerLoyalty();
                 renderAccount();
                 UI.showToast(`Redeemed: ${rec.label || reward.label} — code ${rec.code}`, 'success');
             } catch (e) {
                 UI.showToast(e && e.message === 'timeout'
                     ? 'Still processing — check Account in a minute.'
+                    : e && e.message === 'cancelled' ? 'Redemption cancelled.'
                     : 'Redemption failed. Try again.', 'error');
             } finally {
                 rewardBtn.disabled = false;
@@ -1288,20 +1471,37 @@ function renderRewards() {
     </div>`;
 }
 
-function renderCustomerStatsAndHistory() {
-    const stats = customerStats();
-    if (!hasIdentity()) {
-        return `<div class="account-empty">Save your mobile number to see order history, loyalty points and ratings for this kitchen.</div>`;
-    }
-    const strip = renderLoyaltyStrip();
-    const rank = renderRankings();
-    const rewards = renderRewards();
-    if (stats.orders === 0) {
-        return strip + rank + rewards + `<div class="account-empty">No orders yet. Order from the menu to build your history.</div>`;
-    }
+// Live tracking for the dedicated app: steps differ for delivery and pickup.
+const TRACK_DELIVERY = [['Placed', 'Placed'], ['Confirmed', 'Confirmed'], ['Ready', 'Ready'], ['Out for Delivery', 'On the way'], ['Delivered', 'Delivered']];
+const TRACK_PICKUP = [['Placed', 'Placed'], ['Confirmed', 'Confirmed'], ['Ready', 'Ready'], ['Served', 'Collected']];
+function trackLevel(order) {
+    const s = String(order.status || 'Placed');
+    if (order.orderMode === 'pickup') return Math.max(0, TRACK_PICKUP.findIndex(([k]) => k === s));
+    if (s === 'Picked Up' || s === 'Arriving at Restaurant' || s === 'Arrived at Restaurant') return 2;
+    if (s === 'Reached Drop Location') return 3;
+    return Math.max(0, TRACK_DELIVERY.findIndex(([k]) => k === s));
+}
+
+function trackingHtml(order) {
+    if (order.source !== 'APP') return '';
+    const status = String(order.status || 'Placed');
+    if (status === 'Cancelled') return '<div class="trk-cancelled">This order was cancelled.</div>';
+    const steps = order.orderMode === 'pickup' ? TRACK_PICKUP : TRACK_DELIVERY;
+    const at = trackLevel(order);
+    const dots = steps.map(([, label], i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"><span></span>${esc(label)}</li>`).join('');
+    const live = status === 'Out for Delivery' || status === 'Reached Drop Location';
+    const rider = live && order.riderName
+        ? `<div class="trk-rider">Your rider: <strong>${esc(order.riderName)}</strong>${order.riderPhone ? ` · <a href="tel:${esc(order.riderPhone)}">${esc(order.riderPhone)}</a>` : ''}</div>` : '';
+    const otp = live && order.deliveryOtp
+        ? `<div class="trk-otp">Delivery code <strong>${esc(order.deliveryOtp)}</strong><small>Tell this to the rider when your order arrives</small></div>` : '';
+    const pickupReady = order.orderMode === 'pickup' && status === 'Ready'
+        ? '<div class="trk-otp">Your order is ready — please collect it at the counter.</div>' : '';
+    return `<ol class="trk-steps">${dots}</ol>${rider}${otp}${pickupReady}`;
+}
+
+function ordersListHtml() {
     const rows = _orders.map((order) => {
-        const statusKey = String(order.status || 'Placed').toLowerCase();
-        const rated = _ratings[String(order.id)];
+        const statusKey = String(order.status || 'Placed').toLowerCase().replace(/[^a-z0-9]+/g, '-');
         return `
         <div class="account-order-card" data-order-id="${esc(String(order.id))}">
             <div class="account-order-head">
@@ -1313,22 +1513,127 @@ function renderCustomerStatsAndHistory() {
                 <span class="account-order-total">${UI.fmtMoney(order.total || 0)}</span>
             </div>
             <div class="account-order-items">${esc(orderItemNames(order))}</div>
+            ${trackingHtml(order)}
             <div class="account-order-actions">
+                ${order.source === 'APP' && String(order.status) === 'Placed' ? `<button type="button" class="trk-cancel" data-cancel-order="${esc(String(order.id))}">Cancel order</button>` : ''}
                 ${ratingStarsHtml(order)}
             </div>
         </div>`;
     }).join('');
-    return strip + rank + rewards + `
+    return rows;
+}
+
+// Loyalty card: tier strip, rank, rewards, headline stats.
+function renderLoyaltyPanel() {
+    if (_access.state === 'taken') return lockedPanelHtml();
+    const stats = customerStats();
+    if (!hasIdentity()) {
+        return `<div class="account-empty">Save your mobile number to see order history, loyalty points and ratings for this kitchen.</div>`;
+    }
+    return renderLoyaltyStrip() + renderRankings() + renderRewards() + `
     <div class="account-stats">
         <div class="stat"><div class="stat-value">${UI.fmtMoney(stats.totalSpent)}</div><div class="stat-label">Total spent</div></div>
         <div class="stat"><div class="stat-value">${stats.orders}</div><div class="stat-label">Orders</div></div>
         <div class="stat"><div class="stat-value">${stats.points}</div><div class="stat-label">Loyalty points</div></div>
-    </div>
-    <div class="account-section">
-        <div class="account-section-head">Your Orders at this kitchen <span class="account-section-count">(${stats.orders})</span></div>
-        <div id="accountOrdersList" class="account-orders">${rows}</div>
     </div>`;
 }
+
+// Order history: every order placed with this phone number at this kitchen.
+function renderOrdersPanel() {
+    if (_access.state === 'taken') return lockedPanelHtml();
+    if (!hasIdentity()) {
+        return `<div class="account-empty">Save your mobile number to see your order history for this kitchen.</div>`;
+    }
+    if (!_orders || _orders.length === 0) {
+        return `<div class="account-empty">No orders yet. Order from the menu to build your history.</div>`;
+    }
+    return `<div class="account-section">
+        <div class="account-section-head">Your Orders at this kitchen <span class="account-section-count">(${_orders.length})</span></div>
+        <div id="accountOrdersList" class="account-orders">${ordersListHtml()}</div>
+    </div>`;
+}
+
+function renderCustomerStatsAndHistory() {
+    // Dedicated app: Orders and Loyalty have their own tabs; Account stays profile-only.
+    if (document.body.classList.contains('direct-mode')) return '';
+    return renderLoyaltyPanel() + renderOrdersPanel();
+}
+
+// ── Payment history ────────────────────────────────────────────────
+// Reads the payment fields the bot mirrors onto customers/{phone}/orders/{id}
+// (bot/payment-sync.js). This is a payment record, not a tax invoice.
+let _ordersView = 'orders'; // 'orders' | 'payments'
+
+function paymentState(order) {
+    const status = String(order.status || '');
+    const pay = String(order.paymentStatus || 'Pending');
+    if (status === 'Cancelled') return { key: 'void', label: 'No charge' };
+    if (pay === 'Refunded' || status === 'Refunded') return { key: 'refunded', label: 'Refunded' };
+    if (pay === 'Paid') return { key: 'paid', label: 'Paid' };
+    const delivery = String(order.source || '') === 'webview_delivery' || /deliver/i.test(String(order.type || ''));
+    return { key: 'pending', label: delivery ? 'Pay on delivery' : 'Payment pending' };
+}
+
+function whenText(ms) {
+    const v = Number(ms || 0);
+    return v ? new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+}
+
+function renderPaymentsPanel() {
+    if (_access.state === 'taken') return lockedPanelHtml();
+    if (!hasIdentity()) {
+        return `<div class="account-empty">Save your mobile number to see your payment history for this kitchen.</div>`;
+    }
+    if (!_orders || _orders.length === 0) {
+        return `<div class="account-empty">No payments yet. Your payments will appear here after you order.</div>`;
+    }
+    let paid = 0, pending = 0;
+    const rows = _orders.map((o) => {
+        const st = paymentState(o);
+        const amount = Number(o.total) || 0;
+        if (st.key === 'paid') paid += amount;
+        if (st.key === 'pending') pending += amount;
+        const method = o.paymentMethod ? esc(String(o.paymentMethod)) : '';
+        return `
+        <details class="pay-row pay-${st.key}" data-order-id="${esc(String(o.id))}">
+            <summary>
+                <span class="pay-main"><strong>Order ${esc(String(o.id))}</strong><small>${esc(orderTime(o))}</small></span>
+                <span class="pay-amt">${UI.fmtMoney(amount)}<small class="pay-pill pay-pill-${st.key}">${esc(st.label)}${st.key === 'paid' && method ? ' · ' + method : ''}</small></span>
+            </summary>
+            <div class="pay-detail">
+                <div><span>Items</span><span>${esc(orderItemNames(o))}</span></div>
+                <div><span>Order status</span><span>${esc(o.status || 'Placed')}</span></div>
+                <div><span>Payment</span><span>${esc(st.label)}${method ? ' · ' + method : ''}</span></div>
+                ${o.paidAt ? `<div><span>Paid on</span><span>${esc(whenText(o.paidAt))}</span></div>` : ''}
+                ${o.table ? `<div><span>Table</span><span>${esc(String(o.table))}</span></div>` : ''}
+                <div><span>Amount</span><span>${UI.fmtMoney(amount)}</span></div>
+            </div>
+        </details>`;
+    }).join('');
+    return `
+    <div class="account-stats">
+        <div class="stat"><div class="stat-value">${UI.fmtMoney(paid)}</div><div class="stat-label">Paid</div></div>
+        <div class="stat"><div class="stat-value">${UI.fmtMoney(pending)}</div><div class="stat-label">To pay</div></div>
+    </div>
+    <div class="account-section">
+        <div class="account-section-head">Payment history</div>
+        <div id="paymentsList" class="pay-list">${rows}</div>
+        <p class="pay-note">This is a payment record for your reference, not a tax invoice.</p>
+    </div>`;
+}
+
+// Bottom-tab screens of the dedicated app (direct mode): Orders and Loyalty.
+function renderTabPanels() {
+    const o = document.getElementById('ordersScreenBody');
+    document.querySelectorAll('[data-orders-view]').forEach(b => b.classList.toggle('active', b.dataset.ordersView === _ordersView));
+    if (o) o.innerHTML = _ordersView === 'payments' ? renderPaymentsPanel() : renderOrdersPanel();
+    const l = document.getElementById('loyaltyScreenBody');
+    if (l) l.innerHTML = renderLoyaltyPanel();
+}
+
+export async function renderOrdersTab() { await loadCustomerData(); }
+export async function renderLoyaltyTab() { await loadCustomerData(); }
+export function openAccountTab() { setPromoTab('account'); }
 
 export async function renderCustomerPromotions(store, mode = 'dine-in') {
     _mode = mode;

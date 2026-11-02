@@ -110,7 +110,7 @@ const _rangeLabel = () => {
 const _rates = () => ({ ...DEFAULT_RATES, ...(_billing && typeof _billing === 'object' ? _billing.rates || {} : {}) });
 const _mode = () => normalizeMode(_billing && typeof _billing === 'object' ? _billing.mode : null);
 
-const LABELS = { QR: 'QR menu', POS: 'POS counter', webview_delivery: 'Foodhubbie-App Orders', WA: 'WhatsApp bot', other: 'Other' };
+const LABELS = { QR: 'QR menu', POS: 'POS counter', app: 'Customer App order', APP: 'Customer App order', webview_delivery: 'WhatsApp delivery link', WA: 'WhatsApp bot', other: 'Other' };
 const _label = src => LABELS[src] || src;
 
 function _setText(id, txt) {
@@ -203,7 +203,7 @@ function _render() {
             const rates = _rates();
             const mode = _mode();
             const modeLabel = mode === 'percentage'
-                ? 'Foodhubbie-App Orders 3% · WhatsApp bot 3% · POS + QR menu 1%'
+                ? 'Customer App orders 2% · WhatsApp-based 3% · POS + QR menu 1%'
                 : mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total) — legacy' : 'Per-order flat rates — legacy';
             const setup = b.setup || {};
             const setupStatus = setup.status || 'non_refundable';

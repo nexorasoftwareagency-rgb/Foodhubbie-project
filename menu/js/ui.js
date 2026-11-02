@@ -103,7 +103,8 @@ export function updateGreeting(name) {
 
 const BOTTOM_NAV_SCREENS = {
     screenMenu: 'screenMenu', screenCart: 'screenCart', screenTracking: 'screenTracking',
-    screenHistory: 'screenHistory', screenPromotions: 'screenPromotions'
+    screenHistory: 'screenHistory', screenPromotions: 'screenPromotions',
+    screenOrders: 'screenOrders', screenLoyalty: 'screenLoyalty'
 };
 
 const _screenStack = [];
