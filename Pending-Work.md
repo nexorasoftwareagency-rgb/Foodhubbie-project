@@ -65,21 +65,16 @@ This rule applies to:
 - **Adoptable kernels (Phase 2.5 candidates, owner's call 2026-11-01: drop ② expiry, build the rest):** (1) `maxRedeemPercentOfOrder` Zomato-style cap inside `computeTenderPaise` + menu tender preview + Admin config field ✅; (2) points expiry on idle `lastEarnedAt` — DROPPED per owner directive 2026-11-01; (3) manual admin point adjustments with mandatory reason + `source: 'manual'` audit node `loyalty/adjustments` ✅; (4) tier-up FCM push through in-app inbox (`notifyTierUp`) — earn fires, tier-up log line verified, dead-token hygiene present ✅ (inbox write verified live on order 931397, FCM push path proves out via bot logs); (5) liability KPI (`Σ lifetimePoints × redeemValue`) + rankings read ✅.
 - **Tenanted reality:** config is live but only on the e2e outlet; both real tenants (`roshani-pizza`, `roshani-cake`) still run `loyalty/config` = null → code defaults, and pizza has 1 ranked customer (lifetime 40 pts). Configuring tenants is an ops step, not a code gap.
 
-### 🔍 D4 — Wallet gates: stop the bot at 10%, stop QR ordering at 0
-- **Stage:** `reviewing` — blocked on the live ledger being settled
-- **Agreed behaviour:** at 10% remaining, stop the WhatsApp bot; at 0, stop QR table ordering and show a "Temporarily Unavailable" page on scan. POS never gated; demo tenant hard-skipped; flat ₹100 bot threshold; ₹0 closes ordering.
-- **Shipped groundwork:** wallet writer in observe mode (`enforce:false`) — it records state but gates nothing yet.
-- **Blocker:** `roshani-pizza/pizza` is at −₹72.14 (paid ₹117.86, used ₹190, 180 orders, `topUpDone:false`) — genuinely unpaid, not a math bug (91 cancelled orders are already excluded; the ₹500 setup charge is correctly excluded). Enforcement would take the live outlet offline the moment it flips, so the owner must top up first.
-- **Note:** a real HTTP 404 is impossible on Spark/Hosting (the SPA rewrite returns 200) — the stop screen is an in-app 200.
+### ✅ D4 — Wallet gates — code shipped + verified (2026-11-01)
+- **Stage:** `verified-code` — pure gate + menu consumer + admin writer + rules link shipped; enforcement OFF (observe) until owner tops up; bot consumer still pending. Plain, nonspread summary: `shared/cost-math.js` `walletGate(w)` + asserts; `database.rules.json` public read on `outlets/{oid}/walletGate`; `menu/js/session.js` `assertWalletGate()` + `menu/js/app.js` gate display; `Admin/js/features/costs.js` writer gated by `billing/wallet/enforce` flag (demo tenant hard-skipped); build `build:admin` 3.9MB OK; twins 5/5; deploy `database,hosting:menu,hosting:admin`.
+- Not yet done: owner top-up + `enforce:true`; bot reads public flag before confirming WA orders.
 
 ### 🔍 D5 — Pricing / percentage-package marketing consistency
 - **Stage:** `verified` (updated 2026-11-01 — setup-fee removed; wallet-minimum model live) — `website/pricing.html` compact, `shared/cost-math.js` (`MIN_TOPUP` 1000 / `MIN_TOPUP_WITH_WA` 1500 / `MIN_BALANCE` 250), `BILLING-MODEL.md` rate table + removal note; `Admin/js/features/costs.js` reads new constants; `SupremeAdmin/js/features/restaurant-profile.js` `billing-save-setup` action removed; build/admin SW `v5.12.*` + deploy `database,hosting:admin,hosting:website`.
 - **Facts to hold:** No setup fee. First-time wallet top-up: ₹1,000 (no WhatsApp) / ₹1,500 (with WhatsApp bot). Maintain minimum balance ≥ ₹250 always. Percentage rates unchanged (QR 1%, POS 1%, App/WA 3%, other 3%, promo ₹1/token). `shared/cost-math.js` authoritative (`PERCENT_RATES`, `APP_PLAN_NAME`, `MIN_TOPUP`, `MIN_TOPUP_WITH_WA`, `MIN_BALANCE`). `website/pricing.html` compact version deployed (`db380aa`). `docs/BILLING-MODEL.md` setup line removed; wallet-minimum + balance-guard rows added; removal note appended.
 
-### 🔄 Custom-domain migration (PLAN-DOMAIN-MIGRATION.md) — planning done, P1 waiting on owner
-- **Stage:** plan written + committed (`a87280b` branch, NOT on main yet); P1 (console + DNS) is owner-hands — 4 domains to connect + GoDaddy CNAMEs
-- **Next agent step:** after P1 DNS verifies, run P2 code cutover sweep (URL inventory already mapped in the plan, incl. the `firebase deploy --only auth` authorizedDomains-wipe hazard and the `settings/qrBaseUrl` runtime knob)
-- **Open decision:** retire the orphan `foodhubbie-delivery` hosting site (stale since Aug, no firebase.json block, nothing references it)
+### ✅ Custom-domain migration (PLAN-DOMAIN-MIGRATION.md) — P1 + P2 done (2026-11-01)
+- **Stage:** P1 (console + DNS, 4 subdomains + GoDaddy CNAMEs) and P2 (code cutover sweep) — both done, verified on 4 hosts with `.web.app` fallback preserved; see the newer "Domain Migration — P1 + P2" entry below.
 
 ### ✅ Admin Dashboard UI/UX Audit — RECALLED / COMPLETE (2026-11-01) — **UPDATED** (this subagent audit)
 - **Status:** Done (PASS; clean-up required — see `docs/UI-AUDIT-COMPLETE.md` for full tables + evidence).

@@ -483,6 +483,22 @@ export async function assertOutletEnabled() {
         throw err;
     }
 }
+/**
+ * D4 wallet gate (public flag like `disabled`): 'low' = bot stops (₹100 flat /
+ * 10% of topped-up), 'closed' = QR ordering stops. Written by Admin/bot only
+ * (rules keep the write admin-only); customers read it freely.
+ */
+export async function assertWalletGate() {
+    const snap = await get(outletRef('walletGate'));
+    const gate = snap.exists() ? String(snap.val()) : null;
+    if (gate === 'closed') {
+        const err = new Error('WALLET_CLOSED');
+        err.userMessage = 'Ordering is temporarily unavailable. Please try again later.';
+        err.code = 'WALLET_CLOSED';
+        throw err;
+    }
+    return gate; // 'low' | null — 'low' currently affects the bot only
+}
 export async function saveCheckoutContact(name, phone, guestCount, specialNote) {
     if (!Session.sessionId) return;
     const now = Date.now();

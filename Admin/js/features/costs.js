@@ -18,7 +18,7 @@
 import { Outlet, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { state } from '../state.js';
 import { SUPPORT_WA } from '../ui.js';
-import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel } from '../../shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel, walletGate } from '../../shared/cost-math.js';
 
 let _unsubs = [];
 let _orders = {};
@@ -302,6 +302,21 @@ function _renderWallet() {
         else if (w.level === 'empty') msg = 'Your wallet balance is finished. Please top up now to avoid interruption.';
         else if (w.level === 'low') msg = `Low balance: 25% or less of your top-ups is left. Please top up soon.`;
         else msg = 'Your restaurant is live.';
+        // D4: only when the owner has explicitly armed enforcement does the
+        // admin writer publish the public gate flag; the demo tenant is
+        // hard-skipped because it must never be gated.
+        const enforce = !!(_billing && _billing.wallet && _billing.wallet.enforce === true);
+        const isDemo = (window.currentBusinessId === 'foodhubbie-demo');
+        if (enforce && !isDemo) {
+            const gate = walletGate(w);
+            const ref = Outlet.ref(`walletGate`);
+            if (ref) ref.set(gate === 'ok' ? '' : gate).catch(e => console.error('[walletGate] write failed', e));
+            msg = gate === 'closed' ? 'Ordering is now disabled (wallet empty).'
+                : gate === 'low' ? 'Bot is now paused (wallet low).'
+                : 'Wallet gate is clear. Your restaurant is live.';
+        } else if (!enforce) {
+            msg = `${msg} (Wallet gate: observe mode — not enforced.)`;
+        }
         _setText('walletStatus', msg);
         const hero = document.getElementById('walletHero');
         if (hero) hero.style.borderLeft = w.level === 'empty' ? '4px solid #dc2626' : w.level === 'low' ? '4px solid #f59e0b' : '';

@@ -4,7 +4,7 @@
  * This is the only file with top-level event listener registration.
  */
 import { outletRef, get, onValue, push, set, OUTLET, isConnected, update, runTransaction } from './firebase.js';
-import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled } from './session.js';
+import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled, assertWalletGate } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getQRStorageKey } from './cart.js';
 import { placeOrder } from './order.js';
 import { validateCoupon } from './discount.js';
@@ -126,10 +126,17 @@ async function boot() {
         // plus a clear message instead of a silent permission error.
         try {
             await assertOutletEnabled();
+            await assertWalletGate();
         } catch (e) {
-            if (e.code === 'OUTLET_DISABLED') {
+            if (e.code === 'OUTLET_DISABLED' || e.code === 'WALLET_CLOSED') {
                 document.getElementById('loadingOverlay').style.display = 'none';
                 document.getElementById('offlineBanner').classList.remove('visible');
+                if (e.code === 'WALLET_CLOSED') {
+                    const h3 = document.querySelector('#screenDisabled h3');
+                    const p = document.querySelector('#screenDisabled p');
+                    if (h3) h3.textContent = 'Ordering temporarily unavailable';
+                    if (p) p.textContent = 'Online ordering is paused right now. Please check back later or ask a staff member for assistance.';
+                }
                 UI.showScreen('screenDisabled');
                 clearTimeout(_bootWatchdog);
                 return;

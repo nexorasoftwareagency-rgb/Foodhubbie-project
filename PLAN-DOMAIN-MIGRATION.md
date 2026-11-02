@@ -128,14 +128,25 @@ the existing `--only hosting:admin,hosting:menu,hosting:rider,hosting:supreme,ho
   (Firebase keeps serving them — leave as fallback indefinitely; do not delete).
 
 ### P4 — Verification checklist (each blank until tested live)
-- [ ] app.foodhubbie.in login (owner + demo) & Roshani tab loads
-- [ ] menu.foodhubbie.in QR scan → order → session attach
-- [ ] WhatsApp delivery deep link opens menu.foodhubbie.in webview & orders
-- [ ] rider.foodhubbie.in login + order accept → Delivered (earns loyalty)
-- [ ] control.foodhubbie.in supreme sign-in (incl. Google if enabled)
-- [ ] demo: app.foodhubbie.in/demo boots 0 console errors
-- [ ] bot-control-api accepts an idToken from an app.* origin (CORS)
-- [ ] Old `.web.app` URLs still answer on all 5 sites (fallback intact)
+- [x] app.foodhubbie.in login (owner + demo) & Roshani tab loads (P2 verify, commit `0e93373`)
+- [x] menu.foodhubbie.in QR scan → order → session attach (P2 verify)
+- [x] WhatsApp delivery deep link opens menu.foodhubbie.in webview & orders (P2 verify)
+- [x] rider.foodhubbie.in login + order accept → Delivered (earns loyalty) (P2 verify)
+- [x] control.foodhubbie.in supreme sign-in (incl. Google if enabled) (P2 verify)
+- [x] demo: app.foodhubbie.in/demo boots 0 console errors (P2 verify)
+- [x] bot-control-api accepts an idToken from an app.* origin (CORS) (P2 verify)
+- [x] Old `.web.app` URLs still answer on all 5 sites (fallback intact) (P2 verify)
+
+## 5. AS BUILT (2026-11-01)
+- P1: 4 subdomains connected (app/menu/rider/control) + SSL + GoDaddy CNAMEs — owner-hands, verified.
+- P2: commit `8941309` — DB `qrBaseUrl` flip + authorized domains (console-only; `--only auth` NEVER run)
+  + bot `WEBVIEW_DELIVERY_HOST` + bot-control-api CORS/loginUrl + Supreme `ADMIN_APP_URL` +
+  admin `reviewUrl`/`qrBaseUrl` + `menu/delivery.html` OG tags; deployed `hosting:admin,menu,website,supreme,rider`.
+- Post-P2: performance audit C on the new domains (`03251fa`, `docs/PERF-AUDIT-NEW-DOMAINS.md`);
+  UI/UX audit fixes shipped (`7637347`, `dce5368`, `872d8fc` — Admin SW `v5.12.14`).
+- All 4 hosts answer HTTP 200 (re-probed 2026-11-02); `.web.app` still serves (fallback).
+- P3 remaining: `api.foodhubbie.in` (optional, needs TLS reverse proxy), retire `foodhubbie-delivery`
+  orphan site, optional `assets` domain. No code blockers left.
 
 ## 4. Risks / rules for this migration
 - Never `firebase deploy --only auth` (authorizedDomains wipe) — console only.

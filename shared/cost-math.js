@@ -49,6 +49,23 @@ export function rateLabel(src, mode, rates = DEFAULT_RATES) {
 }
 
 const _n = (x) => Number(x) || 0;
+
+/**
+ * D4 wallet gate (agreed behaviour 2026-11-01): with `enforce == true`,
+ *   - bot stops when balance <= max(10% of topped-up, FLAT bot threshold) → 'low'
+ *   - QR/menu ordering stops when balance <= 0 → 'closed'
+ *   - POS is NEVER gated (counter staff settle in person)
+ * Demo tenant is hard-skipped upstream (consumer-side), not here.
+ */
+export const WALLET_FLAT_THRESHOLD = 100;
+export function walletGate(w = {}) {
+    const b = _r2(_n(w.balance));
+    if (b <= 0) return 'closed';
+    const topped = _n(w.paid);
+    const botThresh = Math.max(topped * 0.1, WALLET_FLAT_THRESHOLD);
+    if (b <= botThresh) return 'low';
+    return 'ok';
+}
 const _r2 = (x) => Math.round(x * 100) / 100;
 
 /**
@@ -176,5 +193,13 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     assert.equal(walletLevel({ paid: 0 }), 'none'); assert.equal(walletLevel({ paid: 1000, used: 500 }), 'ok');
     assert.equal(walletLevel({ paid: 1000, used: 750 }), 'low', 'exactly 25% left'); assert.equal(walletLevel({ paid: 1000, used: 749 }), 'ok');
     assert.equal(walletLevel({ paid: 1000, used: 900, charges: 100 }), 'empty'); assert.equal(walletLevel({ paid: 1000, used: 1200 }), 'empty');
+    // --- D4 wallet gate ---
+    assert.equal(walletGate({ balance: 0 }), 'closed', 'balance 0 closes QR');
+    assert.equal(walletGate({ balance: -5 }), 'closed', 'negative closes QR');
+    assert.equal(walletGate({ paid: 1000, balance: 100 }), 'low', 'bot stops at max(10% topped-up, 100) — exactly flat');
+    assert.equal(walletGate({ paid: 1000, balance: 101 }), 'ok', 'just above threshold OK');
+    assert.equal(walletGate({ paid: 1500, balance: 149 }), 'low', 'below 10% of topped-up (150) → low');
+    assert.equal(walletGate({ paid: 200, balance: 20 }), 'low', '10% of small top-up yields the flat ₹100 floor');
+    assert.equal(walletGate({ paid: 200, balance: 100 }), 'low', 'at exactly the flat ₹100 → low');
     console.log('cost-math OK');
 }
