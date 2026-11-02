@@ -123,6 +123,10 @@ fields, because RTDB deletes keys written as `null`.
 
 - **Firebase:** `database` rules + hosting `admin`, `supreme`, `menu`, `rider`, `website` deployed to
   `foodhubbie-10`. Menu hosting was redeployed after the anonymous-auth fix.
+- **Admin rebuild:** the concurrent pixel/ARIA audit commit (`a2ff531`) was not part of the first build, so
+  Admin was rebuilt from the final branch and redeployed. That commit had introduced a UTF-8 BOM in
+  `Admin/style.css`, which the encoding guard rejects; the BOM is removed and the shell is bumped to
+  **`foodhubbie-erp-shell-v5.12.16` / `style.css?v=5.4.16`** so clients pick it up.
 - **Menu service worker:** `menu-shell-v32` (precaches `app-checkout.js`, forces the fixed shell).
 - **EC2** (`/var/www/foodhubbie`, pm2): `bot/index.js` synced and ids **1** (pizza, meta transport) and **6**
   (e2e outlet, Baileys) restarted clean; **2** (bot-control-api) restarted earlier in the deploy.
