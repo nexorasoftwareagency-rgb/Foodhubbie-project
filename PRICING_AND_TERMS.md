@@ -34,7 +34,7 @@ subscription on any channel, no per-outlet licence.
 | **QR menu** | **1%** of order value | Dine-in table ordering |
 | Unclassified / legacy (`other`, unknown source string) | 3% | Anything not tagged with a channel |
 | **Promotional message** | **₹1** per message | WhatsApp marketing templates to opted-in customers |
-| **Setup** | **₹500** one-time, **non-refundable**, adjusted in the first bill | Onboarding |
+| **Setup** | **None** — ordering goes live after a one-time wallet top-up | Onboarding |
 | **Minimum first top-up** | **₹1,000** | Prepaid wallet |
 | **Free promo tokens** | 15 | Welcome pack |
 
@@ -116,7 +116,7 @@ cover Meta's per-message cost. Indicative Meta rates for India (they change quar
 ### 4. Payments & Billing
 - **Billing model:** Prepaid wallet. Order usage and manual charges are deducted from top-ups; there is no monthly invoice cycle.
 - **Minimum top-up:** ₹1,000 (first top-up is required before an outlet goes live).
-- **Setup fee:** ₹500 one-time, non-refundable, adjusted in the first bill.
+- **Setup fee:** none — the wallet top-up (minimum ₹1,000; ₹1,500 with WhatsApp bot) is the only amount due before going live.
 - **Low balance:** warning when the remaining balance reaches 25% of everything topped up so far.
 - **Payment methods:** UPI / bank transfer, recorded in Supreme Admin (Usage & Payments → Record payment).
 - **Invoices:** printable receipt generated from the payment record (save as PDF from the browser).
