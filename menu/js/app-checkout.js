@@ -15,7 +15,7 @@ import { outletRef, get, set, ensureAnonAuth, OUTLET, BUSINESS_ID } from './fire
 import { Cart, clearCart, subtotal as cartSubtotal, isEmpty as cartIsEmpty } from './cart.js';
 import * as UI from './ui.js';
 import { validateCoupon } from './discount.js';
-import { getProfile, rememberIdentity, writeCustomerOrder, validateRewardCode, redeemValuePaisePerPoint, minSpendAfterRedemptionRs } from './customer.js';
+import { getProfile, rememberIdentity, writeCustomerOrder, validateRewardCode, redeemValuePaisePerPoint, minSpendAfterRedemptionRs, maxRedeemPercentOfOrder } from './customer.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
 import { generateOrderId } from './order.js';
 import { assertOutletEnabled } from './session.js';
@@ -56,15 +56,19 @@ export function deliveryFeeFor(location, store, slabs) {
     return { fee: getFeeFromSlabs(dist, Array.isArray(slabs) ? slabs : []), distanceKm: round2(dist) };
 }
 
-export function computeCheckout({ subtotal, mode, discount, rewardPoints, fee, dine, redeemPaise = 100, minSpendRs = 0 }) {
+export function computeCheckout({ subtotal, mode, discount, rewardPoints, fee, dine, redeemPaise = 100, minSpendRs = 0, maxRedeemPct = 0 }) {
     const rates = taxRatesFrom(dine);
     const deliveryFee = mode === 'delivery' ? (Number(fee) || 0) : 0;
     const t = computeOrderTotals({ subtotal, discount: discount && discount.amount > 0 ? discount.amount : 0, taxRates: rates, serviceChargeEnabled: false, deliveryFee });
     let tender = 0;
     if (rewardPoints > 0) {
+        // Same R10 cap the bot applies (maxRedeemPercentOfOrder of the pre-tax
+        // order value) so the previewed "To pay" always equals the final bill.
+        const capBasePaise = Math.round(Math.max(0, t.subtotal - t.discount) * 100);
         tender = round2(computeTenderPaise({
             points: rewardPoints, redeemValuePaisePerPoint: redeemPaise,
             totalDuePaise: Math.round(t.total * 100), minSpendAfterRedemptionPaise: Math.round(minSpendRs * 100),
+            subtotalPaise: capBasePaise, maxRedeemPercentOfOrder: maxRedeemPct,
         }) / 100);
     }
     return { ...t, tender, payable: round2(Math.max(0, t.total - tender)) };
@@ -126,6 +130,7 @@ function currentTotals() {
         subtotal: cartSubtotal(), mode: S.mode, discount: S.discount,
         rewardPoints: S.reward ? S.reward.points : 0, fee, dine: S.dine,
         redeemPaise: redeemValuePaisePerPoint(), minSpendRs: minSpendAfterRedemptionRs(),
+        maxRedeemPct: maxRedeemPercentOfOrder(),
     });
 }
 

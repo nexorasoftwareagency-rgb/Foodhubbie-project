@@ -1,4 +1,4 @@
-const CACHE_NAME = 'menu-shell-v31';
+const CACHE_NAME = 'menu-shell-v32';
 const ASSETS = [
   './index.html',
   './delivery.html',

@@ -106,11 +106,24 @@ export async function mintAnonWebviewToken() {
 // source 'APP' requires an anonymous-auth caller and appUid == auth.uid, so a
 // stray unauthenticated script cannot create orders. No customer login is
 // involved (the phone number remains the customer's identifier).
+//
+// One in-flight promise: several callers race here on first use (device
+// registration, profile sync, checkout). Firebase's signInAnonymously is NOT
+// idempotent under concurrency — without this, each racer created a separate
+// anonymous user, the device registered under one uid and the order was
+// written by another (rules: permission_denied), and first-phone-wins then
+// locked the real customer out of their own number.
+let _anonPending = null;
 export async function ensureAnonAuth() {
     const auth = getAuth(app);
     if (auth.currentUser) return auth.currentUser;
-    const cred = await signInAnonymously(auth);
-    return cred.user;
+    if (!_anonPending) {
+        _anonPending = (async () => {
+            try { await auth.authStateReady(); } catch (e) { /* older SDK */ }
+            return auth.currentUser || (await signInAnonymously(auth)).user;
+        })().finally(() => { _anonPending = null; });
+    }
+    return _anonPending;
 }
 
 export { ref, get, onValue, set, push, update, runTransaction };

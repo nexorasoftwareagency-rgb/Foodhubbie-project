@@ -968,6 +968,13 @@ function isWebOrderSource(order) {
     return !!order && (order.source === 'webview_delivery' || order.source === 'APP');
 }
 
+// Finalize a browser-written order exactly once, and only while it is still
+// live: an order the customer cancelled before the bot saw it must not deduct
+// stock or burn a reward code.
+function shouldFinalizeWebOrder(order) {
+    return isWebOrderSource(order) && !order.stockDeducted && String(order.status || '') === 'Placed';
+}
+
 const CUSTOMER_APP_STATUS = {
     'placed': { title: 'Order received', body: 'We received your order and will confirm it shortly.' },
     'confirmed': { title: 'Order confirmed', body: 'The kitchen is preparing your order.' },
@@ -1292,30 +1299,13 @@ async function clawLoyaltyPoints(orderId, order, status) {
         if (!isCancel && !isVoidedDineIn) return;
         const outlet = order.outlet || OUTLET;
         const bid = resolveBusinessIdFor(outlet);
-        // Accrual lookup FIRST — unpaid dine-in orders hit this path on every
-        // routine update, and most have nothing to reverse (one cheap read).
-        const accrualRef = db.ref(resolvePath(`loyalty/accruals/${String(orderId)}`, outlet));
-        const snap = await accrualRef.once('value').catch(() => null);
-        const rec = snap && snap.val();
-        if (!rec) return; // never accrued — nothing to reverse
-        const config = await getLoyaltyConfig(outlet);
-        if (config.clawbackEnabled === false) return;
-        const phone = String(rec.phone || '');
-        if (!/^[6-9]\d{9}$/.test(phone)) return;
         const now = Date.now();
-        const reason = isCancel ? statusLower : 'bill-void';
-        // Audit copy first, then remove the idempotency lock, then reverse.
-        await db.ref(resolvePath(`loyalty/clawbacks/${String(orderId)}`, outlet)).set({
-            ...rec,
-            clawedAt: now,
-            clawedFromStatus: rec.status || '',
-            reason
-        });
-        await accrualRef.remove();
         // R2 fairness: a burned reward code on this order goes back to active
-        // so a cancellation/void doesn't eat the customer's reward. The
-        // usedOnOrder guard means we only resurrect OUR burn — never a code
-        // that was already spent again elsewhere.
+        // so a cancellation/void doesn't eat the customer's reward. Runs even
+        // when nothing accrued yet (a Placed order cancelled before delivery
+        // has no accrual but its tender is already burned). The usedOnOrder
+        // guard means we only resurrect OUR burn — never a code that was
+        // already spent again elsewhere.
         const tender = order.loyaltyTender;
         const tenderPhone = order.phone ? String(order.phone).replace(/\D/g, '').slice(-10) : '';
         if (tender && tender.rewardKey && /^[6-9]\d{9}$/.test(tenderPhone)) {
@@ -1329,6 +1319,26 @@ async function clawLoyaltyPoints(orderId, order, status) {
                 return { ...node, status: 'active', usedAt: null, usedOnOrder: null };
             }).catch(() => {});
         }
+        // Accrual lookup AFTER the reward release — unpaid dine-in orders hit
+        // this path on every routine update, and most have nothing to reverse
+        // (one cheap read).
+        const accrualRef = db.ref(resolvePath(`loyalty/accruals/${String(orderId)}`, outlet));
+        const snap = await accrualRef.once('value').catch(() => null);
+        const rec = snap && snap.val();
+        if (!rec) return; // never accrued — nothing to reverse
+        const config = await getLoyaltyConfig(outlet);
+        if (config.clawbackEnabled === false) return;
+        const phone = String(rec.phone || '');
+        if (!/^[6-9]\d{9}$/.test(phone)) return;
+        const reason = isCancel ? statusLower : 'bill-void';
+        // Audit copy first, then remove the idempotency lock, then reverse.
+        await db.ref(resolvePath(`loyalty/clawbacks/${String(orderId)}`, outlet)).set({
+            ...rec,
+            clawedAt: now,
+            clawedFromStatus: rec.status || '',
+            reason
+        });
+        await accrualRef.remove();
         const loyaltyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, outlet));
         const loyaltySnap = await loyaltyRef.once('value').catch(() => null);
         const current = (loyaltySnap && loyaltySnap.val()) || {};
@@ -2470,7 +2480,7 @@ async function sendDailyReportSafely(dateOverride = null) {
             // outage silently drops tenders and stock. Every sock-dependent
             // call below guards itself (notifyAdmin, handleOrderStatusUpdate,
             // deductInventoryStock's alert).
-            const isWebviewFinalize = isWebOrderSource(order) && !order.stockDeducted;
+            const isWebviewFinalize = shouldFinalizeWebOrder(order);
             if (!currentSock && !isWebviewFinalize) return;
 
         // Only handle "new" orders if they were created after the bot started
@@ -2489,7 +2499,7 @@ async function sendDailyReportSafely(dateOverride = null) {
             // straight to Firebase (no chat round-trip). The side effects
             // (stock deduction, customer profile save, discount usage logging)
             // are handled inline here before the "Order Placed" message.
-            if (isWebOrderSource(order) && !order.stockDeducted) {
+            if (shouldFinalizeWebOrder(order)) {
                 try {
                     // --- SAFEST-FIRST: server-side discount re-validation ---
                     // This order was written directly by the customer's browser
