@@ -1,4 +1,4 @@
-:root {
+﻿:root {
     /* Core brand palette */
     --primary: #E84908;           /* Brand orange */
     --primary-rgb: 232, 73, 8;
@@ -868,7 +868,7 @@ tr.premium-row-v4:focus-visible {
     font-size: 14px;
     outline: none;
     padding: 12px 16px;
-    transition: all 0.3s ease;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
     width: 100%;
 }
 
@@ -11521,4 +11521,11 @@ body.setup-mode .setup-hide {
 @media (prefers-reduced-motion: reduce) {
     .setup-progress__fill { transition: none; }
     .setup-flash { animation: none; box-shadow: 0 0 0 3px rgba(232, 73, 8, 0.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

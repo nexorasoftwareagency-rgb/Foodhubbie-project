@@ -940,8 +940,8 @@ export function loadCombos() {
                             <input type="checkbox" data-action="toggleCombo" data-id="${c.id}" ${disabled ? '' : 'checked'} onchange="window.__toggleCombo('${c.id}', this.checked)">
                             <span class="toggle-slider"></span>
                         </label>
-                        <button class="btn-action-v4" data-action="editCombo" data-id="${c.id}" title="Edit Combo"><i data-lucide="edit-3" style="width:14px;"></i></button>
-                        <button class="btn-action-v4 danger" data-action="deleteCombo" data-id="${c.id}" title="Delete Combo"><i data-lucide="trash-2" style="width:14px;"></i></button>
+                        <button aria-label="Edit combo" class="btn-action-v4" data-action="editCombo" data-id="${c.id}" title="Edit Combo"><i data-lucide="edit-3" style="width:14px;"></i></button>
+                        <button aria-label="Delete combo" class="btn-action-v4 danger" data-action="deleteCombo" data-id="${c.id}" title="Delete Combo"><i data-lucide="trash-2" style="width:14px;"></i></button>
                     </div>
                 </div>
             </div>`;

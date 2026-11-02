@@ -3840,9 +3840,9 @@
                     <input type="date" id="rrTo" class="form-input">
                 </div>
                 <button id="btnRrGenerate" class="btn-primary"><i data-lucide="play" class="icon-14"></i> Generate</button>
-                <button id="btnRrCsv" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="download" class="icon-14"></i> CSV</button>
-                <button id="btnRrXlsx" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="file-spreadsheet" class="icon-14"></i> Excel</button>
-                <button id="btnRrPrint" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="printer" class="icon-14"></i> Print</button>
+                <button id="btnRrCsv" aria-label="Export report as CSV file" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="download" class="icon-14"></i> CSV</button>
+                <button id="btnRrXlsx" aria-label="Export report as Excel workbook" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="file-spreadsheet" class="icon-14"></i> Excel</button>
+                <button id="btnRrPrint" aria-label="Print or save report as PDF" class="btn-secondary rr-export-btn" style="display:none;"><i data-lucide="printer" class="icon-14"></i> Print</button>
             </div>
             <small id="rrRangeNote" class="text-muted-small"></small>
         </div>
@@ -6871,11 +6871,11 @@
 
                     <div style="display:flex; gap:8px; align-items:center;">
 
-                        <input type="time" id="discSchedStart" class="search-input-group" style="max-width:130px;">
+                        <input type="time" id="discSchedStart" aria-label="Happy-hour start time (HH:MM)" class="search-input-group" style="max-width:130px;">
 
                         <span>→</span>
 
-                        <input type="time" id="discSchedEnd" class="search-input-group" style="max-width:130px;">
+                        <input type="time" id="discSchedEnd" aria-label="Happy-hour end time (HH:MM)" class="search-input-group" style="max-width:130px;">
 
                     </div>
 
