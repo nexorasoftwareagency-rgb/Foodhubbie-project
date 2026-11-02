@@ -28,7 +28,7 @@ subscription on any channel, no per-outlet licence.
 
 | Plan / channel | Rate | What it covers |
 |---|---|---|
-| **Foodhubbi-App Orders** | **3%** of order value | Delivery-app orders **plus every status notification sent to the customer on the app** |
+| **Foodhubbi-App Orders (Customer App)** | **2%** of order value | Delivery/pickup orders placed in the restaurant's own app **plus every status notification sent to the customer on the app** |
 | **WhatsApp bot ordering** | **3%** of order value | Orders placed through the outlet's own WhatsApp bot |
 | **POS counter** | **1%** of order value | Walk-in / counter billing |
 | **QR menu** | **1%** of order value | Dine-in table ordering |
@@ -63,7 +63,7 @@ Each restaurant owns **its own WhatsApp Business Account (WABA), phone number an
 platform never adds tenant numbers to a FoodHubbie-owned WABA.
 
 **Meta's WhatsApp Business Platform usage is charged to FoodHubbie's main Facebook account**, not to
-each restaurant (decision recorded 2026-11-01). So the 1%/3% order rates and the ₹1 promo price must
+each restaurant (decision recorded 2026-11-01). So the 1% / 2% / 3% order rates and the ₹1 promo price must
 cover Meta's per-message cost. Indicative Meta rates for India (they change quarterly):
 
 | Category | Rate/message | Use case |
@@ -278,7 +278,7 @@ cd SupremeAdmin && npm run dev
 ## 🌐 Website Updates Required
 
 ### 1. Pricing Page (`/pricing`) — ✅ rewritten 2026-11-01
-- [x] Five rate cards: POS 1% · QR menu 1% · Foodhubbi-App Orders 3% · WhatsApp bot 3% · promo ₹1/message
+- [x] Five rate cards: POS 1% · QR menu 1% · Foodhubbi-App Orders (Customer App) 2% · WhatsApp bot 3% · promo ₹1/message
 - [x] Worked months (₹2,300 / ₹2,100 / ₹7,200) and a 4-column comparison incl. aggregator at 25%
 - [x] Visible FAQ + FAQPage JSON-LD kept in sync (8 questions)
 - [x] Same rate card propagated to index, compare, best-software, pos-billing, qr-ordering,

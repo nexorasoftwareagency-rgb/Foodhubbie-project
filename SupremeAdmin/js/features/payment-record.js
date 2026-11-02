@@ -210,10 +210,10 @@ function renderAll() {
 const SRC_LABEL = {
   QR: 'QR table orders',
   POS: 'POS orders',
-  app: 'Foodhubbie-App Orders',
-  APP: 'Foodhubbie-App Orders',
-  webview_delivery: 'Webview delivery (WhatsApp, upcoming feature)',
-  WA: 'WhatsApp orders (upcoming feature)',
+  app: 'Customer App orders',
+  APP: 'Customer App orders',
+  webview_delivery: 'WhatsApp delivery links',
+  WA: 'WhatsApp bot orders',
   other: 'Other orders',
 };
 

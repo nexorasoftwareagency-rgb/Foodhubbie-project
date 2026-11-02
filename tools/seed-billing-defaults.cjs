@@ -23,7 +23,7 @@ async function write(path, value, label) {
 }
 
 // Mirror of shared/cost-math.js + shared/billing-defaults.cjs.
-// Pricing 2026-11-01: 'percentage' is the mode — Foodhubbi-App Orders 3% · WhatsApp bot 3%
+// Pricing 2026-11-01: 'percentage' is the mode — WhatsApp-based 3% · Customer App 2%
 // · POS + QR menu 1%. `rates` is only read by the legacy 'per_order' mode.
 const FREE_TOKENS = 15;
 const DEFAULT_BILLING = {
@@ -53,7 +53,7 @@ async function main() {
         }
         // Pricing change 2026-11-01: flat ₹/order is replaced by percentage pricing.
         // Every row still on a flat/legacy mode moves to 'percentage' (rates live in
-        // shared/cost-math.js PERCENT_RATES — 1% POS/QR, 3% app orders + WhatsApp bot).
+        // shared/cost-math.js PERCENT_RATES — 1% POS/QR, 2% Customer App, 3% WhatsApp).
         if (val.mode !== 'percentage') {
           await write(`${base}/mode`, 'percentage', `PATCH ${bid}/${oid} mode ${val.mode || '(unset)'} → percentage`);
         }

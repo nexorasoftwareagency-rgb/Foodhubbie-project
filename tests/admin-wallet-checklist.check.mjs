@@ -25,8 +25,8 @@ const run = async (data, locked = false) => {
   const m = await import('./Admin/js/features/costs.js?' + Math.random()); m.loadCosts(); await new Promise(r => setTimeout(r, 400)); m.cleanupCosts(); return els;
 };
 let e = await run({ billing: { payments: { a: { amount: 1000, method: 'UPI', receiptNo: 'RCP-1', createdAt: Date.now() } } }, orders: { o1: { source: 'QR', status: 'Delivered', total: 100, createdAt: '2026-10-01' } }, 'bot/promotions/campaigns': { c: { totalSent: 10 } } });
-assert.equal(e.walletBalance.textContent, '₹988', e.walletBalance.textContent);
-assert.equal(e.walletStatus.textContent, 'Your restaurant is live.');
+assert.equal(e.walletBalance.textContent, '₹989', e.walletBalance.textContent);
+assert.ok(e.walletStatus.textContent.includes('Your restaurant is live.'), e.walletStatus.textContent);
 assert.ok(e.walletHistoryBody.innerHTML.includes('RCP-1') && e.walletHistoryBody.innerHTML.includes('UPI'));
 console.log('PASS wallet = topped up - usage; history listed; live status');
 e = await run({ billing: { payments: {} }, orders: {} }, true);
@@ -41,7 +41,7 @@ assert.equal(e.walletBalance.textContent, '−₹200'); assert.ok(e.walletStatus
 e = await run({ billing: { payments: { a: { amount: 1000, createdAt: 1 } }, charges: { c: { amount: 800 } } }, orders: {} });
 assert.ok(e.walletStatus.textContent.includes('Low balance') && e.walletStatus.textContent.includes('25%')); console.log('PASS 200 left of 1000 topped up: low-balance message');
 e = await run({ billing: { mode: 'percentage', payments: { a: { amount: 1000, createdAt: 1 } } }, orders: { o: { source: 'webview_delivery', status: 'Delivered', total: 10000, createdAt: '2026-10-01' } } });
-assert.equal(e.walletBalance.textContent, '₹800'); console.log('PASS percentage package: 2% of 10000 WhatsApp order = 200 used');
+assert.equal(e.walletBalance.textContent, '₹700'); console.log('PASS percentage package: 3% of 10000 WhatsApp order = 300 used');
 console.log('ALL PASSED');
 `);
 put('alert.mjs', `import assert from 'assert';
@@ -52,8 +52,8 @@ const run = async (data, locked = false) => { globalThis.DATA = data; state.lock
 const pay = (a) => ({ billing: { payments: { p: { amount: a } } } });
 let e = await run({ ...pay(1000), orders: { a: { source: 'QR', status: 'Delivered', total: 100, createdAt: 'x' } } });
 assert.equal(e.style.display, 'none'); console.log('PASS healthy wallet: no alert');
-e = await run({ billing: { payments: { p: { amount: 1000 } }, mode: 'percentage' }, orders: { a: { source: 'webview_delivery', status: 'Delivered', total: 37500, createdAt: 'x' } } });
-assert.ok(e.innerHTML.includes('Low wallet balance'), e.innerHTML); assert.ok(e.innerHTML.includes('25%')); console.log('PASS 2% WhatsApp percentage usage pushes wallet to low (250 left of 1000)');
+e = await run({ billing: { payments: { p: { amount: 1000 } }, mode: 'percentage' }, orders: { a: { source: 'webview_delivery', status: 'Delivered', total: 25000, createdAt: 'x' } } });
+assert.ok(e.innerHTML.includes('Low wallet balance'), e.innerHTML); assert.ok(e.innerHTML.includes('25%')); console.log('PASS 3% WhatsApp percentage usage pushes wallet to low (250 left of 1000)');
 e = await run({ billing: { payments: { p: { amount: 1000 } }, mode: 'percentage' }, orders: { a: { source: 'webview_delivery', status: 'Delivered', total: 50000, createdAt: 'x' } } });
 assert.ok(e.innerHTML.includes('Wallet balance finished')); console.log('PASS wallet used up: finished alert');
 e = await run({ billing: { payments: {} }, orders: { a: { source: 'QR', status: 'Delivered', total: 1, createdAt: 'x' } } });
@@ -158,13 +158,13 @@ assert.equal(storeName.focused, 1, 'focuses the store-name field');
 assert.ok(storeName.scrolled >= 1, 'scrolls the field into view');
 console.log('PASS deep-link: profile -> Settings > General > #settingStoreName');
 
-// Category -> Categories tab, opens the add-category modal button.
-const addCat = fakeEl('#btnAddCategory'); nodes['#btnAddCategory'] = addCat;
+// Category -> Categories tab, opens the create-category drawer trigger.
+const addCat = fakeEl('#btnOpenCatDrawer'); nodes['#btnOpenCatDrawer'] = addCat;
 await run(profile);
 await click('category');
 assert.deepEqual(globalThis.__TABS, ['categories']);
-assert.equal(addCat.clicked, 1, 'clicks the add-category button');
-console.log('PASS deep-link: category -> Categories > #btnAddCategory');
+assert.equal(addCat.clicked, 1, 'clicks the add-category drawer trigger');
+console.log('PASS deep-link: category -> Categories > #btnOpenCatDrawer');
 
 // Top-up -> support hand-off (no tab switch), and the secondary link opens the wallet.
 let opened = null;

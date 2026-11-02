@@ -4,7 +4,7 @@
  * Live "cost of running the software" index for a selectable date range
  * (default: current month; From/To date inputs + This/Last month chips):
  *   - every new order (onChildAdded) is identified by source and priced:
- *       QR menu 1% · POS counter 1% · Foodhubbie-App Orders 3% · WhatsApp bot 3% · other 3%
+ *       QR menu 1% · POS counter 1% · Customer App orders 2% · WhatsApp-based 3% · other 3%
  *       (flat ₹ per-order rates survive only as the legacy 'per_order' mode)
  *   - cancelled/refunded orders are excluded from billing
  *   - promo token balance KPI + promo usage cost = sent tokens × ₹1 (campaigns totalSent)

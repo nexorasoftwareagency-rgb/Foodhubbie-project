@@ -8,7 +8,7 @@ Branch with everything together: `final/integrated`. Nothing has been deployed, 
 |---|---------|----------------|
 | 1 | Loyalty hardening: points no longer wiped by a bug, WhatsApp code (OTP) to redeem, points expiry (default 180 days), default earn 1 point per ₹50 | `bot/redeem.js`, `bot/index.js`, `Admin/js/features/loyalty.js`, `menu/js/customer.js` |
 | 2 | One dedicated app per restaurant: first open = sign in with phone (+ optional name, no OTP), then the full menu | `menu/js/app.js`, `menu/index.html`, `menu/js/session.js` |
-| 3 | Pricing: "Foodhubbie-App Orders" 3%, POS and QR menu 1%, WhatsApp ordering labelled "Upcoming Feature in 1 month" | `shared/cost-math.js`, billing labels |
+| 3 | Pricing: Customer App (Foodhubbie-App Orders) 2%, POS and QR menu 1%, WhatsApp-based ordering 3% (upcoming feature) | `shared/cost-math.js`, billing labels |
 | 4 | App tabs: Menu, Cart, Orders, Loyalty, Account; Orders / Payments history | `menu/js/customer.js` |
 | 5 | Payment history kept in sync by the bot | `bot/payment-sync.js` |
 | 6 | Complete in-app ordering (Delivery + Pickup), live tracking, rider + delivery code, cancel while "Placed"; Admin pickup flow; riders ignore pickup | `menu/js/app-checkout.js`, `bot/index.js`, `Admin/js/features/orders.js`, `rider-app/…/orderService.ts`, `database.rules.json` |

@@ -44,7 +44,7 @@ Delivery orders are identified everywhere by `source === 'webview_delivery'`: th
 - **Pricing question for the owner:** should an order placed in the restaurant's own app be billed like WhatsApp ordering (₹5 / 2%) or like other channels (₹2 / 1%)? Today's direct delivery already lands as `webview_delivery`, i.e. the WhatsApp rate. This is NOT changed by Phase 2a.
 
 ## Pricing decision (owner, 2026-11-01) — implemented in branch `feat/app-orders-pricing`
-- **Foodhubbie-App Orders** = fixed **3%** of order value. Includes the restaurant's own delivery app and every order-status notification sent to the customer in the app.
+- **Foodhubbie-App Orders (Customer App)** = fixed **2%** of order value. Includes the restaurant's own app (delivery + pickup) and every order-status notification sent to the customer in the app.
 - **QR menu and POS** = **1%** of order value (replaces the ₹1 / ₹2 per-order rates in this package).
 - **WhatsApp bot ordering** = labelled "Upcoming feature (within 1 month)"; its pricing logic is untouched and WhatsApp work is paused.
 - New restaurants start on this package (`mode: 'percentage'` in `shared/billing-defaults.*`). **Existing restaurants keep their current mode** until switched in Supreme Admin (switching re-prices their whole order history, because the wallet is computed from orders).

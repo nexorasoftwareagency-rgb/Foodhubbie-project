@@ -3,7 +3,7 @@
 > **Decision recorded 2026-11-01:** each restaurant owns its own WABA, but **WhatsApp Business
 > Platform usage is charged to FoodHubbie's main Facebook account**, not to each restaurant.
 >
-> **Revenue side decided 2026-11-01:** percentage plan â€” Foodhubbie-App Orders 3% Â· WhatsApp bot 3%
+> **Revenue side decided 2026-11-01:** percentage plan â€” Foodhubbie-App Orders (Customer App) 2% Â· WhatsApp bot 3%
 > Â· POS + QR menu 1% (replaces the flat â‚¹1â€“5 per-order model). See Â§1.
 >
 > This document records the model, the constraint that makes it non-trivial, and what must change
@@ -22,7 +22,7 @@ Current revenue rates â€” **percentage plan, in force since 2026-11-01** (`
 
 | Plan / channel | Rate | Covers |
 |---|---|---|
-| **Foodhubbie-App Orders** | **3%** of order value | Delivery-app orders **plus every status notification sent to the customer on the app** |
+| **Foodhubbie-App Orders (Customer App)** | **2%** of order value | Delivery-app orders **plus every status notification sent to the customer on the app** |
 | **WhatsApp bot ordering** | **3%** of order value | Orders placed through the WhatsApp bot |
 | **POS counter** | **1%** of order value | Walk-in / counter billing |
 | **QR menu** | **1%** of order value | Dine-in table ordering |

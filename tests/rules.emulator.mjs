@@ -111,7 +111,7 @@ const cases = [
   ['redeem request for another outlet', () => call('PUT', `${OUT}/bot/redeemQueue/req-3`, null, { phone: '9876543210', rewardId: 'free_fries', requestedAt: 1, outlet: 'cake' }), 'deny'],
   ['client deletes a redeem request', () => call('DELETE', `${OUT}/bot/redeemQueue/req-1`, null), 'deny'],
   ['client forges a redemption record', () => call('PUT', `${CUST}/rewards/forged`, null, { rewardId: 'free_fries', label: 'Free Fries', cost: 0, code: 'LOYAL0000', status: 'active', redeemedAt: 1, outlet: 'pizza' }), 'deny'],
-  ['client reads its own redemptions', () => call('GET', `${CUST}/rewards`, null), 200]
+  ['client reads its own redemptions', () => call('GET', `${CUST}/rewards`, ANON1), 200],
   // ── phone privacy: customer data is readable only by registered devices ──
   ['privacy: owner device reads own loyalty', () => call('GET', `${CUST}/loyalty`, ANON1), 200],
   ['privacy: stranger device cannot read loyalty', () => call('GET', `${CUST}/loyalty`, ANON2), 'deny'],
@@ -137,6 +137,7 @@ const cases = [
 
 await seed({
   admins: { ADMIN1: { email: 'a@b.c', outlet: 'pizza' } },
+  riderIndex: { RIDER1: { bid: 'b1', outlet: 'pizza' } },
   sosAlerts: { RIDER1: { A1: { riderId: 'RIDER1', riderName: 'R', lat: 1, lng: 2, ts: 3, status: 'active' } } },
   businesses: {
     b1: {
