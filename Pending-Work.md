@@ -80,9 +80,7 @@ This rule applies to:
 - **Related:** `website/assets/generated/` + `website/assets/REal/` exist; `assets` site (`foodhubbie-assets`) referenced only by `website` CSP `img-src` in `firebase.json` (line 493); no custom domain mapped — optional, no action needed.
 
 ### 🟡 WhatsApp Ordering / Marketing — "Upcoming feature — launching in about 1 month" (marketing sites only)
-- **Stage:** `verified-code` (local) — uncommitted
-- **Done:** `website/whatsapp-ordering.html` + `website/whatsapp-marketing.html` hero pill + CTAs swapped `/signup`→`/book`, `/book`→`/pricing`; `website/index.html` WA section got the same pill + `/book`/`/pricing` CTAs. The live WA ordering flow itself is unchanged and still uses the **menu site** (`menu.foodhubbie.in`, `bot/index.js:22` `WEBVIEW_DELIVERY_HOST` + `bot-control-api/server.js:1256` `MENU_WEB_ORIGIN`) — marketing pages only re-marked.
-- **Next:** commit + `git push origin seo-brand-consistency --force-with-lease` + `firebase deploy --only hosting:website`.
+- **Stage:** `done` — hero pill + CTAs on whatsapp-ordering.html / whatsapp-marketing.html / index.html WA section; committed `f38c4b5`; deployed `hosting:website` (`foodhubbie-web` release complete).
 
 ### ✅ Admin Dashboard UI/UX Audit — RECALLED / COMPLETE (2026-11-01) — **UPDATED** (this subagent audit)
 - **Status:** Done (PASS; clean-up required — see `docs/UI-AUDIT-COMPLETE.md` for full tables + evidence).
