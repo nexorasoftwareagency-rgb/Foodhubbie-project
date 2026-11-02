@@ -1,14 +1,14 @@
 /**
- * FoodHubbie ERP | COST MATH (pure â€” no imports, runnable in node or browser)
+ * FoodHubbie ERP | COST MATH (pure — no imports, runnable in node or browser)
  *
- * PRICING (decided 2026-11-01 â€” percentage of order value, no flat per-order fees):
- *   "Foodhubbie-App Orders"  3%  â€” delivery app orders + every status notification sent on the app
+ * PRICING (decided 2026-11-01 — percentage of order value, no flat per-order fees):
+ *   "Foodhubbie-App Orders"  3%  — delivery app orders + every status notification sent on the app
  *   WhatsApp bot ordering   3%
  *   POS counter + QR menu   1%
  *   Unclassified / legacy   3%  (`other`, and any unknown source string)
- *   Promo (marketing) message = â‚¹1 Â· cancelled/refunded orders never bill
+ *   Promo (marketing) message = ₹1 · cancelled/refunded orders never bill
  *
- * Legacy modes stay readable for old rows: 'per_order' (flat â‚¹ rates) and
+ * Legacy modes stay readable for old rows: 'per_order' (flat ₹ rates) and
  * 'commission_1pct' (1% on delivery-webview only). New/migrated outlets use 'percentage'.
  */
 
@@ -24,15 +24,15 @@ export const MIN_BALANCE = 250; // maintain always
 // Low-balance warning: balance at or below this share of everything topped up so far.
 export const LOW_BALANCE_RATIO = 0.25;
 
-// Billing modes (outlet billing.mode): 'percentage' (default â€” share of order value per channel),
-// 'per_order' (legacy flat â‚¹ rates) and 'commission_1pct' (legacy: 1% on WhatsApp delivery only).
+// Billing modes (outlet billing.mode): 'percentage' (default — share of order value per channel),
+// 'per_order' (legacy flat ₹ rates) and 'commission_1pct' (legacy: 1% on WhatsApp delivery only).
 export const PERCENT_RATES = { QR: 0.01, POS: 0.01, webview_delivery: 0.03, WA: 0.03, other: 0.03, default: 0.03 };
 export const APP_PLAN_NAME = 'Foodhubbie-App Orders';
-// Meta-cost planning slots (S2 / S1 track â€” not a billing behavior).
+// Meta-cost planning slots (S2 / S1 track — not a billing behavior).
 // Meta charges per Message (utility / marketing / auth / service) and has a
 // 1,000 / month / phone-number free tier for service messages (reset monthly,
-// does not roll over; per WABA â€” NOT per business). Per BILLING-MODEL.md Â§4.
-// These fields are placeholders for the cost-ledger to track â€” they do NOT
+// does not roll over; per WABA — NOT per business). Per BILLING-MODEL.md Â§4.
+// These fields are placeholders for the cost-ledger to track — they do NOT
 // change restaurant-facing pricing (percentage plan stays). See docs/BILLING-MODEL.md.
 export const META_COST_PLANNING = { tierCandidate: 'TechProvider', serviceFreeTierPerMonth: 1000, serviceFreeResetsMonthly: true, metaCurrency: 'INR' };
 export function normalizeMode(mode) {
@@ -137,19 +137,19 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) 
     const pk = computeCostIndex({ a: o(1000, 'QR'), b: o(500, 'POS'), c: o(1000, 'webview_delivery'), d: o(200, 'WA'), e: o(100, 'other'), f: o(9999, 'QR', 'Cancelled'), g: o(9999, 'QR', 'Refunded') });
     assert.equal(pk.count, 5, 'cancelled + refunded excluded');
     assert.equal(pk.total, 10 + 5 + 30 + 6 + 3, '1% QR/POS + 3% app/WhatsApp/other');
-    assert.equal(pk.bySource.webview_delivery.cost, 30, 'app order â‚¹1000 â†’ â‚¹30');
+    assert.equal(pk.bySource.webview_delivery.cost, 30, 'app order ₹1000 → ₹30');
     assert.equal(feeOf({ total: 333.33, source: 'QR' }), 3.33, 'rounded to paise');
     assert.equal(sourceOf({ source: 'wa' }), 'WA', 'lowercase wa canonicalised (2 live orders)');
     assert.equal(sourceOf({ source: 'WEBVIEW_DELIVERY' }), 'webview_delivery', 'case-insensitive source');
-    assert.equal(sourceOf({ type: 'Dine-in' }), 'POS', 'untagged dine-in â†’ POS');
-    assert.equal(computeCostIndex({ a: { total: 100, type: 'Dine-in' } }).total, 1, 'untagged dine-in â†’ 1%');
+    assert.equal(sourceOf({ type: 'Dine-in' }), 'POS', 'untagged dine-in → POS');
+    assert.equal(computeCostIndex({ a: { total: 100, type: 'Dine-in' } }).total, 1, 'untagged dine-in → 1%');
     assert.equal(normalizeMode(undefined), 'percentage', 'percentage is the default mode');
     assert.equal(normalizeMode('junk'), 'percentage');
     assert.equal(normalizeMode('per_order'), 'per_order', 'legacy mode still selectable');
     assert.equal(normalizeMode('commission_1pct'), 'commission_1pct');
     assert.equal(rateLabel('webview_delivery'), '3% of order');
     assert.equal(rateLabel('QR'), '1% of order');
-    assert.equal(PROMO_RATE, 1, 'promo â‚¹1/token');
+    assert.equal(PROMO_RATE, 1, 'promo ₹1/token');
 
     // --- legacy modes stay readable for old rows ---
     const flat = computeCostIndex({ a: o(100, 'QR'), b: o(100, 'POS'), c: o(100, 'webview_delivery'), d: o(100, 'QR', 'Cancelled') }, DEFAULT_RATES, 'per_order');
