@@ -165,8 +165,15 @@ async function isOptedOut(phone, OUTLET, db) {
 async function hasPromoConsent(phone, OUTLET, db) {
     try {
         const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
-        const snap = await db.ref(resolvePath(`customers/${cleanPhone}/promotionalConsent`, OUTLET)).once('value');
-        return snap.val() === true;
+        const [snap, appSnap] = await Promise.all([
+            db.ref(resolvePath(`customers/${cleanPhone}/promotionalConsent`, OUTLET)).once('value'),
+            db.ref(resolvePath(`customers/${cleanPhone}/app/consent/offers`, OUTLET)).once('value'),
+        ]);
+        // The customer's own "Offers" switch in the restaurant app wins both ways:
+        // switched off = never message (even if an order once flagged consent);
+        // switched on = allowed.
+        if (appSnap.val() === false) return false;
+        return snap.val() === true || appSnap.val() === true;
     } catch (_) {
         return false;
     }

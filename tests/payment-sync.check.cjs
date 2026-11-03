@@ -66,5 +66,13 @@ const PH = '9876543210', ID = 'A100';
     assert.match(src, /function isWebOrderSource/, 'APP orders share web-order finalization');
     assert.match(src, /source\s*===\s*'APP'/, 'bot recognises APP orders');
     assert.match(src, /'Pickup'/, 'pickup handled (no rider broadcast)');
+    // review fixes (bot)
+    assert.match(src, /async function resurrectRewardTender/, 'reward goes back on cancel even if no points were earned');
+    assert.match(src, /if \(isCancel\) await resurrectRewardTender/, 'cancel path restores the reward before the accrual check');
+    assert.match(src, /order\.source === 'APP'\s*\n?\s*\? `\$\{WEBVIEW_DELIVERY_HOST\}\/\?b=/, 'app push opens the app, not delivery.html');
+    assert.match(src, /missedWebOrder/, 'web/app orders placed during bot downtime are still finalized');
+    assert.match(src, /base\.app\?\.consent\?\.offers/, 'app orders never force promotional consent on');
+    const promo = require('fs').readFileSync(require('path').join(__dirname, '../bot/promotions.js'), 'utf8');
+    assert.match(promo, /app\/consent\/offers/, 'promotions honour the app Offers switch');
     console.log('payment-sync OK');
 })().catch(e => { console.error(e); process.exit(1); });

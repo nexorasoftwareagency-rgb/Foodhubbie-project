@@ -54,7 +54,9 @@ export async function renderPromotionsGuide(container) {
         </ol>
         <p class="text-muted-small mt-16">
             <i data-lucide="info" class="icon-14"></i>
-            Only customers with <code>promotionalConsent: true</code> (recorded at their first order) will receive messages.
+            Only customers with <code>promotionalConsent: true</code> (recorded at their first order)
+            or the restaurant app's Offers switch <b>on</b> will receive messages; switching Offers
+            <b>off</b> in the app always wins.
             Recipients are capped at 300 per campaign.
         </p>
     `;

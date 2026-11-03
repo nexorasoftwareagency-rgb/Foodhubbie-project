@@ -127,6 +127,17 @@ await scenario('invalid ?t= still shows the invalid-QR screen', async (page) => 
     await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenInvalid', null, { timeout: 8000 });
 });
 
+await scenario('notification tap (?tab=orders) opens the Orders tab for a signed-in customer', async (page) => {
+    await page.goto(URL_DIRECT + '&tab=orders');
+    await page.waitForSelector('#screenSignIn.active');
+    await page.fill('#signInPhone', '9876543210');
+    await page.click('#btnSignIn');
+    await page.waitForSelector('#screenMenu.active');
+    await page.goto(URL_DIRECT + '&tab=orders');
+    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenOrders', null, { timeout: 8000 });
+    await page.waitForSelector('.account-order-card', { timeout: 5000 });
+});
+
 await scenario('valid table token still opens dine-in (welcome screen)', async (page) => {
     await page.goto(URL_DIRECT + '&t=GOODTOKEN');
     await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenWelcome', null, { timeout: 8000 });

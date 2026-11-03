@@ -295,6 +295,11 @@ async function bootDirect() {
         const p = getProfile();
         if (p?.name && p.name !== 'Guest') UI.updateGreeting(p.name);
         UI.showScreen('screenMenu');
+        // Notification tap: bot links to /?tab=orders
+        if (new URLSearchParams(window.location.search).get('tab') === 'orders') {
+            UI.showScreen('screenOrders');
+            renderOrdersTab();
+        }
     } else {
         UI.showScreen('screenSignIn');
     }

@@ -1284,6 +1284,27 @@ async function accrueDineInPaidOrder(orderId, order) {
     }
 }
 
+// R2 fairness: a burned reward code on this order goes back to active so a
+// cancellation/void doesn't eat the customer's reward. The usedOnOrder guard
+// means we only resurrect OUR burn - never a code spent again elsewhere.
+// Idempotent, so it is safe to call from more than one place.
+async function resurrectRewardTender(orderId, order, outlet) {
+    try {
+        const tender = order && order.loyaltyTender;
+        const tenderPhone = order && order.phone ? String(order.phone).replace(/\D/g, '').slice(-10) : '';
+        if (!tender || !tender.rewardKey || !/^[6-9]\d{9}$/.test(tenderPhone)) return;
+        // Cold-tx seed (redeem.js pattern) - null-first attempt otherwise
+        // aborts the resurrect silently.
+        const resRef = db.ref(resolvePath(`customers/${tenderPhone}/rewards/${String(tender.rewardKey)}`, outlet));
+        const resSeed = (await resRef.once('value').catch(() => null) || {}).val();
+        await resRef.transaction((cur) => {
+            const node = cur || resSeed;
+            if (!node || node.usedOnOrder !== String(orderId)) return undefined;
+            return { ...node, status: 'active', usedAt: null, usedOnOrder: null };
+        }).catch(() => {});
+    } catch (e) { console.error('[LOYALTY] resurrectRewardTender error:', e.message); }
+}
+
 // R3 clawback: reverse an accrual when the sale falls through — the order is
 // cancelled/refunded, or a settled table bill is voided (paymentStatus flips
 // back to 'Unpaid' once voidTableBill's revert transaction runs). Deletes the
@@ -1300,25 +1321,9 @@ async function clawLoyaltyPoints(orderId, order, status) {
         const outlet = order.outlet || OUTLET;
         const bid = resolveBusinessIdFor(outlet);
         const now = Date.now();
-        // R2 fairness: a burned reward code on this order goes back to active
-        // so a cancellation/void doesn't eat the customer's reward. Runs even
-        // when nothing accrued yet (a Placed order cancelled before delivery
-        // has no accrual but its tender is already burned). The usedOnOrder
-        // guard means we only resurrect OUR burn — never a code that was
-        // already spent again elsewhere.
-        const tender = order.loyaltyTender;
-        const tenderPhone = order.phone ? String(order.phone).replace(/\D/g, '').slice(-10) : '';
-        if (tender && tender.rewardKey && /^[6-9]\d{9}$/.test(tenderPhone)) {
-            // Cold-tx seed (redeem.js pattern) — null-first attempt otherwise
-            // aborts the resurrect silently.
-            const resRef = db.ref(resolvePath(`customers/${tenderPhone}/rewards/${String(tender.rewardKey)}`, outlet));
-            const resSeed = (await resRef.once('value').catch(() => null) || {}).val();
-            await resRef.transaction((cur) => {
-                const node = cur || resSeed;
-                if (!node || node.usedOnOrder !== String(orderId)) return undefined;
-                return { ...node, status: 'active', usedAt: null, usedOnOrder: null };
-            }).catch(() => {});
-        }
+        // A cancelled order that never earned points (cancelled before delivery,
+        // e.g. the customer cancelled in the app) must still give the reward back.
+        if (isCancel) await resurrectRewardTender(orderId, order, outlet);
         // Accrual lookup AFTER the reward release — unpaid dine-in orders hit
         // this path on every routine update, and most have nothing to reverse
         // (one cheap read).
@@ -1339,6 +1344,7 @@ async function clawLoyaltyPoints(orderId, order, status) {
             reason
         });
         await accrualRef.remove();
+        await resurrectRewardTender(orderId, order, outlet);
         const loyaltyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, outlet));
         const loyaltySnap = await loyaltyRef.once('value').catch(() => null);
         const current = (loyaltySnap && loyaltySnap.val()) || {};
@@ -1426,7 +1432,11 @@ async function notifyCustomerApp(orderId, order, status) {
         if (existing && existing.exists()) return;
 
         const bid = resolveBusinessIdFor(outlet);
-        const url = `${WEBVIEW_DELIVERY_HOST}/${outlet}/delivery.html?b=${bid}&o=${outlet}&order=${encodeURIComponent(order.orderId || orderId)}&tab=notifications`;
+        // Restaurant-app customers land back in the app's Orders tab; delivery.html is
+        // only for WhatsApp-bot links.
+        const url = order.source === 'APP'
+            ? `${WEBVIEW_DELIVERY_HOST}/?b=${bid}&o=${outlet}&tab=orders`
+            : `${WEBVIEW_DELIVERY_HOST}/${outlet}/delivery.html?b=${bid}&o=${outlet}&order=${encodeURIComponent(order.orderId || orderId)}&tab=notifications`;
         const title = `Order #${oid} - ${copy.title}`;
 
         await inboxRef.set({
@@ -2492,7 +2502,11 @@ async function sendDailyReportSafely(dateOverride = null) {
         const timeBuffer = isDineIn ? 1800000 : 10000;
 
         const currentProcessedStatus = await getProcessedStatus(snap.key);
-        const isNewOrder = orderTime > startupTime - timeBuffer;
+        // Catch-up: a web/app order placed while the bot was down or restarting still
+        // needs server-side finalization (discount re-check, stock, profile). Only
+        // recent, still-'Placed' orders that were never finalized qualify.
+        const missedWebOrder = shouldFinalizeWebOrder(order) && orderTime > Date.now() - 24 * 3600 * 1000;
+        const isNewOrder = orderTime > startupTime - timeBuffer || missedWebOrder;
         if (!currentProcessedStatus && isNewOrder) {
             // --- WEBVIEW DELIVERY ORDER: server-side finalization ---
             // The delivery webview (menu/delivery.html) writes the order
@@ -2604,7 +2618,9 @@ async function sendDailyReportSafely(dateOverride = null) {
                                 location: (order.lat && order.lng) ? { lat: order.lat, lng: order.lng } : (base.location || null),
                                 mapsLink: mapsLink || base.mapsLink || "",
                                 lastOrderDate: order.createdAt || new Date().toISOString(),
-                                promotionalConsent: true,
+                                // App customers choose Offers on/off themselves (customers/{phone}/app.consent);
+                                // never force it on for them. Web/WhatsApp keeps its existing behaviour.
+                                promotionalConsent: order.source === 'APP' ? (base.app?.consent?.offers === true || base.promotionalConsent === true) : true,
                                 orderCount: (base.orderCount || 0) + 1,
                                 totalSpent: (base.totalSpent || 0) + (order.total || 0),
                                 lastSeen: Date.now()

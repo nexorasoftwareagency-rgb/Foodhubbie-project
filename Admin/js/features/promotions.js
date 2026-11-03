@@ -183,7 +183,11 @@ async function _buildRecipients() {
             const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
             for (const [phone, c] of Object.entries(customers)) {
                 if (!c) continue;
-                if (c.promotionalConsent !== true) continue;
+                // Same rule the bot enforces (bot/promotions.js hasPromoConsent):
+                // the app's Offers switch wins both ways, so the count shown here
+                // matches who actually receives the campaign.
+                if (c.app?.consent?.offers === false) continue;
+                if (c.promotionalConsent !== true && c.app?.consent?.offers !== true) continue;
                 if (filter === 'recent_30d') {
                     if (!c.lastOrderDate) continue;
                     if (new Date(c.lastOrderDate).getTime() < cutoff) continue;
