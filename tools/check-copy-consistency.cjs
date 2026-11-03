@@ -135,7 +135,9 @@ for (const f of html) {
 // The public demo is the LIVE dashboard — the static /demo/tour replica was deleted
 // 2026-10-29. Every nav "Live demo" link must point straight at it, and no page may
 // link the dead tour URL (the hosts still 301/302 it, but the copy must not advertise it).
-const DEMO_URL = 'https://foodhubbie-admins.web.app/demo';
+// Migrated 2026-11-01: app.foodhubbie.in is the Admin custom domain; the web.app host
+// still serves /demo but the site and firebase.json redirect all point at the domain.
+const DEMO_URL = 'https://app.foodhubbie.in/demo';
 for (const f of html) {
   const c = site[f];
   if (/\/demo\/tour/.test(c)) fail(`${SITE}/${f}`, 'links the deleted /demo/tour replica - use the live demo');

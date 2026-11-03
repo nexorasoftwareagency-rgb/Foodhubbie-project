@@ -38,3 +38,10 @@ LEDGER CLOSE - 20261103-supreme-router (Supreme router lost-cleanup fix, TIER 1,
 - Verified: deterministic race repro (hold restaurant-profile.js 2.5s, change route at the first skeleton paint) FAILed before (22 subscriber errors) and PASSes after on live; live functional 5/5 (sign-in list, row->profile, profile->list rebuild, rapid 3x hash switch settles on last route, no leaked subscriber errors); `tests/supreme-profile-sections.spec.js` 1/1 with 0 console errors; encoding PASS.
 - Deploy: `firebase deploy --only hosting:supreme` PASS (Supreme has no app-shell service worker, JS is no-store, no cache bump needed).
 - Confidence: HIGH - deterministic before/after repro + live browser both flows.
+
+LEDGER CLOSE - 20261103-copy-gate (copy-consistency green, TIER 1, DONE/high)
+- `tools/check-copy-consistency.cjs` DEMO_URL updated to `https://app.foodhubbie.in/demo` (the 2026-11-01 custom-domain cutover; the old web.app constant was the drift, all 28 nav links were already correct).
+- Trimmed 8 meta descriptions to the 70-160 band (index, pricing, compare, best-software, pos-billing, signup, use-cases, whatsapp-ordering) without changing claims; best-software FAQ visible answer now repeats the FAQPage JSON-LD verbatim (percentage billing 1% / 2% / 3%).
+- Archived the untracked duplicate `website/privacy-policy.html` to `docs/archive/privacy-policy.draft.html` (owner choice) so it leaves the deploy + check set without deleting it. `/privacy` stays canonical.
+- Gate now `OK: 30 files + 24 sitemap urls consistent` (was 38 failures). Encoding PASS.
+- Confidence: HIGH - full gate green + encoding; live check of the deployed copy below.
