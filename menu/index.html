@@ -109,8 +109,12 @@
                 <label for="coNote">Special Note (Optional)</label>
                 <textarea id="coNote" placeholder="e.g. Extra spicy, no onion…" rows="2" maxlength="200"></textarea>
             </div>
+            <div class="form-group-mini hidden" id="coRewardWrap">
+                <span class="co-reward-title">Your rewards</span>
+                <div class="co-reward-chips" id="coRewardChips"></div>
+            </div>
             <div class="form-group-mini">
-                <label for="coDiscountInput">Discount or Reward Code (Optional)</label>
+                <label for="coDiscountInput">Coupon Code (Optional)</label>
                 <div class="discount-input-row">
                     <input type="text" id="coDiscountInput" placeholder="e.g. WELCOME20" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false">
                     <button type="button" class="btn-apply-discount" id="btnCoApply">Apply</button>

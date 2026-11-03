@@ -556,7 +556,7 @@
               },
               "redeemQueue": {
                 "$reqId": {
-                  ".write": "newData.exists() && $reqId.matches(/^[A-Za-z0-9_-]{1,40}$/) && newData.hasChildren(['phone','rewardId','requestedAt','outlet']) && newData.child('phone').isString() && newData.child('phone').val().matches(/^[6-9][0-9]{9}$/) && newData.child('rewardId').isString() && newData.child('rewardId').val().length >= 1 && newData.child('rewardId').val().length <= 50 && newData.child('requestedAt').isNumber() && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId"
+                  ".write": "auth != null && newData.exists() && $reqId.matches(/^[A-Za-z0-9_-]{1,40}$/) && newData.hasChildren(['phone','rewardId','requestedAt','outlet','appUid']) && newData.child('phone').isString() && newData.child('phone').val().matches(/^[6-9][0-9]{9}$/) && newData.child('rewardId').isString() && newData.child('rewardId').val().length >= 1 && newData.child('rewardId').val().length <= 50 && newData.child('requestedAt').isNumber() && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('appUid').isString() && newData.child('appUid').val() == auth.uid && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child(newData.child('phone').val()).child('devices').child(auth.uid).exists()"
                 }
               },
               "status": {

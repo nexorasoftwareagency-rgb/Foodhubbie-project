@@ -15,7 +15,7 @@ import { outletRef, get, set, ensureAnonAuth, OUTLET, BUSINESS_ID } from './fire
 import { Cart, clearCart, subtotal as cartSubtotal, isEmpty as cartIsEmpty } from './cart.js';
 import * as UI from './ui.js';
 import { validateCoupon } from './discount.js';
-import { getProfile, rememberIdentity, writeCustomerOrder, validateRewardCode, redeemValuePaisePerPoint, minSpendAfterRedemptionRs, maxRedeemPercentOfOrder } from './customer.js';
+import { getProfile, rememberIdentity, writeCustomerOrder, loadLoyaltyConfig, listActiveRewards, redeemValuePaisePerPoint, minSpendAfterRedemptionRs, maxRedeemPercentOfOrder } from './customer.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
 import { generateOrderId } from './order.js';
 import { assertOutletEnabled, assertWalletGate } from './session.js';
@@ -34,6 +34,10 @@ const S = {
     ready: false,
     onPlaced: null,
 };
+
+// Active rewards of the checkout phone ('customers/{phone}/rewards', active
+// only). Rendered as one-tap chips — the customer never types a code.
+let _rewards = [];
 
 const $ = (id) => document.getElementById(id);
 
@@ -134,6 +138,39 @@ function currentTotals() {
     });
 }
 
+function checkoutPhone() {
+    return ($('coPhone')?.value || '').replace(/\D/g, '').slice(-10);
+}
+
+async function loadRewards() {
+    const phone = checkoutPhone();
+    _rewards = /^[6-9]\d{9}$/.test(phone) ? await listActiveRewards(phone) : [];
+    if (S.reward && !_rewards.some(r => r.key === S.reward.key)) S.reward = null;
+}
+
+function renderRewardChips() {
+    const wrap = $('coRewardWrap'); const box = $('coRewardChips');
+    if (!wrap || !box) return;
+    if (!_rewards.length) { wrap.classList.add('hidden'); box.innerHTML = ''; return; }
+    wrap.classList.remove('hidden');
+    box.innerHTML = _rewards.map(r => {
+        const on = !!(S.reward && S.reward.key === r.key);
+        return `<button type="button" class="co-reward-chip${on ? ' active' : ''}" data-reward-key="${UI.esc(r.key)}" aria-pressed="${on}">🎁 ${UI.esc(r.label)} <span>${r.cost} pts</span></button>`;
+    }).join('');
+}
+
+function toggleReward(key) {
+    const r = _rewards.find(x => x.key === key);
+    if (!r) return;
+    if (S.reward && S.reward.key === key) { S.reward = null; render(); return; }
+    S.reward = { key: r.key, code: r.code, label: r.label, points: r.cost, amount: 0 };
+    if (!(currentTotals().tender > 0)) {
+        S.reward = null;
+        UI.showToast('This reward does not apply to this bill', 'error');
+    }
+    render();
+}
+
 // ── view ──────────────────────────────────────────────────────────
 function row(label, value, cls = '') { return `<div class="cart-summary-row ${cls}"><span>${UI.esc(label)}</span><span>${value}</span></div>`; }
 
@@ -166,6 +203,7 @@ function render() {
     $('coPayNote').textContent = isDelivery
         ? 'Pay cash or UPI to the rider when your order arrives.'
         : 'Pay at the counter (cash, UPI or card) when you collect your order.';
+    renderRewardChips();
 }
 
 function setLocStatus(msg, bad = false) {
@@ -189,23 +227,15 @@ async function applyCode() {
     const input = $('coDiscountInput'); if (!input) return;
     const msg = $('coDiscountMsg');
     const show = (t, bad) => { msg.textContent = t; msg.classList.remove('hidden'); msg.classList.toggle('co-error', !!bad); };
-    if (S.discount || S.reward) { S.discount = null; S.reward = null; input.value = ''; input.disabled = false; msg.classList.add('hidden'); $('btnCoApply').textContent = 'Apply'; render(); return; }
+    if (S.discount) { S.discount = null; input.value = ''; input.disabled = false; msg.classList.add('hidden'); $('btnCoApply').textContent = 'Apply'; render(); return; }
     const code = input.value.trim();
     if (!code) { show('Enter a code', true); return; }
+    // Coupons only: loyalty rewards are applied with the chips above, so the
+    // app never asks the customer to type a reward code.
     const hit = await validateCoupon(code, cartSubtotal());
-    if (hit) {
-        S.discount = hit; input.disabled = true; $('btnCoApply').textContent = 'Remove';
-        render(); show(`${hit.name || hit.couponCode} applied: -${UI.fmtMoney(hit.amount)}`); return;
-    }
-    const phone = ($('coPhone').value || '').replace(/\D/g, '').slice(-10);
-    if (!/^[6-9]\d{9}$/.test(phone)) { show('Enter your mobile number first, then apply a reward code', true); return; }
-    const rew = await validateRewardCode(code, phone);
-    if (!rew) { show('Invalid or expired code', true); return; }
-    S.reward = { key: rew.key, code: rew.code, label: rew.label || 'Loyalty reward', points: rew.cost, amount: 0 };
-    const t = currentTotals();
-    if (!(t.tender > 0)) { S.reward = null; show('This reward does not apply to this bill', true); return; }
-    input.disabled = true; $('btnCoApply').textContent = 'Remove';
-    render(); show(`${S.reward.label} applied: -${UI.fmtMoney(t.tender)}`);
+    if (!hit) { show('Invalid or expired code', true); return; }
+    S.discount = hit; input.disabled = true; $('btnCoApply').textContent = 'Remove';
+    render(); show(`${hit.name || hit.couponCode} applied: -${UI.fmtMoney(hit.amount)}`);
 }
 
 // ── place order ───────────────────────────────────────────────────
@@ -286,6 +316,10 @@ export async function openCheckout() {
     S.discount = null; S.reward = null;
     const inp = $('coDiscountInput'); if (inp) { inp.value = ''; inp.disabled = false; }
     $('btnCoApply').textContent = 'Apply'; $('coDiscountMsg')?.classList.add('hidden');
+    // Loyalty config first: the tender preview must use the same caps the bot
+    // applies, even when the customer never opened the Account tab.
+    await loadLoyaltyConfig();
+    await loadRewards();
     render();
     UI.showScreen('screenCheckout');
 }
@@ -296,6 +330,14 @@ export function initAppCheckout({ onPlaced, onBack } = {}) {
     document.querySelectorAll('[data-co-mode]').forEach(b => b.addEventListener('click', () => { S.mode = b.dataset.coMode === 'pickup' ? 'pickup' : 'delivery'; render(); }));
     $('btnCoLocate')?.addEventListener('click', requestLocation);
     $('btnCoApply')?.addEventListener('click', () => applyCode().catch(() => UI.showToast('Could not check that code', 'error')));
+    $('coRewardChips')?.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-reward-key]');
+        if (chip) toggleReward(chip.dataset.rewardKey);
+    });
+    // Rewards belong to the phone: refresh the chips when it changes.
+    $('coPhone')?.addEventListener('change', () => {
+        loadRewards().then(() => { if (S.ready) render(); }).catch(() => {});
+    });
     $('btnCoPlace')?.addEventListener('click', placeOrder);
     $('btnCoBack')?.addEventListener('click', () => { if (onBack) onBack(); });
 }

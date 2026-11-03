@@ -10,7 +10,7 @@
  * The FCM token itself is never stored in localStorage - it only lives in
  * the outlet's pushSubscriptions record (see pwa-install.js).
  */
-import { outletRef, get, set, push, update, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
+import { outletRef, get, set, push, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
 import * as UI from './ui.js';
 import { esc } from './ui.js';
 import {
@@ -1046,7 +1046,7 @@ const TIER_DISPLAY = {
     gold:   { label: 'Gold',   color: '#c5a005', bg: 'rgba(197,160,5,.12)' }
 };
 
-async function loadLoyaltyConfig() {
+export async function loadLoyaltyConfig() {
     try {
         const snap = await get(outletRef('loyalty/config'));
         _loyaltyConfig = snap && snap.exists() ? snap.val() : null;
@@ -1174,6 +1174,28 @@ export async function validateRewardCode(code, phone) {
     return null;
 }
 
+// Active rewards this device can spend at checkout. Reads are device-bound
+// (customers/{phone}/devices/{auth.uid}), so a phone typed into someone else's
+// checkout returns nothing. Used by the app checkout as one-tap tender chips —
+// the customer never types a code.
+export async function listActiveRewards(phone) {
+    const p = normalizePhone(phone);
+    if (!p) return [];
+    try {
+        const snap = await get(outletRef(`customers/${p}/rewards`));
+        const rewards = (snap && snap.exists() && snap.val()) || {};
+        return Object.entries(rewards)
+            .filter(([, r]) => r && r.status === 'active' && String(r.code || ''))
+            .map(([key, r]) => ({
+                key,
+                code: String(r.code),
+                rewardId: r.rewardId || '',
+                label: r.label || 'Loyalty reward',
+                cost: Number(r.cost) || 0
+            }));
+    } catch (e) { return []; }
+}
+
 // Configured redemption value of one point, in PAISE (R2). Same default the
 // bot applies when loyalty/config lacks the field: ₹1 per point.
 export function redeemValuePaisePerPoint() {
@@ -1248,8 +1270,7 @@ export async function writeCustomerOrder(order) {
 }
 
 // Resolves with the reward record once `pred(record)` is true. The bot writes
-// status 'otp_required' (code sent to WhatsApp), 'rejected', or the final
-// active record with the redemption code.
+// 'rejected' or the final active record with the server-minted code.
 function waitForReward(phone, reqKey, pred, ms = 15000) {
     return new Promise((resolve, reject) => {
         const r = outletRef(`customers/${phone}/rewards/${reqKey}`);
@@ -1268,27 +1289,6 @@ function waitForReward(phone, reqKey, pred, ms = 15000) {
             reject(new Error('read failed'));
         });
     });
-}
-
-// Ask for the WhatsApp code (up to 3 tries) and wait for the bot's verdict.
-async function completeRedemptionWithOtp(reqRef, phone, key) {
-    // The bot counts wrong codes in the reward record (wrongTries). The customer's
-    // browser cannot clear a stale error (rules), so each attempt waits for the
-    // counter to go UP instead of looking at a leftover message.
-    let seen = 0;
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const otp = window.prompt('We sent a 6-digit code to your WhatsApp. Enter it to redeem:');
-        if (!otp || !/^\d{6}$/.test(otp.trim())) {
-            // (rules forbid clients deleting a request; the bot expires it)
-            throw new Error('cancelled');
-        }
-        await update(reqRef, { otp: otp.trim() });
-        const rec = await waitForReward(phone, key, v => v.status === 'active' || v.status === 'rejected' || (Number(v.wrongTries) || 0) > seen, 20000);
-        if (rec.status === 'active' || rec.status === 'rejected') return rec;
-        seen = Number(rec.wrongTries) || seen + 1;
-        UI.showToast('Wrong code. Try again.', 'error');
-    }
-    throw new Error('rejected');
 }
 
 function orderItemNames(order) {
@@ -1374,27 +1374,36 @@ function bindAccountRatings() {
             rewardBtn.disabled = true;
             rewardBtn.textContent = 'Redeeming…';
             try {
+                // This device is registered under customers/{phone}/devices
+                // (first phone wins). That binding is the proof the bot accepts,
+                // so redemption needs no WhatsApp OTP and no typed code.
+                if ((await ensureDeviceAccess(_profile.phone)) !== 'owner') throw new Error('device');
+                const user = await ensureAnonAuth();
                 const reqRef = push(outletRef('bot/redeemQueue'));
                 await set(reqRef, {
                     phone: _profile.phone,
                     rewardId,
                     requestedAt: Date.now(),
-                    outlet: OUTLET
+                    outlet: OUTLET,
+                    appUid: user.uid
                 });
                 // The bot is the only writer of a redemption (server-minted code,
                 // points deducted); the reply lands on this request's own key.
-                let rec = await waitForReward(_profile.phone, reqRef.key, () => true);
-                if (rec.status === 'otp_required') {
-                    rec = await completeRedemptionWithOtp(reqRef, _profile.phone, reqRef.key);
-                }
+                const rec = await waitForReward(_profile.phone, reqRef.key, v => v.status === 'active' || v.status === 'rejected', 20000);
                 if (rec.status === 'rejected') throw new Error('rejected');
                 await loadCustomerLoyalty();
                 renderAccount();
-                UI.showToast(`Redeemed: ${rec.label || reward.label} — code ${rec.code}`, 'success');
+                // The app applies rewards as checkout chips, so no code is ever
+                // shown there. QR / WhatsApp surfaces still print it: dine-in has
+                // no reward tender and staff honour it as a manual discount.
+                const use = document.body.classList.contains('direct-mode')
+                    ? 'use it at checkout'
+                    : `code ${rec.code}`;
+                UI.showToast(`Redeemed: ${rec.label || reward.label} — ${use}`, 'success');
             } catch (e) {
                 UI.showToast(e && e.message === 'timeout'
                     ? 'Still processing — check Account in a minute.'
-                    : e && e.message === 'cancelled' ? 'Redemption cancelled.'
+                    : e && e.message === 'device' ? 'Could not verify this phone. Check your connection and try again.'
                     : 'Redemption failed. Try again.', 'error');
             } finally {
                 rewardBtn.disabled = false;

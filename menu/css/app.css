@@ -613,6 +613,27 @@ img{max-width:100%; display:block;}
     color: #fff;
     border-color: #64748b;
 }
+/* --- Checkout rewards: one tap, no code needed --- */
+.co-reward-title { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 700; color: var(--text-sub); }
+.co-reward-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-reward-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: 1px solid var(--primary, #E84908);
+    border-radius: 999px;
+    background: rgba(232, 73, 8, .06);
+    color: var(--text, #1f2937);
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s ease, transform .1s ease;
+}
+.co-reward-chip span { color: var(--text-sub, #6b7280); font-size: 11.5px; font-weight: 600; }
+.co-reward-chip.active { background: var(--primary, #E84908); color: #fff; }
+.co-reward-chip.active span { color: rgba(255, 255, 255, .85); }
+.co-reward-chip:active { transform: scale(.96); }
 .cart-summary-discount {
     color: #15803d;
     font-weight: 600;

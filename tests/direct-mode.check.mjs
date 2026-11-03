@@ -29,6 +29,7 @@ const DB = {
         dishes: { d1: { name: 'Margherita', category: 'c1', price: 199, stock: true, sizes: [{ label: 'Regular', price: 199 }] } },
         customers: { '9876543210': {
             loyalty: { phone: '9876543210', lifetimePoints: 1200, pointsSpent: 200, totalSpent: 2400, orderCount: 2, tier: 'silver', updatedAt: 1 },
+            rewards: { rw1: { rewardId: 'free-samosa', label: 'Free Samosa', cost: 200, code: 'LOYAL111111', status: 'active', redeemedAt: 1, outlet: 'pizza' } },
             orders: {
                 A100: { orderId: 'A100', status: 'Delivered', total: 398, createdAt: 2000, paymentStatus: 'Paid', paymentMethod: 'UPI', paidAt: 2500, source: 'QR', itemsSummary: [{ name: 'Margherita', qty: 2 }] },
                 A200: { orderId: 'A200', status: 'Out for Delivery', total: 250, createdAt: 4000, source: 'APP', orderMode: 'delivery', paymentStatus: 'Pending', riderName: 'Amit', riderPhone: '9123456780', deliveryOtp: '4821', itemsSummary: [{ name: 'Pasta', qty: 1 }] },
@@ -261,6 +262,39 @@ await scenario('checkout validates name and phone', async (page) => {
     await page.click('#btnCoPlace');
     assert.deepEqual(await orderWrites(page), []);
     assert.equal(await active(page), 'screenCheckout');
+});
+
+await scenario('checkout: an active reward is a one-tap chip, no code typed', async (page) => {
+    await signInAndAddDish(page);
+    await page.click('[data-co-mode="pickup"]');
+    await page.waitForSelector('#coRewardChips .co-reward-chip');
+    const chip = page.locator('#coRewardChips .co-reward-chip').first();
+    assert.match(await chip.textContent(), /Free Samosa/, 'reward label comes from the customer record');
+    await chip.click();
+    assert.match(await page.textContent('#coLines'), /Loyalty points \(200 pts\)/, 'tender preview');
+    assert.match(await page.textContent('#coLines'), /To pay/);
+    await page.click('#btnCoPlace');
+    await page.waitForSelector('#screenOrders.active', { timeout: 8000 });
+    const o = (await orderWrites(page))[0].value;
+    assert.deepEqual(o.rewardCode, { key: 'rw1', code: 'LOYAL111111' }, 'chip sends the key+code internally');
+    assert.equal(o.total, 208.95, 'order total unchanged — tender only reduces the payable amount');
+});
+
+await scenario('loyalty: Redeem queues a device-bound request (no OTP prompt)', async (page) => {
+    await page.goto(URL_DIRECT);
+    await page.waitForSelector('#screenSignIn.active');
+    await page.fill('#signInPhone', '9876543210');
+    await page.click('#btnSignIn');
+    await page.waitForSelector('#screenMenu.active');
+    await page.goto(URL_DIRECT + '&tab=loyalty');
+    await page.waitForSelector('.reward-btn', { timeout: 8000 });
+    await page.click('.reward-btn');
+    await page.waitForFunction(() => window.__writes.some(w => /bot\/redeemQueue\//.test(w.path)), null, { timeout: 8000 });
+    const req = await page.evaluate(() => window.__writes.find(w => /bot\/redeemQueue\//.test(w.path)).value);
+    assert.equal(req.phone, '9876543210');
+    assert.equal(req.appUid, 'ANON-TEST', 'the device binding is what the bot trusts');
+    assert.equal(req.outlet, 'pizza');
+    assert.equal(typeof req.rewardId, 'string');
 });
 
 await scenario('tracking: delivery steps, rider and delivery code; pickup steps; cancel only while Placed', async (page) => {

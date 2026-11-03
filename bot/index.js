@@ -2348,13 +2348,7 @@ async function startBot() {
     }
 
     initCommandListener(sock);
-    redeem.initRedeemListener({
-        db, resolvePath, OUTLET,
-        sendText: async (phone, text) => {
-            try { await sock.sendMessage(`91${phone}@s.whatsapp.net`, { text }); return true; }
-            catch (e) { console.warn('[Redeem] OTP send failed:', e.message); return false; }
-        }
-    });
+    redeem.initRedeemListener({ db, resolvePath, OUTLET });
 
     // Heartbeat & Cleanup & Report Scheduling
     if (reportInterval) clearInterval(reportInterval);

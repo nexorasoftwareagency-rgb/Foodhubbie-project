@@ -1,4 +1,4 @@
-// Redemption OTP + expiry check — in-memory fake of the Realtime Database.
+// Loyalty redemption (device-bound, no OTP) — in-memory fake of the Realtime Database.
 // Run: node tests/loyalty-redeem.check.cjs
 const assert = require('assert/strict');
 const redeem = require('../bot/redeem.js');
@@ -16,7 +16,13 @@ function ref(p) {
     return {
         key: p.split('/').pop(),
         child: (c) => ref(p + '/' + c),
-        once: async () => { const v = get(p); return { val: () => (v === undefined ? null : JSON.parse(JSON.stringify(v))) }; },
+        once: async () => {
+            const v = get(p);
+            return {
+                exists: () => v !== undefined && v !== null,
+                val: () => (v === undefined ? null : JSON.parse(JSON.stringify(v)))
+            };
+        },
         set: async (v) => put(p, v),
         update: async (o) => { const cur = get(p) || {}; Object.entries(o).forEach(([k, v]) => { if (v === null) delete cur[k]; else cur[k] = v; }); put(p, cur); },
         remove: async () => put(p, null),
@@ -25,10 +31,9 @@ function ref(p) {
         on: (ev, cb) => listeners[ev].push(cb),
     };
 }
-const sent = [];
 const db = { ref };
 const resolvePath = (p) => `o/${p}`;
-redeem.initRedeemListener({ db, resolvePath, OUTLET: 'o1', sendText: async (ph, t) => { sent.push({ ph, t }); return true; } });
+redeem.initRedeemListener({ db, resolvePath, OUTLET: 'o1' });
 const snapOf = (key) => ({ key, val: () => get(`o/bot/redeemQueue/${key}`), ref: ref(`o/bot/redeemQueue/${key}`) });
 const fire = async (ev, key) => { for (const cb of listeners[ev]) await cb(snapOf(key)); };
 const PH = '9876543210';
@@ -41,64 +46,50 @@ const PH = '9876543210';
 
     put('o/loyalty/config', { rewards: [{ id: 'r1', label: 'Free Samosa', cost: 200 }], expiryDays: 180 });
     put(`o/customers/${PH}/loyalty`, { lifetimePoints: 500, pointsSpent: 0, lastOrderAt: Date.now() });
+    put(`o/customers/${PH}/devices/uid1`, { at: 1 });
 
-    // 1) request without code -> OTP sent, nothing deducted
-    put('o/bot/redeemQueue/k1', { phone: PH, rewardId: 'r1', requestedAt: 1, outlet: 'o1' });
+    // 1) device-bound request redeems immediately: points deducted, code minted,
+    //    request cleared — no OTP, no WhatsApp message.
+    put('o/bot/redeemQueue/k1', { phone: PH, rewardId: 'r1', requestedAt: 1, outlet: 'o1', appUid: 'uid1' });
     await fire('child_added', 'k1');
-    assert.equal(sent.length, 1); assert.match(sent[0].t, /\b\d{6}\b/);
-    assert.equal(get(`o/customers/${PH}/rewards/k1`).status, 'otp_required');
-    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 0, 'no deduction before the code');
-    assert.ok(get('o/bot/redeemQueue/k1'), 'request parked');
-    const otp = sent[0].t.match(/\b(\d{6})\b/)[1];
-
-    // 2) wrong code -> still no deduction, try again allowed
-    put('o/bot/redeemQueue/k1/otp', otp === '111111' ? '222222' : '111111');
-    await fire('child_changed', 'k1');
-    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 0);
-    assert.equal(get(`o/customers/${PH}/rewards/k1`).lastError, 'wrong code');
-    assert.equal(get(`o/customers/${PH}/rewards/k1`).wrongTries, 1, 'wrong-code counter lets the app tell a new failure from an old one');
-
-    // 3) right code -> redeemed once, 200 deducted, code minted, request gone
-    put('o/bot/redeemQueue/k1/otp', otp);
-    await fire('child_changed', 'k1');
     assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 200);
     assert.equal(get(`o/customers/${PH}/rewards/k1`).status, 'active');
     assert.match(get(`o/customers/${PH}/rewards/k1`).code, /^LOYAL\d{6}$/);
     assert.equal(get('o/bot/redeemQueue/k1'), undefined);
 
-    // 4) 3 wrong codes -> rejected, nothing deducted
-    put('o/bot/redeemQueue/k2', { phone: PH, rewardId: 'r1', requestedAt: 2, outlet: 'o1' });
+    // 2) a device that is not registered under the phone cannot redeem it
+    put('o/bot/redeemQueue/k2', { phone: PH, rewardId: 'r1', requestedAt: 2, outlet: 'o1', appUid: 'uid2' });
     await fire('child_added', 'k2');
-    for (let i = 0; i < 3; i++) { put('o/bot/redeemQueue/k2/otp', '000000'); await fire('child_changed', 'k2'); }
     assert.equal(get(`o/customers/${PH}/rewards/k2`).status, 'rejected');
-    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 200);
+    assert.equal(get(`o/customers/${PH}/rewards/k2`).reason, 'device not linked');
+    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 200, 'nothing deducted');
+    assert.equal(get('o/bot/redeemQueue/k2'), undefined);
 
-    // 5) lapsed points -> rejected before any code is sent
-    const before = sent.length;
-    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 500, pointsSpent: 0, lastOrderAt: Date.now() - 300 * 86400000 });
+    // 3) legacy shape without appUid is refused (no unverified phone redeems)
     put('o/bot/redeemQueue/k3', { phone: PH, rewardId: 'r1', requestedAt: 3, outlet: 'o1' });
     await fire('child_added', 'k3');
-    assert.equal(sent.length, before, 'no code for expired points');
-    assert.equal(get(`o/customers/${PH}/rewards/k3`).reason, 'points expired');
+    assert.equal(get(`o/customers/${PH}/rewards/k3`).reason, 'device not linked');
+    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 200);
 
-    // 6) too few points -> rejected, no code
-    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 50, pointsSpent: 0, lastOrderAt: Date.now() });
-    put('o/bot/redeemQueue/k4', { phone: PH, rewardId: 'r1', requestedAt: 4, outlet: 'o1' });
+    // 4) a second redemption on the same device accumulates pointsSpent
+    put('o/bot/redeemQueue/k4', { phone: PH, rewardId: 'r1', requestedAt: 4, outlet: 'o1', appUid: 'uid1' });
     await fire('child_added', 'k4');
-    assert.equal(sent.length, before);
-    assert.equal(get(`o/customers/${PH}/rewards/k4`).reason, 'insufficient points');
+    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 400);
+    assert.equal(get(`o/customers/${PH}/rewards/k4`).status, 'active');
 
-    // 7) rate limit: 3 codes per phone per window
-    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 5000, pointsSpent: 0, lastOrderAt: Date.now() });
-    const base = sent.length; let rejected = 0;
-    for (let i = 0; i < 5; i++) {
-        put(`o/bot/redeemQueue/s${i}`, { phone: PH, rewardId: 'r1', requestedAt: 5, outlet: 'o1' });
-        await fire('child_added', `s${i}`);
-        if (get(`o/customers/${PH}/rewards/s${i}`).status === 'rejected') rejected++;
-    }
-    assert.ok(sent.length - base <= 3, 'no more than 3 codes'); assert.ok(rejected >= 2);
+    // 5) too few points -> rejected before anything is written
+    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 50, pointsSpent: 0, lastOrderAt: Date.now() });
+    put('o/bot/redeemQueue/k5', { phone: PH, rewardId: 'r1', requestedAt: 5, outlet: 'o1', appUid: 'uid1' });
+    await fire('child_added', 'k5');
+    assert.equal(get(`o/customers/${PH}/rewards/k5`).reason, 'insufficient points');
 
-    // 8) source guard: the earn transaction must carry pointsSpent forward
+    // 6) lapsed points -> rejected
+    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 500, pointsSpent: 0, lastOrderAt: Date.now() - 300 * 86400000 });
+    put('o/bot/redeemQueue/k6', { phone: PH, rewardId: 'r1', requestedAt: 6, outlet: 'o1', appUid: 'uid1' });
+    await fire('child_added', 'k6');
+    assert.equal(get(`o/customers/${PH}/rewards/k6`).reason, 'points expired');
+
+    // 7) source guard: the earn transaction must carry pointsSpent forward
     // (it used to rebuild the node without it, refunding redeemed points).
     const src = require('fs').readFileSync(require('path').join(__dirname, '../bot/index.js'), 'utf8');
     assert.match(src, /pointsSpent: spent,/, 'accrual tx keeps pointsSpent');
