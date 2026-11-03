@@ -6,12 +6,14 @@
 // Pricing (FINAL, 2026-11-02): 'percentage' is the default mode —
 // WhatsApp-based 3% · Customer App 2% · POS + QR menu 1% · unknown 3% (see shared/cost-math.js).
 // The `rates` row below is only read by the legacy 'per_order' mode.
+// Setup fee was removed 2026-11-01 (wallet-minimum model): new outlets start
+// with amount 0 / status 'none'. Existing rows keep their stored setup record.
 
 export function getBillingDefaults() {
   return {
     mode: 'percentage', // percentage package: QR/POS 1%, Customer App 2%, WhatsApp 3%
     rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1, commission1pct: 0.01 },
-    setup: { amount: 500, status: 'non_refundable', date: new Date().toISOString() },
+    setup: { amount: 0, status: 'none', date: new Date().toISOString() },
     tokens: { balance: 15, updatedAt: firebase.database.ServerValue.TIMESTAMP },
     tokenPacks: { welcome: { qty: 15, priceRs: 0, note: 'Free welcome pack', grantedAt: firebase.database.ServerValue.TIMESTAMP, grantedBy: 'system' } },
   };

@@ -18,7 +18,10 @@ loyalty Phase 2.5, wallet model, audit fixes, marketing/WA-upcoming commits)
    | QR menu | **1 %** |
    | POS counter | **1 %** |
    | Unknown / legacy / other | **3 %** (safe default, highest) |
-   Promo stays ₹1/token. Flat `per_order` mode stays readable for old rows only.
+   Promo stays ₹1/token. **Setup fee: none** — removed 2026-11-01 with the wallet-minimum model
+   (new tenants get `setup:{amount:0,status:'none'}`; existing stored setup records are left untouched).
+   Wallet minimum: first top-up ₹1,000, or ₹1,500 when the outlet uses WhatsApp. Flat `per_order` mode stays
+   readable for old rows only.
 3. **Phone privacy:** accept first-phone-wins (no OTP), as documented by the package.
 4. **Deploy:** full live deploy after local verification + rules emulator + builds.
 5. **Rules emulator:** portable Temurin 21 JRE in `%TEMP%` (no system install).

@@ -17,7 +17,6 @@ const CANON_FILES = ['docs/BACKLINK-KIT.md', `${SITE}/contact.html`, `${SITE}/ll
 const CANON = { phone: '+919724649971', email: 'nileshshah84870@gmail.com' };
 
 const BANNED = [
-  [/1,?500\s*(one[-\s]time\s*)?setup/i, 'setup fee must be ₹500 - found a ₹1,500 setup claim'],
   [/0%\s*commission on per-order/i, 'ambiguous "0% commission" stat - name which plan 1% applies to'],
   [/pizz[ai]/i, 'pizza terms must not appear in public copy'],
   [/no ban risk|ban[- ]free|does not cost you the number/i, 'absolute WhatsApp ban-risk claim - Meta controls account standing'],
@@ -31,7 +30,8 @@ const text = (html) => html.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/
 // Per-element text: keeps a table cell's price away from the next cell's price.
 const chunks = (html) => html.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<style[\s\S]*?<\/style>/g, ' ').split(/<[^>]+>/).map(s => s.replace(/\s+/g, ' ')).filter(Boolean);
 
-// The rupee amount stated as the setup fee, read in both directions.
+// The setup fee was retired 2026-11-01 (wallet-minimum model) - any positive
+// setup amount in public copy is drift. Read the amount in both directions.
 const SETUP_AMOUNTS = [
   /₹\s*([\d,]+)\s*(?:one[-\s]time\s+)?(?:software\s+)?setup/i,
   /setup(?:\s+fee)?\s*(?:is|of|:|=|at|costs?)?\s*₹\s*([\d,]+)/i,
@@ -50,7 +50,7 @@ for (const f of PUBLIC) {
   for (const chunk of chunks(c)) {
     for (const re of SETUP_AMOUNTS) {
       const m = chunk.match(re);
-      if (m && m[1].replace(/,/g, '') !== '500') fail(f, `setup fee must be ₹500, found ₹${m[1]} -> "${chunk.slice(0, 90)}"`);
+      if (m && Number(m[1].replace(/,/g, '')) > 0) fail(f, `setup fee was removed - found a ₹${m[1]} setup claim -> "${chunk.slice(0, 90)}"`);
     }
   }
 }

@@ -17,9 +17,9 @@ Do NOT spin up fake directory spam — one accurate profile per platform.
 FoodHubbie is restaurant management software for restaurants and cafes: QR table
 ordering, kitchen display system, POS counter billing, delivery dispatch with rider app and
 OTP handoff, WhatsApp ordering on the official Meta API, promotions and discount engine,
-inventory, analytics and multi-outlet reporting — in one realtime dashboard. Flat per-order
-pricing (QR ₹2, POS ₹1, WhatsApp Official ₹5 or 1%), ₹500 one-time setup, no monthly
-lock-in. https://foodhubbie.in/
+inventory, analytics and multi-outlet reporting — in one realtime dashboard. Percentage
+pricing (QR table + POS counter 1% per order, Customer App 2%, WhatsApp ordering 3%),
+no setup fee, no monthly lock-in. https://foodhubbie.in/
 
 ## Long description (JustDial / IndiaMART)
 

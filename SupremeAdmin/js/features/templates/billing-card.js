@@ -28,7 +28,14 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
   const mode = normalizeMode(b.mode);
   const rates = b.rates || {};
   const bal = b.tokens?.balance ?? 0;
-  const setupStatus = billingDraft?.setup ?? b.setup?.status ?? 'non_refundable';
+  const setupAmount = Number(b.setup?.amount ?? 0);
+  const setupStatus = String(b.setup?.status || 'none');
+  const setupStatusLabel = setupStatus === 'non_refundable'
+    ? 'Non-refundable'
+    : setupStatus.charAt(0).toUpperCase() + setupStatus.slice(1);
+  const setupLabel = setupAmount > 0 && setupStatus !== 'none'
+    ? `${escapeHtml(setupStatusLabel)} · ₹${setupAmount}`
+    : 'No setup fee';
   const w = b.tokenPacks?.welcome;
   const ym = currentYm();
   const month = scopeStats(outlet, { k: 'month', ym });
@@ -39,7 +46,7 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
     <div class="collapsible-body${collapsed ? ' collapsed' : ''}" id="billing-body">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">
         <div class="detail-cell"><div class="detail-label">Pricing mode</div><div class="detail-value">${mode === 'percentage' ? 'Percentage plan (QR/POS 1% · App 2% · WhatsApp 3%)' : mode === 'commission_1pct' ? '1% of sales' : 'Per order'}</div></div>
-        <div class="detail-cell"><div class="detail-label">Setup fee</div><div class="detail-value">₹${b.setup?.amount ?? 500} · ${escapeHtml(String(b.setup?.status || '—'))}</div></div>
+        <div class="detail-cell"><div class="detail-label">Setup fee</div><div class="detail-value">${setupLabel}</div></div>
         <div class="detail-cell"><div class="detail-label">Promo token balance</div><div class="detail-value mono">${bal}</div></div>
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
@@ -60,10 +67,6 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
         ${[['per_order', 'Flat per-order'], ['percentage', 'Percentage plan (QR/POS 1% · App 2% · WhatsApp 3%)'], ['commission_1pct', 'WhatsApp 1% only']]
           .filter(([m]) => m !== mode)
           .map(([m, label]) => `<button class="btn btn-ghost btn-sm" data-action="billing-set-mode" data-mode="${m}" ${ro} title="${roTitle}">Switch to ${label}</button>`).join('\n        ')}
-        <select id="billingSetupStatus" class="text-input" style="width:auto" data-billing-draft="setup" ${ro}>
-          ${['non_refundable', 'refundable', 'paid', 'adjusted', 'refunded'].map((s) => `<option value="${s}" ${setupStatus === s ? 'selected' : ''}>Setup: ${s}</option>`).join('')}
-        </select>
-        <button class="btn btn-ghost btn-sm" data-action="billing-save-setup" ${ro} title="${roTitle}">Save setup</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
         <input id="billingGrantQty" type="number" min="1" max="10000" class="text-input" style="width:110px" placeholder="Tokens" value="${escapeHtml(billingDraft?.qty ?? '')}" data-billing-draft="qty" ${ro}>

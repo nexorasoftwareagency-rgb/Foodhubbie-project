@@ -38,7 +38,7 @@ const DATA = path.join(ROOT, "Restaurant Lead Data");
 const XLSX = path.join(DATA, "restaurant-leads.xlsx");
 const LOG = path.join(DATA, "wa-log.csv");
 const AUTH = path.join(ROOT, ".wa-sales-auth");
-const SITE = "https://foodhubbie-web.web.app/";
+const SITE = "https://foodhubbie.in/";
 const VIDEO_URL = SITE + "assets/demo/demo-walkthrough-32s.mp4";
 let DAILY_CAP = 15; // --cap N overrides for the run (owner's call)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -98,7 +98,7 @@ const OWNER_HOOK_LINE = {
   cafe: "For a café like yours, the QR + WhatsApp ordering piece usually pays for itself first.",
   bakery: "For a bakery like yours, counter billing plus QR table orders together is where you'll feel it first.",
   "fine dining": "For a fine-dining setup like yours, live table-order vs bill sync is the piece worth seeing first.",
-  qsr: "For a fast-service outlet like yours, the ₹1 counter billing speed is the piece worth trying first.",
+  qsr: "For a fast-service outlet like yours, the 1% counter billing speed is the piece worth trying first.",
   restaurant: "For a restaurant like yours, dine-in QR + WhatsApp orders on one screen is the piece worth seeing first."
 };
 const OWNER_DM =
@@ -109,7 +109,7 @@ const OWNER_DM =
   "• *Rider App* — apni delivery, apne riders, live tracking. Aggregator commission 0.\n" +
   "• *Live Reports* — kaunsi dish chalti hai, peak hour kya hai. Decisions data se.\n\n" +
   "*Demo aaj hi — 10 minute.* Aapka menu, aapki settings, live chal ke dekhein:\n" +
-  "👉 https://foodhubbie-web.web.app/\n\n" +
+  "👉 https://foodhubbie.in/\n\n" +
   "Bas *demo* reply kijiye — main aapke outlet ka demo aaj hi set kar deta hoon.";
 const HOOKS = {
   cafe:     {hi: "guest QR scan karke order karta hai — kitchen tak seedha pahunch jaata hai, no waiter-runner",
@@ -118,8 +118,8 @@ const HOOKS = {
              en: "counter billing and table orders run side by side in one dashboard"},
   "fine dining": {hi: "table ka QR order aur counter ka bill ek hi dashboard mein live sync hote hain",
              en: "table QR orders and the counter bill stay in live sync on one dashboard"},
-  qsr:      {hi: "counter billing sabse fast — 1 order = ₹1, table QR bhi included",
-             en: "counter billing is as fast as it gets — ₹1 per order, table QR included"},
+  qsr:      {hi: "counter billing sabse fast — 1% per order, table QR bhi included",
+             en: "counter billing is as fast as it gets — 1% per order, table QR included"},
   restaurant: {hi: "dine-in table orders aur counter billing ek hi screen par aate hain",
              en: "dine-in table orders and counter billing arrive on one screen"}
 };
@@ -207,7 +207,7 @@ function compose(l) {
     `• Foodhubbi-App Orders (delivery app + all status updates) — 2%`,
     `• Kitchen screen + reports — included`,
     ``,
-    `No monthly fee. ₹500 one-time setup, adjusted in your first bill.`,
+    `No monthly fee and no setup fee. First wallet top-up ₹1,000 (₹1,500 with WhatsApp).`,
     `Cancelled orders are never charged.`,
     ``,
     `Open to a 10-minute demo on your own menu? Just reply *"yes"*.`,
@@ -228,7 +228,7 @@ function compose(l) {
     `• Foodhubbi-App Orders (delivery app + saare status updates) — 2%`,
     `• Kitchen screen + reports — included`,
     ``,
-    `Monthly fee *zero*. Setup ₹500 one-time, first bill mein adjust.`,
+    `Monthly fee *zero*, setup fee bhi zero. Pehla wallet top-up ₹1,000 (WhatsApp ke saath ₹1,500).`,
     `Cancelled order ka charge nahi.`,
     ``,
     `10-min ka demo aapke hi menu pe de doon? Bas *"haan"* likh dijiye.`,
@@ -247,9 +247,9 @@ const faqAnswer = (t, lang) => {
       `• Counter billing (POS) — 1%`,
       `• Table QR menu — 1%`,
       `• WhatsApp bot ordering — 3%`,
-      `• Foodhubbi-App Orders — 3%`,
+      `• Foodhubbi-App Orders — 2%`,
       `• Monthly subscription — ₹0`,
-      `• One-time setup — ₹500 (adjusted in your first bill)`,
+      `• Setup fee — none; first wallet top-up ₹1,000 (₹1,500 with WhatsApp)`,
       ``,
       `Cancelled orders are never charged.`,
       `Shall I give you a quick demo? Just reply "yes".`
@@ -259,9 +259,9 @@ const faqAnswer = (t, lang) => {
       `• Counter billing (POS) — 1%`,
       `• Table QR menu — 1%`,
       `• WhatsApp bot ordering — 3%`,
-      `• Foodhubbi-App Orders — 3%`,
+      `• Foodhubbi-App Orders — 2%`,
       `• Monthly subscription — ₹0`,
-      `• One-time setup — ₹500 (first bill mein adjust)`,
+      `• Setup fee — none; pehla wallet top-up ₹1,000 (WhatsApp ke saath ₹1,500)`,
       ``,
       `Cancelled order ka charge nahi lagta.`,
       `Chhota demo de doon? "haan" likh dijiye.`

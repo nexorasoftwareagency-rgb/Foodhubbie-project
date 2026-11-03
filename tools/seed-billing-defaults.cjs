@@ -25,11 +25,12 @@ async function write(path, value, label) {
 // Mirror of shared/cost-math.js + shared/billing-defaults.cjs.
 // Pricing 2026-11-01: 'percentage' is the mode — WhatsApp-based 3% · Customer App 2%
 // · POS + QR menu 1%. `rates` is only read by the legacy 'per_order' mode.
+// Setup fee removed 2026-11-01 (wallet-minimum model): new rows get 0 / 'none'.
 const FREE_TOKENS = 15;
 const DEFAULT_BILLING = {
   mode: 'percentage',
   rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1, commission1pct: 0.01 },
-  setup: { amount: 500, status: 'non_refundable', date: new Date(now).toISOString() },
+  setup: { amount: 0, status: 'none', date: new Date(now).toISOString() },
   tokens: { balance: FREE_TOKENS, updatedAt: now },
   tokenPacks: { welcome: { qty: FREE_TOKENS, priceRs: 0, note: 'Free welcome pack', grantedAt: now, grantedBy: 'system' } },
 };
@@ -66,11 +67,9 @@ async function main() {
             await write(`${base}/rates/${key}`, want, `PATCH ${bid}/${oid} rates/${key} ${have} → ${want}`);
           }
         }
-        // Setup policy: fee is non-refundable (2026-09-29). Only rows still in the
-        // old 'refundable' default move; paid/adjusted/refunded history is kept.
-        if (val.setup?.status === 'refundable') {
-          await write(`${base}/setup/status`, 'non_refundable', `PATCH ${bid}/${oid} setup.status refundable → non_refundable`);
-        }
+        // Setup policy: no fee since 2026-11-01. Existing setup records are left
+        // untouched (paid/refunded history is money state; new rows already get
+        // amount 0 / status 'none').
         console.log(`skip  ${bid}/${oid} (billing exists)`); skipped++; continue;
       }
       await write(base, DEFAULT_BILLING, `SEEDED ${bid}/${oid} — billing defaults + ${FREE_TOKENS} free promo tokens`);

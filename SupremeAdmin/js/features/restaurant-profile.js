@@ -28,9 +28,9 @@ let collapsedSections = new Set(); // collapsible section ids the user has close
 let pairModalOpen = false; // live QR modal state
 let pairUnsubscribe = null; // stop the QR listener when the modal closes
 let currentTab = 'overview'; // 'overview' | 'analytics' — in-page tab rail state
-// Draft for the Billing card inputs (token qty/price, setup status) — same
-// idea as detailEdit: survives the live re-render ticks so a half-typed
-// grant form isn't wiped by an incoming botStatus/usage update.
+// Draft for the Billing card inputs (token qty/price) — same idea as
+// detailEdit: survives the live re-render ticks so a half-typed grant form
+// isn't wiped by an incoming botStatus/usage update.
 let billingDraft = null; // { qty, priceRs }
 
 function reRenderProfile() {

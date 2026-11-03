@@ -206,7 +206,11 @@ function _render() {
                 ? 'Customer App orders 2% · WhatsApp-based 3% · POS + QR menu 1%'
                 : mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total) — legacy' : 'Per-order flat rates — legacy';
             const setup = b.setup || {};
-            const setupStatus = setup.status || 'non_refundable';
+            const setupAmount = Number(setup.amount || 0);
+            const setupStatus = setup.status || 'none';
+            const setupLabel = setupAmount > 0 && setupStatus !== 'none'
+                ? `${setupStatus === 'non_refundable' ? 'Non-refundable' : setupStatus.charAt(0).toUpperCase() + setupStatus.slice(1)} · ₹${setupAmount}`
+                : 'No setup fee';
             const tp = b.tokenPacks || {};
             const welcome = tp.welcome || {};
             const bal = b.tokens?.balance ?? 0;
@@ -223,7 +227,7 @@ function _render() {
                         </div>
                         <div>
                             <div class="cost-detail-label">Setup status</div>
-                            <div class="cost-detail-value">${setupStatus === 'non_refundable' ? 'Non-refundable' : setupStatus.charAt(0).toUpperCase() + setupStatus.slice(1)}</div>
+                            <div class="cost-detail-value">${setupLabel}</div>
                         </div>
                         <div>
                             <div class="cost-detail-label">Token balance</div>

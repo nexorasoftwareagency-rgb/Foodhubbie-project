@@ -454,7 +454,7 @@ export function buildDemoState() {
             plan: 'Growth (demo)',
             mode: 'per_order',
             rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1 },
-            setup: { amount: 500, status: 'non_refundable', date: '2026-08-02' },
+            setup: { amount: 0, status: 'none', date: '2026-08-02' },
             payments: [
                 { id: 'bp1', date: '2 Sep 2026', amount: 1500, method: 'UPI', note: 'Advance top-up' },
                 { id: 'bp2', date: '1 Oct 2026', amount: 1990, method: 'Card', note: 'Monthly settlement' },

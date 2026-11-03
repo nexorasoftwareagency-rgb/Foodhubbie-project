@@ -27,9 +27,9 @@ Current revenue rates â€” **percentage plan, in force since 2026-11-01** (`
 | **POS counter** | **1%** of order value | Walk-in / counter billing |
 | **QR menu** | **1%** of order value | Dine-in table ordering |
 | Unclassified / legacy orders | 3% | `other`, unknown source strings |
-| Promo (marketing) message | â‚¹1 per message | Promo tokens |
-| Setup | â‚¹500 one-time, non-refundable | Onboarding |
-| Min first top-up | â‚¹1,000 | Wallet |
+| Promo (marketing) message | ₹1 per message | Promo tokens |
+| Setup | **None** — wallet top-up only | Onboarding |
+| Min first top-up | ₹1,000 (₹1,500 with WhatsApp) | Wallet |
 | Free promo tokens | 15 | Welcome pack |
 
 Cancelled and refunded orders are never billed.

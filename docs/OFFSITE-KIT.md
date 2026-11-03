@@ -6,7 +6,8 @@ real product demonstrations and honest review requests. Google's guidance is exp
 credible references to the product, not manufactured volume.
 
 Copy facts are identical to `docs/BACKLINK-KIT.md` and to the site. `tools/check-copy-consistency.cjs`
-enforces the numbers (₹1–5 per order, ₹500 setup, one phone, one email) and the no-niche-terms rule.
+enforces the numbers (QR/POS 1%, Customer App 2%, WhatsApp 3%, no setup fee, one phone, one email)
+and the no-niche-terms rule.
 
 ---
 
@@ -19,7 +20,7 @@ enforces the numbers (₹1–5 per order, ₹500 setup, one phone, one email) an
 | Phone / WhatsApp | +91 97246 49971 |
 | Email | nileshshah84870@gmail.com |
 | Category | Restaurant Management Software / POS Software |
-| Pricing | Flat per order — ₹1 POS counter, ₹2 QR table, ₹5 WhatsApp Official (or 1% of order value), ₹1 promotional message · ₹500 one-time setup · no monthly fee |
+| Pricing | Percentage per order — 1% POS counter + QR table, 2% Foodhubbie-App orders, 3% WhatsApp bot orders · ₹1 promotional message · no setup fee · no monthly fee · first wallet top-up ₹1,000 (₹1,500 with WhatsApp) |
 | Free trial | Yes, full feature set, no card |
 | Platform | Browser (no install) — Admin Dashboard, Customer QR Menu, Rider App |
 | Support | WhatsApp +91 97246 49971, Mon–Sun 10:00–23:00 IST |
@@ -50,9 +51,9 @@ the ones that take prose. Priority order = highest search value first.
 ### Capterra / GetApp / G2 — description block (same copy, edit per platform)
 
 > FoodHubbie is restaurant management software for restaurants and cafes. Orders are billed
-> individually — ₹1 for a POS counter order, ₹2 for a QR table order, ₹5 for a WhatsApp Official
-> order (or 1% of that order's value) and ₹1 per promotional message — with a one-time ₹500 setup
-> and no monthly subscription, so a slow month costs almost nothing.
+> as a percentage — 1% for a POS counter or QR table order, 2% for a Foodhubbie-App order and
+> 3% for a WhatsApp bot order, plus ₹1 per promotional message — with no setup fee and no
+> monthly subscription, so a slow month costs almost nothing.
 >
 > The system covers the whole day: customers scan a table QR and order from their own phone with no
 > app download, the kitchen works from a live display screen instead of paper KOTs, the cashier bills
@@ -80,7 +81,7 @@ Push notifications · No hardware required · Browser-based
 ### Platform fields
 
 - Deployment: Browser / SaaS
-- Pricing model: Per order (₹1–5) + one-time ₹500 setup, no monthly fee
+- Pricing model: Percentage per order (QR/POS 1%, Customer App 2%, WhatsApp 3%) + ₹1 per promotional message, no setup fee, no monthly fee
 - Free trial: Yes (full features, no card)
 - Languages: English, Hindi, Hinglish
 - Devices: Desktop, tablet, mobile
@@ -102,10 +103,10 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 > gap between the order and the bill.
 >
 > FoodHubbie does QR table ordering, kitchen display, POS billing, WhatsApp ordering and
-> delivery riders in one system, and charges per order instead of per month: ₹1 for a counter
-> order, ₹2 for a QR table order, ₹5 for a WhatsApp order, ₹500 one-time setup, no monthly rent.
-> A slow month costs almost nothing, which is exactly why a busy cafe shouldn't pay for the slow
-> month too.
+> delivery riders in one system, and charges per order instead of per month: 1% for a counter
+> or QR table order, 2% for a Foodhubbie-App order, 3% for a WhatsApp order, no setup fee, no
+> monthly rent. A slow month costs almost nothing, which is exactly why a busy cafe shouldn't
+> pay for the slow month too.
 >
 > 32-second walkthrough of a real order flow:
 > https://foodhubbie.in?utm_source=linkedin&utm_medium=social&utm_campaign=linkedin-demo
@@ -117,7 +118,7 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 
 **A (cost angle)**
 > Most restaurant software charges per month whether you serve 20 plates or 200.
-> FoodHubbie charges per order: ₹1 POS, ₹2 QR table, ₹5 WhatsApp, ₹500 setup, no monthly fee.
+> FoodHubbie charges per order: 1% POS or QR table, 2% Foodhubbie-App, 3% WhatsApp, no setup fee, no monthly fee.
 > 32 sec: https://foodhubbie.in?utm_source=x&utm_medium=social&utm_campaign=x-cost
 
 **B (KDS angle)**
@@ -128,17 +129,17 @@ UTM pattern: `?utm_source={platform}&utm_medium=social&utm_campaign={slug}`
 ### Instagram / Facebook caption
 
 > Kitchen screen, table QR, one bill screen, rider app. FoodHubbie runs a restaurant's whole
-> day in one system — and bills per order, not per month (₹1–5 per order, ₹500 setup, no
-> subscription). 32-second walkthrough in the bio. Free trial, no card.
+> day in one system — and bills per order, not per month (1% QR/POS, 2% app, 3% WhatsApp, no
+> setup fee, no subscription). 32-second walkthrough in the bio. Free trial, no card.
 > #restaurantsoftware #QRordering #kitchenDisplay #POS #foodbusiness #smallbusiness
 
 ### YouTube (title / description)
 
 - Title: `Restaurant software in 32 seconds — QR ordering, kitchen display, POS & riders`
 - Description: `A full order flow in FoodHubbie: a table QR order lands on the kitchen screen, the
-  cashier bills the session, the rider takes it out with OTP handoff. Flat per-order pricing — ₹1 POS,
-  ₹2 QR table, ₹5 WhatsApp order, ₹500 one-time setup, no monthly subscription. Free trial, no card:
-  https://foodhubbie.in?utm_source=youtube&utm_medium=social&utm_campaign=youtube-demo`
+  cashier bills the session, the rider takes it out with OTP handoff. Percentage pricing — 1% POS or
+  QR table, 2% Foodhubbie-App, 3% WhatsApp order, no setup fee, no monthly subscription. Free trial,
+  no card: https://foodhubbie.in?utm_source=youtube&utm_medium=social&utm_campaign=youtube-demo`
 - Tags: restaurant software, QR code ordering, POS software India, kitchen display system, restaurant
   billing software, delivery rider management
 
@@ -171,7 +172,7 @@ it were a testimonial.
 
 **Case-study template** (one page each, on the site, linked from the homepage later):
 `Outlet name + city · setup date · what they used before (paper KOT, aggregator, monthly POS) ·
-the problem in one line · what FoodHubbie changed (with a number) · what it costs them per month ·
+the problem in one line · what FoodHubbie changed (with a number) · what it costs them per order ·
 one quote with a name and outlet.`
 
 ---

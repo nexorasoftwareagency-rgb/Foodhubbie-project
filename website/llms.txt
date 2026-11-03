@@ -30,17 +30,18 @@
 - Safety: 300 recipients/campaign, 300/day, 8–15s pacing + batch pauses, 7-day warmup ramp,
   >35% failure circuit-breaker, kill-switch, Meta-only promos.
 
-## Pricing (per-order, flat)
-- QR Table ₹2/order + POS counter ₹1/order.
-- WhatsApp Official (Meta Cloud API) ₹5/order or 1% of sales. Official Promo msgs ₹1 each.
-- One-time setup ₹500 (non-refundable, adjusted in first bill).
+## Pricing (percentage per order)
+- QR Table + POS counter 1% of order value.
+- Foodhubbie Customer App (delivery/pickup in the restaurant app) 2% of order value.
+- WhatsApp bot ordering 3% of order value. Official Promo msgs ₹1 each.
+- No setup fee. First wallet top-up ₹1,000 (₹1,500 with WhatsApp); minimum balance ₹250.
 
 ## Pages
 - https://foodhubbie.in/ — product, features, pricing
 - https://foodhubbie.in/architecture — customer/dine-in/rider/admin flows
 - https://foodhubbie.in/signup — restaurant registration (writes onboardingRequests)
-- https://foodhubbie.in/billing-policy - Billing: per-order rates by channel, 500 setup, cancelled/refunded orders not billed, invoice disputes
-- https://foodhubbie.in/refund-policy - Refunds and termination: setup fee non-refundable, no lock-in, 30-day data retention after closure
+- https://foodhubbie.in/billing-policy - Billing: percentage rates by channel, no setup fee, cancelled/refunded orders not billed, invoice disputes
+- https://foodhubbie.in/refund-policy - Refunds and termination: wallet top-up, no setup fee, no lock-in, 30-day data retention after closure
 - https://foodhubbie.in/whatsapp-policy - WhatsApp policy: official API only for promos, consent-only audiences, STOP honoured, approved templates, 1/msg
 - https://foodhubbie.in/privacy - privacy policy: what data is stored, who can see it, deletion requests
 - https://foodhubbie.in/book — demo/inquiry via WhatsApp
@@ -58,7 +59,7 @@
 - https://foodhubbie.in/multi-outlet — several outlets under one login
 - https://foodhubbie.in/restaurant-analytics — sales, channel and item reports
 - https://foodhubbie.in/use-cases — use cases: cafes, family restaurants, cloud kitchens
-- https://foodhubbie.in/pricing — pricing (₹1–5 per order, ₹500 setup)
+- https://foodhubbie.in/pricing — pricing (1% QR/POS, 2% Customer App, 3% WhatsApp, no setup fee)
 - https://foodhubbie.in/compare — vs monthly-fee POS suites
 - https://foodhubbie.in/best-software — 2026 software buyer's guide
 

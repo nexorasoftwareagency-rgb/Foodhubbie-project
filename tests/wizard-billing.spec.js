@@ -1,5 +1,5 @@
 // Regression: the Add Restaurant wizard must write the CURRENT billing defaults —
-// per-order rates, ₹500 setup with status 'non_refundable', 15 welcome tokens.
+// percentage rates, no setup fee (0 / 'none'), 15 welcome tokens.
 // Bug this guards: root shared/billing-defaults.js shipped an abandoned ₹299
 // monthly-plan model into dist/shared, so wizard-created outlets got billing with
 // no rates/setup/tokens (costs.js masked it via DEFAULT_RATES fallback).
@@ -120,7 +120,7 @@ test.describe('wizard billing regression', () => {
       expect(billing.monthlyRate).toBeUndefined();
       expect(billing.mode).toBe('percentage'); // new restaurants start on the Foodhubbie package
       expect(billing.rates).toEqual(EXPECTED_RATES);
-      expect(billing.setup).toMatchObject({ amount: 500, status: 'non_refundable' });
+      expect(billing.setup).toMatchObject({ amount: 0, status: 'none' });
       expect(billing.tokens && billing.tokens.balance).toBe(15);
       expect(billing.tokenPacks && billing.tokenPacks.welcome && billing.tokenPacks.welcome.qty).toBe(15);
       expect(outlets[oid].settings && outlets[oid].settings.features && outlets[oid].settings.features.discountApproval).toBe(false);
