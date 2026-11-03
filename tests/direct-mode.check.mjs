@@ -47,7 +47,7 @@ const put = (p, v) => { const ks = p.split('/').filter(Boolean); let n = DB; ks.
 const snap = (v) => ({ exists: () => v != null, val: () => (v === undefined ? null : v), forEach: (f) => { Object.entries(v || {}).forEach(([k, x]) => f({ key: k, val: () => x })); }, key: null });
 export const getDatabase = () => ({});
 export const ref = (db, p) => ({ path: p || '', key: (p || '').split('/').pop() });
-export const get = async (r) => snap(at(r.path));
+export const get = async (r) => (r.path.endsWith('/walletGate') && window.__walletGate ? snap(window.__walletGate) : snap(at(r.path)));
 export const onValue = (r, cb) => { Promise.resolve().then(() => cb(snap(at(r.path)))); return () => {}; };
 export const set = async (r, v) => { if (r.path.includes('/devices/') && window.__denyDevice && !(v && v.code && v.code === window.__linkCode)) throw new Error('PERMISSION_DENIED'); window.__writes.push({ path: r.path, value: JSON.parse(JSON.stringify(v)) }); put(r.path, v); };
 export const update = async (r, o) => { window.__writes.push({ path: r.path, update: o }); const cur = at(r.path) || {}; put(r.path, { ...cur, ...o }); };
@@ -223,6 +223,35 @@ await scenario('delivery order: needs location + address, fee from slabs, COD', 
     assert.equal(o.deliveryFee, 30); assert.equal(o.total, 238.95, '199 + 9.95 GST + 30 fee (fee outside tax)');
     assert.equal(o.paymentMethod, 'COD'); assert.equal(o.paymentStatus, 'Pending');
     assert.equal(o.address, 'Flat 4, MG Road, near the temple'); assert.equal(typeof o.lat, 'number'); assert.ok(o.distanceKm >= 0);
+});
+
+await scenario('wallet gate: closed wallet pauses app checkout, writes nothing', async (page) => {
+    await page.addInitScript(() => { window.__walletGate = 'closed'; });
+    await signInAndAddDish(page);
+    await page.click('[data-co-mode="pickup"]');
+    await page.click('#btnCoPlace');
+    await page.waitForFunction(() => /temporarily unavailable/i.test(document.body.textContent), null, { timeout: 5000 });
+    assert.deepEqual(await orderWrites(page), [], 'no order written while the wallet is closed');
+    assert.equal(await active(page), 'screenCheckout');
+});
+
+await scenario('wallet gate: "low" still allows app orders (it only affects the bot)', async (page) => {
+    await page.addInitScript(() => { window.__walletGate = 'low'; });
+    await signInAndAddDish(page);
+    await page.click('[data-co-mode="pickup"]');
+    await page.click('#btnCoPlace');
+    await page.waitForSelector('#screenOrders.active', { timeout: 8000 });
+    assert.equal((await orderWrites(page)).length, 1);
+});
+
+await scenario('notification tap (?tab=loyalty) opens the Loyalty tab', async (page) => {
+    await page.goto(URL_DIRECT);
+    await page.waitForSelector('#screenSignIn.active');
+    await page.fill('#signInPhone', '9876543210');
+    await page.click('#btnSignIn');
+    await page.waitForSelector('#screenMenu.active');
+    await page.goto(URL_DIRECT + '&tab=loyalty');
+    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenLoyalty', null, { timeout: 8000 });
 });
 
 await scenario('checkout validates name and phone', async (page) => {

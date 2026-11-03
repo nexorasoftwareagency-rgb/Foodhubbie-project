@@ -74,5 +74,6 @@ const PH = '9876543210', ID = 'A100';
     assert.match(src, /base\.app\?\.consent\?\.offers/, 'app orders never force promotional consent on');
     const promo = require('fs').readFileSync(require('path').join(__dirname, '../bot/promotions.js'), 'utf8');
     assert.match(promo, /app\/consent\/offers/, 'promotions honour the app Offers switch');
+    assert.match(src, /customers\/\$\{phone\}\/app\/name[\s\S]{0,200}tab=loyalty/, 'tier-up push opens the app for app customers');
     console.log('payment-sync OK');
 })().catch(e => { console.error(e); process.exit(1); });

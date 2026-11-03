@@ -23,7 +23,7 @@
  */
 import { outletRef, set, get, OUTLET } from './firebase.js';
 import { generateOrderId } from './order.js';
-import { assertOutletEnabled } from './session.js';
+import { assertOutletEnabled, assertWalletGate } from './session.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
 import { round2, computeOrderTotals } from '../../shared/money-math.js';
 
@@ -65,7 +65,9 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         get(outletRef('settings/Store')),
         get(outletRef('dineinSettings')),  // same tax settings the dine-in checkout uses
     ]);
-    const orderIdP = (async () => { await assertOutletEnabled(); return generateOrderId(); })();
+    // Same gates as the QR/app checkout: an empty prepaid wallet closes online
+    // ordering (D4-3: the WhatsApp delivery webview is gated at ₹0 too).
+    const orderIdP = (async () => { await assertOutletEnabled(); await assertWalletGate(); return generateOrderId(); })();
     const [orderId, [delSnap, storeSnap, dineSnap]] = await Promise.all([orderIdP, feeP]);
     const delSettings = delSnap.val() || [];
     const storeSettings = storeSnap.val() || {};

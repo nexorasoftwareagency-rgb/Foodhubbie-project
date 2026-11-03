@@ -18,7 +18,7 @@ import { validateCoupon } from './discount.js';
 import { getProfile, rememberIdentity, writeCustomerOrder, validateRewardCode, redeemValuePaisePerPoint, minSpendAfterRedemptionRs, maxRedeemPercentOfOrder } from './customer.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
 import { generateOrderId } from './order.js';
-import { assertOutletEnabled } from './session.js';
+import { assertOutletEnabled, assertWalletGate } from './session.js';
 import { computeOrderTotals, round2 } from '../shared/money-math.js';
 import { computeTenderPaise } from '../shared/loyalty-math.js';
 
@@ -226,6 +226,9 @@ async function placeOrder() {
     const btn = $('btnCoPlace'); btn.disabled = true; btn.textContent = 'Placing your order…';
     try {
         await assertOutletEnabled();
+        // Same wallet gate as the QR menu: an empty prepaid wallet pauses online
+        // ordering (browsing the menu and history keep working).
+        await assertWalletGate();
         const user = await ensureAnonAuth();
         const orderId = await generateOrderId();
         const { distanceKm } = currentFee();
@@ -251,7 +254,7 @@ async function placeOrder() {
         if (S.onPlaced) S.onPlaced(orderId);
     } catch (e) {
         console.error('[AppCheckout] failed', e);
-        UI.showToast(e && e.code === 'OUTLET_DISABLED' ? 'This restaurant is not taking orders right now.' : 'Could not place your order — please try again.', 'error');
+        UI.showToast(e && e.code === 'OUTLET_DISABLED' ? 'This restaurant is not taking orders right now.' : e && e.code === 'WALLET_CLOSED' ? 'Ordering is temporarily unavailable. Please try again later or call the restaurant.' : 'Could not place your order — please try again.', 'error');
     } finally {
         S.placing = false;
         render();

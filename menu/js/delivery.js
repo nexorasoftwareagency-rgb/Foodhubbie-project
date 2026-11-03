@@ -975,7 +975,7 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
         }
     } catch (e) {
         console.error('[Delivery] checkout failed', e);
-        UI.showToast(e.message || 'Something went wrong — please try again', 'error');
+        UI.showToast(e.userMessage || e.message || 'Something went wrong — please try again', 'error');
     } finally {
         btn.disabled = !M.location;
         btn.textContent = M.location ? 'PLACE ORDER' : 'ENABLE LOCATION TO ORDER';

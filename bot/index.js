@@ -1485,7 +1485,12 @@ async function notifyTierUp(phone, newTier, oldTier, outlet, bid) {
 
         const title = `🎉 You're now ${label}`;
         const body = `Loyalty tier reached: ${label} earns ${(newTier === 'gold') ? '1.5×' : '1.25×'} points on every order from now on.`;
-        const url = `${WEBVIEW_DELIVERY_HOST}/${outlet}/delivery.html?b=${bid}&o=${outlet}&tab=account`;
+        // Customers of the restaurant's own app (they have an app profile) land back in
+        // the app; WhatsApp-only customers keep the delivery page link.
+        const appProfile = await db.ref(resolvePath(`customers/${phone}/app/name`, outlet)).once('value').catch(() => null);
+        const url = appProfile && appProfile.exists()
+            ? `${WEBVIEW_DELIVERY_HOST}/?b=${bid}&o=${outlet}&tab=loyalty`
+            : `${WEBVIEW_DELIVERY_HOST}/${outlet}/delivery.html?b=${bid}&o=${outlet}&tab=account`;
         const inboxRef = db.ref(resolvePath(`pushInbox/${phone}/tier_${newTier}_${Date.now()}`, outlet));
         await inboxRef.set({
             title,

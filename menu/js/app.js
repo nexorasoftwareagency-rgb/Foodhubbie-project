@@ -295,10 +295,14 @@ async function bootDirect() {
         const p = getProfile();
         if (p?.name && p.name !== 'Guest') UI.updateGreeting(p.name);
         UI.showScreen('screenMenu');
-        // Notification tap: bot links to /?tab=orders
-        if (new URLSearchParams(window.location.search).get('tab') === 'orders') {
+        // Notification tap: bot links to /?tab=orders (order updates) or /?tab=loyalty (tier-up)
+        const deepTab = new URLSearchParams(window.location.search).get('tab');
+        if (deepTab === 'orders') {
             UI.showScreen('screenOrders');
             renderOrdersTab();
+        } else if (deepTab === 'loyalty') {
+            UI.showScreen('screenLoyalty');
+            renderLoyaltyTab();
         }
     } else {
         UI.showScreen('screenSignIn');
