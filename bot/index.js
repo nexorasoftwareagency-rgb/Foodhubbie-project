@@ -2131,6 +2131,9 @@ async function startBot() {
     // Initialize outlet -> businessId reverse index for O(1) tenant path resolution
     try {
         await initializeOutletBusinessIndex(db);
+        // Make a tenant mismatch obvious in the boot log — the live pizza bot was
+        // silently routed to a test business by a duplicate outlet id before.
+        console.log(`[TENANT] outlet=${resolveOutletId()} business=${resolveBusinessIdFor(resolveOutletId())}`);
     } catch (e) {
         console.error('[Bot] Failed to initialize outlet business index:', e.message);
     }

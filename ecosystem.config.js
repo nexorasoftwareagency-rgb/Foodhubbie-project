@@ -11,7 +11,11 @@ module.exports = {
       max_memory_restart: '600M',
       env: {
         NODE_ENV: 'production',
-        OUTLET: 'pizza'
+        OUTLET: 'pizza',
+        // The orchestrator sets this for every bot it spawns; this legacy pm2
+        // entry predates it. Without it the reverse index decided the tenant,
+        // and a test business holding an outlet named `pizza` hijacked it.
+        BUSINESS_ID: 'roshani-pizza'
       }
     }
     // The cake bot was removed 2026-10-27 (owner: re-add later from Supreme Admin

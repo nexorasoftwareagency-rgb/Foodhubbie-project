@@ -88,8 +88,20 @@ function resolveBusinessIdFor(outletId) {
 
 /** Initialize reverse index from Firebase — call once at startup */
 async function initializeOutletBusinessIndex(db) {
-    const businessesSnap = await db.ref('businesses').once('value');
+    const [businessesSnap, indexSnap] = await Promise.all([
+        db.ref('businesses').once('value'),
+        db.ref('outletIndex').once('value').catch(() => null)
+    ]);
     const businesses = businessesSnap.val() || {};
+    // The canonical registry wins: a test/staging tenant that reused an outlet
+    // id can never hijack a live outlet (the customer-app E2E created a second
+    // `pizza` under e2e-biz-1792987605261, which first-wins scanning resolved
+    // for the LIVE pizza bot — it subscribed to the wrong Redis inbox).
+    const index = (indexSnap && indexSnap.val()) || {};
+    for (const [oid, entry] of Object.entries(index)) {
+        // Ignore stale registry rows whose business was deleted.
+        if (entry && entry.bid && businesses[entry.bid]) outletToBusinessIdCache.set(oid, entry.bid);
+    }
     for (const [bid, business] of Object.entries(businesses)) {
         const outlets = business.outlets || {};
         for (const [oid] of Object.entries(outlets)) {

@@ -72,6 +72,27 @@ test('outlet-resolution: defaults without env', () => {
     assert.strictEqual(helpers.resolveOutletId(), 'pizza');
 });
 
+test('outlet-resolution: canonical outletIndex beats a duplicate outlet id', async () => {
+    // A test tenant holding its own outlet named `pizza` must never win over
+    // the canonical outletIndex entry (live bug: the pizza bot subscribed to
+    // the test business's Redis inbox).
+    const fakeDb = {
+        ref: (p) => ({
+            once: async () => ({
+                val: () => p === 'businesses'
+                    ? {
+                        'e2e-biz-test': { outlets: { pizza: {}, 'e2e-outlet': {} } },
+                        'roshani-pizza': { outlets: { pizza: {} } }
+                    }
+                    : { pizza: { bid: 'roshani-pizza' } }
+            })
+        })
+    };
+    await helpers.initializeOutletBusinessIndex(fakeDb);
+    assert.strictEqual(helpers.resolveBusinessIdFor('pizza'), 'roshani-pizza', 'live outlet never resolves to a test tenant');
+    assert.strictEqual(helpers.resolveBusinessIdFor('e2e-outlet'), 'e2e-biz-test', 'unregistered outlets still resolve by scan');
+});
+
 test('stripUndefined: removes undefined leaves, keeps null/arrays', () => {
     assert.deepStrictEqual(stripUndefined({ a: 1, b: undefined }), { a: 1, b: null });
     assert.deepStrictEqual(stripUndefined([{ a: undefined }, 2]), [{ a: null }, 2]);
