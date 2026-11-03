@@ -1014,6 +1014,12 @@ async function loadCustomerData() {
         renderAccount();
         return;
     }
+    // Every read below is device-bound (rules: auth.uid must be registered in
+    // customers/{phone}/devices). A cold boot can land here — e.g. a deep link
+    // straight to the Loyalty tab — before Firebase restores the anonymous
+    // session, which denied the reads and showed 0 points (Redeem disabled)
+    // until the tab was reopened. Wait for auth instead of trusting the race.
+    try { await ensureAnonAuth(); } catch (e) { /* reads below fail soft */ }
     try {
         await loadLoyaltyConfig();
         await loadCustomerLoyalty();
