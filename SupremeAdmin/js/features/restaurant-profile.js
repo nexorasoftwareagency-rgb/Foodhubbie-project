@@ -79,7 +79,13 @@ export function render(bid, oid, tab) {
     if (!quotaFetchedFor) loadQuota(bid, oid);
   });
 
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    // Navigating away with the Pair modal open used to leave this second
+    // listener attached to the app-wide store for the rest of the session.
+    pairUnsubscribe?.();
+    pairUnsubscribe = null;
+  };
 }
 
 function renderProfile(bid, oid, biz, outlet) {

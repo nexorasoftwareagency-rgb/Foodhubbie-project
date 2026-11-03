@@ -174,7 +174,7 @@ test.describe('Supreme Admin restaurant profile sections', () => {
 
       // --- Section 5: Admin login creds (empty state since no creds set) ---
       await expect(page.locator('.collapsible-header').filter({ hasText: 'Admin login' })).toBeVisible({ timeout: 10000 });
-      await expect(page.locator('text=No admin login stored yet')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('text=No admin email on record')).toBeVisible({ timeout: 10000 });
 
       // --- Section 6: Billing card ---
       await expect(page.locator('.collapsible-header').filter({ hasText: 'Billing & promo tokens' })).toBeVisible({ timeout: 10000 });

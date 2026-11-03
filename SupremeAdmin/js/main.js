@@ -59,8 +59,25 @@ const DASHBOARD_HOME = { restaurant: 'restaurants', agent: 'agents', payment: 'p
 const mainEl = document.getElementById('app-main');
 const subnavEl = document.getElementById('app-subnav');
 let currentCleanup = null;
+// Route renders are async (lazy module imports). Two overlapping handleRoute
+// calls used to race: the slower page's render finished last and overwrote
+// currentCleanup without calling it, so the earlier page's live listener
+// (and its setInterval) survived navigation and fired into a torn-down DOM.
+// Serialize them: one route finishes — including storing its cleanup — before
+// the next begins.
+let routeChain = Promise.resolve();
 
-async function handleRoute() {
+function handleRoute() {
+  routeChain = routeChain
+    .then(() => runRoute())
+    .catch((err) => {
+      console.error('Route render failed', err);
+      mainEl.innerHTML = `<div class="glass-card table-empty">Something went wrong loading this page. Check the console for details.</div>`;
+    });
+  return routeChain;
+}
+
+async function runRoute() {
   if (currentCleanup) {
     try { currentCleanup(); } catch (err) { console.error('Route cleanup failed', err); }
     currentCleanup = null;
@@ -174,7 +191,14 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+let started = false;
 export function startApp() {
+  // onAuthStateChanged can fire more than once (e.g. a token refresh on a slow
+  // session). A second startApp would double-register the hashchange listener
+  // and kick off two concurrent route renders — the exact leak handleRoute's
+  // queue is there to prevent.
+  if (started) return;
+  started = true;
   // The ⌘K hint should only read as ⌘ on macOS — swap it for Windows/Linux.
   const kbd = document.getElementById('cp-kbd');
   if (kbd && !/Mac/i.test(navigator.platform)) kbd.textContent = 'Ctrl K';
