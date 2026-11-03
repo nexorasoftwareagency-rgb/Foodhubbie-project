@@ -594,5 +594,8 @@ async function expireOldPromoLogs(OUTLET, db) {
 }
 
 module.exports = {
-    runPromotionCampaign, resumeStuckPromotions, pickupScheduledPromotions, expireOldPromoLogs
+    runPromotionCampaign, resumeStuckPromotions, pickupScheduledPromotions, expireOldPromoLogs,
+    // Exported so the consent rule is testable (unit: bot/tests/unit.test.js;
+    // live matrix in the 2026-11-03 V2 bot-review E2E).
+    hasPromoConsent
 };

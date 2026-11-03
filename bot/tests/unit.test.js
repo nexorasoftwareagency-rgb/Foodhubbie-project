@@ -93,6 +93,24 @@ test('outlet-resolution: canonical outletIndex beats a duplicate outlet id', asy
     assert.strictEqual(helpers.resolveBusinessIdFor('e2e-outlet'), 'e2e-biz-test', 'unregistered outlets still resolve by scan');
 });
 
+test('promotions: the app Offers switch wins both ways', async () => {
+    const { hasPromoConsent } = require('../promotions');
+    const fakeDb = (offers, consent) => ({
+        ref: (path) => ({
+            once: async () => ({
+                val: () => path.endsWith('/app/consent/offers') ? offers
+                    : path.endsWith('/promotionalConsent') ? consent : null
+            })
+        })
+    });
+    // Offers is the customer's live choice: off blocks even an old consent flag,
+    // on allows without one, and the legacy flag alone still works.
+    assert.strictEqual(await hasPromoConsent('9876543210', 'pizza', fakeDb(false, true)), false, 'off overrides consent:true');
+    assert.strictEqual(await hasPromoConsent('9876543210', 'pizza', fakeDb(true, null)), true, 'on allows');
+    assert.strictEqual(await hasPromoConsent('9876543210', 'pizza', fakeDb(null, true)), true, 'legacy consent:true');
+    assert.strictEqual(await hasPromoConsent('9876543210', 'pizza', fakeDb(null, null)), false, 'no consent blocks');
+});
+
 test('stripUndefined: removes undefined leaves, keeps null/arrays', () => {
     assert.deepStrictEqual(stripUndefined({ a: 1, b: undefined }), { a: 1, b: null });
     assert.deepStrictEqual(stripUndefined([{ a: undefined }, 2]), [{ a: null }, 2]);
