@@ -102,5 +102,14 @@ const PH = '9876543210', ID = 'A100';
     assert.ok(listener.indexOf('releaseOrderDiscountUsage(snap.key, order)') > -1, 'child_changed calls the release helper');
     assert.ok(listener.indexOf('releaseOrderDiscountUsage') < listener.indexOf('if (sameStatusRecently) return;'), 'release runs BEFORE the debounce gate');
     assert.match(src, /order\.discountUsageRecorded !== true \|\| order\.discountUsageReversed === true/, 'only recorded, not-yet-reversed usage is given back');
+
+    // stock must come back too, and only what the deduction really took
+    assert.match(src, /async function restoreOrderInventory/, 'cancel path has a stock restore helper');
+    assert.match(finalize, /const inventoryDeducted = await deductInventoryStock/, 'finalization waits for the deduction (a cancel cannot race it)');
+    assert.match(finalize, /\{ stockDeducted: true, inventoryDeducted \}/, 'finalization records exactly what was taken');
+    assert.ok(listener.indexOf('restoreOrderInventory(snap.key, order)') > -1, 'child_changed calls the restore helper');
+    assert.ok(listener.indexOf('restoreOrderInventory(snap.key, order)') < listener.indexOf('if (sameStatusRecently) return;'), 'restore runs BEFORE the debounce gate');
+    assert.match(src, /order\.stockDeducted !== true \|\| order\.stockRestored === true/, 'only deducted, not-yet-restored stock is given back');
+    assert.match(src, /const claim = await flagRef\.transaction/, 'restore claims the order before touching stock (at most once)');
     console.log('payment-sync OK');
 })().catch(e => { console.error(e); process.exit(1); });

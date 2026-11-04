@@ -743,8 +743,13 @@ async function sendTemplateMessage(sock, to, templateName, components, outlet = 
     }
 }
 
+// Deducts the ordered quantities from `inventory`, matching catalog dishes by
+// name, and returns what was ACTUALLY taken per inventory id
+// ({ [invId]: qtyClampedByStock }) so a later cancel can give exactly that
+// back — a line for more than the shelf holds only ever took what existed.
 async function deductInventoryStock(sock, items, outlet = 'outlet') {
-    if (!items || !Array.isArray(items) || items.length === 0) return;
+    const deducted = {};
+    if (!items || !Array.isArray(items) || items.length === 0) return deducted;
     try {
         const inventoryRef = db.ref(resolvePath('inventory', outlet));
         const snapshot = await inventoryRef.once('value');
@@ -752,36 +757,85 @@ async function deductInventoryStock(sock, items, outlet = 'outlet') {
         const deliverySettings = await getData("settings/Delivery", outlet) || {};
         const notifyPhone = deliverySettings.notifyPhone || deliverySettings.reportPhone;
 
+        // Aggregate first. Two lines of the same dish used to each compute
+        // `stock - qty` from the same snapshot, so the second overwrote the
+        // first and only one line was ever deducted.
+        const wanted = new Map();           // inventory id -> { data, qty }
         for (const item of items) {
-            const itemName = (item.name || item.item).toLowerCase();
-            const invEntry = Object.entries(inventory).find(([id, data]) => data.name.toLowerCase() === itemName);
+            const itemName = String((item && (item.name || item.item)) || '').toLowerCase();
+            const invEntry = Object.entries(inventory).find(([, data]) =>
+                data && String(data.name || '').toLowerCase() === itemName);
+            if (!invEntry) continue;
+            const [id, data] = invEntry;
+            const qty = Math.max(1, Math.round(Number(item.quantity) || 1));
+            const cur = wanted.get(id);
+            if (cur) cur.qty += qty;
+            else wanted.set(id, { data, qty });
+        }
 
-            if (invEntry) {
-                const [id, data] = invEntry;
-                const qty = item.quantity || 1;
-                const newStock = Math.max(0, (data.stock || 0) - qty);
-                const threshold = data.threshold || 0;
+        for (const [id, { data, qty }] of wanted) {
+            const before = Number(data.stock) || 0;
+            const newStock = Math.max(0, before - qty);
+            const threshold = data.threshold || 0;
 
-                await inventoryRef.child(id).update({
-                    stock: newStock,
-                    updatedAt: new Date().toISOString()
-                });
+            await inventoryRef.child(id).update({
+                stock: newStock,
+                updatedAt: new Date().toISOString()
+            });
+            const taken = Math.max(0, before - newStock);
+            if (taken > 0) deducted[id] = taken;
 
-                if (newStock <= threshold && notifyPhone) {
-                    const alertMsg = `⚠️ *LOW STOCK ALERT* ⚠️\n━━━━━━━━━━━━━━━━━━━━\n` +
-                        `📦 Item: *${data.name}*\n` +
-                        `📉 Current Stock: *${newStock}*\n` +
-                        `🚩 Threshold: *${threshold}*\n════════════════════════\n` +
-                        `_Please refill stock from Admin Panel immediately!_`;
+            if (newStock <= threshold && notifyPhone && sock) {
+                const alertMsg = `⚠️ *LOW STOCK ALERT* ⚠️\n━━━━━━━━━━━━━━━━━━━━\n` +
+                    `📦 Item: *${data.name}*\n` +
+                    `📉 Current Stock: *${newStock}*\n` +
+                    `🚩 Threshold: *${threshold}*\n════════════════════════\n` +
+                    `_Please refill stock from Admin Panel immediately!_`;
 
-                    const jid = formatJid(notifyPhone);
-                    if (jid) sock.sendMessage(jid, { text: alertMsg }).catch(() => {});
-                }
+                const jid = formatJid(notifyPhone);
+                if (jid) sock.sendMessage(jid, { text: alertMsg }).catch(() => {});
             }
         }
     } catch (e) {
         console.error("[INVENTORY] ❌ Stock Deduction Error:", e);
     }
+    return deducted;
+}
+
+// A cancelled/refunded web/app order gives back exactly what its finalization
+// deducted (`inventoryDeducted`). Same at-most-once claim as the discount
+// release. Orders finalized before this shipped carry no map and are skipped —
+// guessing from item names could add stock that was never taken.
+async function restoreOrderInventory(orderId, order) {
+    try {
+        if (!order || order.stockDeducted !== true || order.stockRestored === true) return;
+        const statusLower = String(order.status || '').toLowerCase();
+        if (statusLower !== 'cancelled' && statusLower !== 'refunded') return;
+        if (isDineInOrder(order)) return;
+        const deducted = order.inventoryDeducted;
+        if (!deducted || typeof deducted !== 'object' || !Object.keys(deducted).length) return;
+        const outlet = order.outlet || OUTLET;
+        const flagRef = db.ref(resolvePath(`orders/${orderId}/stockRestored`, outlet));
+        const seed = ((await flagRef.once('value').catch(() => null)) || {}).val();
+        const claim = await flagRef.transaction((cur) => ((cur || seed) ? undefined : true)).catch(() => null);
+        if (!claim || !claim.committed) return;
+
+        const inventoryRef = db.ref(resolvePath('inventory', outlet));
+        for (const [id, qty] of Object.entries(deducted)) {
+            const n = Math.round(Number(qty) || 0);
+            if (n <= 0) continue;
+            const ref = inventoryRef.child(id);
+            // Seed from a read: the first transaction ticket is null even for an
+            // existing node, and returning a bare { stock } would wipe its name.
+            const base = ((await ref.once('value').catch(() => null)) || {}).val();
+            await ref.transaction((cur) => {
+                const node = cur || base;
+                if (!node) return undefined;          // item deleted since — nothing to restore into
+                return { ...node, stock: (Number(node.stock) || 0) + n, updatedAt: new Date().toISOString() };
+            });
+        }
+        console.log(`[INVENTORY] Returned stock for cancelled order ${orderId}`);
+    } catch (e) { console.error('[INVENTORY] Stock restore error:', e.message); }
 }
 
 async function cleanupStaleOrders(sock) {
@@ -2480,6 +2534,9 @@ async function sendDailyReportSafely(dateOverride = null) {
             // Same "before the debounce" rule: a cancel/refund must free the
             // discount it consumed (idempotent per order).
             if (order) releaseOrderDiscountUsage(snap.key, order).catch(e => console.error("[Discounts] release error:", e.message));
+            // And put back the stock that order took — same "before the
+            // debounce" rule, same at-most-once claim.
+            if (order) restoreOrderInventory(snap.key, order).catch(e => console.error("[INVENTORY] restore error:", e.message));
             // Restaurant-app orders: every status goes to the customer in the app
             // (push + inbox) whether or not WhatsApp is connected. Deduped per status.
             if (order && order.source === 'APP') notifyCustomerApp(snap.key, order, order.status).catch(() => {});
@@ -2659,9 +2716,14 @@ async function sendDailyReportSafely(dateOverride = null) {
                     // loyaltyTender + totalDue for the invoice/admin views).
                     await verifyRewardTender(snap.key, order, order.outlet || OUTLET);
 
-                    deductInventoryStock(currentSock, order.items, order.outlet).catch(e =>
-                        console.error("[WebOrder] Stock deduction failed:", e));
-                    await updateData(`orders/${snap.key}`, { stockDeducted: true }, order.outlet);
+                    // Keep exactly what was taken: a cancel returns only this
+                    // map, never a guess from the item names (a line for more
+                    // than the shelf held only ever took what existed).
+                    // `stockDeducted` stays the finalization marker either way
+                    // — clearing it would let the order be finalized twice.
+                    const inventoryDeducted = await deductInventoryStock(currentSock, order.items, order.outlet)
+                        .catch(e => { console.error("[WebOrder] Stock deduction failed:", e); return {}; });
+                    await updateData(`orders/${snap.key}`, { stockDeducted: true, inventoryDeducted }, order.outlet);
 
                     notifyAdmin(currentSock, snap.key, order, "NEW").catch(() => {});
 
