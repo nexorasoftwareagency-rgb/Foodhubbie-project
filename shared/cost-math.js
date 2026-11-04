@@ -149,8 +149,12 @@ export function computeCostIndex(orders, rates = DEFAULT_RATES, mode = 'percenta
 }
 
 // check: node shared/cost-math.js
+// (dynamic import + .then, NOT top-level await — TLA makes this module
+// un-require()-able, and bot-control-api/wallet-watch.js require()s it.)
 if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) {
-    const { default: assert } = await import('node:assert');
+    import('node:assert').then(({ default: assert }) => selfCheck(assert));
+}
+function selfCheck(assert) {
     const o = (total, source, status) => ({ total, source, status: status || 'Delivered' });
 
     // --- current pricing (percentage is the default mode) ---

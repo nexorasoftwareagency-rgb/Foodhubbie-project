@@ -24,6 +24,7 @@ const path = require('path');
 const waGraph = require('./whatsapp-graph');
 const { pm2, connectOnce } = require('./pm2-client');
 const { startStatusWatcher } = require('./status-watcher');
+const { startWalletWatcher, publishWalletGate } = require('./wallet-watch');
 const { startOrchestrator } = require('./orchestrator');
 const sharp = require('sharp');
 const { getBillingDefaults } = require('../shared/billing-defaults.cjs');
@@ -239,6 +240,19 @@ app.post('/api/bot/restart/:bid/:oid', requireSuperOnly, async (req, res) => {
   } catch (err) {
     console.error('restart failed', err);
     res.status(500).json({ error: `pm2 restart failed — ${err.message || 'process not found'}` });
+  }
+});
+
+// Recompute + publish an outlet's wallet gate right now. Supreme calls this
+// after arming/disarming billing.wallet.enforce so the flag flips immediately
+// instead of waiting for the next watcher pass (which would apply it anyway).
+app.post('/api/bot/wallet-gate/:bid/:oid', requireSuperOnly, async (req, res) => {
+  try {
+    const { gate, balance } = await publishWalletGate(admin, req.params.bid, req.params.oid);
+    res.json({ ok: true, gate, balance });
+  } catch (err) {
+    console.error('wallet-gate publish failed', err);
+    res.status(500).json({ error: `wallet gate publish failed — ${err.message || 'unknown error'}` });
   }
 });
 
@@ -1422,6 +1436,10 @@ app.listen(PORT, () => console.log(`Bot Control API listening on :${PORT}`));
 startAutoApproval();
 startStatusWatcher({ admin, processName, statusOf }).catch((err) => {
   console.error('Status watcher failed to start — bot status will not be real-time until this is fixed', err);
+});
+
+startWalletWatcher({ admin }).catch((err) => {
+  console.error('Wallet gate watcher failed to start — the D4 gate will stay stale until this is fixed', err);
 });
 
 startOrchestrator({ admin, processName, nextHealthPort }).catch((err) => {

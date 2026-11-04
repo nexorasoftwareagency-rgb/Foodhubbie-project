@@ -500,8 +500,8 @@ export async function assertOutletEnabled() {
 }
 /**
  * D4 wallet gate (public flag like `disabled`): 'low' = bot stops (₹100 flat /
- * 10% of topped-up), 'closed' = QR ordering stops. Written by Admin/bot only
- * (rules keep the write admin-only); customers read it freely.
+ * 10% of topped-up), 'closed' = QR ordering stops. Published server-side by
+ * bot-control-api only (wallet-watch.js); customers read it freely.
  */
 export async function assertWalletGate() {
     const snap = await get(outletRef('walletGate'));

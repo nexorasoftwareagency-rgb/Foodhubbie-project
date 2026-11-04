@@ -40,6 +40,16 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
   const ym = currentYm();
   const month = scopeStats(outlet, { k: 'month', ym });
   const all = scopeStats(outlet, { k: 'all' });
+  // D4 wallet gate. The flag is published by bot-control-api (wallet-watch.js)
+  // from this same math — never by the tenant's own dashboard.
+  const enforce = b.wallet?.enforce === true;
+  const liveGate = String(outlet.walletGate || '').trim().toLowerCase();
+  const isDemo = bid === 'foodhubbie-demo';
+  const gateLabel = isDemo ? 'Not applicable — the demo outlet is never gated.'
+    : !enforce ? 'Observe only — the balance is reported, ordering is never stopped.'
+    : liveGate === 'closed' ? 'Enforced · ordering is PAUSED (wallet empty).'
+    : liveGate === 'low' ? 'Enforced · bot order links are paused (balance low).'
+    : 'Enforced · ordering is open.';
 
   return `<div class="glass-card" style="font-size:13px;margin-bottom:16px">
     ${header}
@@ -56,6 +66,18 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
         <div class="detail-cell"><div class="detail-label">Usage · ${monthLabel(ym)}</div><div class="detail-value">${inr(month.usage)} <span style="font-size:11px;color:var(--text-tertiary)">${month.orders} orders</span></div></div>
         <div class="detail-cell"><div class="detail-label">Received · ${monthLabel(ym)}</div><div class="detail-value">${inr(month.paid)}</div></div>
         <div class="detail-cell"><div class="detail-label">All-time due</div><div class="detail-value" style="font-weight:800;color:${all.due > 0.009 ? 'var(--status-offline,#dc2626)' : 'var(--status-online,#16a34a)'}">${all.due > 0.009 ? inr(all.due) : 'Settled'}</div></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:12px;padding:10px 12px;border:1px solid var(--glass-border,rgba(15,23,42,.10));border-radius:10px">
+        <div style="min-width:220px">
+          <div class="detail-label">Wallet gate</div>
+          <div class="detail-value">${gateLabel}</div>
+          <div style="font-size:11.5px;color:var(--text-tertiary);margin-top:2px">
+            Balance ${all.due > 0.009 ? `−${inr(all.due)}` : inr(-all.due)} · bot stops at max(10% of top-ups, ₹100) · QR/app ordering stops at ₹0 · POS is never gated.
+          </div>
+        </div>
+        ${readOnly || isDemo ? '' : `<button class="btn ${enforce ? 'btn-ghost' : 'btn-primary'} btn-sm" data-action="billing-toggle-gate" data-enforce="${enforce ? '0' : '1'}" title="${roTitle}">
+          ${enforce ? 'Stop enforcing' : 'Enforce wallet gate'}
+        </button>`}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-ghost btn-sm" data-action="navigate" data-href="payments/${escapeHtml(bid)}/${escapeHtml(oid)}">Payment record →</button>

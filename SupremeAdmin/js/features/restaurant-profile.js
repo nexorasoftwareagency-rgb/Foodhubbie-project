@@ -1021,6 +1021,46 @@ registerAction('billing-set-mode', async (btn) => {
 
 
 
+// D4: the FoodHubbie-side switch. When armed, bot-control-api/wallet-watch.js
+// publishes outlets/{oid}/walletGate='low'|'closed' from the live balance and
+// the bot/QR/app stop taking new orders. The tenant's Admin tab can only read it.
+registerAction('billing-toggle-gate', async (btn) => {
+  if (isReadOnly()) return showToast("Your account is view-only.", 'error');
+  if (currentBid === 'foodhubbie-demo') return showToast('The demo outlet is never gated.', 'error');
+  const outlet = lastRaw?.[currentBid]?.outlets?.[currentOid];
+  if (!outlet?.billing) return showToast('Billing not seeded \u2014 run tools/seed-billing-defaults.cjs.', 'error');
+  const next = btn?.dataset?.enforce === '1';
+  const bal = -scopeStats(outlet, { k: 'all' }).due;
+  const ok = await showConfirm({
+    title: next ? 'Enforce the wallet gate?' : 'Stop enforcing the wallet gate?',
+    body: next
+      ? `New bot order links stop when the balance is at or below max(10% of top-ups, \u20B9100), and QR / Customer App ordering pauses at \u20B90. POS is never affected. Current balance: ${inr(bal)}.`
+      : 'Ordering opens again immediately, whatever the balance is. The wallet keeps being reported.',
+    confirmLabel: next ? 'Enforce' : 'Stop enforcing',
+  });
+  if (!ok) return;
+  try {
+    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}/billing/wallet`).update({
+      enforce: next,
+      updatedAt: firebase.database.ServerValue.TIMESTAMP,
+      updatedBy: firebase.auth().currentUser?.uid || 'unknown',
+    });
+  } catch (err) {
+    console.error('wallet gate toggle failed', err);
+    return showToast('Could not save the wallet gate setting \u2014 check the console.', 'error');
+  }
+  // Publish now instead of waiting for the next watcher pass. A failure here
+  // only delays the flag by up to a minute, so never turn it into an error.
+  try {
+    const token = await firebase.auth().currentUser.getIdToken();
+    await fetch(`${TUNNEL_URL}/api/bot/wallet-gate/${currentBid}/${currentOid}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (_) { /* the watcher's next pass applies it */ }
+  showToast(next ? 'Wallet gate armed.' : 'Wallet gate released.', 'success');
+});
+
 registerAction('billing-grant-tokens', async () => {
   if (isReadOnly()) return showToast("Your account is view-only.", 'error');
   const qty = parseInt(document.getElementById('billingGrantQty')?.value, 10);

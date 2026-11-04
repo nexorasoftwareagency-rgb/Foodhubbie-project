@@ -1,6 +1,6 @@
 /**
  * D4 wallet gate read — the public `outlets/{oid}/walletGate` flag.
- * Admin publishes it ONLY while `billing.wallet.enforce` is armed
+ * bot-control-api publishes it ONLY while `billing.wallet.enforce` is armed
  * ('low' | 'closed', '' when healthy); absent = no gate.
  *
  * Read fresh, not via getData: its 30 s cache would keep handing out order

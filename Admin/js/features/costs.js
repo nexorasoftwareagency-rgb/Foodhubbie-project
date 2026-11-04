@@ -18,7 +18,7 @@
 import { Outlet, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { state } from '../state.js';
 import { SUPPORT_WA } from '../ui.js';
-import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel, walletGate } from '../../shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel } from '../../shared/cost-math.js';
 
 let _unsubs = [];
 let _orders = {};
@@ -31,6 +31,7 @@ let _rangeWired = false;
 let _range = null;           // { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
 let _orderUnsubs = [];
 let _allOrders = null;       // all-time orders (one-time read) for the wallet balance; null = not loaded
+let _gate = null;            // published outlets/{oid}/walletGate: 'low' | 'closed' | '' | null
 let _walletWired = false;
 
 function _wireSubtabs() {
@@ -300,26 +301,22 @@ function _renderWallet() {
     _setText('walletUsed', _inr(w.used));
     _setText('walletCharges', _inr(w.charges));
     if (_allOrders !== null && _billing !== null) {
+        // D4: the gate is published by FoodHubbie (bot-control-api) from this
+        // same wallet math — the restaurant cannot arm or clear it from here.
+        const enforce = !!(_billing && _billing.wallet && _billing.wallet.enforce === true);
+        const published = String(_gate || '').trim().toLowerCase();
         let msg;
-        if (!w.topUpDone) msg = `Top up at least ${_inr(MIN_TOPUP)} to go live.`;
+        if (published === 'closed') msg = 'Ordering is paused (wallet finished). Top up to resume.';
+        else if (published === 'low') msg = 'Bot order links are paused (wallet low). Top up to resume.';
+        else if (!w.topUpDone) msg = `Top up at least ${_inr(MIN_TOPUP)} to go live.`;
         else if (state.locked) msg = 'Top-up received. Your restaurant is being switched live.';
         else if (w.level === 'empty') msg = 'Your wallet balance is finished. Please top up now to avoid interruption.';
         else if (w.level === 'low') msg = `Low balance: 25% or less of your top-ups is left. Please top up soon.`;
         else msg = 'Your restaurant is live.';
-        // D4: only when the owner has explicitly armed enforcement does the
-        // admin writer publish the public gate flag; the demo tenant is
-        // hard-skipped because it must never be gated.
-        const enforce = !!(_billing && _billing.wallet && _billing.wallet.enforce === true);
-        const isDemo = (window.currentBusinessId === 'foodhubbie-demo');
-        if (enforce && !isDemo) {
-            const gate = walletGate(w);
-            const ref = Outlet.ref(`walletGate`);
-            if (ref) ref.set(gate === 'ok' ? '' : gate).catch(e => console.error('[walletGate] write failed', e));
-            msg = gate === 'closed' ? 'Ordering is now disabled (wallet empty).'
-                : gate === 'low' ? 'Bot is now paused (wallet low).'
-                : 'Wallet gate is clear. Your restaurant is live.';
-        } else if (!enforce) {
-            msg = `${msg} (Wallet gate: observe mode — not enforced.)`;
+        if (!published) {
+            msg = enforce
+                ? `${msg} (Wallet gate: enforced — new orders pause when the balance runs out.)`
+                : `${msg} (Wallet gate: observe mode — not enforced.)`;
         }
         _setText('walletStatus', msg);
         const hero = document.getElementById('walletHero');
@@ -351,13 +348,15 @@ export function loadCosts() {
     _wireSubtabs();
     _wireRange();
     _wireWallet();
-    _billing = null; _campaigns = null; _allOrders = null;
+    _billing = null; _campaigns = null; _allOrders = null; _gate = null;
     _range = _range || _monthRange(0);
     _applyRange(_range);
 
     _unsubs.push(onValue(Outlet.ref('billing'),
         s => { _billing = s.val() || null; _scheduleRender(); },
         () => { _billing = false; _scheduleRender(); }));
+    _unsubs.push(onValue(Outlet.ref('walletGate'),
+        s => { _gate = s.val(); _scheduleRender(); }, () => {}));
     _unsubs.push(onValue(Outlet.ref('bot/promotions/campaigns'),
         s => { _campaigns = s.val(); _scheduleRender(); }, () => {}));
 
