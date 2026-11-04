@@ -187,4 +187,71 @@ async function recordDiscountUsage({ OUTLET, discountId, orderId, customerPhone,
     }
 }
 
-module.exports = { evaluateDiscount, validateCouponCode, recordDiscountUsage, discountAmount };
+/**
+ * Reverse the usage `recordDiscountUsage` recorded when the sale falls
+ * through — the order is cancelled or refunded after the bot finalized it.
+ * Without this a limited coupon stays consumed forever: `stats.usedCount`
+ * never frees up, the customer's `discountUsage` counter keeps them locked
+ * out of a per-customer offer, and a first-order customer never gets their
+ * one-shot back after cancelling.
+ *
+ * Writes a NEGATIVE audit row so summing a discount's history still nets to
+ * zero (Admin's void path uses the same convention). Callers guarantee this
+ * runs at most once per order; every decrement is floored at 0 anyway.
+ */
+async function releaseDiscountUsage({ OUTLET, orderId, discountId, customerPhone, amountGiven, discountLabel, discountSource }) {
+    if (!discountId) return false;
+    const amount = Math.abs(Math.round(Number(amountGiven) || 0));
+    try {
+        const statsRef = db.ref(resolvePath(`discounts/${discountId}/stats`, OUTLET));
+        const statsSnap = await statsRef.once('value').catch(() => null);
+        // No stats node (discount deleted since) — do not resurrect it.
+        if (statsSnap && statsSnap.exists()) {
+            const seed = statsSnap.val() || {};
+            await statsRef.transaction((cur) => {
+                const node = cur || seed;   // first ticket is null even when it exists
+                return {
+                    ...node,
+                    usedCount: Math.max(0, (node.usedCount || 0) - 1),
+                    totalDiscountGiven: Math.max(0, (node.totalDiscountGiven || 0) - amount)
+                };
+            });
+        }
+        const usageId = db.ref(resolvePath(`discountsUsage`, OUTLET)).push().key;
+        await db.ref(resolvePath(`discountsUsage/${usageId}`, OUTLET)).set({
+            discountId, discountLabel: discountLabel || '',
+            orderId: orderId || '', customerPhone: customerPhone || '',
+            amountGiven: -amount,
+            appliedAt: Date.now(), channel: 'webview',
+            source: discountSource || '', discountSource: discountSource || '',
+            voidReason: 'order-cancelled'
+        });
+
+        const phone10 = customerPhone ? String(customerPhone).replace(/\D/g, '').slice(-10) : '';
+        if (/^[6-9]\d{9}$/.test(phone10)) {
+            const custRef = db.ref(resolvePath(`customers/${phone10}`, OUTLET));
+            const baseSnap = await custRef.once('value').catch(() => null);
+            await custRef.transaction((c) => {
+                const node = c || (baseSnap && baseSnap.val());
+                if (!node) return undefined;
+                const updated = { ...node };
+                const usage = { ...(node.discountUsage || {}) };
+                const count = Number(usage[discountId]) || 0;
+                if (count > 1) usage[discountId] = count - 1;
+                else delete usage[discountId];
+                updated.discountUsage = usage;
+                if (discountSource === 'firstOrder' && node.firstOrderDiscountId === discountId) {
+                    delete updated.firstOrderDiscountUsed;
+                    delete updated.firstOrderDiscountId;
+                }
+                return updated;
+            }).catch(e => console.warn('[Discounts] release customer counter failed:', e?.message || e));
+        }
+        return true;
+    } catch (e) {
+        console.warn('[Discounts] releaseDiscountUsage failed:', e?.message || e);
+        return false;
+    }
+}
+
+module.exports = { evaluateDiscount, validateCouponCode, recordDiscountUsage, releaseDiscountUsage, discountAmount };

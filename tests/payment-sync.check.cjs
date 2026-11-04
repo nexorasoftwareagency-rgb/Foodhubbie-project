@@ -88,5 +88,19 @@ const PH = '9876543210', ID = 'A100';
     for (const f of ['menu/js/app-checkout.js', 'menu/js/delivery-order.js']) {
         assert.match(fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8'), /dishId: l\.dishId/, `${f} sends dishId so re-pricing resolves by id`);
     }
+
+    // discount usage must be reversible when the sale falls through: a global
+    // limit or a first-order one-shot cannot stay consumed by a cancelled order
+    const engine = fs2.readFileSync(path2.join(__dirname, '../bot/discount-engine.js'), 'utf8');
+    assert.match(engine, /async function releaseDiscountUsage/, 'discount engine can release a recorded usage');
+    assert.match(engine, /module\.exports = \{[^}]*releaseDiscountUsage/, 'releaseDiscountUsage is exported');
+    assert.match(finalize, /discountUsageRecorded: true/, 'finalization stamps that the usage really landed');
+    assert.ok(finalize.indexOf('discountUsageRecorded') > finalize.indexOf('recordDiscountUsage'), 'flag is written only after recordDiscountUsage');
+    const releaseAt = src.indexOf('async function releaseOrderDiscountUsage');
+    assert.ok(releaseAt > -1, 'cancel path has a release helper');
+    const listener = src.slice(src.indexOf('orderRef.on("child_changed"'));
+    assert.ok(listener.indexOf('releaseOrderDiscountUsage(snap.key, order)') > -1, 'child_changed calls the release helper');
+    assert.ok(listener.indexOf('releaseOrderDiscountUsage') < listener.indexOf('if (sameStatusRecently) return;'), 'release runs BEFORE the debounce gate');
+    assert.match(src, /order\.discountUsageRecorded !== true \|\| order\.discountUsageReversed === true/, 'only recorded, not-yet-reversed usage is given back');
     console.log('payment-sync OK');
 })().catch(e => { console.error(e); process.exit(1); });

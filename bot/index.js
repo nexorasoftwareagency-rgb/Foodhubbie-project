@@ -1393,6 +1393,37 @@ async function clawLoyaltyPoints(orderId, order, status) {
     }
 }
 
+// A cancelled/refunded order must give its discount usage back, or a limited
+// coupon stays consumed forever (global cap never frees, the customer's
+// per-customer counter locks them out, a first-order customer loses their
+// one-shot). Only usage the BOT recorded counts — the web/app finalization
+// stamps `discountUsageRecorded` — so a cancel that lands before finalization
+// cannot free a slot that was never used. Table/POS voids are handled by Admin.
+async function releaseOrderDiscountUsage(orderId, order) {
+    try {
+        if (!order || !order.discountId || !(Number(order.discount) > 0)) return;
+        if (order.discountUsageRecorded !== true || order.discountUsageReversed === true) return;
+        const statusLower = String(order.status || '').toLowerCase();
+        if (statusLower !== 'cancelled' && statusLower !== 'refunded') return;
+        if (isDineInOrder(order)) return;
+        const outlet = order.outlet || OUTLET;
+        // Claim it once: a second cancel event must not decrement twice.
+        const flagRef = db.ref(resolvePath(`orders/${orderId}/discountUsageReversed`, outlet));
+        const seed = ((await flagRef.once('value').catch(() => null)) || {}).val();
+        const claim = await flagRef.transaction((cur) => ((cur || seed) ? undefined : true)).catch(() => null);
+        if (!claim || !claim.committed) return;
+        await discountEngine.releaseDiscountUsage({
+            OUTLET: outlet,
+            orderId,
+            discountId: order.discountId,
+            customerPhone: order.phone,
+            amountGiven: order.discount,
+            discountLabel: order.discountLabel,
+            discountSource: order.discountSource
+        });
+    } catch (e) { console.error('[Discounts] releaseOrderDiscountUsage error:', e.message); }
+}
+
 // Single loyalty entry point from the order listeners. Runs independent of
 // WhatsApp plumbing (dine-in orders carry no JID by design) and must be
 // called BEFORE the child_changed debounce gate so a paymentStatus-only
@@ -2446,6 +2477,9 @@ async function sendDailyReportSafely(dateOverride = null) {
             // accrual or clawback. Idempotent per orderId, so extra events
             // are cheap no-ops. Independent of currentSock on purpose.
             if (order) processLoyalty(snap.key, order).catch(e => console.error("[LOYALTY] processLoyalty error:", e.message));
+            // Same "before the debounce" rule: a cancel/refund must free the
+            // discount it consumed (idempotent per order).
+            if (order) releaseOrderDiscountUsage(snap.key, order).catch(e => console.error("[Discounts] release error:", e.message));
             // Restaurant-app orders: every status goes to the customer in the app
             // (push + inbox) whether or not WhatsApp is connected. Deduped per status.
             if (order && order.source === 'APP') notifyCustomerApp(snap.key, order, order.status).catch(() => {});
@@ -2665,7 +2699,7 @@ async function sendDailyReportSafely(dateOverride = null) {
                     }
 
                     if (order.discount > 0 && order.discountId) {
-                        discountEngine.recordDiscountUsage({
+                        const recorded = await discountEngine.recordDiscountUsage({
                             OUTLET: order.outlet,
                             discountId: order.discountId,
                             orderId: snap.key,
@@ -2675,7 +2709,12 @@ async function sendDailyReportSafely(dateOverride = null) {
                             globalLimit: order.discountGlobalLimit,
                             discountLabel: order.discountLabel,
                             discountSource: order.discountSource
-                        }).catch(() => {});
+                        }).catch(() => false);
+                        // The flag is what lets a later cancel give the usage
+                        // back — only orders whose usage really landed.
+                        if (recorded) {
+                            await updateData(`orders/${snap.key}`, { discountUsageRecorded: true }, order.outlet).catch(() => {});
+                        }
                     }
                 } catch (webOrderErr) {
                     console.error("[WebOrder] Finalization error:", webOrderErr);
