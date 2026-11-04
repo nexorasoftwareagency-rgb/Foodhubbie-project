@@ -81,7 +81,7 @@ export function computeCheckout({ subtotal, mode, discount, rewardPoints, fee, d
 /** Builds the order record. Pure: everything environmental is passed in. */
 export function buildAppOrder({ orderId, mode, cartLines, name, phone, address, location, distanceKm, note, totals, discount, reward, appUid, business, outlet, now = new Date() }) {
     const items = cartLines.map(l => ({
-        name: l.name, size: l.size, unitPrice: l.unitPrice,
+        name: l.name, size: l.size, unitPrice: l.unitPrice, dishId: l.dishId,
         addons: (l.addons || []).map((n, i) => ({ name: n, price: (l.addonPrices || [])[i] || 0 })),
         quantity: l.qty, total: round2(l.unitPrice * l.qty), outlet,
         instructions: l.instructions || '',

@@ -75,5 +75,18 @@ const PH = '9876543210', ID = 'A100';
     const promo = require('fs').readFileSync(require('path').join(__dirname, '../bot/promotions.js'), 'utf8');
     assert.match(promo, /app\/consent\/offers/, 'promotions honour the app Offers switch');
     assert.match(src, /customers\/\$\{phone\}\/app\/name[\s\S]{0,200}tab=loyalty/, 'tier-up push opens the app for app customers');
+
+    // server-side re-pricing: browser-written prices are rebuilt from the catalog
+    assert.match(src, /const orderPricing = require\('\.\/order-pricing'\)/, 're-pricer loaded');
+    const finalize = src.slice(src.indexOf('if (shouldFinalizeWebOrder(order)) {'));
+    const repriceAt = finalize.indexOf('orderPricing.repriceOrder');
+    const discountAt = finalize.indexOf('discountEngine.evaluateDiscount');
+    assert.ok(repriceAt > -1, 'web/app orders are re-priced before anything trusts the subtotal');
+    assert.ok(repriceAt < discountAt, 're-pricing runs BEFORE the discount re-validation');
+    assert.match(finalize, /order\.subtotal = priced\.subtotal/, 'corrected subtotal feeds the rest of finalization');
+    const fs2 = require('fs'), path2 = require('path');
+    for (const f of ['menu/js/app-checkout.js', 'menu/js/delivery-order.js']) {
+        assert.match(fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8'), /dishId: l\.dishId/, `${f} sends dishId so re-pricing resolves by id`);
+    }
     console.log('payment-sync OK');
 })().catch(e => { console.error(e); process.exit(1); });

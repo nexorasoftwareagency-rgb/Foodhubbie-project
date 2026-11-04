@@ -39,6 +39,7 @@ const { getData, setData, updateData, db, resolvePath, getUserProfile, saveUserP
 const { resolveOutletId, resolveBusinessIdFor, initializeOutletBusinessIndex } = require('./helpers/outlet-resolution');
 const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
 const discountEngine = require('./discount-engine');
+const orderPricing = require('./order-pricing');
 const redeem = require('./redeem');
 const paymentSync = require('./payment-sync');
 
@@ -2517,6 +2518,39 @@ async function sendDailyReportSafely(dateOverride = null) {
             // are handled inline here before the "Order Placed" message.
             if (shouldFinalizeWebOrder(order)) {
                 try {
+                    // --- SAFEST-FIRST: server-side re-pricing ---
+                    // Every unit price above came from the customer's browser.
+                    // Rebuild each line from the outlet catalog BEFORE the
+                    // discount is verified against `order.subtotal`, so a
+                    // modified client cannot buy a ₹299 dish for ₹1. A line the
+                    // catalog cannot resolve keeps its claimed price and is
+                    // logged (inventing one would overcharge or give food away).
+                    try {
+                        const [catalogDishes, catalogCombos] = await Promise.all([
+                            getData('dishes', order.outlet),
+                            getData('combos', order.outlet),
+                        ]);
+                        const priced = orderPricing.repriceOrder({
+                            items: order.items,
+                            dishes: catalogDishes,
+                            combos: catalogCombos,
+                            subtotal: order.subtotal,
+                        });
+                        if (priced.unmatched.length) {
+                            console.warn(`[WebOrder] ${snap.key}: no catalog match for "${priced.unmatched.join('", "')}" — claimed price kept.`);
+                        }
+                        if (priced.changed) {
+                            console.warn(`[WebOrder] Price correction on ${snap.key}: client subtotal ₹${order.subtotal} (${(order.items || []).length} lines), catalog ₹${priced.subtotal}.`);
+                            await updateData(`orders/${snap.key}`, { items: priced.items, subtotal: priced.subtotal }, order.outlet);
+                            order.items = priced.items;
+                            order.subtotal = priced.subtotal;
+                        }
+                    } catch (priceErr) {
+                        // Keep the claimed prices rather than block the order —
+                        // this is the pre-existing behaviour, never worse.
+                        console.error('[WebOrder] Re-pricing failed:', priceErr);
+                    }
+
                     // --- SAFEST-FIRST: server-side discount re-validation ---
                     // This order was written directly by the customer's browser
                     // (menu/js/delivery-order.js), which computed discount/total

@@ -85,6 +85,7 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
         name: l.name,
         size: l.size,
         unitPrice: l.unitPrice,
+        dishId: l.dishId,
         addons: (l.addons || []).map((n, i) => ({ name: n, price: (l.addonPrices || [])[i] || 0 })),
         quantity: l.qty,
         total: round2(l.unitPrice * l.qty),
