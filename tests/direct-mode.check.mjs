@@ -196,6 +196,8 @@ await scenario('pickup order: written with source APP, no address, no fee, payme
     assert.equal(o.deliveryFee, 0); assert.equal(o.address, undefined); assert.equal(o.lat, undefined);
     assert.equal(o.subtotal, 199); assert.equal(o.total, 208.95, '199 + 5% GST');
     assert.equal(o.note, 'no onion'); assert.equal(o.items.length, 1); assert.equal(o.items[0].quantity, 1);
+    // dishId lets the bot re-price the line from the catalog (item 2, bot/order-pricing.js)
+    assert.equal(o.items[0].dishId, 'd1');
     assert.match(o.createdAt, /^\d{4}-\d{2}-\d{2}T/); assert.equal(o.assignedRider, null);
     // history entry for the Orders tab
     const mirror = await page.evaluate(() => window.__writes.find(x => /customers\/9876543210\/orders\//.test(x.path))?.value);
