@@ -47,7 +47,7 @@ const paymentSync = require('./payment-sync');
 // repo checkout that ships to EC2, so a relative require reaches it).
 // require(esm) needs Node >= 22.12; on an older runtime or a partial deploy
 // missing shared/ we degrade gracefully to the legacy verify formulas (see
-// _verifiedOrderTotal below) — never a WRONG total, and the warn shows in pm2.
+// _verifiedOrderTotals below) — never a WRONG total, and the warn shows in pm2.
 let moneyMath = null;
 try { moneyMath = require('../shared/money-math.js'); }
 catch (e) {
@@ -63,6 +63,15 @@ try { loyaltyMath = require('../shared/loyalty-math.js'); }
 catch (e) {
     console.warn('[LoyaltyMath] shared/loyalty-math.js failed to load — loyalty earn falls back to order.total base.'
         + ' Ensure the EC2 deploy includes the repo shared/ folder and Node >= 22.12. Detail:', e && e.message);
+}
+
+// Haversine + distance-slab fee, the exact functions the menu computes its
+// delivery fee with. Without it the fee keeps the client's value (never a
+// guessed one) — same guarded-require pattern as the math modules above.
+let geo = null;
+try { geo = require('../shared/geo/geo.js'); }
+catch (e) {
+    console.warn('[Geo] shared/geo/geo.js failed to load — delivery fee keeps the client value. Detail:', e && e.message);
 }
 
 // ── Suppress noisy libsignal session-state dumps ────────────────────────
@@ -2002,26 +2011,93 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
 }
 
 
+// Tax rates and the delivery fee are the RESTAURANT's numbers, not the
+// phone's. Orders from the app / delivery webview are written by the customer's
+// browser, so without this a tampered payload could zero the GST on a valid
+// order or have a 40 km delivery pay the ₹20 slab. Both are re-derived from the
+// outlet's own settings before the total is verified. Both return null when the
+// settings cannot be read, so the caller keeps the order's stored values
+// instead of inventing a number.
+async function _serverTaxRates(outlet) {
+    const dine = await getData('dineinSettings', outlet);
+    if (!dine || typeof dine !== 'object') return null;
+    // Same derivation the menu uses (app.js / delivery-order.js /
+    // app-checkout.js): explicit taxRates win, then taxName+taxPercent (5%
+    // GST default), and taxEnabled:false means no tax at all.
+    if (Array.isArray(dine.taxRates) && dine.taxRates.length > 0) {
+        return dine.taxRates.map(r => ({ name: (r && r.name) || 'Tax', rate: Number(r && r.rate) || 0 }));
+    }
+    if (dine.taxEnabled === false) return [];
+    return [{ name: dine.taxName || 'GST', rate: typeof dine.taxPercent === 'number' ? dine.taxPercent : 5 }];
+}
+
+async function _serverDeliveryFee(order, outlet) {
+    const claimed = Math.max(0, Number(order.deliveryFee) || 0);
+    if (order.type === 'Pickup' || order.orderMode === 'pickup') return 0;   // a pickup never pays a fee
+    if (!geo) return claimed;                                                // shared/geo missing on a partial deploy
+    const lat = Number(order.lat), lng = Number(order.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return claimed;      // legacy order without coordinates
+    try {
+        const [store, slabs] = await Promise.all([
+            getData('settings/Store', outlet),
+            getData('settings/Delivery/slabs', outlet),
+        ]);
+        const oLat = parseFloat((store || {}).lat), oLng = parseFloat((store || {}).lng);
+        if (!Array.isArray(slabs) || !Number.isFinite(oLat) || !Number.isFinite(oLng)) return claimed;
+        const km = geo.calculateDistance(lat, lng, oLat, oLng);
+        return Math.max(0, Number(geo.getFeeFromSlabs(km, slabs)) || 0);
+    } catch (e) {
+        console.warn('[WebOrder] Delivery fee re-check failed — claimed fee kept:', e.message);
+        return claimed;
+    }
+}
+
 // Server-side total re-verification for client-placed orders (QR dine-in +
-// webview delivery). Recomputes tax from the order's own stored taxItems
-// rates on the CORRECTED taxable value — the client-claimed `tax` must never
-// be reused once the discount has been corrected, or an upward-corrected
-// discount leaves tax stale and undercharges (fixed 2026-10-26, Phase 1b).
-// Legacy fallback (order predates taxItems, or shared/money-math.js missing
-// on a partial deploy): claimed tax + claimed SC + fee − discount, matching
-// the pre-Phase-1b formulas. Delivery orders never carry service charge
-// (owner decision: SC is dine-in-only) — callers just pass 0 for it.
-function _verifiedOrderTotal({ subtotal, discount, taxItems, claimedTax = 0, serviceCharge = 0, deliveryFee = 0 }) {
+// webview/app delivery). Recomputes tax on the CORRECTED taxable value — the
+// client-claimed `tax` must never be reused once the discount has been
+// corrected, or an upward-corrected discount leaves tax stale and undercharges
+// (fixed 2026-10-26, Phase 1b). `taxRates` (from _serverTaxRates) always wins
+// over the order's stored taxItems when we have it: the rates are the outlet's
+// settings, while taxItems came from the customer's browser. An empty
+// `taxRates` array is a real answer ("this outlet charges no tax") and must not
+// fall through to the client's claim.
+// Legacy fallback (order predates taxItems, settings unreadable, or
+// shared/money-math.js missing on a partial deploy): claimed tax + claimed SC +
+// fee − discount, matching the pre-Phase-1b formulas. Delivery orders never
+// carry service charge (owner decision: SC is dine-in-only) — callers pass 0.
+// Returns the verified tax breakdown as well as the total, so the corrected
+// order carries the server's numbers (Admin reports read order.tax).
+function _verifiedOrderTotals({ subtotal, discount, taxItems, taxRates, claimedTax = 0, serviceCharge = 0, deliveryFee = 0 }) {
     const sub = Number(subtotal) || 0;
     const disc = Math.max(0, Number(discount) || 0);
     const sc = Number(serviceCharge) || 0;
-    const fee = Number(deliveryFee) || 0;
+    const fee = Math.max(0, Number(deliveryFee) || 0);
     if (moneyMath) {
         const taxable = moneyMath.round2(Math.max(0, sub - disc));
-        const tax = moneyMath.recomputeTaxOnTaxable(taxable, taxItems);
-        if (tax != null) return Math.max(0, moneyMath.round2(taxable + tax + sc + fee));
+        const rates = Array.isArray(taxRates) ? taxRates : taxItems;
+        const tax = Array.isArray(taxRates) && taxRates.length === 0
+            ? 0
+            : moneyMath.recomputeTaxOnTaxable(taxable, rates);
+        if (tax != null) {
+            const items = (Array.isArray(rates) ? rates : []).map(r => ({
+                name: (r && r.name) || 'Tax',
+                rate: Number(r && r.rate) || 0,
+                amount: moneyMath.round2(taxable * ((Number(r && r.rate) || 0) / 100)),
+            }));
+            return {
+                total: Math.max(0, moneyMath.round2(taxable + tax + sc + fee)),
+                tax,
+                taxItems: items,
+                taxName: items.map(i => i.name).join(' + '),
+            };
+        }
     }
-    return Math.max(0, Math.round((sub + (Number(claimedTax) || 0) + sc + fee - disc) * 100) / 100);
+    return {
+        total: Math.max(0, Math.round((sub + (Number(claimedTax) || 0) + sc + fee - disc) * 100) / 100),
+        tax: null,
+        taxItems: null,
+        taxName: null,
+    };
 }
 
 // R2 reward tender (delivery webview only): the order claims a redeemed
@@ -2147,26 +2223,37 @@ async function verifyQrOrderDiscount(orderId, order, OUTLET) {
         console.error(`[QROrder] Discount re-validation failed for ${orderId}, zeroing out:`, discErr);
         correctedDiscount = 0; // fail safe — never honor an unverified amount
     }
-    const correctedTotal = _verifiedOrderTotal({
+    // Tax rates are the outlet's settings, never the order payload (a QR
+    // client could otherwise send a 0% rate and underpay the bill).
+    const money = _verifiedOrderTotals({
         subtotal: order.subtotal,
         discount: correctedDiscount,
         taxItems: order.taxItems,
+        taxRates: await _serverTaxRates(OUTLET),
         claimedTax: order.tax,
         serviceCharge: order.serviceCharge,
     });
+    const correctedTotal = money.total;
+    // Carry the server's breakdown onto the order too: Admin reports and the
+    // invoice read order.tax, so a corrected total with the client's old tax
+    // number would still understate collected GST. Service charge stays as the
+    // client computed it — it is dine-in-session-owned by design.
+    const taxCorrection = money.taxItems
+        ? { tax: money.tax, taxItems: money.taxItems, taxName: money.taxName }
+        : {};
     const claimedDiscount = order.discount || 0;
     const claimedTotal = order.total || 0;
     if (correctedDiscount !== claimedDiscount || correctedTotal !== claimedTotal) {
-        console.warn(`[QROrder] Discount mismatch on ${orderId}: client claimed ₹${claimedDiscount} (total ₹${claimedTotal}), server verified ₹${correctedDiscount} (total ₹${correctedTotal}). Correcting order + session.`);
+        console.warn(`[QROrder] Money mismatch on ${orderId}: client claimed ₹${claimedDiscount} discount / ₹${claimedTotal} total, server verified ₹${correctedDiscount} / ₹${correctedTotal}. Correcting order + session.`);
     }
     const orderCorrection = verified ? {
         discount: correctedDiscount, discountId: verified.discount.id,
         discountLabel: verified.label, discountSource: verified.source,
         discountMode: verified.discount.mode || 'fixed', discountValue: verified.discount.value || 0,
-        total: correctedTotal, discountVerified: true
+        total: correctedTotal, ...taxCorrection, discountVerified: true
     } : {
         discount: 0, discountId: null, discountLabel: null, discountSource: null,
-        discountMode: null, discountValue: 0, total: correctedTotal, discountVerified: true
+        discountMode: null, discountValue: 0, total: correctedTotal, ...taxCorrection, discountVerified: true
     };
     await updateData(`orders/${orderId}`, orderCorrection, OUTLET);
 
@@ -2642,6 +2729,18 @@ async function sendDailyReportSafely(dateOverride = null) {
                         console.error('[WebOrder] Re-pricing failed:', priceErr);
                     }
 
+                    // --- SAFEST-FIRST: settings-owned tax rates + delivery fee ---
+                    // The remaining money fields came from the browser too.
+                    // Re-derive them from the outlet's own settings before the
+                    // total is verified, so a tampered payload can neither zero
+                    // the GST nor ship a far delivery at the nearest slab.
+                    const serverTaxRates = await _serverTaxRates(order.outlet);
+                    const serverDeliveryFee = await _serverDeliveryFee(order, order.outlet);
+                    const moneyFields = (m) => ({
+                        deliveryFee: serverDeliveryFee,
+                        ...(m.taxItems ? { tax: m.tax, taxItems: m.taxItems, taxName: m.taxName } : {}),
+                    });
+
                     // --- SAFEST-FIRST: server-side discount re-validation ---
                     // This order was written directly by the customer's browser
                     // (menu/js/delivery-order.js), which computed discount/total
@@ -2669,14 +2768,16 @@ async function sendDailyReportSafely(dateOverride = null) {
                             channel: 'website'
                         });
                         const correctedDiscount = verified ? verified.amount : 0;
-                        const correctedTotal = _verifiedOrderTotal({
+                        const money = _verifiedOrderTotals({
                             subtotal: order.subtotal,
                             discount: correctedDiscount,
                             taxItems: order.taxItems,
-                            deliveryFee: order.deliveryFee,
+                            taxRates: serverTaxRates,
+                            deliveryFee: serverDeliveryFee,
                         });
+                        const correctedTotal = money.total;
                         if (correctedDiscount !== (order.discount || 0) || correctedTotal !== (order.total || 0)) {
-                            console.warn(`[WebOrder] Discount mismatch on ${snap.key}: client claimed ₹${order.discount || 0} (total ₹${order.total}), server verified ₹${correctedDiscount} (total ₹${correctedTotal}). Correcting.`);
+                            console.warn(`[WebOrder] Money mismatch on ${snap.key}: client claimed ₹${order.discount || 0} discount / ₹${order.total || 0} total, server verified ₹${correctedDiscount} / ₹${correctedTotal}. Correcting.`);
                         }
                         const correction = verified ? {
                             discount: correctedDiscount,
@@ -2686,11 +2787,13 @@ async function sendDailyReportSafely(dateOverride = null) {
                             discountMode: verified.discount.mode || 'fixed',
                             discountValue: verified.discount.value || 0,
                             discountGlobalLimit: verified.discount.globalLimit || 0,
-                            total: correctedTotal
+                            total: correctedTotal,
+                            ...moneyFields(money)
                         } : {
                             discount: 0, discountId: null, discountLabel: null, discountSource: null,
                             discountMode: null, discountValue: 0, discountGlobalLimit: 0,
-                            total: correctedTotal
+                            total: correctedTotal,
+                            ...moneyFields(money)
                         };
                         await updateData(`orders/${snap.key}`, correction, order.outlet);
                         Object.assign(order, correction); // keep everything below consistent with the verified truth
@@ -2699,14 +2802,15 @@ async function sendDailyReportSafely(dateOverride = null) {
                         // Fail safe: if verification itself breaks, don't honor an
                         // unverified client-supplied discount — zero it out rather
                         // than risk giving away money on a check we couldn't run.
-                        // Tax still recomputes from the order's own taxItems rates.
-                        const safeTotal = _verifiedOrderTotal({
+                        // Tax still comes from the outlet settings (serverTaxRates).
+                        const safe = _verifiedOrderTotals({
                             subtotal: order.subtotal,
                             discount: 0,
                             taxItems: order.taxItems,
-                            deliveryFee: order.deliveryFee,
+                            taxRates: serverTaxRates,
+                            deliveryFee: serverDeliveryFee,
                         });
-                        const correction = { discount: 0, discountId: null, discountLabel: null, discountSource: null, discountMode: null, discountValue: 0, discountGlobalLimit: 0, total: safeTotal };
+                        const correction = { discount: 0, discountId: null, discountLabel: null, discountSource: null, discountMode: null, discountValue: 0, discountGlobalLimit: 0, total: safe.total, ...moneyFields(safe) };
                         await updateData(`orders/${snap.key}`, correction, order.outlet).catch(() => {});
                         Object.assign(order, correction);
                     }

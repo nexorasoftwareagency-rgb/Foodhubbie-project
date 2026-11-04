@@ -89,6 +89,17 @@ const PH = '9876543210', ID = 'A100';
         assert.match(fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8'), /dishId: l\.dishId/, `${f} sends dishId so re-pricing resolves by id`);
     }
 
+    // tax rates + delivery fee are the outlet's settings, never the phone's
+    assert.match(src, /async function _serverTaxRates/, 'tax rates are re-derived from the outlet settings');
+    assert.match(src, /async function _serverDeliveryFee/, 'delivery fee is re-derived from the slab table');
+    assert.strictEqual(src.match(/taxRates: await _serverTaxRates\(OUTLET\)/g)?.length, 1, 'QR dine-in totals use the server tax rates');
+    assert.match(finalize, /const serverTaxRates = await _serverTaxRates/, 'web finalization reads the server tax rates');
+    assert.match(finalize, /taxRates: serverTaxRates/, 'verified total uses the server rates, not the client taxItems');
+    assert.match(finalize, /deliveryFee: serverDeliveryFee/, 'verified total uses the server delivery fee');
+    assert.ok(finalize.indexOf('_serverTaxRates') < finalize.indexOf('discountEngine.evaluateDiscount'), 'tax/fee are resolved BEFORE the discount re-validation');
+    assert.match(finalize, /\.\.\.moneyFields\(money\)/, 'the verified tax breakdown is written back onto the order');
+    assert.doesNotMatch(src, /_verifiedOrderTotal\(/, 'no call site left on the old client-owned verifier');
+
     // discount usage must be reversible when the sale falls through: a global
     // limit or a first-order one-shot cannot stay consumed by a cancelled order
     const engine = fs2.readFileSync(path2.join(__dirname, '../bot/discount-engine.js'), 'utf8');
