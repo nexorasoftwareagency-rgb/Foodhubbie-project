@@ -49,14 +49,13 @@ Branch with everything together: `final/integrated`. Nothing has been deployed, 
 4. Cancel a new order while "Placed" → cancelled; try after Confirmed → refused.
 5. Open the app with the same number on a second phone/browser → it must say the number is on another phone; make a code on the first (Account → Link another phone), enter it on the second → unlocks.
 6. Admin → Customers → "Reset phone lock" for the test number.
-7. Wallet/Costs: the APP order is billed 3%.
-8. Loyalty: redeem a reward → WhatsApp code arrives → enter it. (Needs a live WhatsApp session.)
+7. Wallet/Costs: the APP order is billed 2% (WhatsApp 3%, QR/POS 1%).
+8. Loyalty: open Loyalty in the app → Redeem → the reward appears as a one-tap chip at checkout. No WhatsApp code and no typed code.
 
 ## 6. Known limits — please read
-- **Phone privacy is "first phone wins", not verification.** A stranger who opens the app with someone's number *before* the real owner can become the owner (and see old history for that number). Only a real verification step (WhatsApp/SMS code) fixes this; the code path is prepared (the bot can write `customers/{phone}/link` and send the code on WhatsApp) but WhatsApp work is pending.
-- iPhone: Safari and the installed home-screen app are separate storage; the installed app may ask for a link code once. Clearing site data/reinstalling does the same.
-- Item prices in orders are sent by the customer's phone and are not re-checked on the server (same as the existing QR and web flows).
+- **Phone privacy is "first phone wins", not verification — ACCEPTED (owner decision 2026-11-05).** A stranger who opens the app with someone's number *before* the real owner can become the owner (and see old history for that number). This is a deliberate trade-off to keep sign-in instant: no OTP, no SMS. Recovery is operational — `Admin → Customers → "Reset phone lock"` forgets the devices so the next phone that opens the app becomes the owner, and an existing owner can move access to a second phone with the 8-digit code under Account → Link another phone.
+- iPhone: Safari and the installed home-screen app are separate storage; the installed app may ask for a link code once. Clearing site data/reinstalling does the same, and the restaurant can always reset the lock from Admin.
+- Item prices in browser-written orders (delivery webview and the app) are re-priced from the restaurant catalog on the server before the order is finalized, so a modified client cannot buy a ₹299 dish for ₹1. QR dine-in totals remain the session's own (staff-settled) numbers.
 - The delivery code is stored in the customer's own record (visible only to the registered phone after this release).
-- Website pricing page and `PRICING_AND_TERMS.md` still show the old ₹1/₹2/₹5 rates.
 - Bot `handleOrderStatusUpdate` still returns early on a dead WhatsApp socket for non-app orders (existing behaviour).
-- WhatsApp bot ordering is marked "Upcoming" only as a label; its 2% rate in the billing maths is untouched.
+- WhatsApp bot ordering bills 3% (App 2%, QR/POS 1%, unknown source 3%, no setup fee). `website/pricing.html` is the canonical rate card — keep its FAQ JSON-LD in sync when rates change.

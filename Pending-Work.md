@@ -80,7 +80,7 @@ This rule applies to:
 - **Bug found + fixed:** device-bound reads racing the anonymous session on a cold boot left `_loyalty` null — the Loyalty tab showed 0 points and a disabled Redeem until reopened. `loadCustomerData()` now awaits `ensureAnonAuth()` (before/after proven locally: 0 pts/disabled -> 1000 pts/enabled).
 - **Verified:** local — loyalty-redeem OK, direct-mode 25/25, bot unit 20/20, payment-sync, twins 5/5, cost-math, customer-profile, discount-evaluator 9/9, auto-onboarding, signup-onboarding, encoding, check-imports, `node --check`. Live E2E **26/26** on the e2e outlet (zero dialogs on redeem, points deducted, code never shown, chip tender ₹200 on a ₹313.95 order -> `totalDue` ₹113.95, reward burned, 401 probes for unregistered device / mismatched uid / signed-out). `menu-shell-v36`.
 - **Rules emulator:** not runnable locally (no Java) — the rewritten redeem cases were probed live instead.
-- **Still open (next review items):** "first phone wins" privacy / iOS storage decision.
+- **Decided (owner, 2026-11-05):** "first phone wins" stays — no OTP. Recovery is operational (`Admin > Customers > Reset phone lock` clears `devices` + `link`; the 8-digit link code moves access to a second phone). Trade-off documented in `docs/FINAL-COMPATIBILITY-GUIDE.md` §6 and `AGENTS.md` Key Decisions. Next review item: client-supplied `taxItems` rates and `deliveryFee`.
 
 ### ✅ Server-side re-pricing of browser-written orders (2026-11-04; item 2 of the independent review)
 - **Stage:** `done` — commit `8cfd241`, pushed to `main` / `seo-brand-consistency` / `feat/customer-app-integration`; `firebase deploy --only hosting:menu`; EC2 `bot/index.js` + `bot/order-pricing.js` scp'd, pm2 6 (e2e) and 35 (live pizza) restarted plain.
