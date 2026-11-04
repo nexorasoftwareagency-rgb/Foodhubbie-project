@@ -90,9 +90,9 @@ This rule applies to:
 - **Depends on:** `menu/sw.js` -> `menu-shell-v37` (clients send `dishId`); EC2 must have `bot/order-pricing.js`.
 - **Not covered (same class, next):** client-supplied `taxItems` rates and `deliveryFee` are still trusted by `_verifiedOrderTotal`; QR dine-in totals stay client-owned (session totals, no bot finalization hook).
 
-### 🟡 api.foodhubbie.in (P3) — reverse proxy + TLS; owner DNS pending
-- **Stage:** `verified-code` (infra) / `blocked-owner-dns` (TLS)
-- **Done:** nginx 1.24.0 + certbot 2.9.0 installed on EC2 (`3.111.39.210`); vhost `/etc/nginx/sites-available/api.foodhubbie.in` → `http://127.0.0.1:5000` (webhook-server, which proxies `/api/*` → bot-control-api `:4000`); `nginx -t` OK, enabled + reloaded; `curl -H 'Host: api.foodhubbie.in' http://127.0.0.1/` → 200; SG `sg-0a5a73df4b5d37b38` already allows TCP 80+443 `0.0.0.0/0`; key `foodhubbie-key.pem` present locally.
+### ✅ api.foodhubbie.in (P3) — TLS live (2026-11-04)
+- **Stage:** done
+- **Done:** nginx 1.24.0 + certbot installed on EC2 (`3.111.39.210`); vhost /etc/nginx/sites-available/api.foodhubbee.in -> :5000 (webhook-server -> /api/* -> bot-control-api :4000); AWS SG sg-0a5a73df4b5d37b38 authorized TCP 80+443 via aws ec2 authorize-security-group-ingress (SG actually had only port 22 - ACCESS.md doc was stale); sudo certbot --nginx -d api.foodhubbee.in succeeded (exit 0); cert installed /etc/letsencrypt/live/api.foodhubbee.in/fullchain.pem (valid to 2027-02-02); nginx :443 listener active; external HTTPS /webhook -> 200; certbot auto-renewal task scheduled.
 - **Blocked:** GoDaddy A record `api.foodhubbie.in` → `3.111.39.210` not yet added (owner-hands; agent has no GoDaddy access). Until it resolves: `sudo certbot --nginx -d api.foodhubbie.in` cannot run, no TLS.
 - **Next after TLS:** owner decision on cutting Supreme's `TUNNEL_URL` (`SupremeAdmin/js/firebase-config.js:23`, runtime override via `config/tunnelUrl`) to `https://api.foodhubbie.in` — the Meta webhook stays on the Cloudflare Quick Tunnel and must NOT be repointed in Meta console.
 - **Related:** `website/assets/generated/` + `website/assets/REal/` exist; `assets` site (`foodhubbie-assets`) referenced only by `website` CSP `img-src` in `firebase.json` (line 493); no custom domain mapped — optional, no action needed.
