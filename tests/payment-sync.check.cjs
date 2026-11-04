@@ -122,5 +122,20 @@ const PH = '9876543210', ID = 'A100';
     assert.ok(listener.indexOf('restoreOrderInventory(snap.key, order)') < listener.indexOf('if (sameStatusRecently) return;'), 'restore runs BEFORE the debounce gate');
     assert.match(src, /order\.stockDeducted !== true \|\| order\.stockRestored === true/, 'only deducted, not-yet-restored stock is given back');
     assert.match(src, /const claim = await flagRef\.transaction/, 'restore claims the order before touching stock (at most once)');
+
+    // D4 wallet gate: an enforced low/closed balance stops NEW bot order links.
+    // The flag is public-read and written by Admin only when enforcement is armed.
+    assert.match(src, /walletGateBlocks/, 'bot reads the D4 wallet gate');
+    assert.match(src, /getWalletGate\(OUTLET\)/, 'gate is read for the bot own outlet id');
+    const wg = fs2.readFileSync(path2.join(__dirname, '../bot/wallet-gate.js'), 'utf8');
+    assert.match(wg, /resolvePath\('walletGate', outlet\)/, 'gate comes from the outlet node');
+    assert.match(wg, /\.once\('value'\)/, 'fresh read — the stop flag must not sit behind the 30 s cache');
+    assert.match(wg, /catch[\s\S]{0,120}return null/, 'read failures fail open');
+    const flow = src.slice(src.indexOf('async function sendOrderFlow'), src.indexOf('function appendContactInfo'));
+    assert.ok(flow.indexOf('walletGateBlocks') > -1 && flow.indexOf('walletGateBlocks') < flow.indexOf('const [store, bot] = await Promise.all(['), 'menu flow checks the gate before the greeting/CTA');
+    const cta = src.slice(src.indexOf('async function resendMenuCTA'), src.indexOf('function appendContactInfo'));
+    assert.ok(cta.indexOf('walletGateBlocks') < cta.indexOf('getOrCreateWebviewToken'), 'gate blocks BEFORE minting a webview token');
+    assert.ok(cta.indexOf('walletGateBlocks') < cta.indexOf('sendOrderCTA'), 'gate blocks the order CTA');
+    assert.match(fs2.readFileSync(path2.join(__dirname, '../bot/utils.js'), 'utf8'), /function walletGateBlocks/, 'decision helper lives with the other bot pure utils');
     console.log('payment-sync OK');
 })().catch(e => { console.error(e); process.exit(1); });

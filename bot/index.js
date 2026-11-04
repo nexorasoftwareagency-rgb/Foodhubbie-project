@@ -99,7 +99,7 @@ const {
     calculateDistance, getFeeFromSlabs,
     formatCartSummary, formatOrderInvoice, getFunnyFoodJoke, getFoodFunnyProgress,
     isSocketDead, RateLimiter, isBlockedJid, OutboundTracker, BaileysSendTracker,
-    isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo
+    isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo, walletGateBlocks
 } = require('./utils');
 
 // ── Outbound tracker (best-effort analytics, never blocks sends) ──────
@@ -109,6 +109,7 @@ const promo = require('./promotions');
 const { sendDailyReport, sendMonthlyReport, sendWeeklyReport } = require('./reports');
 const riderNotify = require('./rider');
 const { logChatMessage } = require('./chat-log');
+const { getWalletGate } = require('./wallet-gate');
 const { prunePushInbox } = require('../shared/push-inbox.cjs');
 
 let sharpLib;
@@ -529,6 +530,10 @@ async function getOrCreateWebviewToken(outlet, phone, user) {
     return token;
 }
 
+// D4 wallet gate: set only while billing.wallet.enforce is armed; both 'low'
+// and 'closed' stop NEW order links (clients gate themselves on 'closed').
+const WALLET_PAUSED_TEXT = `⏳ *Ordering is temporarily unavailable*\n\nAbhi naye orders nahi le pa rahe hain. Kripya thodi der baad dobara try karein. 🙏`;
+
 // Send the CTA as an interactive URL button (meta transport); falls back to image + link text (baileys).
 async function sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl) {
     if (typeof sock.sendButton === 'function') {
@@ -547,6 +552,13 @@ async function sendOrderCTA(sock, sender, menuImg, ctaText, menuUrl) {
 // withMenu=false sends the greeting image + full welcome only (no menu-image/order
 // link) — used for plain greetings, where blasting the order CTA on spec is avoided.
 async function sendOrderFlow(sock, sender, pushName, user, withMenu = true) {
+    if (withMenu) {
+        const gate = walletGateBlocks(await getWalletGate(OUTLET));
+        if (gate) {
+            console.log(`[WALLET] gate=${gate} — order CTA suppressed for ${maskJid(sender)}`);
+            return sock.sendMessage(sender, { text: WALLET_PAUSED_TEXT });
+        }
+    }
     const [store, bot] = await Promise.all([
         getData("settings/Store", OUTLET),
         getData("settings/Bot", OUTLET)
@@ -575,6 +587,11 @@ async function sendOrderFlow(sock, sender, pushName, user, withMenu = true) {
 
 // Resend just the menu CTA (menu image + order link/button) — used for C2/C3/C5.
 async function resendMenuCTA(sock, sender, user, store, bot, ctaText) {
+    const gate = walletGateBlocks(await getWalletGate(OUTLET));
+    if (gate) {
+        console.log(`[WALLET] gate=${gate} — order CTA suppressed for ${maskJid(sender)}`);
+        return sock.sendMessage(sender, { text: WALLET_PAUSED_TEXT });
+    }
     if (!store || !bot) {
         const data = await Promise.all([
             getData("settings/Store", OUTLET),

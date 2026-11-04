@@ -288,3 +288,17 @@ test('loyalty-math: earn base, two-stage floor, tender caps, bill split', async 
     assert.strictEqual(shares[0], 5000);
     assert.deepStrictEqual(lm.distributeBillDiscountPaise(0.3, [1, 1, 1, 1]), [8, 8, 7, 7]);
 });
+
+// D4 wallet gate: only 'low' and 'closed' stop the bot handing out the order
+// link; anything else ('' = armed-but-healthy, absent, legacy junk) stays open.
+test('walletGateBlocks: low/closed block, everything else opens', () => {
+    const { walletGateBlocks } = require('../utils');
+    assert.strictEqual(walletGateBlocks('low'), 'low');
+    assert.strictEqual(walletGateBlocks('closed'), 'closed');
+    assert.strictEqual(walletGateBlocks(' LOW '), 'low');
+    assert.strictEqual(walletGateBlocks('Closed'), 'closed');
+    assert.strictEqual(walletGateBlocks(''), null);
+    assert.strictEqual(walletGateBlocks('ok'), null);
+    assert.strictEqual(walletGateBlocks(null), null);
+    assert.strictEqual(walletGateBlocks(undefined), null);
+});

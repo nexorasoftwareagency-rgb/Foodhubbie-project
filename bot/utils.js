@@ -425,6 +425,15 @@ function isMetaTransport(sock) {
     return !!(sock && sock.user && String(sock.user.id).startsWith('meta:'));
 }
 
+// D4 wallet gate: Admin publishes `outlets/{oid}/walletGate` ('low' | 'closed')
+// only while billing.wallet.enforce is armed; '' / absent = no gate. 'low' and
+// 'closed' both stop the bot handing out a NEW order link (QR/webview clients
+// gate themselves). Returns the blocking value, or null when open.
+function walletGateBlocks(gate) {
+    const g = String(gate || '').trim().toLowerCase();
+    return (g === 'low' || g === 'closed') ? g : null;
+}
+
 module.exports = {
     formatJid, maskJid, isBlockedJid,
     formatOrderId,
@@ -435,5 +444,5 @@ module.exports = {
     getBroadcastDelayRangeMs, sleep,
     RateLimiter, OutboundTracker, BaileysSendTracker,
     isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo,
-    isMetaTransport
+    isMetaTransport, walletGateBlocks
 };
