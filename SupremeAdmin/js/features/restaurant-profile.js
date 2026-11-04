@@ -1031,10 +1031,11 @@ registerAction('billing-toggle-gate', async (btn) => {
   if (!outlet?.billing) return showToast('Billing not seeded \u2014 run tools/seed-billing-defaults.cjs.', 'error');
   const next = btn?.dataset?.enforce === '1';
   const bal = -scopeStats(outlet, { k: 'all' }).due;
+  const balLabel = `${bal < 0 ? '\u2212' : ''}${inr(Math.abs(bal))}`;
   const ok = await showConfirm({
     title: next ? 'Enforce the wallet gate?' : 'Stop enforcing the wallet gate?',
     body: next
-      ? `New bot order links stop when the balance is at or below max(10% of top-ups, \u20B9100), and QR / Customer App ordering pauses at \u20B90. POS is never affected. Current balance: ${inr(bal)}.`
+      ? `New bot order links stop when the balance is at or below max(10% of top-ups, \u20B9100), and QR / Customer App ordering pauses at \u20B90. POS is never affected. Current balance: ${balLabel}.`
       : 'Ordering opens again immediately, whatever the balance is. The wallet keeps being reported.',
     confirmLabel: next ? 'Enforce' : 'Stop enforcing',
   });
