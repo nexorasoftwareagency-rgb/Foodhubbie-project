@@ -2019,6 +2019,29 @@
                             </div>
                         </div>
 
+                        <div class="glass-card p-20 grid-full" data-settings-section="general">
+                            <div class="flex-between flex-center mb-14">
+                                <div>
+                                    <h4 class="mb-4"><i data-lucide="smartphone" class="icon-16"></i> Customer App</h4>
+                                    <p class="text-muted-small">Share this link so customers can install the app and order directly</p>
+                                </div>
+                            </div>
+                            <label class="form-label-small">App link</label>
+                            <div class="flex-row flex-gap-12">
+                                <input type="text" id="settingAppLink" class="form-input flex-1" readonly
+                                    placeholder="Select an outlet to generate its app link">
+                                <button type="button" id="btnCopyAppLink" class="btn-secondary btn-small flex-center flex-gap-6"
+                                    title="Copy the customer app link">
+                                    <i data-lucide="copy" class="icon-16"></i> Copy
+                                </button>
+                                <button type="button" id="btnShowAppQr" class="btn-secondary btn-small flex-center flex-gap-6"
+                                    title="Show a QR code for the app link">
+                                    <i data-lucide="qr-code" class="icon-16"></i> QR
+                                </button>
+                            </div>
+                            <div id="appLinkQrBox" class="mt-14 hidden"></div>
+                        </div>
+
                         <div class="glass-card p-20" data-settings-section="marketing">
 
                             <div class="settings-section-card">

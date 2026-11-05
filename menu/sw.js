@@ -1,4 +1,4 @@
-const CACHE_NAME = 'menu-shell-v38';
+const CACHE_NAME = 'menu-shell-v39';
 const ASSETS = [
   './index.html',
   './delivery.html',
@@ -22,6 +22,7 @@ const ASSETS = [
   './shared/money-math.js',
   './shared/config/vapid.js',
   './manifest.json',
+  './icons/icon-192.png',
   './sw.js'
 ];
 

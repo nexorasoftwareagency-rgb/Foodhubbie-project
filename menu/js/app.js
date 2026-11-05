@@ -3,7 +3,7 @@
  * Wires together firebase.js, session.js, cart.js, order.js, ui.js.
  * This is the only file with top-level event listener registration.
  */
-import { outletRef, get, onValue, push, set, OUTLET, isConnected, update, runTransaction } from './firebase.js';
+import { outletRef, get, onValue, push, set, OUTLET, isConnected, update, runTransaction, LINK_INCOMPLETE } from './firebase.js';
 import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled, assertWalletGate } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getQRStorageKey } from './cart.js';
 import { placeOrder } from './order.js';
@@ -78,6 +78,19 @@ function _showInvalidToken() {
     UI.showScreen('screenInvalid');
 }
 
+// The URL cannot identify a restaurant (?o= without ?b= on a non-legacy
+// outlet, or ?b= without ?o=). Reuses #screenInvalid with honest copy — the
+// alternative was booting against a guessed tenant.
+function _showIncompleteLink() {
+    const title = document.getElementById('invalidTitle');
+    const body = document.getElementById('invalidBody');
+    const retry = document.getElementById('invalidRetry');
+    if (title) title.textContent = 'Link incomplete';
+    if (body) body.textContent = 'This link is missing the restaurant details, so the right menu cannot be loaded. Please scan the restaurant\'s QR code or open their app link again.';
+    if (retry) retry.classList.add('hidden');
+    _showInvalidToken();
+}
+
 // Real timeout / thrown error / a later step hanging — an actual
 // connectivity problem. Shows the offline banner with a working retry.
 function _showConnectionIssue() {
@@ -93,6 +106,14 @@ async function boot() {
     // was actually connected at that moment.
     const _tokenAttempted = new URLSearchParams(window.location.search).get('t');
     console.log('[Boot] outlet =', OUTLET, '| token =', _tokenAttempted, '| firebase connected =', isConnected());
+
+    // Refuse an ambiguous tenant BEFORE any outletRef() is built — an empty
+    // BUSINESS_ID would produce an invalid path and a confusing crash.
+    if (LINK_INCOMPLETE) {
+        console.warn('[Boot] Incomplete link — business id / outlet id missing.');
+        _showIncompleteLink();
+        return;
+    }
 
     // Watchdog: if boot() doesn't finish within 15s for ANY reason
     // (e.g. loadMenu()/ensureSession() hanging on a bad connection —
@@ -277,12 +298,29 @@ async function bootDirect() {
     if (promosLabel) promosLabel.textContent = 'Account';
     document.getElementById('cartHeaderTitle').textContent = 'Your Cart';
 
+    // App mode never registered a cart:changed listener — only the table boot
+    // did — so adding an item never updated the bottom-nav badge or the
+    // floating cart bar.
+    if (!M._cartListenerBound) {
+        M._cartListenerBound = true;
+        window.addEventListener('cart:changed', onCartChanged);
+    }
+    onCartChanged();
+
+    // Brand, in order: settings/Store/storeName -> its legacy `name` ->
+    // the outlet's own name. Several live outlets have no storeName at all,
+    // so the app greeted customers with a bare "Welcome".
     try {
-        const brandSnap = await get(outletRef('settings/Store/storeName'));
-        if (brandSnap.exists() && brandSnap.val()) {
-            UI.applyBrand(brandSnap.val());
+        const [storeSnap, nameSnap] = await Promise.all([
+            get(outletRef('settings/Store')),
+            get(outletRef('name'))
+        ]);
+        const store = storeSnap.val() || {};
+        const brand = String(store.storeName || store.name || nameSnap.val() || '').trim();
+        if (brand) {
+            UI.applyBrand(brand);
             const b = document.getElementById('signInBrand');
-            if (b) b.textContent = String(brandSnap.val());
+            if (b) b.textContent = brand;
         }
     } catch (e) { console.warn('[Direct] brand fetch failed:', e?.message || e); }
 

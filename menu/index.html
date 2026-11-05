@@ -7,6 +7,7 @@
 <title>FoodHubbie — Order</title>
 <meta name="theme-color" content="#E84908">
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
 <script src="js/dynamic-manifest.js" defer></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -495,9 +496,9 @@
     <div id="screenInvalid" class="screen">
         <div class="invalid-token-body">
             <svg class="icon" style="width:48px;height:48px;color:var(--error);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-            <h3>This QR code is invalid</h3>
-            <p>The table link could not be verified, or this table is no longer available. Please ask a staff member for assistance.</p>
-            <button class="btn-start" onclick="location.reload()">Try Again</button>
+            <h3 id="invalidTitle">This QR code is invalid</h3>
+            <p id="invalidBody">The table link could not be verified, or this table is no longer available. Please ask a staff member for assistance.</p>
+            <button id="invalidRetry" class="btn-start" onclick="location.reload()">Try Again</button>
         </div>
     </div>
 

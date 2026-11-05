@@ -1,9 +1,10 @@
 import { state } from '../state.js';
-import { db, auth, Outlet, tenantPath, ref, get, update, set, EmailAuthProvider, reauthenticateWithCredential } from '../firebase.js';
+import { db, auth, Outlet, BUSINESS_ID, tenantPath, ref, get, update, set, EmailAuthProvider, reauthenticateWithCredential } from '../firebase.js';
 import { logAudit, showToast, showConfirm, getSkeletonRows, hashPin, escapeHtml } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { completeSiteRefresh } from '../pwa.js';
 import { DEFAULT_ROLES } from '../ui.js';
+import { appLink } from '../../shared/app-link.js';
 
 // Auto-create default roles when Staff Management feature is first enabled
 async function initializeDefaultRoles() {
@@ -107,6 +108,67 @@ const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.v
 const setChecked = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v; };
 const isChecked = (id) => document.getElementById(id)?.checked ?? false;
 
+// --- Customer App card (Settings > General) -------------------------------
+// The customer app IS the menu site, scoped per outlet by ?b=/?o=. The host
+// lives in shared/app-link.js so Admin and Supreme can never disagree.
+function populateAppLink() {
+    const input = document.getElementById('settingAppLink');
+    if (input) input.value = appLink(BUSINESS_ID(), Outlet.current);
+    const box = document.getElementById('appLinkQrBox');
+    if (box && box.dataset.shown === '1') { box.innerHTML = ''; box.dataset.shown = ''; box.classList.add('hidden'); }
+}
+
+// qrcodejs is loaded on demand — the QR is a rare action, and this keeps
+// settings.js from depending on tables.js just to borrow its loader.
+function ensureQrLib() {
+    if (window.QRCode) return Promise.resolve(true);
+    if (!window._fhQrLib) {
+        window._fhQrLib = new Promise((resolve) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+            s.onload = () => resolve(true);
+            s.onerror = () => resolve(false);
+            document.head.appendChild(s);
+        });
+    }
+    return window._fhQrLib;
+}
+
+let _appCardWired = false;
+function initCustomerAppCard() {
+    if (_appCardWired) return;
+    _appCardWired = true;
+
+    document.getElementById('btnCopyAppLink')?.addEventListener('click', async () => {
+        const link = val('settingAppLink');
+        if (!link) return showToast('No app link for this outlet yet.', 'error');
+        try {
+            await navigator.clipboard.writeText(link);
+            showToast('App link copied', 'success');
+        } catch {
+            showToast('Could not copy — select the link and copy it manually.', 'error');
+        }
+    });
+
+    document.getElementById('btnShowAppQr')?.addEventListener('click', async () => {
+        const link = val('settingAppLink');
+        const box = document.getElementById('appLinkQrBox');
+        if (!link || !box) return showToast('No app link for this outlet yet.', 'error');
+        if (box.dataset.shown === '1') {
+            box.classList.add('hidden');
+            box.innerHTML = '';
+            box.dataset.shown = '';
+            return;
+        }
+        const ok = await ensureQrLib();
+        if (!ok || !window.QRCode) return showToast('QR library could not load — check the connection.', 'error');
+        box.innerHTML = '';
+        new window.QRCode(box, { text: link, width: 180, height: 180, colorDark: '#1a1a1a', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
+        box.classList.remove('hidden');
+        box.dataset.shown = '1';
+    });
+}
+
 // Settings > Features: mirror the toggle into the card status and the
 // Discount Approval inputs (greyed out while the feature is off).
 function applyFeatureUI() {
@@ -188,6 +250,9 @@ export async function loadStoreSettings() {
         setVal('settingLng', s.lng || '85.026889');
         const coordsEl = document.getElementById('displayCoords');
         if (coordsEl) coordsEl.innerText = `${s.lat || '25.887444'}, ${s.lng || '85.026889'}`;
+
+        // 1b. Customer app link — the installable PWA scoped to THIS outlet.
+        populateAppLink();
 
         // 2. Delivery & Security
         const d = del || {};

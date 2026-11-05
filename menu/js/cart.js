@@ -55,6 +55,9 @@ export function restoreCart(key) {
         if (saved) Cart.lines = JSON.parse(saved);
         else Cart.lines = {};
     } catch { Cart.lines = {}; }
+    // Repaint the badge/bar for the restored lines — restoring used to be
+    // silent, so a reload with items in the cart showed no count.
+    window.dispatchEvent(new CustomEvent('cart:changed'));
 }
 
 /**
