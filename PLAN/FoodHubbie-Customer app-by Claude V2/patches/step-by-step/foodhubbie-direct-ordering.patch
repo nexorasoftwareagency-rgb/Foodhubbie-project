@@ -1,0 +1,76 @@
+From 5d640338957eb964fca3ad5d66cd6f0ff17eb36e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 00:28:46 +0000
+Subject: [PATCH] Direct app: verify cart/profile hand-off to delivery
+ checkout; plan 2a/2b
+
+Adds a browser check that a cart built in the no-table app and the signed-in profile
+arrive in delivery.html. Splits Phase 2 in the plan: 2a (this) needs no rules/bot/billing
+change; 2b (pickup, native checkout) lists the decisions it depends on.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ed5NQtedhQ5SdCJqqDJpCe
+---
+ docs/PLAN-DEDICATED-CUSTOMER-APP.md |  8 +++++++-
+ tests/direct-mode.check.mjs         | 22 ++++++++++++++++++++++
+ 2 files changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/docs/PLAN-DEDICATED-CUSTOMER-APP.md b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+index 3e2d3d4..cdfa943 100644
+--- a/docs/PLAN-DEDICATED-CUSTOMER-APP.md
++++ b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+@@ -17,7 +17,8 @@
+ | Phase | What | Status |
+ |---|---|---|
+ | 1 | Sign-in gate (first open), menu as home without a table (direct mode), table token only reused within 4 h, no-table cart shows an order-mode chooser | **Done in this branch** |
+-| 2 | Order modes at checkout: Dine-in (table token), Delivery, Pickup. New order sources + rules (`direct_delivery`, `direct_pickup`), emulator-tested | Not started |
++| 2a | Delivery from the direct app: cart + profile carry over to the existing delivery checkout (same tab, same origin). No rules, bot or billing change | **Done in branch `feat/direct-ordering`** |
++| 2b | Pickup, and a native in-app checkout (no hop to `delivery.html`). Needs the decisions below | Not started |
+ | 3 | Bottom tabs for direct mode: Menu · Cart · Orders · Loyalty · Account (Orders = full phone-keyed history) | Not started |
+ | 4 | Payment history: record method/status on orders, show per-order payment and a receipt view | Not started |
+ | 5 | Retire `delivery.html` as a separate app (redirect to the single app); migrate service-worker cache | Not started |
+@@ -36,3 +37,8 @@
+ 
+ ## Test status
+ - Phase 1: Playwright run with a stubbed Firebase (see `tests/direct-mode.check.mjs`). Not run against real Firebase, a real phone, or iOS install.
++
++## Phase 2b — decisions needed before building
++Delivery orders are identified everywhere by `source === 'webview_delivery'`: the bot's server-side finalization (discount re-check, reward-code burn, stock deduction, profile save), the Admin order lists, and **billing** (`shared/cost-math.js`: ₹5 flat, or 2% in the percentage package).
++- A new source (`direct_delivery` / `direct_pickup`) means touching all of those, plus new rules in `database.rules.json` (emulator-tested), plus a Pickup status flow in Admin (no rider).
++- **Pricing question for the owner:** should an order placed in the restaurant's own app be billed like WhatsApp ordering (₹5 / 2%) or like other channels (₹2 / 1%)? Today's direct delivery already lands as `webview_delivery`, i.e. the WhatsApp rate. This is NOT changed by Phase 2a.
+diff --git a/tests/direct-mode.check.mjs b/tests/direct-mode.check.mjs
+index 90e84c4..97f40be 100644
+--- a/tests/direct-mode.check.mjs
++++ b/tests/direct-mode.check.mjs
+@@ -150,6 +150,28 @@ await scenario('direct-mode: add a dish, Place order opens the chooser (no table
+     assert.equal(await page.isVisible('#directOrderChooser'), false);
+ });
+ 
++await scenario('chooser -> delivery app keeps the cart and the signed-in profile', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210'); await page.fill('#signInName', 'Rahul');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    await page.getByText('Margherita').first().click();
++    await page.waitForSelector('#screenCustomize.active');
++    await page.click('#btnAddToOrder');
++    await page.waitForSelector('#screenMenu.active');
++    await page.evaluate(() => document.getElementById('btnOpenCartFromMenu').click());
++    await page.waitForSelector('#screenCart.active');
++    await page.evaluate(() => document.getElementById('btnPlaceOrder').click());
++    await page.waitForSelector('#directOrderChooser:not(.hidden)');
++    await Promise.all([page.waitForURL(/delivery\.html\?o=pizza/), page.click('#directDeliveryLink')]);
++    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenMenu', null, { timeout: 8000 });
++    await page.waitForFunction(() => Number(document.getElementById('bottomNavCartCount')?.textContent) >= 1, null, { timeout: 5000 });
++    // profile is shared (same origin): checkout fields are pre-filled
++    const vals = await page.evaluate(() => [document.getElementById('checkoutName')?.value, document.getElementById('checkoutPhone')?.value]);
++    assert.deepEqual(vals, ['Rahul', '9876543210']);
++});
++
+ await browser.close(); server.close();
+ console.log(failures ? `${failures} FAILED` : 'direct-mode ALL PASSED');
+ process.exit(failures ? 1 : 0);
+-- 
+2.43.0
+

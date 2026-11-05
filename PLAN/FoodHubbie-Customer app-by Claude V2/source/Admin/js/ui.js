@@ -1,0 +1,618 @@
+import { MIN_TOPUP } from '../../shared/cost-math.js';
+import { haptic } from './utils.js';
+import { showToast, showConfirm } from './ui-utils.js';
+import { state } from './state.js';
+import { toggleNotificationSheet, updateNotificationUI, updateNotificationSettingsUI } from './features/notifications.js';
+
+const _modCache = {};
+function mod(name) {
+    if (!_modCache[name]) _modCache[name] = import(`./features/${name}.js`);
+    return _modCache[name];
+}
+let _lucidePromise = null;
+export async function loadLucide() {
+    if (window.lucide) return window.lucide;
+    if (!_lucidePromise) {
+        _lucidePromise = import('https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js')
+            .then(() => window.lucide)
+            .catch(() => { _lucidePromise = null; throw new Error('Failed to load Lucide'); });
+    }
+    return _lucidePromise;
+}
+
+
+
+export const toggleSidebar = () => {
+    const sidebar = document.getElementById('sidebarNav');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (!sidebar) return;
+
+    haptic(15);
+
+    if (window.innerWidth > 1024) {
+        document.body.classList.toggle('sidebar-collapsed');
+    } else {
+        const isActive = sidebar.classList.toggle('active');
+        document.body.classList.toggle('sidebar-active', isActive);
+        if (overlay) overlay.classList.toggle('active', isActive);
+        
+        if (isActive) {
+            history.pushState({ action: 'closeUI', target: 'sidebar' }, "", window.location.hash);
+        }
+    }
+};
+
+export const closeSidebar = () => {
+    const sidebar = document.getElementById('sidebarNav');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.remove('active');
+    if (overlay) overlay.classList.remove('active');
+    document.body.classList.remove('sidebar-active');
+};
+
+
+// --- ROLE-BASED TAB ACCESS ---
+// Dashboard tabs a role can be granted (id = data-tab on the nav buttons).
+export const TAB_DEFS = [
+    ['dashboard', 'Dashboard'], ['orders', 'Orders'], ['live', 'Kitchen Display'],
+    ['walkin', 'POS (Walk-in)'], ['tables', 'Tables'], ['promotions', 'Promotions'],
+    ['discounts', 'Discounts'], ['menu', 'Menu'], ['categories', 'Categories'],
+    ['combos', 'Combos'],
+    ['menu-browser', 'Menu Browser'], ['inventory', 'Inventory'], ['riders', 'Riders'],
+    ['customers', 'Customers'], ['loyalty', 'Loyalty'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
+    ['riderAnalytics', 'Rider Analytics'], ['feedback', 'Feedback'], ['liveTracker', 'Live Tracker'],
+    ['payments', 'Payments'], ['expenses', 'Expenses'], ['notifications', 'Notifications'],
+    ['costs', 'Costs'], ['settings', 'Settings']
+];
+const ALL_TABS = TAB_DEFS.map(t => t[0]);
+
+// Tabs usable while the outlet is locked ("setup mode": new restaurant before its first wallet top-up).
+// Everything that takes orders or spends money (POS, orders, kitchen, riders, promotions, chat...) is excluded.
+// Discounts is in: offers can be prepared before go-live and the tab has no side effects.
+// Chat is NOT in: it is the customer-conversation tab, and the WhatsApp connection is done by Supreme.
+// The database rules also refuse order/table-session writes while locked; this list is the friendly UI layer.
+export const SETUP_TABS = ['dashboard', 'menu', 'categories', 'combos', 'menu-browser', 'tables', 'discounts', 'inventory', 'settings', 'costs', 'notifications'];
+const _allExcept = (skip) => ALL_TABS.filter(t => !skip.includes(t));
+
+// Built-in matrix — the default for every outlet until an admin saves a
+// customized copy to settings/roles (Staff Management → Roles).
+// Levels feed staff-edit hierarchy: supreme 4, super 3, owner 2, manager 1, cashier 0, waiter -1.
+export const DEFAULT_ROLES = {
+    // 'Admin' is auth.js's default role (role: adminData.role || 'Admin') — must exist here or canAccessTab fail-closed denies every default login (03df0f7 fallout)
+    admin:   { name: 'Admin',   level: 2, tabs: ALL_TABS },
+    owner:   { name: 'Owner',   level: 2, tabs: ALL_TABS },
+    manager: { name: 'Manager', level: 1, tabs: _allExcept(['settings']) },
+    cashier: { name: 'Cashier', level: 0, tabs: ['dashboard', 'walkin', 'tables', 'orders', 'live', 'notifications'] },
+    waiter:  { name: 'Waiter',  level: -1, tabs: ['orders', 'live', 'notifications'] }
+};
+
+// Active role set for this outlet (settings/roles) — defaults until customized.
+export const getRoles = () => state.roles || DEFAULT_ROLES;
+
+// Hierarchy level for a role name. Supreme/super are email-derived fixed
+// tiers; everything else comes from its role record. Unknown role = -99.
+export const roleLevel = (role) => {
+    const k = (role || '').toLowerCase().trim();
+    if (k === 'supreme admin') return 4;
+    if (k === 'super admin') return 3;
+    return Number(getRoles()[k]?.level ?? -99);
+};
+
+let _roleWarned = false;
+export const canAccessTab = (tabId) => {
+    if (state.adminData?.isSuper) return true; // supreme/super bypass the matrix
+    const key = (state.adminData?.role || '').toLowerCase().trim();
+    const role = getRoles()[key];
+    if (role) return !Array.isArray(role.tabs) || role.tabs.includes(tabId);
+    if (!_roleWarned) {
+        _roleWarned = true;
+        console.warn(`[RoleAccess] Missing/unknown role "${key}" — access denied`);
+    }
+    return false; // deny by default for unknown roles
+};
+
+// --- PHASE 3.25: DATA LOADING (extracted for clarity) ---
+export async function loadTabData(tabId) {
+    switch (tabId) {
+        case 'dashboard': {
+            const [{ loadRiders: lr, isRidersSubscribed }, { renderOrders }] = await Promise.all([
+                mod('riders'), mod('orders')
+            ]);
+            // Dashboard boot can land after the Riders tab already subscribed
+            // (module imports are async) — reloading here would drop the
+            // riderStats listener and blank every rider's Orders/Wallet.
+            if (!isRidersSubscribed()) lr({ withStats: false });
+            renderOrders(state.lastOrdersSnap);
+            mod('wallet-alert').then(m => m.loadWalletAlert()).catch(e => console.warn('[UI] wallet alert failed:', e));
+            mod('setup-checklist').then(m => m.loadSetupChecklist()).catch(e => console.warn('[UI] setup checklist failed:', e));
+            break;
+        }
+        case 'orders': {
+            const { loadOrdersPage } = await mod('orders');
+            loadOrdersPage(true);
+            break;
+        }
+        case 'live': {
+            const { loadTableManagement } = await mod('tables');
+            loadTableManagement();
+            break;
+        }
+        case 'liveTracker': {
+            const { initLiveRiderTracker } = await mod('tracker');
+            initLiveRiderTracker();
+            break;
+        }
+        case 'catalog':
+        case 'categories':
+        case 'menu': {
+            const { loadCategories, loadMenu } = await mod('catalog');
+            loadCategories();
+            loadMenu();
+            break;
+        }
+        case 'combos': {
+            const { loadCombos } = await mod('catalog');
+            loadCombos();
+            break;
+        }
+        case 'menu-browser': {
+            const { initMenuBrowser } = await mod('menu-browser');
+            initMenuBrowser();
+            break;
+        }
+        case 'riders': {
+            const { loadRiders } = await mod('riders');
+            loadRiders();
+            break;
+        }
+        case 'feedback': {
+            const { loadFeedbacks } = await mod('feedback');
+            loadFeedbacks();
+            break;
+        }
+        case 'loyalty': {
+            const { loadLoyalty } = await mod('loyalty');
+            loadLoyalty();
+            break;
+        }
+        case 'walkin': {
+            const { loadWalkinMenu } = await mod('pos');
+            loadWalkinMenu();
+            break;
+        }
+        case 'settings': {
+            const { loadStoreSettings } = await mod('settings');
+            loadStoreSettings();
+            break;
+        }
+        case 'customers': {
+            const { loadCustomers } = await mod('customers');
+            loadCustomers();
+            break;
+        }
+        case 'reports': {
+            const { loadReports } = await mod('analytics');
+            loadReports();
+            break;
+        }
+        case 'inventory': {
+            const { loadInventory } = await mod('inventory');
+            loadInventory();
+            break;
+        }
+        case 'riderAnalytics': {
+            const { initRiderAnalytics } = await mod('rider-analytics');
+            initRiderAnalytics();
+            break;
+        }
+        case 'payments': { const { renderOrders } = await mod('orders'); renderOrders(state.lastOrdersSnap); break; }
+        case 'costs': {
+            const { loadCosts } = await mod('costs');
+            loadCosts();
+            break;
+        }
+        case 'expenses': {
+            const { state } = await import('./state.js');
+            if (!state.features?.expense) {
+                showToast('Expense feature is disabled. Enable it in Settings > Features.', 'info');
+                // Switch back to previous tab or dashboard
+                const prevTab = document.querySelector('.nav-btn.active')?.dataset.tab || 'dashboard';
+                document.querySelector(`[data-tab="${prevTab}"]`)?.click();
+                return;
+            }
+            const { loadExpenses, initExpenseModals } = await mod('expenses');
+            loadExpenses();
+            initExpenseModals();
+            break;
+        }
+        case 'promotions': {
+            const { loadPromotions } = await mod('promotions');
+            loadPromotions();
+            break;
+        }
+        case 'discounts': {
+            const { loadDiscounts } = await mod('discounts');
+            loadDiscounts();
+            break;
+        }
+        case 'tables': {
+            const { loadTableManagement } = await mod('tables');
+            loadTableManagement();
+            break;
+        }
+        case 'chat': {
+            const { loadChat } = await mod('chat');
+            loadChat();
+            break;
+        }
+        default: {
+            console.warn('[loadTabData] No data loader for tab:', tabId);
+        }
+    }
+}
+
+export const switchTab = async (tabId, skipHistory = false) => {
+    if (!canAccessTab(tabId)) {
+        // Boot with a blocked landing tab (e.g. hash/#dashboard for a waiter):
+        // fall back to the first tab this role can open instead of a blank shell.
+        if (!state.currentActiveTab) {
+            const fallback = TAB_DEFS.find(([id]) => canAccessTab(id));
+            if (fallback) return switchTab(fallback[0], true);
+        }
+        window.__adminLogger?.warn?.('NAV', `Blocked by role: ${tabId}`);
+        showToast(`You don't have access to that section`, 'warning');
+        return;
+    }
+    if (state.locked && !SETUP_TABS.includes(tabId)) {
+        if (!state.currentActiveTab) return switchTab('dashboard', true);
+        showLockedScreen();
+        return;
+    }
+    if (state.currentActiveTab === tabId) {
+        window.__adminLogger?.info('NAV', `Tab already active: ${tabId}`);
+        return;
+    }
+
+    // --- PHASE 3: DIRTY STATE TRACKING ---
+    if (state.settingsDirty && state.currentActiveTab === 'settings') {
+        const discard = await showConfirm(
+            'You have unsaved changes in Settings. Do you want to discard them?',
+            'Unsaved Changes'
+        );
+        
+        if (!discard) {
+            document.querySelectorAll('.sidebar li, .bottom-nav .nav-item').forEach(el => {
+                el.classList.remove('active');
+                if (el.id === `menu-${state.currentActiveTab}` || el.getAttribute('data-tab') === state.currentActiveTab) {
+                    el.classList.add('active');
+                }
+            });
+            return;
+        }
+        state.settingsDirty = false;
+    }
+
+    const previousTab = state.currentActiveTab;
+    state.currentActiveTab = tabId;
+    const titleEl = document.getElementById('currentTabTitle');
+    if (titleEl) titleEl.textContent = TAB_DEFS.find(([id]) => id === tabId)?.[1] || tabId;
+    window.__adminLogger?.nav('TAB', `Switching: ${previousTab || '(none)'} → ${tabId}`);
+
+    // Reset orders pagination when leaving the orders tab
+    if (previousTab === 'orders' && tabId !== 'orders') {
+        state.ordersPageData = [];
+        state.ordersPageCursor = null;
+        state.ordersPageLoading = false;
+        state.hasMoreOrders = true;
+    }
+
+    if (!skipHistory) {
+        history.pushState({ tabId }, "", `#${tabId}`);
+    }
+
+    closeSidebar();
+    
+    // Close other mobile drawers
+    const orderDrawer = document.getElementById('orderDrawer');
+    const orderOverlay = document.getElementById('orderDrawerOverlay');
+    const drawerWasOpen = orderDrawer?.classList.contains('active');
+    if (orderDrawer) orderDrawer.classList.remove('active');
+    if (orderOverlay) orderOverlay.classList.remove('active');
+    if (drawerWasOpen) document.body.style.overflow = '';
+    
+    window.__tables?.closeDrawer?.();
+    
+    toggleNotificationSheet(false);
+
+    if (tabId === 'notifications') {
+        state.isNotificationPending = false;
+        updateNotificationUI();
+    }
+
+    if (tabId === 'settings') {
+        updateNotificationSettingsUI();
+    }
+
+    const body = document.body;
+    const posTab = document.getElementById('tab-walkin');
+
+    // Handle POS (Walk-in) Fullscreen on Mobile
+    const mobileHeader = document.getElementById('mobileAppHeader');
+    if (tabId === 'walkin') {
+        if (window.innerWidth < 768) {
+            body.classList.add('pos-immersion-active');
+            if (mobileHeader) mobileHeader.style.setProperty('display', 'none', 'important');
+        }
+        if (posTab) posTab.classList.add('pos-fullscreen');
+    } else {
+        body.classList.remove('pos-immersion-active');
+        if (mobileHeader) mobileHeader.style.display = '';
+        if (posTab) posTab.classList.remove('pos-fullscreen');
+    }
+
+    // Handle Reports Fullscreen/Immersive
+    if (tabId === 'reports') {
+        body.classList.add('reports-immersive');
+    } else {
+        body.classList.remove('reports-immersive');
+    }
+
+    // Update Sidebar Navigation Active State
+    document.querySelectorAll('.sidebar li').forEach(li => li.classList.remove('active'));
+    const mainItem = document.getElementById(`menu-${tabId}`);
+    if (mainItem) mainItem.classList.add('active');
+
+    // Update Mobile Bottom Nav & Header Title
+    const mobileTitle = document.getElementById('mobileTabTitle');
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('data-tab') === tabId) {
+            item.classList.add('active');
+            if (mobileTitle) {
+                const label = item.querySelector('span');
+                if (label) mobileTitle.textContent = label.textContent;
+            }
+        }
+    });
+
+    // Settings registers its delegated subtab handler at module eval — load it
+    // before the tab is visible so the first subtab click can't land in the gap.
+    // (Preloading at boot was worse: settings.js ran pre-auth and its blocked-
+    // numbers read was denied, leaving an empty cache that Save then wrote as null.)
+    if (tabId === 'settings') await mod('settings').catch(e => console.warn('[UI] settings module load failed:', e));
+
+    // Switch Content Tabs
+    document.querySelectorAll('.tab-content').forEach(div => {
+        div.classList.add('hidden');
+    });
+
+    const target = document.getElementById(`tab-${tabId}`);
+    console.log(`[SWITCH] target=${!!target}, id=tab-${tabId}`);
+    if (target) {
+        target.classList.remove('hidden');
+        const _targetDisplay = getComputedStyle(target).display;
+        const _targetHeight = target.offsetHeight;
+        console.log(`[SWITCH] removed hidden, classes="${target.className}", display=${_targetDisplay}, height=${_targetHeight}`);
+
+        const mainEl = document.querySelector('.main');
+        if (mainEl) mainEl.scrollTop = 0;
+        if (document.documentElement) document.documentElement.scrollTop = 0;
+        if (document.body) document.body.scrollTop = 0;
+
+        // --- PHASE 3.25: PARALLEL CLEANUP (error-isolated) ---
+        const cleanupTasks = [];
+        if (tabId !== 'catalog' && tabId !== 'categories') cleanupTasks.push(mod('catalog').then(m => m.cleanupCatalog?.()));
+        if (tabId !== 'riders' && tabId !== 'dashboard' && tabId !== 'live') cleanupTasks.push(mod('riders').then(m => m.cleanupRiders?.()));
+        if (tabId !== 'feedback') cleanupTasks.push(mod('feedback').then(m => m.cleanupFeedbacks?.()));
+        if (tabId !== 'liveTracker') cleanupTasks.push(mod('tracker').then(m => { m.stopRiderLocationListener?.(); m.cleanupLiveRiderTracker?.(); }));
+        if (tabId !== 'inventory') cleanupTasks.push(mod('inventory').then(m => m.cleanupInventory?.()));
+        if (tabId !== 'reports') cleanupTasks.push(mod('analytics').then(m => m.cleanupReports?.()));
+        if (tabId !== 'promotions') cleanupTasks.push(mod('promotions').then(m => m.cleanupPromotions?.()));
+        if (tabId !== 'discounts') cleanupTasks.push(mod('discounts').then(m => m.cleanupDiscounts?.()));
+        if (tabId !== 'discounts') cleanupTasks.push(mod('discountsReports').then(m => m.closeDiscountsReports?.()));
+        if (tabId !== 'tables') cleanupTasks.push(mod('tables').then(m => m.cleanupTables?.()));
+        if (tabId !== 'chat') cleanupTasks.push(mod('chat').then(m => m.cleanupChat?.()));
+        if (tabId !== 'menu-browser') cleanupTasks.push(mod('menu-browser').then(m => m.cleanupMenuBrowser?.()));
+        if (tabId !== 'expenses') cleanupTasks.push(mod('expenses').then(m => m.cleanupExpenses?.()));
+        if (tabId !== 'costs') cleanupTasks.push(mod('costs').then(m => m.cleanupCosts?.()));
+        if (tabId !== 'security-audit') cleanupTasks.push(mod('security-audit').then(m => m.cleanupSecurityAudit?.()));
+        await Promise.allSettled(cleanupTasks);
+        console.log(`[SWITCH] cleanup done for ${tabId}`);
+
+// --- PHASE 3.25: DATA REFRESH ---
+    window.__adminLogger?.data('TAB', `Loading data for: ${tabId}`);
+    try {
+        await loadTabData(tabId);
+    } catch (loadErr) {
+        window.__adminLogger?.error('TAB', `Load error for ${tabId}: ${loadErr.message}`, loadErr);
+    }
+
+    await loadLucide();
+        window.lucide.createIcons({ root: target });
+
+        applyDataLabels();
+
+        console.log(`[SWITCH] DONE: tab=${tabId}, height=${target.offsetHeight}, childCount=${target.children.length}`);
+        window.__adminLogger?.success('TAB', `Tab loaded: ${tabId}`);
+    } else {
+        window.__adminLogger?.warn('TAB', `Tab target not found: tab-${tabId}`);
+    }
+};
+
+export const applyDataLabels = () => {
+    const isMobile = window.innerWidth <= 768;
+    document.querySelectorAll('table.premium-table-v4, table.mobile-card-table').forEach(table => {
+        // Tables in inactive tabs are invisible; labelling them is pure work and
+        // this runs on every DOM mutation. Modals live outside .tab-content, so
+        // they are still labelled.
+        if (table.closest('.tab-content.hidden')) return;
+        const headers = [];
+        table.querySelectorAll('thead th').forEach(th => {
+            headers.push(th.textContent.trim());
+        });
+        if (headers.length === 0) return;
+        table.querySelectorAll('tbody tr').forEach(row => {
+            row.querySelectorAll('td').forEach((td, index) => {
+                if (index < headers.length) {
+                    td.setAttribute('data-label', headers[index]);
+                }
+            });
+        });
+        table.classList.toggle('mobile-card-table', isMobile);
+    });
+};
+
+let _dataLabelTimer = null;
+const tableObserver = new MutationObserver(() => {
+    if (_dataLabelTimer) cancelAnimationFrame(_dataLabelTimer);
+    _dataLabelTimer = requestAnimationFrame(() => { _dataLabelTimer = null; applyDataLabels(); });
+});
+const observerTarget = document.getElementById('main-content') || document.body;
+tableObserver.observe(observerTarget, { childList: true, subtree: true });
+
+export const toggleMobileCart = (state) => import('./features/pos.js').then(m => m.toggleMobileCart(state));
+
+const SUPPORT_NUMBER = '919724649971';
+// Build a prefilled support link so every hand-off says what the owner actually needs.
+export const supportWa = (text) => `https://wa.me/${SUPPORT_NUMBER}?text=${encodeURIComponent(text)}`;
+export const SUPPORT_WA = supportWa(`Hi FoodHubbie Team! I want to top up my wallet (minimum \u20B9${MIN_TOPUP}) and go live.`);
+const LOCK_MSG = `Your restaurant is in <strong>setup mode</strong>. You can set up your menu, tables and settings now. To start taking orders, add a minimum wallet balance of <strong>\u20B9${MIN_TOPUP.toLocaleString('en-IN')}</strong>. Contact FoodHubbie support and we will add it once your payment is received.`;
+
+// Dismissible popup shown when a locked outlet tries something that needs go-live.
+export function showLockedScreen() {
+    let el = document.getElementById('locked-screen');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'locked-screen';
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('aria-label', 'Top up required to go live');
+        el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,10,10,.8);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;';
+        el.innerHTML = `
+            <div style="max-width:480px;color:#fff">
+                <h2 style="font-size:22px;font-weight:800;margin-bottom:12px">Top up to go live</h2>
+                <p style="font-size:15px;color:rgba(255,255,255,.8);line-height:1.7;margin-bottom:24px">${LOCK_MSG}</p>
+                <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+                    <button type="button" class="btn btn-primary" id="lockedContactBtn" style="padding:12px 24px;font-size:15px">Contact support</button>
+                    <button type="button" class="btn btn-secondary" id="lockedCloseBtn" style="padding:12px 24px;font-size:15px">Continue setup</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.querySelector('#lockedContactBtn').addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+        const close = () => { el.style.display = 'none'; };
+        el.querySelector('#lockedCloseBtn').addEventListener('click', close);
+        el.addEventListener('click', (e) => { if (e.target === el) close(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && el.style.display !== 'none') close(); });
+    }
+    el.style.display = 'flex';
+    el.querySelector('#lockedCloseBtn')?.focus();
+}
+
+// Called once the outlet is known to be locked: show a slim persistent banner and make sure
+// we are not sitting on an operations tab.
+export function enterSetupMode() {
+    document.body.classList.add('setup-mode');
+    if (!document.getElementById('locked-banner')) {
+        const b = document.createElement('div');
+        b.id = 'locked-banner';
+        b.setAttribute('role', 'status');
+        b.style.cssText = 'position:sticky;top:0;z-index:60;background:#fef3c7;color:#78350f;padding:8px 14px;font-size:13px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;';
+        b.innerHTML = `<span>Setup mode: add a minimum wallet balance of \u20B9${MIN_TOPUP.toLocaleString('en-IN')} to start taking orders.</span><button type="button" class="btn-secondary btn-sm" id="lockedBannerBtn">Contact support</button>`;
+        (document.querySelector('.main') || document.body).prepend(b);
+        b.querySelector('#lockedBannerBtn').addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+    }
+    if (state.currentActiveTab && !SETUP_TABS.includes(state.currentActiveTab)) {
+        switchTab('dashboard', true);
+        // Keep the URL in step, otherwise a refresh deep-links straight back to the blocked tab.
+        history.replaceState({ tabId: 'dashboard' }, '', '#dashboard');
+    }
+    // Dim the sections that cannot be used yet, so the sidebar shows what is actually open
+    // instead of offering seven paywalls. They stay clickable — the popup explains why.
+    document.querySelectorAll('.nav-btn[data-tab], .nav-item[data-tab]').forEach((b) => {
+        b.classList.toggle('is-setup-locked', !SETUP_TABS.includes(b.dataset.tab));
+    });
+}
+
+export function leaveSetupMode() {
+    document.body.classList.remove('setup-mode');
+    document.getElementById('locked-banner')?.remove();
+    document.getElementById('locked-screen')?.remove();
+    document.querySelectorAll('.is-setup-locked').forEach((b) => b.classList.remove('is-setup-locked'));
+}
+
+export const ui = {
+    showConfirm,
+    showToast,
+    toggleSidebar,
+    closeSidebar,
+    switchTab,
+    toggleMobileCart
+};
+
+
+// --- INITIAL DATA-LABEL APPLICATION ---
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyDataLabels);
+} else {
+    applyDataLabels();
+}
+
+window.addEventListener('resize', applyDataLabels);
+
+// --- NAV VISIBILITY (role gates + expense feature flag) ---
+async function refreshNavVisibility() {
+    const { state } = await import('./state.js');
+    const expenseOn = state.features?.expense === true;
+    TAB_DEFS.forEach(([tab]) => {
+        const show = canAccessTab(tab) && (tab !== 'expenses' || expenseOn);
+        const li = document.getElementById(`menu-${tab}`);
+        if (li) li.style.display = show ? '' : 'none';
+        document.querySelectorAll(`.nav-item[data-tab="${tab}"]`).forEach(b => b.style.display = show ? '' : 'none');
+    });
+}
+
+let _featureWatchInterval = null;
+function startFeatureFlagWatcher() {
+    if (_featureWatchInterval) return;
+    _featureWatchInterval = setInterval(() => {
+        refreshNavVisibility().catch(console.error);
+    }, 500);
+}
+function stopFeatureFlagWatcher() {
+    if (_featureWatchInterval) {
+        clearInterval(_featureWatchInterval);
+        _featureWatchInterval = null;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await refreshNavVisibility();
+    startFeatureFlagWatcher();
+});
+
+window.addEventListener('popstate', (event) => {
+    const state = event.state;
+    
+    // 1. Handle UI Component closing (Back button closes drawer/sidebar first)
+    if (state && (state.action === 'closeDrawer' || state.action === 'closeUI')) {
+        if (state.action === 'closeDrawer') {
+            const el = document.getElementById(state.targetId);
+            if (el) el.classList.remove('active');
+        } else if (state.target === 'sidebar') {
+            closeSidebar();
+        } else if (state.target === 'notifications') {
+            toggleNotificationSheet(false);
+        }
+        return;
+    }
+
+    // 2. Handle Tab Navigation
+    if (state && state.tabId) {
+        console.log(`[History] Navigating to tab: ${state.tabId}`);
+        switchTab(state.tabId, true);
+    } else {
+        const hash = window.location.hash.replace('#', '');
+        if (hash) switchTab(hash, true);
+        else switchTab('dashboard', true);
+    }
+});

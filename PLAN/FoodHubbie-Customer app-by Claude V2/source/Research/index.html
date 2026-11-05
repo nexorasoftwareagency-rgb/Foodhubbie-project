@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foodhubbie ERP — Cost Analysis Hub (Firebase Blaze · WhatsApp · Servers)</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Foodhubbie ERP — Cost Analysis Hub</h1>
+  <div class="sub">
+    <b>Every outcome has its own page</b> — pick a possibility below for full detail: per-order cost, 10 / 25 / 50 / 100 orders per day per restaurant, all restaurant counts.<br>
+    Research set · 2026-09-27 · one runnable model behind every number: <code>node Research\scripts\cost-calc.js [--fixed] [--mktg=N]</code> · research only, no codebase changes
+  </div>
+</header>
+
+<nav>
+  <a href="#possibilities">Possibilities</a>
+  <a href="#verify">Meta 24-hr verdict</a>
+  <a href="#pricing">Pricing</a>
+  <a href="#model">Model</a>
+  <a href="#blaze">Blaze + UPI</a>
+  <a href="#levers">Levers</a>
+  <a href="#servers">Servers</a>
+  <a href="#sources">Sources</a>
+</nav>
+
+<!-- ============ POSSIBILITIES ============ -->
+<h2 id="possibilities"><span class="n">·</span>The 4 possibilities — one page each</h2>
+
+<div class="poss">
+  <a class="p1" href="possibility-1-no-bot.html">
+    <div class="pn">Possibility 1</div>
+    <div class="pt">No WhatsApp Bot</div>
+    <div class="pd">Firebase only, EC2 terminated. QR menu + POS ordering; everything serverless. The cost floor every other outcome builds on.</div>
+    <div class="pp">₹1,174 – ₹27,780/mo · ₹0.05–0.68 /order</div>
+  </a>
+  <a class="p2" href="possibility-2-baileys.html">
+    <div class="pn">Possibility 2</div>
+    <div class="pt">Bot + Baileys (QR)</div>
+    <div class="pd">Full WhatsApp bot on the unofficial transport — Meta fee ₹0 forever. Same features, ban risk. Pilot favorite.</div>
+    <div class="pp">₹2,951 – ₹42,872/mo · ₹0.11–1.18 /order</div>
+  </a>
+  <a class="p3" href="possibility-3-meta-free.html">
+    <div class="pn">Possibility 3 · till Sep 30</div>
+    <div class="pt">Official Meta API — FREE window</div>
+    <div class="pd">Official Cloud API, customer-messaged-first → replies in the 24-hr window cost ₹0 (verified). Only promos billed. Expires in 4 days.</div>
+    <div class="pp">₹3,209 – ₹68,672/mo · ₹0.20–1.27 /order</div>
+  </a>
+  <a class="p4" href="possibility-4-meta-billed.html">
+    <div class="pn">Possibility 4 · from Oct 1</div>
+    <div class="pt">Official Meta API — billed</div>
+    <div class="pd">The production default: ₹0.115/msg on every message (no free tier counted — calculate all); promos ₹0.86/msg. Meta is ~88% of the bill at scale.</div>
+    <div class="pp">₹5,969 – ₹3,44,672/mo · ₹1.12–2.19 /order</div>
+  </a>
+</div>
+
+<div class="box">
+  <div class="t">How to read a possibility page</div>
+  Every page has: what you pay / don't pay → full table of <b>TOTAL ₹/mo · ₹/order · ₹/restaurant</b> for <b>10, 25, 50, 100 orders/day per restaurant × 10, 50, 100 restaurants</b> (<b>images in Firebase Storage — the default</b>; no base64 in RTDB) → what the outcome means → a 4-way comparison. <b>₹/order</b> = total ÷ (orders × 30 days × restaurants).
+</div>
+
+<!-- ============ VERIFY ============ -->
+<h2 id="verify"><span class="n">·</span>Meta 24-hr window verdict (verified Sep 27, 2026)</h2>
+<table>
+  <thead><tr><th>Period</th><th>Verdict</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td><b>Now → Sep 30, 2026</b></td><td><span class="pill ok">TRUE — free</span></td><td>Customer messages first → bot replies inside the 24-hr window = <b>₹0, unlimited</b> → <a href="possibility-3-meta-free.html">Possibility 3</a></td></tr>
+    <tr><td><b>From Oct 1, 2026</b></td><td><span class="pill warn">CHANGES</span></td><td>Service replies billed at <b>₹0.115/msg</b> (model counts <b>no free allowance</b> — worst case); in-window utility billable again; CTWA/ads keep free 72-hr window → <a href="possibility-4-meta-billed.html">Possibility 4</a></td></tr>
+    <tr><td>Proactive (bot writes first)</td><td><span class="pill bad">always billed</span></td><td>Utility templates ₹0.115 were never part of the customer-first free rule</td></tr>
+    <tr><td>Inbound customer message</td><td><span class="pill ok">always free</span></td><td>any time</td></tr>
+  </tbody>
+</table>
+<p class="small">Multi-sourced: Twilio (Sep 17 2026) · yCloud (Sep 4 2026) · Wati · sendiee · myoperator · saysimple · wawcd · dragapp rate card (eff. Jul 1 2026).</p>
+
+<!-- ============ PRICING ============ -->
+<h2 id="pricing"><span class="n">·</span>Pricing fundamentals (Blaze, us-central1, 2026)</h2>
+<table>
+  <thead><tr><th>Resource</th><th>Free allowance (kept on Blaze)</th><th class="num">Paid rate</th></tr></thead>
+  <tbody>
+    <tr><td>RTDB download</td><td>10 GB/month</td><td class="num"><b>₹88/GB</b></td></tr>
+    <tr><td>RTDB storage</td><td>1 GB</td><td class="num"><b>₹440/GB-month</b></td></tr>
+    <tr><td>Hosting transfer</td><td>~10.9 GB/mo</td><td class="num">₹13.20/GB</td></tr>
+    <tr><td>Storage download (legacy bucket)</td><td>1 GB/day ≈ 30 GB/mo</td><td class="num">₹10.56/GB</td></tr>
+    <tr><td>Storage stored</td><td>5 GB</td><td class="num">₹2.29/GB</td></tr>
+    <tr><td>Auth · Functions · Analytics</td><td>our usage: within free</td><td class="num"><b>₹0</b></td></tr>
+  </tbody>
+</table>
+<p class="small">Free allowances are <b>project-wide shared pools</b> → 1 restaurant = ₹0/mo; first bill (≈₹49) appears at ~4 busy restaurants. Meta India rate card: service/utility/auth <b>₹0.115</b> · marketing <b>₹0.86</b> · inbound ₹0.</p>
+
+<!-- ============ MODEL ============ -->
+<h2 id="model"><span class="n">·</span>Model — measured facts & labeled assumptions</h2>
+<div class="grid2">
+<div>
+<h3>Measured (live DB, P3-8/P3-9)</h3>
+<ul>
+  <li>Menu payload: <b>~75 KB/scan</b> — images in <b>Firebase Storage (default)</b>, never base64 in RTDB (base64-in-RTDB = 730 KB/scan, +₹259–22,786/mo)</li>
+  <li>Order record 687 B · menu shell 388 KB · admin 0.5 + riders 1.8 GB/mo/rest</li>
+  <li>Bot worker 110–155 MB/outlet · t3.small caps ~10 outlets</li>
+  <li>Order-flow messages (<code>bot/index.js</code>), <b>delivery orders only</b> (dine-in = QR table → POS): greeting + menu CTA + placed + confirmed + ready + OFD/OTP + reached + delivered → <b>8 msgs/order</b> · 1 conversation/order</li>
+  <li>EC2 runs <b>only</b> the WhatsApp stack → no bot = server ₹0</li>
+</ul>
+</div>
+<div>
+<h3>Assumptions (change via flags)</h3>
+<ul>
+  <li>scans/day = 1.5 × orders (P3-8 calibration)</li>
+  <li>bot msgs = 4 × orders/day · promos = 0.1 × orders/day (<code>--mktg=</code>)</li>
+  <li>No free service allowance in the model — every message billed ₹0.115; promos at <b>₹0.86/msg</b> × 0.1 promo msgs per order/day (the "0.1" is frequency, not rupees)</li>
+  <li>₹88/$ · server: 10 rest→t3.small ₹1,338 · 50→t3.large ₹5,342 · 100→t3.xlarge ₹10,692</li>
+  <li>Image mode: <code>--fixed</code> = images in Firebase Storage</li>
+</ul>
+</div>
+</div>
+
+<!-- ============ BLAZE ============ -->
+<h2 id="blaze"><span class="n">·</span>Blaze upgrade via UPI — the ₹1,000 question</h2>
+<div class="box warn">
+  <div class="t">Why ₹1,000 first</div>
+  India + INR billing requires a one-time prepayment (₹500–1,000) before UPI can be registered — it's <b>prepaid balance, not a fee, refunded if unused</b>. Pay at <a href="https://console.cloud.google.com/billing">console.cloud.google.com/billing</a> → Payment overview → “Prepayment pending” → <b>Pay now</b> → payment method <b>UPI</b> → QR → scan with GPay/PhonePe/Paytm/BHIM. Then Firebase → Upgrade → Blaze links that account. <b>Blaze subscription = ₹0</b>; free allowances kept; budget alerts don't cap usage (set ₹850/₹4,250/₹8,500).
+</div>
+<p class="small">Full guide: <code>BLAZE-UPGRADE-UPI-GUIDE.md</code> · Storage enablement: <code>FIREBASE-STORAGE-USAGE.md</code></p>
+
+<!-- ============ LEVERS ============ -->
+<h2 id="levers"><span class="n">·</span>Cost levers (ranked)</h2>
+<ol>
+  <li><b>Images in Firebase Storage (default)</b> — never base64 in RTDB; storing them there would add ₹259–22,786/mo and 10× the scan payload.</li>
+  <li><b>Prune <code>logs/</code></b> — 67% of nodes; protects the free 1 GB storage (₹440/GB-mo = steepest rate).</li>
+  <li><b>Budget alerts ₹850/₹4,250/₹8,500</b> + <code>.validate</code> rate rules on anonymous sessions.</li>
+  <li><b>App Check on menu</b> — stops leaked-URL scanners burning paid bandwidth.</li>
+  <li><b>Bot strategy ladder:</b> Meta billed (4) → cut promos <code>--mktg=0</code> → Baileys (2) → no bot (1).</li>
+  <li>EC2 1-yr commitment ~37% off server; cheaper host: Vultr/DO ₹880–1,056 (see below).</li>
+</ol>
+
+<!-- ============ SERVERS ============ -->
+<h2 id="servers"><span class="n">·</span>Server alternatives (bot box only)</h2>
+<table>
+  <thead><tr><th>Option</th><th class="num">₹/mo</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>Oracle Always Free (Mumbai)</td><td class="num"><b>₹0</b></td><td>rug-risk: free-tier rules cut Jun 2026, idle-reclaim — dev/staging only</td></tr>
+    <tr><td>Hetzner CX23 (EU/SG)</td><td class="num"><b>₹616</b></td><td>cheapest trustworthy; no India DC (~70 ms)</td></tr>
+    <tr><td><b>Vultr Mumbai / DO Bengaluru</b></td><td class="num"><b>₹880–1,056</b></td><td><b>production pick</b> — India latency, flat billing</td></tr>
+    <tr><td>Stay AWS (1-yr RI / Lightsail)</td><td class="num">~₹880</td><td>zero migration, keeps SSM</td></tr>
+    <tr><td>EC2 on-demand (model default)</td><td class="num">₹1,338–10,692</td><td>t3.small / t3.large / t3.xlarge by outlet count</td></tr>
+  </tbody>
+</table>
+<p class="small">Full comparison + migration notes: <code>SERVER-ALTERNATIVES.md</code>.</p>
+
+<!-- ============ SOURCES ============ -->
+<h2 id="sources"><span class="n">·</span>Sources, re-run & companion docs</h2>
+<pre><code>node Research\scripts\cost-calc.js --fixed        # images in Storage  <-- all site numbers
+node Research\scripts\cost-calc.js                # legacy: images in RTDB (docs only)
+node Research\scripts\cost-calc.js --mktg=0.5     # promos = 0.5 x orders/day</code></pre>
+<p class="small">Prints: base matrix · BOT COST vs WITHOUT BOT · NO-BOT RUN SHEET · ALL POSSIBILITIES · <b>4 POSSIBILITY sections (10/25/50/100 orders, ₹/order)</b> · asserts.</p>
+<ul class="small">
+  <li>Companion docs: <code>BLAZE-UPGRADE-UPI-GUIDE.md</code> · <code>FIREBASE-STORAGE-USAGE.md</code> · <code>PER-RESTAURANT-COST.md</code> · <code>WHATSAPP-BOT-COST.md</code> · <code>SERVER-ALTERNATIVES.md</code></li>
+  <li>Pricing sources: firebase.google.com/pricing · docs.cloud.google.com/billing (UPI India) · Meta rate card: dragapp/whautomate/saysimple/Twilio/yCloud/Wati/sendiee/myoperator (Sep 2026)</li>
+  <li>Measured data: PLAN/P3-8-…-VERDICT.md · ACCESS.md (EC2 PM2 inventory) · whatsapp/usage counters</li>
+</ul>
+
+<footer>
+  Research set · Foodhubbie ERP · 2026-09-27 · ₹/mo · rates converted at ₹88/$ · all numbers regenerate from <code>Research\scripts\cost-calc.js --fixed --inr</code> — research only, no codebase changes.
+</footer>
+
+</div>
+</body>
+</html>

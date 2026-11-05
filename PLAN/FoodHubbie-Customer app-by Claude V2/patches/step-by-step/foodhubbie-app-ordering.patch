@@ -1,0 +1,1251 @@
+From 20aa1f5aa2a38716e84fdfee96fb636b8e134b26 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 22:05:35 +0000
+Subject: [PATCH] feat(app): complete in-app ordering (delivery + pickup) with
+ live tracking
+
+Checkout screen inside the dedicated customer app, APP order source with
+rules, bot, Admin pickup flow, rider filter, 3% billing recognition,
+tracking and cancel in the Orders tab, plus tests.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ed5NQtedhQ5SdCJqqDJpCe
+---
+ Admin/js/features/costs.js                 |   2 +-
+ Admin/js/features/orders.js                |  21 +-
+ SupremeAdmin/js/features/payment-record.js |   1 +
+ bot/index.js                               |  48 +++-
+ bot/payment-sync.js                        |  15 +-
+ database.rules.json                        |   2 +-
+ docs/PLAN-DEDICATED-CUSTOMER-APP.md        |  19 ++
+ menu/css/app.css                           |  28 +-
+ menu/index.html                            |  55 +++-
+ menu/js/app-checkout.js                    | 293 +++++++++++++++++++++
+ menu/js/app.js                             |  33 ++-
+ menu/js/customer.js                        |  33 ++-
+ menu/js/firebase.js                        |  11 +
+ menu/sw.js                                 |   3 +-
+ rider-app/src/services/orderService.ts     |   3 +-
+ shared/cost-math.js                        |   6 +-
+ tests/direct-mode.check.mjs                | 128 ++++++---
+ tests/payment-sync.check.cjs               |  14 +
+ tests/rules.emulator.mjs                   |  43 +++
+ 19 files changed, 682 insertions(+), 76 deletions(-)
+ create mode 100644 menu/js/app-checkout.js
+
+diff --git a/Admin/js/features/costs.js b/Admin/js/features/costs.js
+index 6d60cbd..36bb23a 100644
+--- a/Admin/js/features/costs.js
++++ b/Admin/js/features/costs.js
+@@ -110,7 +110,7 @@ const _rangeLabel = () => {
+ const _rates = () => ({ ...DEFAULT_RATES, ...(_billing && typeof _billing === 'object' ? _billing.rates || {} : {}) });
+ const _mode = () => normalizeMode(_billing && typeof _billing === 'object' ? _billing.mode : null);
+ 
+-const LABELS = { QR: 'QR menu', POS: 'POS counter', app: 'Foodhubbie-App Orders', webview_delivery: 'WhatsApp / webview (upcoming feature)', WA: 'WhatsApp ordering (upcoming feature)', other: 'Other' };
++const LABELS = { QR: 'QR menu', POS: 'POS counter', app: 'Foodhubbie-App Orders', APP: 'Foodhubbie-App Orders', webview_delivery: 'WhatsApp / webview (upcoming feature)', WA: 'WhatsApp ordering (upcoming feature)', other: 'Other' };
+ const _label = src => LABELS[src] || src;
+ 
+ function _setText(id, txt) {
+diff --git a/Admin/js/features/orders.js b/Admin/js/features/orders.js
+index 1350346..6d95029 100644
+--- a/Admin/js/features/orders.js
++++ b/Admin/js/features/orders.js
+@@ -38,6 +38,8 @@ function isRiderFresh(r) {
+ export const STATUS_SEQUENCES = {
+     'Online': ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Delivered"],
+     'Dine-in': ["Placed", "Confirmed", "Ready", "Served"],
++    // Restaurant-app pickup: no rider. "Served" = handed over to the customer (payment collected then).
++    'Pickup': ["Placed", "Confirmed", "Ready", "Served"],
+     'Default': ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Delivered"]
+ };
+ const LIVE_STATUSES = ["Placed", "Confirmed", "Ready", "Pending", "New", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Dispatched"];
+@@ -606,7 +608,7 @@ export async function renderOrders(snap) {
+                 <td data-label="Rider">
+                     <div class="flex-row flex-center flex-gap-8">
+                         <i data-lucide="bike" style="width:14px;" class="text-muted"></i>
+-                        <select data-action="assignRider" data-id="${id}" class="status-select-mini" aria-label="Assign rider" ${o.type === 'Dine-in' ? 'disabled' : ''}>
++                        <select data-action="assignRider" data-id="${id}" class="status-select-mini" aria-label="Assign rider" ${(o.type === 'Dine-in' || o.type === 'Pickup') ? 'disabled' : ''}>
+                             <option value="">Assign</option>
+                             ${riderOptions}
+                         </select>
+@@ -660,7 +662,7 @@ export async function renderOrders(snap) {
+                     <span class="status ${safeStatusClass}">${safeStatus}</span>
+                 </td>
+                 <td data-label="Rider">
+-                    <select data-action="assignRider" data-id="${id}" class="status-select-mini" ${o.type === 'Dine-in' ? 'disabled' : ''}>
++                    <select data-action="assignRider" data-id="${id}" class="status-select-mini" ${(o.type === 'Dine-in' || o.type === 'Pickup') ? 'disabled' : ''}>
+                         <option value="">Assign</option>
+                         ${riderOptions}
+                     </select>
+@@ -1054,7 +1056,20 @@ export async function updateStatus(id, status) {
+     let paymentMethod = order.paymentMethod || "Cash";
+     let paymentStatus = order.paymentStatus || "Pending";
+ 
+-    if (status === "Delivered") {
++    if (type === 'Pickup' && status === 'Served') {
++        // Pickup handover: collect payment now (cash / UPI / card at the counter).
++        let method = order.paymentMethod;
++        if (!method) {
++            const picked = await showPaymentPicker(order.total);
++            if (!picked) {
++                renderOrders(state.lastOrdersSnap);
++                return; // Cancelled payment selection
++            }
++            method = picked;
++        }
++        paymentMethod = method;
++        paymentStatus = "Paid";
++    } else if (status === "Delivered") {
+         let method = order.paymentMethod || "Cash";
+         // For non-POS orders without a preset method, ask the admin/rider
+         if (order.tableNo && !order.paymentMethod) {
+diff --git a/SupremeAdmin/js/features/payment-record.js b/SupremeAdmin/js/features/payment-record.js
+index bfd974f..4e64592 100644
+--- a/SupremeAdmin/js/features/payment-record.js
++++ b/SupremeAdmin/js/features/payment-record.js
+@@ -211,6 +211,7 @@ const SRC_LABEL = {
+   QR: 'QR table orders',
+   POS: 'POS orders',
+   app: 'Foodhubbie-App Orders',
++  APP: 'Foodhubbie-App Orders',
+   webview_delivery: 'Webview delivery (WhatsApp, upcoming feature)',
+   WA: 'WhatsApp orders (upcoming feature)',
+   other: 'Other orders',
+diff --git a/bot/index.js b/bot/index.js
+index 99fa8e7..e335cb6 100644
+--- a/bot/index.js
++++ b/bot/index.js
+@@ -960,6 +960,14 @@ async function sendFCMToRider(riderId, title, body, data = {}, outlet = 'pizza')
+ // Transactional order updates for the customer app (menu PWA). Mirrors the
+ // rider push: data-only FCM so the menu service worker owns the notification.
+ // Best-effort - WhatsApp remains the source of truth if no device is linked.
++// Orders written straight from a customer browser: the delivery webview (bot
++// link) and the restaurant's own app (source 'APP'). Both are finalized
++// server-side by the child_added hook (discount re-check, reward tender,
++// stock, customer profile).
++function isWebOrderSource(order) {
++    return !!order && (order.source === 'webview_delivery' || order.source === 'APP');
++}
++
+ const CUSTOMER_APP_STATUS = {
+     'placed': { title: 'Order received', body: 'We received your order and will confirm it shortly.' },
+     'confirmed': { title: 'Order confirmed', body: 'The kitchen is preparing your order.' },
+@@ -970,9 +978,19 @@ const CUSTOMER_APP_STATUS = {
+     'out for delivery': { title: 'Out for delivery', body: 'Your rider is on the way. Share the delivery OTP when they arrive.' },
+     'reached drop location': { title: 'Rider has arrived', body: 'Your rider is at your location. Share the delivery OTP to receive your order.' },
+     'delivered': { title: 'Delivered', body: 'Enjoy your meal! Thank you for ordering.' },
++    'served': { title: 'Order collected', body: 'Thank you for ordering!' },
+     'cancelled': { title: 'Order cancelled', body: 'Your order was cancelled. Contact the restaurant if this looks wrong.' }
+ };
+ 
++// Pickup orders have no rider: the ready/collected messages differ from delivery.
++function appStatusCopy(statusLower, order) {
++    if (order && order.type === 'Pickup') {
++        if (statusLower === 'ready') return { title: 'Ready for pickup', body: 'Your order is ready. Please collect it at the counter.' };
++        if (statusLower === 'served') return { title: 'Order collected', body: 'Thank you for ordering!' };
++    }
++    return CUSTOMER_APP_STATUS[statusLower];
++}
++
+ function customerAppPhone(order) {
+     const digits = String(order.phone || '').replace(/\D/g, '');
+     const last10 = digits.slice(-10);
+@@ -1363,7 +1381,7 @@ async function notifyCustomerApp(orderId, order, status) {
+     try {
+         if (!order || order.type === 'dine-in' || order.isDineIn || order.tableId) return;
+         const statusLower = String(status || order.status || '').toLowerCase();
+-        const copy = CUSTOMER_APP_STATUS[statusLower];
++        const copy = appStatusCopy(statusLower, order);
+         const phone = customerAppPhone(order);
+         if (!copy || !phone) return;
+ 
+@@ -1647,7 +1665,7 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
+                 msg = `📦 *PACKED & READY!* 🚀\n━━━━━━━━━━━━━━━━━━━━\nYour delicious order #${formatOrderId(order.orderId || id)} is ready and packed! 🍱\n${isDineIn ? "It's ready to be served! 🍽️" : "Waiting for the rider to pick it up. 🛵"}\n${getFoodFunnyProgress("Ready")} ❤️`;
+                 img = botSettings.imgReadyPng || botSettings.imgReady || fallbackImg;
+ 
+-                if (!isDineIn) {
++                if (!isDineIn && order.type !== 'Pickup') {
+                     // Only notify if a rider is actually assigned (has riderId)
+                     if (order.riderId && order.riderPhone) {
+                         await riderNotify.notifyRiderPickup(sock, order, addInAppNotification);
+@@ -1721,6 +1739,11 @@ async function handleOrderStatusUpdate(sock, id, order, isNew = false) {
+             const prevStatus = currentProcessedStatus?.status || "None";
+             console.log(`[BOT] 🔔 Status Change for #${formatOrderId(order.orderId || id)}: ${prevStatus} -> ${currentStatus} (${jid ? 'Valid JID' : 'NO JID'})`);
+ 
++            // Restaurant-app customers are served in the app (push + Orders tab);
++            // no WhatsApp message is sent to them (WhatsApp ordering is a separate,
++            // upcoming feature and these customers never opted in to it).
++            if (order.source === 'APP') { msg = ''; templateName = null; templateComponents = null; }
++
+             let sendResult = false;
+             // Template path only when the transport actually supports it
+             // (meta) — Baileys has no sendTemplate → legacy text/image path.
+@@ -2326,11 +2349,22 @@ async function sendDailyReportSafely(dateOverride = null) {
+             // accrual or clawback. Idempotent per orderId, so extra events
+             // are cheap no-ops. Independent of currentSock on purpose.
+             if (order) processLoyalty(snap.key, order).catch(e => console.error("[LOYALTY] processLoyalty error:", e.message));
++            // Restaurant-app orders: every status goes to the customer in the app
++            // (push + inbox) whether or not WhatsApp is connected. Deduped per status.
++            if (order && order.source === 'APP') notifyCustomerApp(snap.key, order, order.status).catch(() => {});
+             // Customer payment history (Payments tab): mirror status/payment fields.
+             if (order) {
+                 const _o = order.outlet || OUTLET;
+-                dineInPhoneFor(order, _o)
+-                    .then(ph => paymentSync.syncCustomerPayment({ db, resolvePath, phone: ph, orderId: snap.key, order, outlet: _o }))
++                const _st = String(order.status || '').toLowerCase();
++                const _onTheWay = _st === 'picked up' || _st === 'out for delivery' || _st === 'reached drop location';
++                Promise.all([dineInPhoneFor(order, _o), _onTheWay ? resolveRider(order) : null])
++                    .then(([ph, rider]) => paymentSync.syncCustomerPayment({
++                        db, resolvePath, phone: ph, orderId: snap.key, order, outlet: _o,
++                        extra: {
++                            rider,
++                            otp: (_st === 'out for delivery' || _st === 'reached drop location') ? (order.deliveryOTP || order.otp || order.otpCode || null) : null,
++                        },
++                    }))
+                     .catch(e => console.error("[PAYSYNC] error:", e.message));
+             }
+             const now = Date.now();
+@@ -2362,7 +2396,7 @@ async function sendDailyReportSafely(dateOverride = null) {
+             // outage silently drops tenders and stock. Every sock-dependent
+             // call below guards itself (notifyAdmin, handleOrderStatusUpdate,
+             // deductInventoryStock's alert).
+-            const isWebviewFinalize = order.source === "webview_delivery" && !order.stockDeducted;
++            const isWebviewFinalize = isWebOrderSource(order) && !order.stockDeducted;
+             if (!currentSock && !isWebviewFinalize) return;
+ 
+         // Only handle "new" orders if they were created after the bot started
+@@ -2381,7 +2415,7 @@ async function sendDailyReportSafely(dateOverride = null) {
+             // straight to Firebase (no chat round-trip). The side effects
+             // (stock deduction, customer profile save, discount usage logging)
+             // are handled inline here before the "Order Placed" message.
+-            if (order.source === "webview_delivery" && !order.stockDeducted) {
++            if (isWebOrderSource(order) && !order.stockDeducted) {
+                 try {
+                     // --- SAFEST-FIRST: server-side discount re-validation ---
+                     // This order was written directly by the customer's browser
+@@ -2513,6 +2547,8 @@ async function sendDailyReportSafely(dateOverride = null) {
+             }
+ 
+         }
++        // Restaurant-app order just placed: tell the customer in the app too.
++        if (isNewOrder && order.source === 'APP') notifyCustomerApp(snap.key, order, order.status).catch(() => {});
+         // ALWAYS call handleOrderStatusUpdate with isNew=true for new orders.
+         // initFCMWatcher's _fcmSent write triggers child_changed which can
+         // pre-cache status before child_added finishes, so we must not gate
+diff --git a/bot/payment-sync.js b/bot/payment-sync.js
+index 4b0c295..784aaa4 100644
+--- a/bot/payment-sync.js
++++ b/bot/payment-sync.js
+@@ -7,6 +7,7 @@
+  * own record customers/{phone}/orders/{id}, which the app's Orders and
+  * Payments tabs read.
+  *
++ * Also mirrors live delivery tracking (rider, handover OTP) and the order mode.
+  * Mirror only: never creates a record (the placement/accrual paths own that),
+  * never writes anything but status/total/payment fields.
+  */
+@@ -21,7 +22,7 @@ function str(v) {
+  * paidAt is set once, the first time the order is seen as Paid, and cleared
+  * when a settled bill is voided (Paid -> Unpaid).
+  */
+-function buildPaymentPatch(order, existing = {}, now = Date.now()) {
++function buildPaymentPatch(order, existing = {}, now = Date.now(), extra = {}) {
+     const paymentStatus = str(order && order.paymentStatus) || 'Pending';
+     const patch = {
+         status: str(order && order.status) || existing.status || 'Placed',
+@@ -29,20 +30,26 @@ function buildPaymentPatch(order, existing = {}, now = Date.now()) {
+         paymentStatus,
+         paymentMethod: str(order && order.paymentMethod),
+         paymentUpdatedAt: now,
++        orderMode: order && order.orderMode ? String(order.orderMode).slice(0, 12) : (existing.orderMode || null),
++        // Live delivery tracking for the app's Orders tab: rider details while the
++        // order is on its way, and the handover OTP the customer reads to the rider.
++        riderName: extra.rider && extra.rider.name ? String(extra.rider.name).slice(0, 60) : null,
++        riderPhone: extra.rider && extra.rider.phone ? String(extra.rider.phone).replace(/\D/g, '').slice(-10) || null : null,
++        deliveryOtp: extra.otp ? String(extra.otp).slice(0, 8) : null,
+     };
+     if (paymentStatus === PAID) patch.paidAt = Number(existing.paidAt) || now;
+     else patch.paidAt = null;
+     return patch;
+ }
+ 
+-async function syncCustomerPayment({ db, resolvePath, phone, orderId, order, outlet, now = Date.now() }) {
++async function syncCustomerPayment({ db, resolvePath, phone, orderId, order, outlet, now = Date.now(), extra = {} }) {
+     if (!phone || !orderId || !order) return false;
+     const ref = db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet));
+     const snap = await ref.once('value');
+     const existing = snap.val();
+     if (!existing) return false; // not mirrored for this customer: nothing to keep in sync
+-    const patch = buildPaymentPatch(order, existing, now);
+-    const same = ['status', 'total', 'paymentStatus', 'paymentMethod'].every(k => (existing[k] ?? null) === (patch[k] ?? null));
++    const patch = buildPaymentPatch(order, existing, now, extra);
++    const same = ['status', 'total', 'paymentStatus', 'paymentMethod', 'riderName', 'riderPhone', 'deliveryOtp', 'orderMode'].every(k => (existing[k] ?? null) === (patch[k] ?? null));
+     if (same) return false; // idempotent: no write when nothing changed
+     await ref.update(patch);
+     return true;
+diff --git a/database.rules.json b/database.rules.json
+index 261e6c5..82929fd 100644
+--- a/database.rules.json
++++ b/database.rules.json
+@@ -118,7 +118,7 @@
+               ".indexOn": ["createdAt", "status", "riderId", "assignedRider", "orderId", "type"],
+               "$orderId": {
+                 ".read": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('businesses').child($businessId).child('outlets').child($outletId).child('riders').child(auth.uid).exists() && (!data.child('assignedRider').exists() || data.child('assignedRider').val().toLowerCase() == root.child('businesses').child($businessId).child('outlets').child($outletId).child('riders').child(auth.uid).child('email').val().toLowerCase())))) || (data.child('source').val() == 'QR')",
+-                ".write": "(root.child('businesses').child($businessId).child('outlets').child($outletId).child('locked').val() != true || (auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true))) && ((auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('businesses').child($businessId).child('outlets').child($outletId).child('riders').child(auth.uid).exists() && data.exists() && data.child('status').val() != 'Delivered' && (!data.child('riderId').exists() || data.child('riderId').val() == auth.uid)))) || (!data.exists() && newData.child('source').val() == 'QR' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true) || (!data.exists() && newData.child('source').val() == 'webview_delivery' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('webviewTokens').child(newData.child('webviewToken').val()).child('used').val() == false && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true) || (data.child('source').val() == 'QR' && data.child('status').val() == 'Pending' && (newData.child('status').val() == 'Placed' || newData.child('status').val() == 'Cancelled') && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true))",
++                ".write": "(root.child('businesses').child($businessId).child('outlets').child($outletId).child('locked').val() != true || (auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true))) && ((auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('businesses').child($businessId).child('outlets').child($outletId).child('riders').child(auth.uid).exists() && data.exists() && data.child('status').val() != 'Delivered' && (!data.child('riderId').exists() || data.child('riderId').val() == auth.uid)))) || (!data.exists() && newData.child('source').val() == 'QR' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true) || (!data.exists() && newData.child('source').val() == 'APP' && auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && newData.child('appUid').val() == auth.uid && newData.child('phone').isString() && newData.child('phone').val().matches(/^[6-9][0-9]{9}$/) && (newData.child('type').val() == 'Online' || newData.child('type').val() == 'Pickup') && newData.child('status').val() == 'Placed' && newData.child('paymentStatus').val() == 'Pending' && newData.child('stockDeducted').val() == false && !newData.hasChild('riderId') && !newData.hasChild('assignedRider') && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true) || (data.child('source').val() == 'APP' && auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && data.child('appUid').val() == auth.uid && data.child('status').val() == 'Placed' && newData.child('status').val() == 'Cancelled') || (!data.exists() && newData.child('source').val() == 'webview_delivery' && root.child('businesses').child($businessId).child('outlets').child($outletId).child('webviewTokens').child(newData.child('webviewToken').val()).child('used').val() == false && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true) || (data.child('source').val() == 'QR' && data.child('status').val() == 'Pending' && (newData.child('status').val() == 'Placed' || newData.child('status').val() == 'Cancelled') && root.child('businesses').child($businessId).child('outlets').child($outletId).child('disabled').val() != true))",
+                 ".validate": "newData.hasChildren(['items', 'total', 'status', 'createdAt']) && newData.child('total').isNumber() && newData.child('status').isString() && newData.child('createdAt').isString() && (!newData.hasChild('subtotal') || newData.child('subtotal').isNumber()) && (!newData.hasChild('tax') || newData.child('tax').isNumber()) && (!newData.hasChild('serviceCharge') || newData.child('serviceCharge').isNumber()) && (!newData.hasChild('discount') || newData.child('discount').isNumber()) && (!newData.hasChild('discountAmount') || newData.child('discountAmount').isNumber()) && (!newData.hasChild('paymentStatus') || newData.child('paymentStatus').isString())"
+               }
+             },
+diff --git a/docs/PLAN-DEDICATED-CUSTOMER-APP.md b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+index a2da9c6..63dcc2d 100644
+--- a/docs/PLAN-DEDICATED-CUSTOMER-APP.md
++++ b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+@@ -56,3 +56,22 @@ Delivery orders are identified everywhere by `source === 'webview_delivery'`: th
+ - The mirror only updates records that already exist (placement/accrual create them) and is idempotent.
+ - Fixed on the way: the loyalty accrual replaced the customer's order record (dropping time, items and payment status); it now merges.
+ - Limits: online payments (gateway) do not exist, so "payment" means cash/UPI/card as recorded by staff. Orders without a customer phone (anonymous table guests) have no history. Verified with stubs only — not against real Firebase.
++
++## Phase 2b — in-app ordering (DONE in branch `feat/app-ordering`)
++The app is now complete by itself: menu -> cart -> checkout -> tracking, with no hop to `delivery.html`.
++(`delivery.html` stays, because WhatsApp ordering links use it.)
++
++- **Checkout screen** (`menu/js/app-checkout.js`): Delivery or Pickup, name, phone, address + shared location (delivery), note, coupon, bill lines (GST, delivery fee from the outlet's slabs). Pay on delivery / at the counter.
++- **Order** is written with `source:'APP'`, `channel:'app'`, status `Placed`, payment `Pending`, signed in anonymously (`appUid`). Billing prices `APP` orders at 3%.
++- **Rules** (`database.rules.json`): create clause for APP orders (anonymous sign-in, own uid, valid phone, Placed/Pending, no rider, outlet enabled) and a cancel clause (own order, only Placed -> Cancelled).
++- **Bot**: APP orders get the same server-side finalization as web orders; the customer is told through the app only (no WhatsApp); pickup orders are not offered to riders; rider name/phone and the delivery code are mirrored to the customer's order record.
++- **Admin**: Pickup flow Placed -> Confirmed -> Ready -> Served (asks payment method at Served); rider assignment disabled for Pickup. **Rider app** ignores Pickup jobs.
++- **Orders tab**: live steps (delivery or pickup), rider, delivery code, and "Cancel order" while Placed.
++
++### Not verified / limits (read before deploying)
++- Database rules were NOT run in the Firebase emulator (not downloadable here). The 16 new `app:` cases in `tests/rules.emulator.mjs` are written but unrun. Run them before deploying.
++- Production build and live Firebase were not exercised; browser tests use a stubbed database.
++- Delivery code is stored in the phone-readable customer record (same open-by-phone risk as the rest of customer data).
++- Item prices in the order come from the customer's device and are not re-checked on the server (same as existing QR / webview flows).
++- Existing restaurants keep their old billing mode until switched in Supreme Admin.
++- Website pricing page and `PRICING_AND_TERMS.md` still show the old rates.
+diff --git a/menu/css/app.css b/menu/css/app.css
+index 3e02a0e..fc0735f 100644
+--- a/menu/css/app.css
++++ b/menu/css/app.css
+@@ -1071,13 +1071,14 @@ body.onb-open{ overflow:hidden; }
+ .signin-error { color: #b91c1c; font-size: 13px; margin-top: 6px; }
+ .signin-btn { display: block; text-align: center; margin-top: 18px; padding: 15px; border: 0; border-radius: 12px; background: var(--primary, #E84908); color: #fff; font-size: 16px; font-weight: 800; text-decoration: none; cursor: pointer; }
+ .signin-btn:disabled { opacity: .6; }
+-.direct-chooser { position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, .55); display: flex; align-items: flex-end; justify-content: center; }
+-.direct-chooser.hidden { display: none; }
+-.direct-chooser-card { width: 100%; max-width: 480px; background: #fff; border-radius: 18px 18px 0 0; padding: 22px 20px calc(22px + env(safe-area-inset-bottom)); }
+-.direct-chooser-card h3 { margin: 0 0 6px; font-size: 18px; }
+-.direct-chooser-card p { margin: 0 0 6px; color: #64748b; font-size: 14px; }
+-.direct-chooser-close { width: 100%; margin-top: 10px; padding: 13px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+-
++.co-wrap { max-width: 520px; margin: 0 auto; padding: 14px 16px 90px; }
++.co-switch { display: flex; gap: 8px; margin-bottom: 12px; }
++.co-switch-btn { flex: 1; padding: 11px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; font-weight: 800; font-size: 14px; cursor: pointer; }
++.co-switch-btn.active { background: var(--primary, #E84908); color: #fff; border-color: transparent; }
++.co-locate { width: 100%; padding: 12px; border: 1px dashed var(--primary, #E84908); border-radius: 12px; background: #fff7f3; color: var(--primary, #E84908); font-weight: 800; font-size: 14px; cursor: pointer; }
++.co-loc-status { margin: 8px 0 12px; font-size: 12.5px; color: #64748b; }
++.co-error { color: #b91c1c !important; }
++.co-pay-note { margin: 10px 0 4px; font-size: 12.5px; color: #64748b; }
+ /* ===== Orders / Payments switch + payment rows ===== */
+ .orders-switch { display: flex; gap: 8px; padding: 12px 16px 0; }
+ .orders-switch-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+@@ -1096,3 +1097,16 @@ body.onb-open{ overflow:hidden; }
+ .pay-detail > div { display: flex; justify-content: space-between; gap: 12px; }
+ .pay-detail > div > span:first-child { color: #64748b; }
+ .pay-note { margin: 12px 0 0; font-size: 12px; color: #94a3b8; }
++
++/* ===== Order tracking (dedicated app) ===== */
++.trk-steps { list-style: none; display: flex; justify-content: space-between; gap: 4px; margin: 12px 0 4px; padding: 0; font-size: 11px; color: #94a3b8; }
++.trk-steps li { flex: 1; text-align: center; position: relative; }
++.trk-steps li span { display: block; width: 12px; height: 12px; margin: 0 auto 4px; border-radius: 50%; background: #e2e8f0; }
++.trk-steps li.done { color: #15803d; } .trk-steps li.done span { background: #22c55e; }
++.trk-steps li.now { color: var(--primary, #E84908); font-weight: 800; } .trk-steps li.now span { background: var(--primary, #E84908); box-shadow: 0 0 0 4px rgba(232,73,8,.18); }
++.trk-rider { margin-top: 8px; font-size: 13px; }
++.trk-otp { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #fff7ed; border: 1px solid #fed7aa; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
++.trk-otp strong { font-size: 20px; letter-spacing: .15em; }
++.trk-otp small { color: #9a3412; }
++.trk-cancelled { margin-top: 8px; font-size: 13px; color: #b91c1c; }
++.trk-cancel { padding: 8px 12px; border: 1px solid #fecaca; border-radius: 10px; background: #fff; color: #b91c1c; font-weight: 700; font-size: 13px; cursor: pointer; }
+diff --git a/menu/index.html b/menu/index.html
+index 10a113f..f52eba2 100644
+--- a/menu/index.html
++++ b/menu/index.html
+@@ -74,13 +74,54 @@
+         </form>
+     </div>
+ 
+-    <!-- ============== ORDER MODE CHOOSER (direct mode, until Phase 2) ============== -->
+-    <div id="directOrderChooser" class="direct-chooser hidden" role="dialog" aria-modal="true" aria-label="How would you like to order?">
+-        <div class="direct-chooser-card">
+-            <h3>How would you like to order?</h3>
+-            <p>Dining here? Scan the QR code on your table to order to your table.</p>
+-            <a id="directDeliveryLink" class="signin-btn direct-chooser-link" href="delivery.html">Order for delivery</a>
+-            <button id="btnCloseChooser" type="button" class="direct-chooser-close">Back to menu</button>
++    <!-- ============== CHECKOUT (dedicated app: delivery or pickup) ============== -->
++    <div id="screenCheckout" class="screen">
++        <div class="topbar">
++            <button class="topbar-back" id="btnCoBack" aria-label="Back to cart">
++                <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
++            </button>
++            <span class="topbar-logo" style="margin:0 auto;">Checkout</span>
++            <span style="width:38px;"></span>
++        </div>
++        <div class="co-wrap">
++            <div class="co-switch" role="tablist" aria-label="How do you want your order?">
++                <button type="button" class="co-switch-btn active" data-co-mode="delivery" role="tab" aria-selected="true">Delivery</button>
++                <button type="button" class="co-switch-btn" data-co-mode="pickup" role="tab" aria-selected="false">Pickup</button>
++            </div>
++            <div class="form-group-mini">
++                <label for="coName">Your Name <span style="color:var(--error)">*</span></label>
++                <input type="text" id="coName" autocomplete="name" placeholder="e.g. Rohan" maxlength="60">
++            </div>
++            <div class="form-group-mini">
++                <label for="coPhone">Mobile Number <span style="color:var(--error)">*</span></label>
++                <input type="tel" id="coPhone" autocomplete="tel" placeholder="e.g. 98765 43210" maxlength="14" inputmode="numeric">
++            </div>
++            <div id="coAddressWrap">
++                <div class="form-group-mini">
++                    <label for="coAddress">Delivery Address <span style="color:var(--error)">*</span></label>
++                    <textarea id="coAddress" autocomplete="street-address" placeholder="House / Street / Landmark" rows="2" maxlength="200"></textarea>
++                </div>
++                <button type="button" class="co-locate" id="btnCoLocate">📍 Share my location</button>
++                <div id="coLocStatus" class="co-loc-status">Location is used only to work out your delivery fee.</div>
++            </div>
++            <div id="coPickupNote" class="co-loc-status hidden">You will collect this order from the restaurant. We will notify you as soon as it is ready.</div>
++            <div class="form-group-mini">
++                <label for="coNote">Special Note (Optional)</label>
++                <textarea id="coNote" placeholder="e.g. Extra spicy, no onion…" rows="2" maxlength="200"></textarea>
++            </div>
++            <div class="form-group-mini">
++                <label for="coDiscountInput">Discount or Reward Code (Optional)</label>
++                <div class="discount-input-row">
++                    <input type="text" id="coDiscountInput" placeholder="e.g. WELCOME20" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false">
++                    <button type="button" class="btn-apply-discount" id="btnCoApply">Apply</button>
++                </div>
++                <div class="discount-msg hidden" id="coDiscountMsg"></div>
++            </div>
++            <div class="cart-summary" id="coSummary">
++                <div id="coLines"></div>
++                <div class="co-pay-note" id="coPayNote"></div>
++                <button class="btn-place-order" id="btnCoPlace">PLACE ORDER</button>
++            </div>
+         </div>
+     </div>
+ 
+diff --git a/menu/js/app-checkout.js b/menu/js/app-checkout.js
+new file mode 100644
+index 0000000..64ec256
+--- /dev/null
++++ b/menu/js/app-checkout.js
+@@ -0,0 +1,293 @@
++/**
++ * menu/js/app-checkout.js
++ * Checkout of the dedicated restaurant app (no table, no WhatsApp link).
++ * Two ways to receive the order: DELIVERY (address + location, fee from the
++ * outlet's distance slabs) or PICKUP (collect at the restaurant, no fee).
++ *
++ * The order is written straight to {outlet}/orders with source 'APP' (rules:
++ * anonymous auth, appUid == auth.uid, status Placed, payment Pending). After
++ * that the bot finalizes it exactly like a webview order (discount re-check,
++ * reward tender, stock, customer profile) and the customer follows every
++ * status in the Orders tab + push notifications. Payment is collected by the
++ * restaurant (cash / UPI at delivery or pickup) — there is no online gateway.
++ */
++import { outletRef, get, set, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
++import { Cart, clearCart, subtotal as cartSubtotal, isEmpty as cartIsEmpty } from './cart.js';
++import * as UI from './ui.js';
++import { validateCoupon } from './discount.js';
++import { getProfile, rememberIdentity, writeCustomerOrder, validateRewardCode, redeemValuePaisePerPoint, minSpendAfterRedemptionRs } from './customer.js';
++import { calculateDistance, getFeeFromSlabs } from './geo.js';
++import { generateOrderId } from './order.js';
++import { assertOutletEnabled } from './session.js';
++import { computeOrderTotals, round2 } from '../shared/money-math.js';
++import { computeTenderPaise } from '../shared/loyalty-math.js';
++
++const S = {
++    mode: 'delivery',          // 'delivery' | 'pickup'
++    location: null,            // { lat, lng }
++    slabs: null,               // settings/Delivery/slabs
++    store: null,               // settings/Store
++    dine: null,                // dineinSettings (tax)
++    discount: null,            // validated coupon
++    reward: null,              // { key, code, label, points, amount }
++    placing: false,
++    ready: false,
++    onPlaced: null,
++};
++
++const $ = (id) => document.getElementById(id);
++
++// ── pure helpers (exported for tests) ─────────────────────────────
++export function taxRatesFrom(dine) {
++    const d = dine || {};
++    const enabled = d.taxEnabled !== false;
++    if (Array.isArray(d.taxRates) && d.taxRates.length > 0) return d.taxRates;
++    return enabled ? [{ name: d.taxName || 'GST', rate: typeof d.taxPercent === 'number' ? d.taxPercent : 5 }] : [];
++}
++
++export function deliveryFeeFor(location, store, slabs) {
++    if (!location) return 0;
++    const s = store || {};
++    const outlet = {
++        lat: parseFloat(s.lat ?? (OUTLET === 'cake' ? 25.887472 : 25.887944)),
++        lng: parseFloat(s.lng ?? (OUTLET === 'cake' ? 85.026861 : 85.026194)),
++    };
++    const dist = calculateDistance(location.lat, location.lng, outlet.lat, outlet.lng);
++    return { fee: getFeeFromSlabs(dist, Array.isArray(slabs) ? slabs : []), distanceKm: round2(dist) };
++}
++
++export function computeCheckout({ subtotal, mode, discount, rewardPoints, fee, dine, redeemPaise = 100, minSpendRs = 0 }) {
++    const rates = taxRatesFrom(dine);
++    const deliveryFee = mode === 'delivery' ? (Number(fee) || 0) : 0;
++    const t = computeOrderTotals({ subtotal, discount: discount && discount.amount > 0 ? discount.amount : 0, taxRates: rates, serviceChargeEnabled: false, deliveryFee });
++    let tender = 0;
++    if (rewardPoints > 0) {
++        tender = round2(computeTenderPaise({
++            points: rewardPoints, redeemValuePaisePerPoint: redeemPaise,
++            totalDuePaise: Math.round(t.total * 100), minSpendAfterRedemptionPaise: Math.round(minSpendRs * 100),
++        }) / 100);
++    }
++    return { ...t, tender, payable: round2(Math.max(0, t.total - tender)) };
++}
++
++/** Builds the order record. Pure: everything environmental is passed in. */
++export function buildAppOrder({ orderId, mode, cartLines, name, phone, address, location, distanceKm, note, totals, discount, reward, appUid, business, outlet, now = new Date() }) {
++    const items = cartLines.map(l => ({
++        name: l.name, size: l.size, unitPrice: l.unitPrice,
++        addons: (l.addons || []).map((n, i) => ({ name: n, price: (l.addonPrices || [])[i] || 0 })),
++        quantity: l.qty, total: round2(l.unitPrice * l.qty), outlet,
++        instructions: l.instructions || '',
++        ...(l.comboId ? { comboId: l.comboId, comboName: l.comboName, comboLineOriginal: l.comboLineOriginal } : {}),
++    }));
++    const delivery = mode === 'delivery';
++    const o = {
++        orderId, outlet, business,
++        type: delivery ? 'Online' : 'Pickup',
++        orderMode: delivery ? 'delivery' : 'pickup',
++        source: 'APP', channel: 'app', appUid,
++        customerName: name, phone,
++        subtotal: totals.subtotal, deliveryFee: totals.deliveryFee, tax: totals.tax, taxItems: totals.taxItems,
++        taxName: (totals.taxItems || []).map(r => r.name).join(' + '),
++        total: totals.total,
++        status: 'Placed',
++        paymentMethod: delivery ? 'COD' : null, paymentStatus: 'Pending',
++        createdAt: now.toISOString(),
++        assignedRider: null,
++        items, stockDeducted: false, note: note || '',
++    };
++    if (delivery) { o.address = address; o.lat = location.lat; o.lng = location.lng; o.distanceKm = distanceKm; }
++    if (totals.discount > 0 && discount) {
++        o.discount = totals.discount; o.discountId = discount.discountId || null;
++        o.discountLabel = discount.name || discount.couponCode || null;
++        o.discountSource = 'coupon:' + (discount.couponCode || '');
++        o.discountMode = discount.mode || 'fixed'; o.discountValue = discount.value || 0; o.discountGlobalLimit = discount.maxCap || 0;
++    }
++    if (reward && reward.key && reward.code) o.rewardCode = { key: String(reward.key), code: String(reward.code) };
++    return o;
++}
++
++// ── data ──────────────────────────────────────────────────────────
++async function loadSettings() {
++    const [slabs, store, dine] = await Promise.all([
++        get(outletRef('settings/Delivery/slabs')), get(outletRef('settings/Store')), get(outletRef('dineinSettings')),
++    ]);
++    S.slabs = slabs.val() || []; S.store = store.val() || {}; S.dine = dine.val() || {};
++    S.ready = true;
++}
++
++function currentFee() {
++    if (S.mode !== 'delivery' || !S.location) return { fee: 0, distanceKm: 0 };
++    return deliveryFeeFor(S.location, S.store, S.slabs);
++}
++
++function currentTotals() {
++    const { fee } = currentFee();
++    return computeCheckout({
++        subtotal: cartSubtotal(), mode: S.mode, discount: S.discount,
++        rewardPoints: S.reward ? S.reward.points : 0, fee, dine: S.dine,
++        redeemPaise: redeemValuePaisePerPoint(), minSpendRs: minSpendAfterRedemptionRs(),
++    });
++}
++
++// ── view ──────────────────────────────────────────────────────────
++function row(label, value, cls = '') { return `<div class="cart-summary-row ${cls}"><span>${UI.esc(label)}</span><span>${value}</span></div>`; }
++
++function render() {
++    const isDelivery = S.mode === 'delivery';
++    document.querySelectorAll('[data-co-mode]').forEach(b => {
++        const on = b.dataset.coMode === S.mode;
++        b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on));
++    });
++    $('coAddressWrap')?.classList.toggle('hidden', !isDelivery);
++    $('coPickupNote')?.classList.toggle('hidden', isDelivery);
++    const t = currentTotals();
++    if (S.reward) {
++        if (t.tender > 0) S.reward.amount = t.tender;
++        else { S.reward = null; UI.showToast('Reward no longer applies to this bill', 'error'); }
++    }
++    let html = row('Item total', UI.fmtMoney(t.subtotal));
++    if (t.discount > 0) html += row(S.discount?.name || 'Discount', '-' + UI.fmtMoney(t.discount), 'cart-summary-discount');
++    (t.taxItems || []).forEach(x => { if (x.amount > 0) html += row(`${x.name || 'Tax'} (${x.rate}%)`, UI.fmtMoney(x.amount)); });
++    if (isDelivery) html += row('Delivery fee', S.location ? UI.fmtMoney(t.deliveryFee) : 'Enable location');
++    if (t.tender > 0) html += row(`Loyalty points (${S.reward.points} pts)`, '-' + UI.fmtMoney(t.tender), 'cart-summary-discount');
++    html += row(t.tender > 0 ? 'Total' : 'Total', UI.fmtMoney(t.total), 'cart-summary-total');
++    if (t.tender > 0) html += row('To pay', UI.fmtMoney(t.payable), 'cart-summary-total');
++    $('coLines').innerHTML = html;
++    const btn = $('btnCoPlace');
++    if (btn && !S.placing) {
++        btn.disabled = false;
++        btn.textContent = isDelivery && !S.location ? 'SHARE LOCATION TO CONTINUE' : (isDelivery ? 'PLACE DELIVERY ORDER' : 'PLACE PICKUP ORDER');
++    }
++    $('coPayNote').textContent = isDelivery
++        ? 'Pay cash or UPI to the rider when your order arrives.'
++        : 'Pay at the counter (cash, UPI or card) when you collect your order.';
++}
++
++function setLocStatus(msg, bad = false) {
++    const el = $('coLocStatus'); if (!el) return;
++    el.textContent = msg; el.classList.toggle('co-error', bad);
++}
++
++function requestLocation() {
++    if (!navigator.geolocation) { setLocStatus('Location is not supported on this device.', true); return; }
++    setLocStatus('Finding your location…');
++    navigator.geolocation.getCurrentPosition((pos) => {
++        S.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
++        setLocStatus('Location shared ✓');
++        render();
++    }, (err) => {
++        setLocStatus(err && err.code === 1 ? 'Location permission was denied. Allow it in your browser settings to order for delivery.' : 'Could not get your location. Try again.', true);
++    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
++}
++
++async function applyCode() {
++    const input = $('coDiscountInput'); if (!input) return;
++    const msg = $('coDiscountMsg');
++    const show = (t, bad) => { msg.textContent = t; msg.classList.remove('hidden'); msg.classList.toggle('co-error', !!bad); };
++    if (S.discount || S.reward) { S.discount = null; S.reward = null; input.value = ''; input.disabled = false; msg.classList.add('hidden'); $('btnCoApply').textContent = 'Apply'; render(); return; }
++    const code = input.value.trim();
++    if (!code) { show('Enter a code', true); return; }
++    const hit = await validateCoupon(code, cartSubtotal());
++    if (hit) {
++        S.discount = hit; input.disabled = true; $('btnCoApply').textContent = 'Remove';
++        render(); show(`${hit.name || hit.couponCode} applied: -${UI.fmtMoney(hit.amount)}`); return;
++    }
++    const phone = ($('coPhone').value || '').replace(/\D/g, '').slice(-10);
++    if (!/^[6-9]\d{9}$/.test(phone)) { show('Enter your mobile number first, then apply a reward code', true); return; }
++    const rew = await validateRewardCode(code, phone);
++    if (!rew) { show('Invalid or expired code', true); return; }
++    S.reward = { key: rew.key, code: rew.code, label: rew.label || 'Loyalty reward', points: rew.cost, amount: 0 };
++    const t = currentTotals();
++    if (!(t.tender > 0)) { S.reward = null; show('This reward does not apply to this bill', true); return; }
++    input.disabled = true; $('btnCoApply').textContent = 'Remove';
++    render(); show(`${S.reward.label} applied: -${UI.fmtMoney(t.tender)}`);
++}
++
++// ── place order ───────────────────────────────────────────────────
++async function placeOrder() {
++    if (S.placing) return;
++    if (cartIsEmpty()) { UI.showToast('Your cart is empty', 'error'); return; }
++    const name = ($('coName').value || '').trim();
++    const phone = ($('coPhone').value || '').replace(/\D/g, '').slice(-10);
++    const address = ($('coAddress').value || '').trim();
++    const note = ($('coNote').value || '').trim();
++    if (!name) { UI.showToast('Please enter your name', 'error'); return; }
++    if (!/^[6-9]\d{9}$/.test(phone)) { UI.showToast('Please enter a valid 10-digit mobile number', 'error'); return; }
++    if (S.mode === 'delivery') {
++        if (!S.location) { requestLocation(); return; }
++        if (!address) { UI.showToast('Please enter your delivery address', 'error'); return; }
++    }
++    S.placing = true;
++    const btn = $('btnCoPlace'); btn.disabled = true; btn.textContent = 'Placing your order…';
++    try {
++        await assertOutletEnabled();
++        const user = await ensureAnonAuth();
++        const orderId = await generateOrderId();
++        const { distanceKm } = currentFee();
++        const totals = currentTotals();
++        const order = buildAppOrder({
++            orderId, mode: S.mode, cartLines: Object.values(Cart.lines), name, phone, address,
++            location: S.location, distanceKm, note, totals, discount: S.discount, reward: S.reward,
++            appUid: user.uid, business: BUSINESS_ID, outlet: OUTLET,
++        });
++        await set(outletRef(`orders/${orderId}`), order);
++        rememberIdentity(name, phone);
++        // History entry for the Orders / Payments tabs (the bot keeps it in sync afterwards).
++        await writeCustomerOrder({
++            orderId, outlet: OUTLET, business: BUSINESS_ID, customerPhone: phone, customerName: name,
++            status: 'Placed', total: totals.total, createdAt: Date.now(), source: 'APP', paymentStatus: 'Pending',
++            itemCount: order.items.length,
++            itemsSummary: order.items.slice(0, 6).map(i => ({ name: i.name, qty: i.quantity })),
++            orderMode: order.orderMode,
++        });
++        clearCart();
++        S.discount = null; S.reward = null;
++        UI.showToast(`Order placed! Total ${UI.fmtMoney(totals.total)}`, 'success');
++        if (S.onPlaced) S.onPlaced(orderId);
++    } catch (e) {
++        console.error('[AppCheckout] failed', e);
++        UI.showToast(e && e.code === 'OUTLET_DISABLED' ? 'This restaurant is not taking orders right now.' : 'Could not place your order — please try again.', 'error');
++    } finally {
++        S.placing = false;
++        render();
++    }
++}
++
++// ── cancel (customer) ─────────────────────────────────────────────
++// Allowed by the rules only for the same device's anonymous uid and only while
++// the order is still 'Placed' (before the restaurant confirms it).
++export async function cancelAppOrder(orderId) {
++    const id = String(orderId || '');
++    if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) return false;
++    await ensureAnonAuth();
++    await set(outletRef(`orders/${id}/status`), 'Cancelled');
++    const p = getProfile();
++    if (p && p.phone) await set(outletRef(`customers/${p.phone}/orders/${id}/status`), 'Cancelled').catch(() => {});
++    return true;
++}
++
++// ── wiring ────────────────────────────────────────────────────────
++let _wired = false;
++export async function openCheckout() {
++    const p = getProfile();
++    if (p) {
++        if (!$('coName').value) $('coName').value = p.name && p.name !== 'Guest' ? p.name : '';
++        if (!$('coPhone').value) $('coPhone').value = p.phone || '';
++    }
++    if (!S.ready) { try { await loadSettings(); } catch (e) { console.warn('[AppCheckout] settings failed', e); } }
++    S.discount = null; S.reward = null;
++    const inp = $('coDiscountInput'); if (inp) { inp.value = ''; inp.disabled = false; }
++    $('btnCoApply').textContent = 'Apply'; $('coDiscountMsg')?.classList.add('hidden');
++    render();
++    UI.showScreen('screenCheckout');
++}
++
++export function initAppCheckout({ onPlaced, onBack } = {}) {
++    S.onPlaced = onPlaced || null;
++    if (_wired) return; _wired = true;
++    document.querySelectorAll('[data-co-mode]').forEach(b => b.addEventListener('click', () => { S.mode = b.dataset.coMode === 'pickup' ? 'pickup' : 'delivery'; render(); }));
++    $('btnCoLocate')?.addEventListener('click', requestLocation);
++    $('btnCoApply')?.addEventListener('click', () => applyCode().catch(() => UI.showToast('Could not check that code', 'error')));
++    $('btnCoPlace')?.addEventListener('click', placeOrder);
++    $('btnCoBack')?.addEventListener('click', () => { if (onBack) onBack(); });
++}
+diff --git a/menu/js/app.js b/menu/js/app.js
+index 2e989f7..590ba37 100644
+--- a/menu/js/app.js
++++ b/menu/js/app.js
+@@ -12,6 +12,7 @@ import * as UI from './ui.js';
+ import { haptic } from './ui.js';
+ import { esc } from './ui.js';
+ import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
++import { initAppCheckout, openCheckout, cancelAppOrder } from './app-checkout.js';
+ import { renderOrdersTab, renderLoyaltyTab, openAccountTab, signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
+ 
+ // ---------------------------------------------------------------
+@@ -254,8 +255,8 @@ async function boot() {
+ 
+ // ---------------------------------------------------------------
+ // DIRECT MODE (no table): sign in once with phone (+ optional name), then the
+-// full menu is always the first screen. Ordering from here arrives in Phase 2
+-// (docs/PLAN-DEDICATED-CUSTOMER-APP.md); until then the cart offers a chooser.
++// full menu is always the first screen. Ordering happens in-app (delivery or
++// pickup) via js/app-checkout.js — no table and no WhatsApp link needed.
+ // ---------------------------------------------------------------
+ async function bootDirect() {
+     M.direct = true;
+@@ -309,13 +310,25 @@ document.getElementById('signInForm')?.addEventListener('submit', (e) => {
+     UI.showScreen('screenMenu');
+ });
+ 
+-function showDirectOrderChooser() {
+-    const link = document.getElementById('directDeliveryLink');
+-    if (link) link.href = `delivery.html${window.location.search}`;
+-    document.getElementById('directOrderChooser')?.classList.remove('hidden');
+-}
+-document.getElementById('btnCloseChooser')?.addEventListener('click', () => {
+-    document.getElementById('directOrderChooser')?.classList.add('hidden');
++document.addEventListener('click', async (e) => {
++    const btn = e.target.closest('[data-cancel-order]');
++    if (!btn) return;
++    if (!window.confirm('Cancel this order?')) return;
++    btn.disabled = true;
++    try {
++        await cancelAppOrder(btn.dataset.cancelOrder);
++        UI.showToast('Order cancelled', 'success');
++        renderOrdersTab();
++    } catch (err) {
++        btn.disabled = false;
++        UI.showToast('Too late to cancel — the restaurant has already started on it. Please call them.', 'error');
++    }
++});
++
++// Direct mode checkout: delivery or pickup, placed inside this app (js/app-checkout.js).
++initAppCheckout({
++    onBack: () => { renderCartScreen(); UI.showScreen('screenCart'); },
++    onPlaced: () => { renderOrdersTab(); UI.showScreen('screenOrders'); },
+ });
+ 
+ let _postBootStarted = false;
+@@ -1112,7 +1125,7 @@ document.getElementById('btnGuestPlus')?.addEventListener('click', () => { hapti
+ document.getElementById('btnPlaceOrder')?.addEventListener('click', async () => {
+     if (M._placing) return;
+     if (cartIsEmpty()) { UI.showToast('Your cart is empty'); return; }
+-    if (M.direct) { showDirectOrderChooser(); return; }
++    if (M.direct) { openCheckout(); return; }
+     M._placing = true;
+     const btn = document.getElementById('btnPlaceOrder');
+     btn.disabled = true;
+diff --git a/menu/js/customer.js b/menu/js/customer.js
+index d13986c..bf90af5 100644
+--- a/menu/js/customer.js
++++ b/menu/js/customer.js
+@@ -1104,7 +1104,8 @@ export async function writeCustomerOrder(order) {
+             orderGroupId: order.orderGroupId || '',
+             paymentStatus: order.paymentStatus || 'Pending',
+             itemCount: order.itemCount || 0,
+-            itemsSummary: order.itemsSummary || []
++            itemsSummary: order.itemsSummary || [],
++            ...(order.orderMode ? { orderMode: String(order.orderMode) } : {})
+         });
+         return true;
+     } catch (e) {
+@@ -1305,6 +1306,34 @@ function renderRewards() {
+     </div>`;
+ }
+ 
++// Live tracking for the dedicated app: steps differ for delivery and pickup.
++const TRACK_DELIVERY = [['Placed', 'Placed'], ['Confirmed', 'Confirmed'], ['Ready', 'Ready'], ['Out for Delivery', 'On the way'], ['Delivered', 'Delivered']];
++const TRACK_PICKUP = [['Placed', 'Placed'], ['Confirmed', 'Confirmed'], ['Ready', 'Ready'], ['Served', 'Collected']];
++function trackLevel(order) {
++    const s = String(order.status || 'Placed');
++    if (order.orderMode === 'pickup') return Math.max(0, TRACK_PICKUP.findIndex(([k]) => k === s));
++    if (s === 'Picked Up' || s === 'Arriving at Restaurant' || s === 'Arrived at Restaurant') return 2;
++    if (s === 'Reached Drop Location') return 3;
++    return Math.max(0, TRACK_DELIVERY.findIndex(([k]) => k === s));
++}
++
++function trackingHtml(order) {
++    if (order.source !== 'APP') return '';
++    const status = String(order.status || 'Placed');
++    if (status === 'Cancelled') return '<div class="trk-cancelled">This order was cancelled.</div>';
++    const steps = order.orderMode === 'pickup' ? TRACK_PICKUP : TRACK_DELIVERY;
++    const at = trackLevel(order);
++    const dots = steps.map(([, label], i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"><span></span>${esc(label)}</li>`).join('');
++    const live = status === 'Out for Delivery' || status === 'Reached Drop Location';
++    const rider = live && order.riderName
++        ? `<div class="trk-rider">Your rider: <strong>${esc(order.riderName)}</strong>${order.riderPhone ? ` · <a href="tel:${esc(order.riderPhone)}">${esc(order.riderPhone)}</a>` : ''}</div>` : '';
++    const otp = live && order.deliveryOtp
++        ? `<div class="trk-otp">Delivery code <strong>${esc(order.deliveryOtp)}</strong><small>Tell this to the rider when your order arrives</small></div>` : '';
++    const pickupReady = order.orderMode === 'pickup' && status === 'Ready'
++        ? '<div class="trk-otp">Your order is ready — please collect it at the counter.</div>' : '';
++    return `<ol class="trk-steps">${dots}</ol>${rider}${otp}${pickupReady}`;
++}
++
+ function ordersListHtml() {
+     const rows = _orders.map((order) => {
+         const statusKey = String(order.status || 'Placed').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+@@ -1319,7 +1348,9 @@ function ordersListHtml() {
+                 <span class="account-order-total">${UI.fmtMoney(order.total || 0)}</span>
+             </div>
+             <div class="account-order-items">${esc(orderItemNames(order))}</div>
++            ${trackingHtml(order)}
+             <div class="account-order-actions">
++                ${order.source === 'APP' && String(order.status) === 'Placed' ? `<button type="button" class="trk-cancel" data-cancel-order="${esc(String(order.id))}">Cancel order</button>` : ''}
+                 ${ratingStarsHtml(order)}
+             </div>
+         </div>`;
+diff --git a/menu/js/firebase.js b/menu/js/firebase.js
+index 971b261..9b22a19 100644
+--- a/menu/js/firebase.js
++++ b/menu/js/firebase.js
+@@ -102,4 +102,15 @@ export async function mintAnonWebviewToken() {
+     return token;
+ }
+ 
++// Anonymous sign-in for the restaurant app's own orders. The orders rule for
++// source 'APP' requires an anonymous-auth caller and appUid == auth.uid, so a
++// stray unauthenticated script cannot create orders. No customer login is
++// involved (the phone number remains the customer's identifier).
++export async function ensureAnonAuth() {
++    const auth = getAuth(app);
++    if (auth.currentUser) return auth.currentUser;
++    const cred = await signInAnonymously(auth);
++    return cred.user;
++}
++
+ export { ref, get, onValue, set, push, update, runTransaction };
+diff --git a/menu/sw.js b/menu/sw.js
+index 15d2e7e..b92b24d 100644
+--- a/menu/sw.js
++++ b/menu/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE_NAME = 'menu-shell-v29';
++const CACHE_NAME = 'menu-shell-v30';
+ const ASSETS = [
+   './index.html',
+   './delivery.html',
+@@ -14,6 +14,7 @@ const ASSETS = [
+   './js/delivery-order.js',
+   './js/geo.js',
+   './js/customer.js',
++  './js/app-checkout.js',
+   './js/pwa-install.js',
+   './shared/combo-math.js',
+   './shared/format-order-id.js',
+diff --git a/rider-app/src/services/orderService.ts b/rider-app/src/services/orderService.ts
+index 1872fbc..c9a821a 100644
+--- a/rider-app/src/services/orderService.ts
++++ b/rider-app/src/services/orderService.ts
+@@ -141,7 +141,8 @@ export function subscribeAvailableOrders(
+   const emit = () => {
+     cleanupCache(); // Run cleanup on each emit
+     const list: AvailableOrder[] = Object.values(cache)
+-      .filter((entry) => entry.data.status === "Ready" && !entry.data.assignedRider && !isGhostOrder(entry.data.createdAt, false))
++      // Pickup orders (restaurant app, collected at the counter) are never delivery jobs.
++      .filter((entry) => entry.data.status === "Ready" && !entry.data.assignedRider && (entry.data as { type?: string }).type !== "Pickup" && !isGhostOrder(entry.data.createdAt, false))
+       .map((entry) => ({
+         id: entry.data.id,
+         outlet: entry.data.outlet,
+diff --git a/shared/cost-math.js b/shared/cost-math.js
+index a8e7533..9ad0b52 100644
+--- a/shared/cost-math.js
++++ b/shared/cost-math.js
+@@ -75,10 +75,10 @@ export function sourceOf(order) {
+ }
+ 
+ /** Source used for billing: in the percentage package, orders placed in the restaurant's own app
+- *  (order.channel === 'app', set by menu/js/delivery-order.js) are their own 3% channel. Other modes
++ *  (source 'APP', written by menu/js/app-checkout.js; or channel 'app' on the older delivery-page path) are their own 3% channel. Other modes
+  *  keep the original source, so legacy flat-rate restaurants are not re-priced. */
+ export function billingSourceOf(order, mode = 'per_order') {
+-    if (mode === 'percentage' && order && order.channel === 'app') return 'app';
++    if (mode === 'percentage' && order && (order.channel === 'app' || order.source === 'APP')) return 'app';
+     return sourceOf(order);
+ }
+ 
+@@ -141,6 +141,8 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math'))
+     assert.equal(ap.total, 30 + 10, '3% app order + 1% QR'); assert.equal(ap.bySource.app.cost, 30);
+     assert.equal(feeOf({ total: 1000, source: 'webview_delivery', channel: 'app' }, DEFAULT_RATES, 'per_order'), 5, 'flat mode not re-priced');
+     assert.equal(rateLabel('app', 'percentage'), '3% of order');
++    assert.equal(feeOf({ total: 500, source: 'APP', type: 'Pickup' }, DEFAULT_RATES, 'percentage'), 15, 'source APP (delivery or pickup) = 3%');
++    assert.equal(feeOf({ total: 500, source: 'APP' }, DEFAULT_RATES, 'per_order'), 2, 'flat mode: new channel falls under other');
+     const wp = computeWallet({ billing: { mode: 'percentage', payments: { a: { amount: 1000 } } }, orders: { a: o(1000, 'webview_delivery') } });
+     assert.equal(wp.used, 20, 'wallet uses the percentage package');
+     // low balance: <= 25% of everything topped up
+diff --git a/tests/direct-mode.check.mjs b/tests/direct-mode.check.mjs
+index 06c115d..55ec9cb 100644
+--- a/tests/direct-mode.check.mjs
++++ b/tests/direct-mode.check.mjs
+@@ -24,13 +24,15 @@ const base = `http://localhost:${server.address().port}`;
+ 
+ const DB = {
+     businesses: { 'roshani-pizza': { outlets: { pizza: {
+-        settings: { Store: { storeName: 'Roshani Pizza' } },
++        settings: { Store: { storeName: 'Roshani Pizza', lat: 25.888, lng: 85.026 }, Delivery: { slabs: [{ km: 3, fee: 30 }, { km: 10, fee: 60 }] } },
+         categories: { c1: { name: 'Pizza', order: 1 } },
+         dishes: { d1: { name: 'Margherita', category: 'c1', price: 199, stock: true, sizes: [{ label: 'Regular', price: 199 }] } },
+         customers: { '9876543210': {
+             loyalty: { phone: '9876543210', lifetimePoints: 1200, pointsSpent: 200, totalSpent: 2400, orderCount: 2, tier: 'silver', updatedAt: 1 },
+             orders: {
+                 A100: { orderId: 'A100', status: 'Delivered', total: 398, createdAt: 2000, paymentStatus: 'Paid', paymentMethod: 'UPI', paidAt: 2500, source: 'QR', itemsSummary: [{ name: 'Margherita', qty: 2 }] },
++                A200: { orderId: 'A200', status: 'Out for Delivery', total: 250, createdAt: 4000, source: 'APP', orderMode: 'delivery', paymentStatus: 'Pending', riderName: 'Amit', riderPhone: '9123456780', deliveryOtp: '4821', itemsSummary: [{ name: 'Pasta', qty: 1 }] },
++                A201: { orderId: 'A201', status: 'Placed', total: 120, createdAt: 4100, source: 'APP', orderMode: 'pickup', paymentStatus: 'Pending', itemsSummary: [{ name: 'Cola', qty: 2 }] },
+                 A101: { orderId: 'A101', status: 'Out for Delivery', total: 199, createdAt: 3000, paymentStatus: 'Pending', source: 'webview_delivery', itemsSummary: [{ name: 'Garlic Bread', qty: 1 }] }
+             }
+         } },
+@@ -39,21 +41,23 @@ const DB = {
+ };
+ const dbStub = `
+ const DB = ${JSON.stringify(DB)};
++window.__writes = [];
+ const at = (p) => p.split('/').filter(Boolean).reduce((n, k) => (n == null ? n : n[k]), DB);
++const put = (p, v) => { const ks = p.split('/').filter(Boolean); let n = DB; ks.slice(0, -1).forEach(k => { n[k] = (n[k] && typeof n[k] === 'object') ? n[k] : {}; n = n[k]; }); n[ks[ks.length - 1]] = JSON.parse(JSON.stringify(v)); };
+ const snap = (v) => ({ exists: () => v != null, val: () => (v === undefined ? null : v), forEach: (f) => { Object.entries(v || {}).forEach(([k, x]) => f({ key: k, val: () => x })); }, key: null });
+ export const getDatabase = () => ({});
+ export const ref = (db, p) => ({ path: p || '', key: (p || '').split('/').pop() });
+ export const get = async (r) => snap(at(r.path));
+ export const onValue = (r, cb) => { Promise.resolve().then(() => cb(snap(at(r.path)))); return () => {}; };
+-export const set = async () => {};
+-export const update = async () => {};
+-export const push = (r) => ({ path: r.path + '/k' + Math.random().toString(36).slice(2, 8), key: 'k' + Math.random().toString(36).slice(2, 8) });
+-export const runTransaction = async () => ({ committed: true, snapshot: snap(null) });
++export const set = async (r, v) => { window.__writes.push({ path: r.path, value: JSON.parse(JSON.stringify(v)) }); put(r.path, v); };
++export const update = async (r, o) => { window.__writes.push({ path: r.path, update: o }); const cur = at(r.path) || {}; put(r.path, { ...cur, ...o }); };
++export const push = (r) => { const k = 'k' + Math.random().toString(36).slice(2, 8); return { path: r.path + '/' + k, key: k }; };
++export const runTransaction = async (r, fn) => { const cur = at(r.path); const nv = fn(cur === undefined ? null : cur); put(r.path, nv); return { committed: true, snapshot: snap(nv) }; };
+ `;
+ const STUBS = {
+     'firebase-app.js': 'export const initializeApp = () => ({});',
+     'firebase-database.js': dbStub,
+-    'firebase-auth.js': 'export const getAuth = () => ({}); export const signInAnonymously = async () => ({ user: { uid: "x", getIdToken: async () => "t" } });',
++    'firebase-auth.js': 'export const getAuth = () => ({ currentUser: null }); export const signInAnonymously = async () => ({ user: { uid: "ANON-TEST", getIdToken: async () => "t" } });',
+     'firebase-messaging.js': 'export const getMessaging = () => ({}); export const getToken = async () => null; export const onMessage = () => () => {}; export const deleteToken = async () => true;',
+ };
+ 
+@@ -74,7 +78,7 @@ async function scenario(name, fn) {
+     const errors = [];
+     page.on('pageerror', e => errors.push(e.message));
+     try { await fn(page, ctx); console.log('PASS', name); }
+-    catch (e) { failures++; console.log('FAIL', name, '-', e.message.split('\n')[0]); }
++    catch (e) { failures++; console.log('FAIL', name, '-', e.message, (e.stack||'').split('\n').find(l=>l.includes('direct-mode.check'))); }
+     if (errors.length) { failures++; console.log('  page errors:', errors.slice(0, 3)); }
+     await ctx.close();
+ }
+@@ -138,10 +142,10 @@ await scenario('table older than 4h is forgotten; recent one is reused', async (
+     await page.waitForFunction(() => ['screenSignIn', 'screenMenu'].includes(document.querySelector('.screen.active')?.id), null, { timeout: 8000 });
+ });
+ 
+-await scenario('direct-mode: add a dish, Place order opens the chooser (no table session)', async (page) => {
++const signInAndAddDish = async (page) => {
+     await page.goto(URL_DIRECT);
+     await page.waitForSelector('#screenSignIn.active');
+-    await page.fill('#signInPhone', '9876543210');
++    await page.fill('#signInPhone', '9876543210'); await page.fill('#signInName', 'Rahul');
+     await page.click('#btnSignIn');
+     await page.waitForSelector('#screenMenu.active');
+     await page.getByText('Margherita').first().click();
+@@ -151,32 +155,92 @@ await scenario('direct-mode: add a dish, Place order opens the chooser (no table
+     await page.evaluate(() => document.getElementById('btnOpenCartFromMenu').click());
+     await page.waitForSelector('#screenCart.active');
+     await page.evaluate(() => document.getElementById('btnPlaceOrder').click());
+-    await page.waitForSelector('#directOrderChooser:not(.hidden)', { timeout: 5000 });
+-    assert.match(await page.getAttribute('#directDeliveryLink', 'href'), /^delivery\.html\?o=pizza/);
+-    await page.click('#btnCloseChooser');
+-    assert.equal(await page.isVisible('#directOrderChooser'), false);
++    await page.waitForSelector('#screenCheckout.active');
++};
++const orderWrites = (page) => page.evaluate(() => window.__writes.filter(w => /\/orders\/[^/]+$/.test(w.path) && !/\/customers\//.test(w.path)));
++
++await scenario('direct-mode: Place order opens the in-app checkout, prefilled', async (page) => {
++    await signInAndAddDish(page);
++    assert.equal(await page.inputValue('#coName'), 'Rahul');
++    assert.equal(await page.inputValue('#coPhone'), '9876543210');
++    assert.match(await page.textContent('#coLines'), /Item total/);
++    assert.deepEqual(await orderWrites(page), [], 'nothing written yet');
++});
++
++await scenario('pickup order: written with source APP, no address, no fee, payment pending', async (page) => {
++    await signInAndAddDish(page);
++    await page.click('[data-co-mode="pickup"]');
++    assert.equal(await page.isVisible('#coAddressWrap'), false);
++    assert.match(await page.textContent('#btnCoPlace'), /PICKUP/);
++    await page.fill('#coNote', 'no onion');
++    await page.click('#btnCoPlace');
++    await page.waitForSelector('#screenOrders.active', { timeout: 8000 });
++    const w = await orderWrites(page);
++    assert.equal(w.length, 1);
++    const o = w[0].value;
++    assert.equal(o.source, 'APP'); assert.equal(o.channel, 'app'); assert.equal(o.type, 'Pickup'); assert.equal(o.orderMode, 'pickup');
++    assert.equal(o.status, 'Placed'); assert.equal(o.paymentStatus, 'Pending'); assert.equal(o.stockDeducted, false);
++    assert.equal(o.appUid, 'ANON-TEST'); assert.equal(o.phone, '9876543210'); assert.equal(o.customerName, 'Rahul');
++    assert.equal(o.deliveryFee, 0); assert.equal(o.address, undefined); assert.equal(o.lat, undefined);
++    assert.equal(o.subtotal, 199); assert.equal(o.total, 208.95, '199 + 5% GST');
++    assert.equal(o.note, 'no onion'); assert.equal(o.items.length, 1); assert.equal(o.items[0].quantity, 1);
++    assert.match(o.createdAt, /^\d{4}-\d{2}-\d{2}T/); assert.equal(o.assignedRider, null);
++    // history entry for the Orders tab
++    const mirror = await page.evaluate(() => window.__writes.find(x => /customers\/9876543210\/orders\//.test(x.path))?.value);
++    assert.equal(mirror.source, 'APP'); assert.equal(mirror.orderMode, 'pickup'); assert.equal(mirror.paymentStatus, 'Pending'); assert.equal(mirror.total, 208.95);
++    // cart emptied
++    assert.equal(await page.evaluate(() => Object.keys(sessionStorage).filter(k => /cart/i.test(k) && sessionStorage.getItem(k) && sessionStorage.getItem(k) !== '[]' && sessionStorage.getItem(k) !== '{}').length), 0, 'cart emptied');
+ });
+ 
+-await scenario('chooser -> delivery app keeps the cart and the signed-in profile', async (page) => {
++await scenario('delivery order: needs location + address, fee from slabs, COD', async (page, ctx) => {
++    await ctx.grantPermissions(['geolocation']);
++    await ctx.setGeolocation({ latitude: 25.889, longitude: 85.027 });  // ~0.15 km from the store
++    await signInAndAddDish(page);
++    // no location yet: button asks for it instead of ordering
++    assert.match(await page.textContent('#btnCoPlace'), /SHARE LOCATION/);
++    await page.click('#btnCoPlace');
++    await page.waitForFunction(() => /Location shared/.test(document.getElementById('coLocStatus')?.textContent || ''), null, { timeout: 8000 });
++    assert.match(await page.textContent('#coLines'), /Delivery fee/);
++    // address is required
++    await page.click('#btnCoPlace');
++    assert.deepEqual(await orderWrites(page), [], 'refused without an address');
++    await page.fill('#coAddress', 'Flat 4, MG Road, near the temple');
++    await page.click('#btnCoPlace');
++    await page.waitForSelector('#screenOrders.active', { timeout: 8000 });
++    const o = (await orderWrites(page))[0].value;
++    assert.equal(o.type, 'Online'); assert.equal(o.orderMode, 'delivery'); assert.equal(o.source, 'APP');
++    assert.equal(o.deliveryFee, 30); assert.equal(o.total, 238.95, '199 + 9.95 GST + 30 fee (fee outside tax)');
++    assert.equal(o.paymentMethod, 'COD'); assert.equal(o.paymentStatus, 'Pending');
++    assert.equal(o.address, 'Flat 4, MG Road, near the temple'); assert.equal(typeof o.lat, 'number'); assert.ok(o.distanceKm >= 0);
++});
++
++await scenario('checkout validates name and phone', async (page) => {
++    await signInAndAddDish(page);
++    await page.click('[data-co-mode="pickup"]');
++    await page.fill('#coPhone', '12345');
++    await page.click('#btnCoPlace');
++    assert.deepEqual(await orderWrites(page), []);
++    assert.equal(await active(page), 'screenCheckout');
++});
++
++await scenario('tracking: delivery steps, rider and delivery code; pickup steps; cancel only while Placed', async (page) => {
+     await page.goto(URL_DIRECT);
+     await page.waitForSelector('#screenSignIn.active');
+-    await page.fill('#signInPhone', '9876543210'); await page.fill('#signInName', 'Rahul');
++    await page.fill('#signInPhone', '9876543210');
+     await page.click('#btnSignIn');
+     await page.waitForSelector('#screenMenu.active');
+-    await page.getByText('Margherita').first().click();
+-    await page.waitForSelector('#screenCustomize.active');
+-    await page.click('#btnAddToOrder');
+-    await page.waitForSelector('#screenMenu.active');
+-    await page.evaluate(() => document.getElementById('btnOpenCartFromMenu').click());
+-    await page.waitForSelector('#screenCart.active');
+-    await page.evaluate(() => document.getElementById('btnPlaceOrder').click());
+-    await page.waitForSelector('#directOrderChooser:not(.hidden)');
+-    await Promise.all([page.waitForURL(/delivery\.html\?o=pizza/), page.click('#directDeliveryLink')]);
+-    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenMenu', null, { timeout: 8000 });
+-    await page.waitForFunction(() => Number(document.getElementById('bottomNavCartCount')?.textContent) >= 1, null, { timeout: 5000 });
+-    // profile is shared (same origin): checkout fields are pre-filled
+-    const vals = await page.evaluate(() => [document.getElementById('checkoutName')?.value, document.getElementById('checkoutPhone')?.value]);
+-    assert.deepEqual(vals, ['Rahul', '9876543210']);
++    await page.click('[data-bottom-tab="screenOrders"]');
++    await page.waitForSelector('.account-order-card[data-order-id="A200"]', { timeout: 5000 });
++    const del = await page.textContent('.account-order-card[data-order-id="A200"]');
++    assert.match(del, /On the way/); assert.match(del, /Amit/); assert.match(del, /4821/); assert.match(del, /Delivery code/);
++    assert.equal(await page.locator('.account-order-card[data-order-id="A200"] [data-cancel-order]').count(), 0, 'no cancel once on the way');
++    const pick = await page.textContent('.account-order-card[data-order-id="A201"]');
++    assert.match(pick, /Collected/); assert.doesNotMatch(pick, /On the way/);
++    assert.equal(await page.locator('.account-order-card[data-order-id="A201"] [data-cancel-order]').count(), 1);
++    page.on('dialog', d => d.accept());
++    await page.click('.account-order-card[data-order-id="A201"] [data-cancel-order]');
++    await page.waitForFunction(() => window.__writes.some(w => /orders\/A201\/status$/.test(w.path) && w.value === 'Cancelled'), null, { timeout: 5000 });
++    await page.waitForFunction(() => /cancelled/i.test(document.querySelector('.account-order-card[data-order-id="A201"]')?.textContent || ''), null, { timeout: 5000 });
+ });
+ 
+ await scenario('dedicated-app tabs: Menu, Cart, Orders, Loyalty, Account', async (page) => {
+@@ -190,7 +254,7 @@ await scenario('dedicated-app tabs: Menu, Cart, Orders, Loyalty, Account', async
+ 
+     await page.click('[data-bottom-tab="screenOrders"]');
+     await page.waitForSelector('#screenOrders.active');
+-    await page.waitForFunction(() => document.querySelectorAll('#ordersScreenBody .account-order-card').length === 2, null, { timeout: 5000 });
++    await page.waitForFunction(() => document.querySelectorAll('#ordersScreenBody .account-order-card').length === 4, null, { timeout: 5000 });
+     const ordersText = await page.textContent('#ordersScreenBody');
+     assert.match(ordersText, /A101/); assert.match(ordersText, /Out for Delivery/); assert.match(ordersText, /Garlic Bread/);
+ 
+@@ -215,14 +279,14 @@ await scenario('Payments view: paid vs pay-on-delivery, totals, details', async
+     await page.click('#btnSignIn');
+     await page.waitForSelector('#screenMenu.active');
+     await page.click('[data-bottom-tab="screenOrders"]');
+-    await page.waitForFunction(() => document.querySelectorAll('#ordersScreenBody .account-order-card').length === 2, null, { timeout: 5000 });
++    await page.waitForFunction(() => document.querySelectorAll('#ordersScreenBody .account-order-card').length === 4, null, { timeout: 5000 });
+     await page.click('[data-orders-view="payments"]');
+     await page.waitForSelector('#paymentsList .pay-row', { timeout: 5000 });
+     const text = await page.textContent('#ordersScreenBody');
+     assert.match(text, /Paid · UPI/); assert.match(text, /Pay on delivery/);
+     assert.match(text, /not a tax invoice/);
+     const stats = await page.$$eval('#ordersScreenBody .account-stats .stat', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
+-    assert.match(stats[0], /398/); assert.match(stats[0], /Paid/); assert.match(stats[1], /199/); assert.match(stats[1], /To pay/);
++    assert.match(stats[0], /398/); assert.match(stats[0], /Paid/); assert.match(stats[1], /569/); assert.match(stats[1], /To pay/);
+     await page.click('.pay-row[data-order-id="A100"] summary');
+     assert.match(await page.textContent('.pay-row[data-order-id="A100"] .pay-detail'), /Paid on/);
+     await page.click('[data-orders-view="orders"]');
+diff --git a/tests/payment-sync.check.cjs b/tests/payment-sync.check.cjs
+index d81f955..4f50c28 100644
+--- a/tests/payment-sync.check.cjs
++++ b/tests/payment-sync.check.cjs
+@@ -45,6 +45,17 @@ const PH = '9876543210', ID = 'A100';
+     await syncCustomerPayment({ db, resolvePath, phone: PH, orderId: ID, order: { status: 'Served', total: 398, paymentStatus: 'Unpaid', paymentMethod: null }, outlet: 'o', now: 9500 });
+     rec = get(`o/customers/${PH}/orders/${ID}`);
+     assert.equal(rec.paymentStatus, 'Unpaid'); assert.equal(rec.paidAt, null);
++
++    // live tracking: rider + delivery code + order mode are mirrored, then cleared
++    await syncCustomerPayment({ db, resolvePath, phone: PH, orderId: ID, order: { status: 'Out for Delivery', total: 398, paymentStatus: 'Pending', orderMode: 'delivery' }, outlet: 'o', now: 9600, extra: { rider: { name: 'Amit', phone: '+91 91234-56780' }, otp: '4821' } });
++    rec = get(`o/customers/${PH}/orders/${ID}`);
++    assert.equal(rec.riderName, 'Amit'); assert.equal(rec.riderPhone, '9123456780'); assert.equal(rec.deliveryOtp, '4821'); assert.equal(rec.orderMode, 'delivery');
++    const w2 = writes;
++    assert.equal(await syncCustomerPayment({ db, resolvePath, phone: PH, orderId: ID, order: { status: 'Out for Delivery', total: 398, paymentStatus: 'Pending', orderMode: 'delivery' }, outlet: 'o', now: 9700, extra: { rider: { name: 'Amit', phone: '9123456780' }, otp: '4821' } }), false);
++    assert.equal(writes, w2, 'tracking sync is idempotent');
++    await syncCustomerPayment({ db, resolvePath, phone: PH, orderId: ID, order: { status: 'Delivered', total: 398, paymentStatus: 'Paid', paymentMethod: 'Cash', orderMode: 'delivery' }, outlet: 'o', now: 9800 });
++    rec = get(`o/customers/${PH}/orders/${ID}`);
++    assert.equal(rec.deliveryOtp, null, 'delivery code not kept after delivery'); assert.equal(rec.riderPhone, null);
+     // no phone -> skipped
+     assert.equal(await syncCustomerPayment({ db, resolvePath, phone: '', orderId: ID, order: { total: 1 }, outlet: 'o' }), false);
+ 
+@@ -52,5 +63,8 @@ const PH = '9876543210', ID = 'A100';
+     const src = require('fs').readFileSync(require('path').join(__dirname, '../bot/index.js'), 'utf8');
+     assert.match(src, /paymentSync\.syncCustomerPayment/, 'child_changed hook wired');
+     assert.doesNotMatch(src, /customers\/\$\{phone\}\/orders\/\$\{String\(orderId\)\}`, outlet\)\)\.set\(\{\s*orderId/, 'accrual mirror must not replace the record');
++    assert.match(src, /function isWebOrderSource/, 'APP orders share web-order finalization');
++    assert.match(src, /source\s*===\s*'APP'/, 'bot recognises APP orders');
++    assert.match(src, /'Pickup'/, 'pickup handled (no rider broadcast)');
+     console.log('payment-sync OK');
+ })().catch(e => { console.error(e); process.exit(1); });
+diff --git a/tests/rules.emulator.mjs b/tests/rules.emulator.mjs
+index 5d1a57b..2bb8359 100644
+--- a/tests/rules.emulator.mjs
++++ b/tests/rules.emulator.mjs
+@@ -23,7 +23,20 @@ const jwt = (uid) => [
+   'ZmFrZQ'
+ ].join('.');
+ 
++// Firebase anonymous-auth token (the restaurant app signs in this way to place orders).
++const anonJwt = (uid) => [
++  b64({ alg: 'HS256', typ: 'JWT' }),
++  b64({
++    sub: uid, user_id: uid, uid,
++    aud: 'demo-foodhubbie', iss: 'https://securetoken.google.com/demo-foodhubbie',
++    iat: NOW, exp: NOW + 3600, auth_time: NOW,
++    firebase: { sign_in_provider: 'anonymous', identities: {} }
++  }),
++  'ZmFrZQ'
++].join('.');
+ const ADMIN = jwt('ADMIN1');
++const ANON1 = anonJwt('ANON1');
++const ANON2 = anonJwt('ANON2');
+ const RIDER = jwt('RIDER1');
+ const OTHER = jwt('RIDER2');
+ 
+@@ -50,8 +63,32 @@ const ack = { settlementId: 'S1', acknowledged: true, acknowledgedAt: 123, rider
+ const sos = { riderId: 'RIDER1', riderName: 'R', riderPhone: '9999999999', lat: 1, lng: 2, ts: 3, status: 'active' };
+ const OUT = '/businesses/b1/outlets/pizza';
+ const CUST = `${OUT}/customers/9876543210`;
++const appOrder = (over = {}) => ({
++  orderId: 'APP-1', outlet: 'pizza', type: 'Online', orderMode: 'delivery', source: 'APP', channel: 'app', appUid: 'ANON1',
++  customerName: 'Rahul', phone: '9876543210', total: 208.95, status: 'Placed', paymentStatus: 'Pending',
++  paymentMethod: 'COD', createdAt: new Date().toISOString(), stockDeducted: false,
++  items: [{ name: 'Margherita', quantity: 1, unitPrice: 199, total: 199 }], ...over
++});
+ 
+ const cases = [
++  // ── restaurant app orders (source APP) ──
++  ['app: anon user places a delivery order', () => call('PUT', `${OUT}/orders/APP-1`, ANON1, appOrder()), 200],
++  ['app: anon user places a pickup order', () => call('PUT', `${OUT}/orders/APP-P1`, ANON1, appOrder({ orderId: 'APP-P1', type: 'Pickup', orderMode: 'pickup', paymentMethod: null })), 200],
++  ['app: unauthenticated order is refused', () => call('PUT', `${OUT}/orders/APP-2`, null, appOrder({ orderId: 'APP-2' })), 'deny'],
++  ['app: non-anonymous login is refused', () => call('PUT', `${OUT}/orders/APP-3`, RIDER, appOrder({ orderId: 'APP-3', appUid: 'RIDER1' })), 'deny'],
++  ['app: appUid must match the signer', () => call('PUT', `${OUT}/orders/APP-4`, ANON1, appOrder({ orderId: 'APP-4', appUid: 'ANON2' })), 'deny'],
++  ['app: order cannot be created Paid', () => call('PUT', `${OUT}/orders/APP-5`, ANON1, appOrder({ orderId: 'APP-5', paymentStatus: 'Paid' })), 'deny'],
++  ['app: order cannot start Delivered', () => call('PUT', `${OUT}/orders/APP-6`, ANON1, appOrder({ orderId: 'APP-6', status: 'Delivered' })), 'deny'],
++  ['app: order cannot pre-assign a rider', () => call('PUT', `${OUT}/orders/APP-7`, ANON1, appOrder({ orderId: 'APP-7', riderId: 'RIDER1' })), 'deny'],
++  ['app: bad phone number refused', () => call('PUT', `${OUT}/orders/APP-8`, ANON1, appOrder({ orderId: 'APP-8', phone: '12345' })), 'deny'],
++  ['app: unknown type refused', () => call('PUT', `${OUT}/orders/APP-9`, ANON1, appOrder({ orderId: 'APP-9', type: 'Dine-in' })), 'deny'],
++  ['app: stock already deducted refused', () => call('PUT', `${OUT}/orders/APP-10`, ANON1, appOrder({ orderId: 'APP-10', stockDeducted: true })), 'deny'],
++  ['app: owner cancels own Placed order', () => call('PUT', `${OUT}/orders/SEED-APP-PLACED/status`, ANON1, 'Cancelled'), 200],
++  ['app: another device cannot cancel it', () => call('PUT', `${OUT}/orders/SEED-APP-PLACED2/status`, ANON2, 'Cancelled'), 'deny'],
++  ['app: no cancel once Confirmed', () => call('PUT', `${OUT}/orders/SEED-APP-CONFIRMED/status`, ANON1, 'Cancelled'), 'deny'],
++  ['app: customer cannot mark own order Delivered', () => call('PUT', `${OUT}/orders/SEED-APP-PLACED3/status`, ANON1, 'Delivered'), 'deny'],
++  ['app: public cannot read an app order', () => call('GET', `${OUT}/orders/SEED-APP-CONFIRMED`, null), 'deny'],
++  ['app: admin updates status', () => call('PUT', `${OUT}/orders/SEED-APP-CONFIRMED/status`, ADMIN, 'Ready'), 200],
+   ['rider acks own existing settlement', () => call('PUT', `${OUT}/settlements/RIDER1/S1/riderAck`, RIDER, ack), 200],
+   ['rider acks with serverTimestamp', () => call('PUT', `${OUT}/settlements/RIDER1/S1/riderAck`, RIDER, { ...ack, acknowledgedAt: { '.sv': 'timestamp' } }), 200],
+   ['rider edits own amountCollected', () => call('PATCH', `${OUT}/settlements/RIDER1/S1`, RIDER, { amountCollected: 999999 }), 'deny'],
+@@ -84,6 +121,12 @@ await seed({
+     b1: {
+       outlets: {
+         pizza: {
++          orders: {
++            'SEED-APP-PLACED': appOrder({ orderId: 'SEED-APP-PLACED' }),
++            'SEED-APP-PLACED2': appOrder({ orderId: 'SEED-APP-PLACED2' }),
++            'SEED-APP-PLACED3': appOrder({ orderId: 'SEED-APP-PLACED3' }),
++            'SEED-APP-CONFIRMED': appOrder({ orderId: 'SEED-APP-CONFIRMED', status: 'Confirmed' })
++          },
+           settlements: { RIDER1: { S1: { riderId: 'RIDER1', amountCollected: 5000, createdAt: 1 } } },
+           loyalty: { config: { earnRatePaisePerPoint: 2000, tiers: { bronze: { min: 0 }, silver: { min: 500 }, gold: { min: 1000 } }, rewards: [{ id: 'free_fries', label: 'Free Fries', cost: 200 }] } },
+           customers: { 9876543210: { loyalty: { phone: '9876543210', outlet: 'pizza', business: 'b1', lifetimePoints: 500, pointsSpent: 100, totalSpent: 1, orderCount: 1, tier: 'silver', updatedAt: 1 } } }
+-- 
+2.43.0
+

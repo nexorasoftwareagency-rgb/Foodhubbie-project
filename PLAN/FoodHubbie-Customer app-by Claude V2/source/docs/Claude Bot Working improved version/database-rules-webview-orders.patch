@@ -1,0 +1,25 @@
+diff --git a/database.rules.json b/database.rules.json
+index 90dfeb2..47b7c98 100644
+--- a/database.rules.json
++++ b/database.rules.json
+@@ -131,8 +131,8 @@
+         ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('riders').child(auth.uid).exists() && (query.orderByChild == 'assignedRider' && (query.equalTo == root.child('riders').child(auth.uid).child('email').val().toLowerCase() || query.equalTo == '' || query.equalTo == null))))",
+         ".indexOn": ["createdAt", "status", "riderId", "assignedRider", "orderId", "type"],
+         "$orderId": {
+-          ".read": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('riders').child(auth.uid).exists() && (!data.child('assignedRider').exists() || data.child('assignedRider').val().toLowerCase() == root.child('riders').child(auth.uid).child('email').val().toLowerCase())))) || (data.child('source').val() == 'QR')",
+-            ".write": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('riders').child(auth.uid).exists() && (!data.child('riderId').exists() || data.child('riderId').val() == auth.uid)))) || (!data.exists() && newData.child('source').val() == 'QR') || (data.child('source').val() == 'QR' && data.child('status').val() == 'Pending' && (newData.child('status').val() == 'Placed' || newData.child('status').val() == 'Cancelled'))",
++          ".read": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('riders').child(auth.uid).exists() && (!data.child('assignedRider').exists() || data.child('assignedRider').val().toLowerCase() == root.child('riders').child(auth.uid).child('email').val().toLowerCase())))) || (data.child('source').val() == 'QR') || (data.child('source').val() == 'webview_delivery')",
++            ".write": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId || (root.child('riders').child(auth.uid).exists() && (!data.child('riderId').exists() || data.child('riderId').val() == auth.uid)))) || (!data.exists() && newData.child('source').val() == 'QR') || (data.child('source').val() == 'QR' && data.child('status').val() == 'Pending' && (newData.child('status').val() == 'Placed' || newData.child('status').val() == 'Cancelled')) || (!data.exists() && newData.child('source').val() == 'webview_delivery' && newData.child('type').val() == 'Online' && newData.child('status').val() == 'Placed')",
+           ".validate": "newData.hasChildren(['items', 'total', 'status', 'createdAt']) && newData.child('total').isNumber() && newData.child('status').isString() && newData.child('createdAt').isString() && (!newData.hasChild('subtotal') || newData.child('subtotal').isNumber()) && (!newData.hasChild('tax') || newData.child('tax').isNumber()) && (!newData.hasChild('serviceCharge') || newData.child('serviceCharge').isNumber()) && (!newData.hasChild('discountAmount') || newData.child('discountAmount').isNumber()) && (!newData.hasChild('paymentStatus') || newData.child('paymentStatus').isString())"
+         }
+       },
+@@ -218,6 +218,9 @@
+           "facebook": { ".read": "true" },
+           "googleReviewLink": { ".read": "true" },
+           "whatsappNumber": { ".read": "true" }
++        },
++        "Delivery": {
++          ".read": "true"
+         }
+       },
+       "metadata": {

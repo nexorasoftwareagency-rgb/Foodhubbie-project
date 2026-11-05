@@ -1,0 +1,140 @@
+/**
+ * Runnable check for the P0-3 (category matching) and P0-4 (table channel)
+ * fixes in Admin/js/features/discount-evaluator.js.
+ *
+ *   node tests/discount-evaluator.check.mjs
+ *
+ * The module imports ../firebase.js (CDN URLs + window/document), so it can't
+ * be loaded directly in Node — bundle it with esbuild (already a devDependency)
+ * and stub that single file. Everything under test is the real source.
+ *
+ * Not named *.test.* on purpose: playwright.config.js uses testDir './tests'
+ * and would otherwise try to load this as a Playwright spec.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { resolve } from 'node:path';
+
+const DISCOUNTS = {
+    cat1: {
+        type: 'category', categoryIds: ['keyA'], value: 10, mode: 'percent',
+        channel: 'pos', enabled: true, startsAt: 0, endsAt: 0, name: 'Drinks 10% off',
+    },
+};
+
+const FIREBASE_STUB = `
+export const Outlet = { current: 'o1', ref: (p) => String(p) };
+export const ref = (p) => p;
+export const get = async (path) => ({
+    exists: () => false,
+    val: () => String(path) === 'categories'
+        ? { keyA: { name: 'Hot Drinks' }, keyB: { name: 'Pizza' } }
+        : String(path) === 'discounts' ? ${JSON.stringify(DISCOUNTS)} : {},
+});
+export const runTransaction = async () => ({ committed: true });
+export const push = () => ({ key: 'pushKey' });
+`;
+
+const { outputFiles } = await build({
+    entryPoints: ['Admin/js/features/discount-evaluator.js'],
+    bundle: true, format: 'esm', write: false, platform: 'neutral', logLevel: 'silent',
+    plugins: [{
+        name: 'firebase-stub',
+        setup(b) {
+            b.onResolve({ filter: /firebase\.js$/ }, () => ({ path: 'stub', namespace: 'fb' }));
+            b.onLoad({ filter: /^stub$/, namespace: 'fb' }, () => ({ contents: FIREBASE_STUB, loader: 'js' }));
+            // shared/* imports are runtime-URL-relative in production (build.mjs
+            // does not bundle — it minifies per-file and copies repo-root shared/
+            // to dist/shared, where the browser resolves ../../shared/* against
+            // /js/features/*). Bundling HERE needs the real file, so map the
+            // repo-root copy explicitly.
+            b.onResolve({ filter: /shared\/.+\.js$/ }, (args) => ({
+                path: resolve(process.cwd(), args.path.replace(/^(\.\.\/)+/, '')),
+            }));
+        },
+    }],
+});
+
+const mod = await import('data:text/javascript;base64,'
+    + Buffer.from(outputFiles[0].text).toString('base64'));
+
+const DRINKS_CART = [{ name: 'Masala Chai', category: 'Hot Drinks' }];
+
+test('P0-4: discountAllowsChannel channel matrix', () => {
+    const cases = [
+        [{ channel: 'pos' }, 'table', true],        // the fix
+        [{ channel: 'pos' }, 'pos', true],          // unchanged
+        [{ channel: 'pos' }, 'whatsapp', false],    // unchanged
+        [{ channel: 'pos' }, 'website', false],     // unchanged
+        [{ channel: 'whatsapp' }, 'table', false],
+        [{ channel: 'website' }, 'table', false],
+        [{ channel: 'both' }, 'table', true],       // unchanged
+        [{ channel: 'table' }, 'table', true],      // #9: now authorable
+        [{ channel: 'table' }, 'pos', false],       // table-only never leaks to POS
+        [{ channel: 'table' }, 'website', false],
+        [{ channel: 'all' }, 'table', true],
+        [{}, 'table', true],
+        [{ channel: '' }, 'table', true],
+    ];
+    for (const [d, channel, expected] of cases) {
+        assert.equal(mod.discountAllowsChannel(d, channel), expected,
+            `discount.channel=${d.channel || '(unset)'} vs channel=${channel}`);
+    }
+});
+
+test('ceiling: needsPinApproval fires only above an active ceiling', () => {
+    // ceiling switched off → never asks for a PIN
+    assert.equal(mod.needsPinApproval(900, 1000, 0), false);
+    assert.equal(mod.needsPinApproval(900, 1000, undefined), false);
+    // exactly at the ceiling passes without a PIN
+    assert.equal(mod.needsPinApproval(150, 1000, 15), false);
+    // above the ceiling → PIN required
+    assert.equal(mod.needsPinApproval(151, 1000, 15), true);
+    // degenerate inputs must never block billing
+    assert.equal(mod.needsPinApproval(500, 0, 15), false);
+    assert.equal(mod.needsPinApproval(null, 1000, 15), false);
+});
+
+test('P0-3: category discount matches a cart carrying the category NAME', async () => {
+    const list = await mod.getEligibleOffersForDisplay(
+        { cat1: DISCOUNTS.cat1 }, { channel: 'table', cart: DRINKS_CART });
+    assert.equal(list.length, 1);
+});
+
+test('P0-3: raw push-key on the item still matches (unchanged behaviour)', async () => {
+    const list = await mod.getEligibleOffersForDisplay(
+        { cat1: DISCOUNTS.cat1 }, { channel: 'pos', cart: [{ name: 'x', categoryId: 'keyA' }] });
+    assert.equal(list.length, 1);
+});
+
+test('P0-3: a different category never matches', async () => {
+    const list = await mod.getEligibleOffersForDisplay(
+        { cat1: DISCOUNTS.cat1 },
+        { channel: 'table', cart: [{ name: 'Margherita', category: 'Pizza' }] });
+    assert.equal(list.length, 0);
+});
+
+test('P0-3: an item with no category at all never matches', async () => {
+    const list = await mod.getEligibleOffersForDisplay(
+        { cat1: DISCOUNTS.cat1 }, { channel: 'table', cart: [{ name: 'Masala Chai (Large)' }] });
+    assert.equal(list.length, 0);
+});
+
+test('P0-3 + P0-4: POS-only category discount pays out on a table bill', async () => {
+    const r = await mod.evaluateDiscount({ subtotal: 500, channel: 'table', cart: DRINKS_CART });
+    assert.equal(r?.amount, 50);
+    assert.equal(r?.discount.id, 'cat1');
+});
+
+test('regression: the same discount never leaks into the website channel', async () => {
+    const r = await mod.evaluateDiscount({ subtotal: 500, channel: 'website', cart: DRINKS_CART });
+    assert.equal(r, null);
+});
+
+test('regression: wrong category pays nothing on a table bill', async () => {
+    const r = await mod.evaluateDiscount({
+        subtotal: 500, channel: 'table', cart: [{ name: 'Margherita', category: 'Pizza' }],
+    });
+    assert.equal(r, null);
+});

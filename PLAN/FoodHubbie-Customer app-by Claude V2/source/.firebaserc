@@ -1,0 +1,33 @@
+{
+  "projects": {
+    "default": "foodhubbie-10"
+  },
+  "targets": {
+    "foodhubbie-10": {
+      "hosting": {
+        "admin": [
+          "foodhubbie-admins"
+        ],
+        "rider": [
+          "foodhubbie-riderapp"
+        ],
+        "menu": [
+          "foodhubbie-qrmenu"
+        ],
+        "supreme": [
+          "foodhubbie-supremeadmin"
+        ],
+        "delivery": [
+          "foodhubbie-delivery"
+        ],
+        "website": [
+          "foodhubbie-web"
+        ],
+        "assets": [
+          "foodhubbie-assets"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

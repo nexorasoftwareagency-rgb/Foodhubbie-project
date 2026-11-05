@@ -1,0 +1,1060 @@
+import { state } from '../state.js';
+import { db, auth, Outlet, tenantPath, ref, get, update, set, EmailAuthProvider, reauthenticateWithCredential } from '../firebase.js';
+import { logAudit, showToast, showConfirm, getSkeletonRows, hashPin, escapeHtml } from '../utils.js';
+import { loadLucide } from '../ui.js';
+import { completeSiteRefresh } from '../pwa.js';
+import { DEFAULT_ROLES } from '../ui.js';
+
+// Auto-create default roles when Staff Management feature is first enabled
+async function initializeDefaultRoles() {
+    try {
+        const rolesRef = Outlet.ref('settings/roles');
+        const snap = await get(rolesRef);
+        if (snap.exists()) return; // Already initialized
+
+        // Convert DEFAULT_ROLES to the format expected (key: {name, level, tabs})
+        const defaultRoles = {};
+        for (const [key, role] of Object.entries(DEFAULT_ROLES)) {
+            defaultRoles[key] = {
+                name: role.name,
+                level: role.level,
+                tabs: role.tabs
+            };
+        }
+        await set(rolesRef, defaultRoles);
+        state.roles = defaultRoles;
+        logAudit('Settings', 'Initialized default roles for Staff Management', 'Global');
+    } catch (e) {
+        console.error('[Settings] Failed to initialize default roles:', e);
+        showToast('Staff Management is on, but default roles could not be created — check your permissions.', 'error');
+    }
+}
+
+// --- STATE & UTILS ---
+const SETTINGS_PATHS = {
+    STORE: "settings/Store",
+    DELIVERY: "settings/Delivery",
+    BOT: "settings/Bot",
+    DISPLAY: "settings/Display",
+    SECURITY: "settings/Security",
+    FEATURES: "settings/features"
+};
+
+function validateCoords(lat, lng) {
+    const l = parseFloat(lat);
+    const n = parseFloat(lng);
+    if (isNaN(l) || l < -90 || l > 90) return { valid: false, msg: "Invalid Latitude (-90 to 90)" };
+    if (isNaN(n) || n < -180 || n > 180) return { valid: false, msg: "Invalid Longitude (-180 to 180)" };
+    return { valid: true };
+}
+
+/**
+ * Validates Indian Phone Format (91XXXXXXXXXX)
+ */
+function validatePhone(phone, label) {
+    if (!phone) return true; // Optional fields
+    const clean = String(phone).replace(/\D/g, '');
+    if (clean.length === 10) return { valid: true, value: "91" + clean };
+    if (clean.length !== 12 || !clean.startsWith('91')) {
+        return { valid: false, msg: `${label} must be 10 digits or 12 digits starting with 91` };
+    }
+    return { valid: true, value: clean };
+}
+
+/**
+ * Validates GSTIN (15 characters)
+ */
+function validateGSTIN(gst) {
+    if (!gst) return true;
+    const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (!regex.test(gst)) return { valid: false, msg: "Invalid GSTIN Format" };
+    return { valid: true };
+}
+
+/**
+ * Validates FSSAI (14 digits)
+ */
+function validateFSSAI(fssai) {
+    if (!fssai) return true;
+    if (!/^[0-9]{14}$/.test(fssai)) return { valid: false, msg: "FSSAI must be exactly 14 digits" };
+    return { valid: true };
+}
+
+/**
+ * Validates Backup/Access Code (4 digits)
+ */
+function validateBackupCode(code) {
+    if (!/^[0-9]{4}$/.test(code)) return { valid: false, msg: "Backup Code must be 4 digits" };
+    return { valid: true };
+}
+
+/**
+ * Validates a generic URL field — optional, but if present must look like a URL.
+ */
+function validateOptionalUrl(url, label) {
+    if (!url) return true;
+    try {
+        const v = url.match(/^https?:\/\//i) ? url : `https://${url}`;
+        new URL(v);
+        return { valid: true };
+    } catch {
+        return { valid: false, msg: `${label} doesn't look like a valid URL` };
+    }
+}
+
+const val = (id) => document.getElementById(id)?.value ?? '';
+const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+const setChecked = (id, v) => { const el = document.getElementById(id); if (el) el.checked = v; };
+const isChecked = (id) => document.getElementById(id)?.checked ?? false;
+
+// Settings > Features: mirror the toggle into the card status and the
+// Discount Approval inputs (greyed out while the feature is off).
+function applyFeatureUI() {
+    const on = isChecked('featureDiscountApproval');
+    for (const id of ['settingDiscCeilingPct', 'settingManagerPin']) {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !on;
+    }
+    const st = document.getElementById('featureDiscountStatus');
+    if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
+}
+
+// Expense feature UI
+function applyExpenseFeatureUI() {
+    const on = isChecked('featureExpense');
+    const st = document.getElementById('featureExpenseStatus');
+    if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
+    // Note: Expense tab visibility is handled in main.js initTabs()
+}
+// Staff Management feature UI
+function applyStaffManagementFeatureUI() {
+    const on = isChecked('featureStaffManagement');
+    const st = document.getElementById('featureStaffManagementStatus');
+    if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
+}
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'featureDiscountApproval') applyFeatureUI();
+    if (e.target && e.target.id === 'featureExpense') applyExpenseFeatureUI();
+    if (e.target && e.target.id === 'featureStaffManagement') applyStaffManagementFeatureUI();
+});
+const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcons({ root }));
+
+// --- CORE FUNCTIONS ---
+
+export async function loadStoreSettings() {
+    console.log("[Settings] Loading all store settings...");
+
+    // Show skeleton while data loads
+    const feeSlabsTbody = document.getElementById('feeSlabsTable');
+    if (feeSlabsTbody) feeSlabsTbody.innerHTML = getSkeletonRows(3, 4);
+
+    try {
+        const [storeSnap, delSnap, botSnap, dispSnap, secSnap, featSnap] = await Promise.all([
+            get(Outlet.ref(SETTINGS_PATHS.STORE)),
+            get(Outlet.ref(SETTINGS_PATHS.DELIVERY)),
+            get(Outlet.ref(SETTINGS_PATHS.BOT)),
+            get(Outlet.ref(SETTINGS_PATHS.DISPLAY)),
+            get(Outlet.ref(SETTINGS_PATHS.SECURITY)),
+            get(Outlet.ref(SETTINGS_PATHS.FEATURES))
+        ]);
+
+        const store = storeSnap.val();
+        const del = delSnap.val();
+        const bot = botSnap.val();
+        const disp = dispSnap.val();
+        const sec = secSnap.val() || {};
+
+        // 1. Store Info
+        const s = store || {};
+        setVal('settingEntityName', s.entityName || '');
+        setVal('settingStoreName', s.storeName || '');
+        setVal('settingStoreAddress', s.address || '');
+        setVal('settingGSTIN', s.gstin || '');
+        setVal('settingFSSAI', s.fssai || '');
+        setVal('settingTagline', s.tagline || '');
+        setVal('settingPoweredBy', s.poweredBy || 'Powered by FoodHubbie');
+        setVal('settingOpenTime', s.shopOpenTime || '10:00');
+        setVal('settingCloseTime', s.shopCloseTime || '23:00');
+        setVal('settingShopStatus', s.shopStatus || 'AUTO');
+        setVal('settingWifiName', s.wifiName || '');
+        setVal('settingWifiPass', s.wifiPass || '');
+        setVal('settingInstagram', s.instagram || '');
+        setVal('settingFacebook', s.facebook || '');
+        setVal('settingGoogleReviewLink', s.googleReviewLink || '');
+        setVal('settingWhatsappNumber', s.whatsappNumber || '');
+        setVal('settingReviewUrl', s.reviewUrl || '');
+        setVal('settingCustomerMenuBgImage', s.customerMenuBgImage || '');
+        setVal('settingLat', s.lat || '25.887444');
+        setVal('settingLng', s.lng || '85.026889');
+        const coordsEl = document.getElementById('displayCoords');
+        if (coordsEl) coordsEl.innerText = `${s.lat || '25.887444'}, ${s.lng || '85.026889'}`;
+
+        // 2. Delivery & Security
+        const d = del || {};
+        setVal('settingDevPhone', d.developerPhone || '');
+        setVal('settingReportPhone', d.reportPhone || '');
+        setVal('settingAdminPhone', d.notifyPhone || '');
+        setVal('settingDeliveryBackupCode', d.backupCode || '');
+        renderFeeSlabs(d.slabs || []);
+
+        // 2a. Discount approval ceiling (settings/Security).
+        // The stored value is a hash, so it never round-trips into the field;
+        // an empty field on save means "keep the PIN that is already set".
+        setVal('settingDiscCeilingPct', typeof sec.discountCeilingPct === 'number' ? sec.discountCeilingPct : 0);
+        setVal('settingManagerPin', '');
+        const pinEl = document.getElementById('settingManagerPin');
+        if (pinEl) pinEl.placeholder = sec.pinHash ? 'PIN set — enter a new one to change it' : 'e.g. 4711';
+
+        // 2a-1. Feature flag (settings/features). Absent node = OFF by design.
+        state.features.discountApproval = featSnap.val()?.discountApproval === true;
+        setChecked('featureDiscountApproval', state.features.discountApproval);
+        applyFeatureUI();
+
+        // 2a-2. Expense feature flag
+        state.features.expense = featSnap.val()?.expense === true;
+        setChecked('featureExpense', state.features.expense);
+        applyExpenseFeatureUI();
+
+        // 2a-3. Staff Management feature flag
+        state.features.staffManagement = featSnap.val()?.staffManagement === true;
+        setChecked('featureStaffManagement', state.features.staffManagement);
+        applyStaffManagementFeatureUI();
+        // Gate the sub-tab on the flag (same pattern as the Expenses nav gate)
+        const smTab = document.querySelector('.settings-subtab[data-subtab="staff-management"]');
+        if (smTab) {
+            smTab.style.display = state.features.staffManagement ? '' : 'none';
+            if (!state.features.staffManagement && smTab.classList.contains('active')) {
+                document.querySelector('.settings-subtab[data-subtab="general"]')?.click();
+            }
+        }
+
+        // 2b. Dine-In Settings (tax, service charge, QR ordering base URL)
+        const dineSnap = await get(Outlet.ref('dineinSettings'));
+        const dine = dineSnap.val() || {};
+        setChecked('dineinTaxEnabled', dine.taxEnabled !== false);
+        // Migrate legacy single tax to taxRates array
+        let taxRates = dine.taxRates;
+        if (!taxRates || !Array.isArray(taxRates) || taxRates.length === 0) {
+            taxRates = dine.taxEnabled !== false ? [{ name: dine.taxName || 'GST', rate: typeof dine.taxRate === 'number' ? dine.taxRate : 5 }] : [];
+        }
+        _renderTaxRates(taxRates);
+        setChecked('dineinServiceChargeEnabled', dine.serviceChargeEnabled === true);
+        setVal('dineinServiceChargeName', dine.serviceChargeName || 'Service Charge');
+        setVal('dineinServiceChargeRate', typeof dine.serviceChargeRate === 'number' ? dine.serviceChargeRate : 10);
+        setVal('settingQrBaseUrl', dine.qrBaseUrl || '');
+
+        // 3. Bot Aesthetics & Marketing
+        const b = bot || {};
+        const botPreviews = {
+            'botImgConfirmedPreview': b.imgConfirmed,
+            'botImgReadyPreview': b.imgReady,
+            'botImgOutPreview': b.imgOut,
+            'botImgDeliveredPreview': b.imgDelivered,
+            'botImgFeedbackPreview': b.imgFeedback,
+            'greetingImgPreview': b.greetingImage,
+            'menuImgPreview': b.menuImage
+        };
+        for (const [id, url] of Object.entries(botPreviews)) {
+            if (url) {
+                const el = document.getElementById(id);
+                if (el) el.src = url;
+                if (id === 'greetingImgPreview') setVal('settingGreetingUrl', url);
+                if (id === 'menuImgPreview') setVal('settingMenuUrl', url);
+            }
+        }
+
+        // 4. Social & Promotions
+        setVal('settingFeedbackReason1', b.reason1 || 'Delicious Taste');
+        setVal('settingFeedbackReason2', b.reason2 || 'Fast Delivery');
+        setVal('settingFeedbackReason3', b.reason3 || 'Premium Packaging');
+
+        // 5. Visibility Controls
+        const vi = disp || {};
+        const checks = [
+            'checkShowStoreName', 'checkShowAddress', 'checkShowGSTIN', 'checkShowFSSAI', 'checkShowTagline',
+            'checkShowPoweredBy', 'checkShowQR', 'checkShowWifiInfo', 'checkShowSocial', 'checkShowFeedbackQR'
+        ];
+        checks.forEach(id => setChecked(id, vi[id] !== false));
+
+        // 6. Payment QR
+        if (s.paymentQR) {
+            setVal('settingQRUrl', s.paymentQR);
+            const qrEl = document.getElementById('qrPreview');
+            if (qrEl) qrEl.src = s.paymentQR;
+        }
+
+        // 7. Today's Offers
+        _renderOffers(dine.offers || []);
+
+        if (window.updateOutletStatusIndicator) window.updateOutletStatusIndicator(s.shopStatus || 'AUTO');
+        
+        state.settingsDirty = false;
+        console.log("[Settings] All data populated.");
+    } catch (e) {
+        console.error("[Settings] Load Error:", e);
+        showToast("Failed to load settings", "error");
+    }
+}
+
+export async function saveStoreSettings() {
+    console.log("[Settings] Preparing to save...");
+    
+    // 1. Validation
+    const lat = val('settingLat');
+    const lng = val('settingLng');
+    const vCoord = validateCoords(lat, lng);
+    if (!vCoord.valid) return showToast(vCoord.msg, "error");
+
+    const gstinVal = val('settingGSTIN').trim();
+    const vGst = validateGSTIN(gstinVal);
+    if (vGst !== true && !vGst.valid) return showToast(vGst.msg, "error");
+
+    const fssaiVal = val('settingFSSAI').trim();
+    const vFssai = validateFSSAI(fssaiVal);
+    if (vFssai !== true && !vFssai.valid) return showToast(vFssai.msg, "error");
+
+    const backupCode = val('settingDeliveryBackupCode').trim();
+    if (backupCode) {
+        const vBackup = validateBackupCode(backupCode);
+        if (!vBackup.valid) return showToast(vBackup.msg, "error");
+    }
+
+    const qrBaseUrlVal = val('settingQrBaseUrl').trim();
+    const vQrBase = validateOptionalUrl(qrBaseUrlVal, "QR Ordering Base URL");
+    if (vQrBase !== true && !vQrBase.valid) return showToast(vQrBase.msg, "error");
+
+    const phones = [
+        { id: 'settingDevPhone', label: "Developer Phone" },
+        { id: 'settingReportPhone', label: "Report Phone" },
+        { id: 'settingAdminPhone', label: "Admin Notification Phone" }
+    ];
+
+    for (const p of phones) {
+        const input = document.getElementById(p.id);
+        const v = validatePhone(input.value, p.label);
+        if (v !== true && !v.valid) return showToast(v.msg, "error");
+        if (v.value) input.value = v.value; // Auto-prefix 91
+    }
+
+    const saveBtn = document.getElementById('btnSaveSettings');
+    const saveBtnOriginalHTML = saveBtn ? saveBtn.innerHTML : '';
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i data-lucide="loader" class="icon-16 spin-icon"></i> Saving...';
+        await refreshIcons(saveBtn);
+    }
+
+    try {
+        // 2. Collect Data
+        const storeData = {
+            entityName: val('settingEntityName'),
+            storeName: val('settingStoreName'),
+            address: val('settingStoreAddress'),
+            gstin: val('settingGSTIN'),
+            fssai: val('settingFSSAI'),
+            tagline: val('settingTagline'),
+            poweredBy: val('settingPoweredBy'),
+            shopOpenTime: val('settingOpenTime'),
+            shopCloseTime: val('settingCloseTime'),
+            shopStatus: val('settingShopStatus'),
+            wifiName: val('settingWifiName'),
+            wifiPass: val('settingWifiPass'),
+            instagram: val('settingInstagram'),
+            facebook: val('settingFacebook'),
+            googleReviewLink: val('settingGoogleReviewLink'),
+            whatsappNumber: val('settingWhatsappNumber'),
+            reviewUrl: val('settingReviewUrl'),
+            customerMenuBgImage: val('settingCustomerMenuBgImage'),
+            lat, lng,
+            paymentQR: val('settingQRUrl'),
+            updatedAt: new Date().toISOString()
+        };
+
+        const deliveryData = {
+            developerPhone: val('settingDevPhone'),
+            reportPhone: val('settingReportPhone'),
+            notifyPhone: val('settingAdminPhone'),
+            backupCode: val('settingDeliveryBackupCode'),
+            slabs: getSlabsFromTable()
+        };
+
+        const botData = {
+            imgConfirmed: document.getElementById('botImgConfirmedPreview')?.src || '',
+            imgReady: document.getElementById('botImgReadyPreview')?.src || '',
+            imgOut: document.getElementById('botImgOutPreview')?.src || '',
+            imgDelivered: document.getElementById('botImgDeliveredPreview')?.src || '',
+            imgFeedback: document.getElementById('botImgFeedbackPreview')?.src || '',
+            greetingImage: val('settingGreetingUrl'),
+            menuImage: val('settingMenuUrl'),
+            reason1: val('settingFeedbackReason1'),
+            reason2: val('settingFeedbackReason2'),
+            reason3: val('settingFeedbackReason3')
+        };
+
+        const displayData = {};
+        const checks = [
+            'checkShowStoreName', 'checkShowAddress', 'checkShowGSTIN', 'checkShowFSSAI', 'checkShowTagline',
+            'checkShowPoweredBy', 'checkShowQR', 'checkShowWifiInfo', 'checkShowSocial', 'checkShowFeedbackQR'
+        ];
+        checks.forEach(id => { displayData[id] = isChecked(id); });
+
+        // Discount approval ceiling + optional manager PIN (settings/Security).
+        // Written as two sub-paths instead of the whole node so a blank PIN
+        // field preserves the existing hash rather than wiping it.
+        const ceilingPct = Math.max(0, Math.min(100, parseFloat(val('settingDiscCeilingPct')) || 0));
+        const pinVal = val('settingManagerPin').trim();
+        let pinHash = null;
+        if (pinVal) {
+            if (!/^\d{4,12}$/.test(pinVal)) return showToast('Manager PIN must be 4 to 12 digits.', 'error');
+            pinHash = await hashPin(pinVal);
+            if (!pinHash) return showToast('PIN could not be hashed — the app must run over HTTPS.', 'error');
+        }
+
+        // 3. Atomic multi-path update
+        const updates = {};
+        updates[tenantPath(Outlet.current, 'settings/Store')] = storeData;
+        updates[tenantPath(Outlet.current, 'settings/Delivery')] = deliveryData;
+        updates[tenantPath(Outlet.current, 'settings/Bot')] = { ...botData, blockedNumbers: _blockedNumbersCache.length > 0 ? _blockedNumbersCache : null };
+        updates[tenantPath(Outlet.current, 'settings/Display')] = displayData;
+        updates[tenantPath(Outlet.current, 'settings/Security/discountCeilingPct')] = ceilingPct;
+        if (pinHash) updates[tenantPath(Outlet.current, 'settings/Security/pinHash')] = pinHash;
+
+        // Feature flags (Settings > Features). Tracked so we can demand a hard refresh on change.
+        const featureDiscountEnabled = isChecked('featureDiscountApproval');
+        const featureExpenseEnabled = isChecked('featureExpense');
+        const featureStaffManagementEnabled = isChecked('featureStaffManagement');
+        const featureDiscountChanged = featureDiscountEnabled !== state.features.discountApproval;
+        const featureExpenseChanged = featureExpenseEnabled !== state.features.expense;
+        const featureStaffManagementChanged = featureStaffManagementEnabled !== state.features.staffManagement;
+        const featureChanged = featureDiscountChanged || featureExpenseChanged || featureStaffManagementChanged;
+        updates[tenantPath(Outlet.current, 'settings/features/discountApproval')] = featureDiscountEnabled;
+        updates[tenantPath(Outlet.current, 'settings/features/expense')] = featureExpenseEnabled;
+        updates[tenantPath(Outlet.current, 'settings/features/staffManagement')] = featureStaffManagementEnabled;
+        const taxRates = _readTaxRates();
+        updates[tenantPath(Outlet.current, 'dineinSettings')] = {
+            qrBaseUrl: val('settingQrBaseUrl'),
+            taxEnabled: isChecked('dineinTaxEnabled'),
+            taxName: taxRates.length > 0 ? taxRates.map(t => t.name).join(' + ') : 'GST',
+            taxRate: taxRates.reduce((s, t) => s + (parseFloat(t.rate) || 0), 0),
+            taxRates,
+            serviceChargeEnabled: isChecked('dineinServiceChargeEnabled'),
+            serviceChargeName: val('dineinServiceChargeName').trim() || 'Service Charge',
+            serviceChargeRate: parseFloat(val('dineinServiceChargeRate')) || 0,
+            offers: _readOffersFromDOM().filter(o => o.title)
+        };
+        await update(ref(db), updates);
+
+        showToast("Settings saved successfully!", "success");
+        state.settingsDirty = false;
+        logAudit("Settings", "Updated Store Settings", "Global");
+        document.getElementById('displayCoords').innerText = `${lat}, ${lng}`;
+        if (window.updateOutletStatusIndicator) window.updateOutletStatusIndicator(storeData.shopStatus);
+
+        // Auto-create default roles if Staff Management feature just enabled —
+        // runs BEFORE the refresh prompt so the write isn't raced off the page.
+        if (featureStaffManagementChanged && featureStaffManagementEnabled) {
+            await initializeDefaultRoles();
+        }
+
+        // Feature toggles take effect on load — one popup, then the nuclear refresh.
+        if (featureChanged) {
+            state.features.discountApproval = featureDiscountEnabled;
+            state.features.expense = featureExpenseEnabled;
+            state.features.staffManagement = featureStaffManagementEnabled;
+            await completeSiteRefresh('Settings saved. A hard refresh is required to activate this feature change. Refresh now?');
+        }
+
+    } catch (e) {
+        console.error("[Settings] Save Error:", e);
+        showToast("Critical failure while saving settings", "error");
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = saveBtnOriginalHTML;
+            await refreshIcons(saveBtn);
+        }
+    }
+}
+
+// --- FEE SLABS LOGIC ---
+
+async function renderFeeSlabs(slabs) {
+    const tbody = document.getElementById('feeSlabsTable');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    slabs.forEach((slab, index) => {
+        const tr = document.createElement('tr');
+        tr.className = 'premium-row-v4';
+        tr.innerHTML = `
+            <td>
+                <div class="flex-row flex-center flex-gap-8">
+                    <i data-lucide="map-pin" class="text-muted" style="width:14px;"></i>
+                    <input type="number" class="slab-km form-input-small w-80" value="${slab.km}" placeholder="KM">
+                    <span class="text-muted-small">km</span>
+                </div>
+            </td>
+            <td>
+                <div class="flex-row flex-center flex-gap-8">
+                    <span class="text-muted-small">₹</span>
+                    <input type="number" class="slab-fee form-input-small w-80" value="${slab.fee}" placeholder="Fee">
+                </div>
+            </td>
+            <td class="text-right">
+                <button class="btn-icon-danger" data-action="removeFeeSlab" title="Remove Slab">
+                    <i data-lucide="trash-2" style="width:16px;"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    await refreshIcons(tbody);
+}
+
+export async function addFeeSlab() {
+    const tbody = document.getElementById('feeSlabsTable');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.className = 'premium-row-v4';
+    tr.innerHTML = `
+        <td>
+            <div class="flex-row flex-center flex-gap-8">
+                <i data-lucide="map-pin" class="text-muted" style="width:14px;"></i>
+                <input type="number" class="slab-km form-input-small w-80" value="0" placeholder="KM">
+                <span class="text-muted-small">km</span>
+            </div>
+        </td>
+        <td>
+            <div class="flex-row flex-center flex-gap-8">
+                <span class="text-muted-small">₹</span>
+                <input type="number" class="slab-fee form-input-small w-80" value="0" placeholder="Fee">
+            </div>
+        </td>
+        <td class="text-right">
+            <button class="btn-icon-danger" data-action="removeFeeSlab" title="Remove Slab">
+                <i data-lucide="trash-2" style="width:16px;"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+    await refreshIcons(tr);
+    state.settingsDirty = true;
+}
+
+function getSlabsFromTable() {
+    const slabs = [];
+    document.querySelectorAll('#feeSlabsTable tr').forEach(tr => {
+        const km = parseFloat(tr.querySelector('.slab-km').value);
+        const fee = parseFloat(tr.querySelector('.slab-fee').value);
+        if (!isNaN(km)) slabs.push({ km, fee: isNaN(fee) ? 0 : fee });
+    });
+    return slabs.sort((a, b) => a.km - b.km);
+}
+
+// --- IMAGE PREVIEWS ---
+
+function previewSettingsImage(inputId, previewId, hiddenId) {
+    const file = document.getElementById(inputId).files[0];
+    if (!file) return;
+
+    if (file.size > 500 * 1024) {
+        showToast("Image too large (>500KB). Please compress.", "error");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const base64 = e.target.result;
+        const previewEl = document.getElementById(previewId);
+        if (previewEl) previewEl.src = base64;
+        if (hiddenId) {
+            const hiddenEl = document.getElementById(hiddenId);
+            if (hiddenEl) hiddenEl.value = base64;
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+// --- QUICK ACTIONS ---
+
+export function quickUpdateOutletStatus() {
+    const statusEl = document.getElementById('settingShopStatus');
+    if (!statusEl) return;
+    const newStatus = statusEl.value;
+
+    update(Outlet.ref(SETTINGS_PATHS.STORE), { shopStatus: newStatus })
+        .then(() => {
+            logAudit("Settings", `Quick Status Update: ${newStatus}`, "Global");
+            if (window.updateOutletStatusIndicator) window.updateOutletStatusIndicator(newStatus);
+            showStatusAlert(newStatus);
+        })
+        .catch(e => {
+            console.error("Failed to update outlet status:", e);
+            showToast("Failed to update status", "error");
+        });
+}
+
+async function showStatusAlert(newStatus) {
+    const alertContainer = document.getElementById('alertContainer');
+    if (!alertContainer) return;
+
+    const div = document.createElement('div');
+    div.className = 'alert-box info';
+    
+    const labelMap = {
+        'FORCE_OPEN': 'Outlet is now FORCE OPEN',
+        'FORCE_CLOSED': 'Outlet is now FORCE CLOSED',
+        'AUTO': 'Outlet set to AUTO'
+    };
+    const iconMap = { 'FORCE_OPEN': 'check-circle', 'FORCE_CLOSED': 'moon', 'AUTO': 'clock' };
+
+    div.innerHTML = `
+        <div class="alert-title">
+            <i data-lucide="${iconMap[newStatus] || 'zap'}" style="width:18px;"></i>
+            <span>${labelMap[newStatus] || 'Status Updated'}</span>
+        </div>
+        <div class="alert-sub">The WhatsApp bot and ordering system will respect this status immediately.</div>
+    `;
+    alertContainer.appendChild(div);
+    await refreshIcons(div);
+    
+    setTimeout(() => {
+        div.style.animation = 'slideOutPremium 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards';
+        setTimeout(() => div.remove(), 500);
+    }, 4000);
+}
+
+window.updateOutletStatusIndicator = function(status) {
+    const pill = document.getElementById('outletStatusPill');
+    if (!pill) return;
+    const label = { 'FORCE_OPEN': 'OPEN', 'FORCE_CLOSED': 'CLOSED', 'AUTO': 'AUTO' }[status] || 'AUTO';
+    pill.textContent = label;
+    pill.className = 'outlet-status-pill status-' + (status === 'FORCE_OPEN' ? 'open' : status === 'FORCE_CLOSED' ? 'closed' : 'auto');
+};
+
+// --- INITIALIZATION ---
+// Bind image uploads for Settings
+document.addEventListener('change', (e) => {
+    if (e.target.id === 'settingQRFile') previewSettingsImage('settingQRFile', 'qrPreview', 'settingQRUrl');
+    else if (e.target.id === 'settingGreetingFile') previewSettingsImage('settingGreetingFile', 'greetingImgPreview', 'settingGreetingUrl');
+    else if (e.target.id === 'settingMenuFile') previewSettingsImage('settingMenuFile', 'menuImgPreview', 'settingMenuUrl');
+    else if (e.target.id.startsWith('botImg')) {
+        const id = e.target.id;
+        const previewId = id.replace('File', 'Preview');
+        previewSettingsImage(id, previewId);
+    } else return;
+    state.settingsDirty = true;
+});
+
+document.addEventListener('click', (e) => {
+    // File upload button triggers
+    if (e.target.id === 'btnChangeQR') document.getElementById('settingQRFile').click();
+    else if (e.target.id === 'btnChangeGreetingImg') document.getElementById('settingGreetingFile').click();
+    else if (e.target.id === 'btnChangeMenuImg') document.getElementById('settingMenuFile').click();
+
+    if (e.target.classList.contains('btn-upload-bot-img')) {
+        const targetId = e.target.getAttribute('data-target');
+        const input = document.getElementById(targetId);
+        if (input) input.click();
+    }
+
+    if (e.target.getAttribute('data-action') === 'removeFeeSlab') {
+        const row = e.target.closest('tr');
+        if (row) { row.remove(); state.settingsDirty = true; }
+    }
+
+    // Settings sub-tab switching
+    const subBtn = e.target.closest('.settings-subtab');
+    if (subBtn) {
+        document.querySelectorAll('.settings-subtab').forEach(b => b.classList.remove('active'));
+        subBtn.classList.add('active');
+        const tab = subBtn.dataset.subtab;
+        document.querySelectorAll('[data-settings-section]').forEach(el => {
+            el.style.display = el.dataset.settingsSection === tab ? '' : 'none';
+        });
+        // Lazy-load Staff Management module when tab is shown
+        if (tab === 'staff-management') {
+            import('../features/staff-management.js').then(m => {
+                m.loadStaffList().then(() => m.renderStaffTable());
+                m.renderRolesList();
+            }).catch(e => console.error('[Settings] Staff Management load failed:', e));
+        }
+        // Lazy-load Security Audit module when tab is shown
+        if (tab === 'security-audit') {
+            import('../features/security-audit.js').then(m => {
+                m.initSecurityAuditTab();
+            }).catch(e => console.error('[Settings] Security Audit load failed:', e));
+        }
+        if (tab === 'receipt-dev') renderReceiptLivePreview();
+    }
+});
+
+// Mark settings as dirty on ANY input change within the settings container
+document.addEventListener('input', (e) => {
+    const settingsTab = document.getElementById('tab-settings');
+    if (settingsTab && settingsTab.contains(e.target)) {
+        if (!state.settingsDirty) {
+            console.log("[Settings] State is now DIRTY");
+            state.settingsDirty = true;
+        }
+    }
+});
+
+// Set initial sub-tab state (General visible, Tax & Services hidden)
+document.querySelectorAll('[data-settings-section]').forEach(el => {
+    el.style.display = el.dataset.settingsSection === 'general' ? '' : 'none';
+});
+
+// --- LIVE RECEIPT PREVIEW (Settings > Receipt & Dev) ---
+const _receiptLiveFields = {
+    settingEntityName: 'entityName', settingStoreName: 'storeName', settingStoreAddress: 'address',
+    settingGSTIN: 'gstin', settingFSSAI: 'fssai', settingTagline: 'tagline',
+    settingPoweredBy: 'poweredBy', settingQRUrl: 'paymentQR'
+};
+const _receiptLiveChecks = ['checkShowStoreName', 'checkShowAddress', 'checkShowGSTIN', 'checkShowFSSAI',
+    'checkShowTagline', 'checkShowPoweredBy', 'checkShowQR', 'checkShowFeedbackQR'];
+const _receiptLiveSample = {
+    orderId: '240101-88', time: '12:30', date: new Date().toLocaleDateString('en-GB'),
+    paymentMethod: 'Cash', type: 'Dine-In', tableNo: '07',
+    items: [
+        { name: 'Farmhouse Pizza', size: 'Large', quantity: 1, price: 399 },
+        { name: 'Garlic Bread Sticks', quantity: 2, price: 99 }
+    ],
+    subtotal: 597, taxName: 'GST', tax: 30, total: 627, customerName: 'Preview Guest',
+    claimBy: 'Cashier — Preview Cashier'
+};
+let _receiptLiveTimer = null;
+function renderReceiptLivePreview() {
+    clearTimeout(_receiptLiveTimer);
+    _receiptLiveTimer = setTimeout(() => {
+        const frame = document.getElementById('receiptLiveFrame');
+        if (!frame || !frame.offsetParent || !window.ReceiptTemplates) return;
+        const store = { config: {} };
+        for (const [id, key] of Object.entries(_receiptLiveFields)) store[key] = val(id);
+        _receiptLiveChecks.forEach(id => { store.config[id.replace('checkShow', 'show')] = isChecked(id); });
+        frame.onload = () => {
+            try { frame.style.height = (frame.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (e) { }
+        };
+        frame.srcdoc = window.ReceiptTemplates.generateThermalReceipt(_receiptLiveSample, store, false);
+    }, 150);
+}
+document.addEventListener('input', (e) => {
+    if (_receiptLiveFields[e.target.id]) renderReceiptLivePreview();
+});
+document.addEventListener('change', (e) => {
+    if (_receiptLiveFields[e.target.id] || _receiptLiveChecks.includes(e.target.id) || e.target.id === 'settingQRFile') renderReceiptLivePreview();
+});
+
+// -------------------------------------------------------------------
+// OFFERS MANAGEMENT
+// -------------------------------------------------------------------
+
+async function _renderOffers(offers) {
+    const arr = Array.isArray(offers) ? offers : (offers && typeof offers === 'object' ? Object.values(offers) : []);
+    const list = document.getElementById('offersList');
+    const noMsg = document.getElementById('noOffersMsg');
+    if (!list) return;
+
+    if (arr.length === 0) {
+        list.innerHTML = '';
+        if (noMsg) noMsg.classList.remove('hidden');
+        return;
+    }
+    if (noMsg) noMsg.classList.add('hidden');
+
+    list.innerHTML = arr.map((o, i) => `
+        <div class="offer-row">
+            <div class="offer-row-fields">
+                <input type="text" class="offer-title-input form-input-small" data-offer-idx="${i}" value="${(o.title || '').replace(/"/g, '&quot;')}" placeholder="Offer title">
+                <input type="text" class="offer-desc-input form-input-small" data-offer-idx="${i}" value="${(o.description || '').replace(/"/g, '&quot;')}" placeholder="Description (optional)">
+                <input type="text" class="offer-code-input form-input-small" data-offer-idx="${i}" value="${(o.code || '').replace(/"/g, '&quot;')}" placeholder="Promo code (optional)">
+            </div>
+            <button type="button" class="btn-icon-danger offer-remove-btn" data-offer-idx="${i}" title="Remove offer">
+                <i data-lucide="x" class="icon-14"></i>
+            </button>
+        </div>`).join('');
+
+    await refreshIcons(list);
+
+    list.querySelectorAll('.offer-remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const all = _readOffersFromDOM();
+            all.splice(Number(btn.dataset.offerIdx), 1);
+            _renderOffers(all);
+            state.settingsDirty = true;
+        });
+    });
+}
+
+document.getElementById('btnAddOffer')?.addEventListener('click', () => {
+    const all = _readOffersFromDOM();
+    all.push({ title: '', description: '', code: '' });
+    _renderOffers(all);
+    state.settingsDirty = true;
+    const list = document.getElementById('offersList');
+    const lastTitle = list?.querySelector('.offer-title-input:last-of-type');
+    if (lastTitle) lastTitle.focus();
+});
+
+function _readOffersFromDOM() {
+    const offers = [];
+    document.querySelectorAll('#offersList .offer-row').forEach(row => {
+        offers.push({
+            title: row.querySelector('.offer-title-input')?.value?.trim() || '',
+            description: row.querySelector('.offer-desc-input')?.value?.trim() || '',
+            code: row.querySelector('.offer-code-input')?.value?.trim() || ''
+        });
+    });
+    return offers;
+}
+
+// --- MULTI-TAX RATES ---
+async function _renderTaxRates(rates) {
+    const container = document.getElementById('dineinTaxRates');
+    if (!container) return;
+    const arr = Array.isArray(rates) ? rates : [];
+    if (arr.length === 0) {
+        container.innerHTML = '<div class="text-muted fs-12 mb-8">No tax rates configured. Tax is disabled or add a rate below.</div>';
+        return;
+    }
+container.innerHTML = arr.map((r, i) => `
+        <div class="flex-row flex-center flex-gap-8 mb-8" data-tax-idx="${i}">
+            <input type="text" class="form-input mb-0 tax-rate-name" data-idx="${i}" value="${(r.name || '').replace(/"/g, '"')}" placeholder="Name (e.g. CGST)" maxlength="20" style="flex:1;min-width:0;">
+            <input type="number" class="form-input mb-0 tax-rate-pct" data-idx="${i}" value="${parseFloat(r.rate) || ''}" placeholder="%" min="0" max="100" step="0.5" style="width:70px;">
+            <button type="button" class="btn-icon-danger tax-rate-remove" data-idx="${i}" title="Remove this tax" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:4px;"><i data-lucide="x" class="icon-14"></i></button>
+        </div>`).join('');
+    await refreshIcons(container);
+    container.querySelectorAll('.tax-rate-name, .tax-rate-pct').forEach(el => {
+        el.addEventListener('input', () => state.settingsDirty = true);
+    });
+    container.querySelectorAll('.tax-rate-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = Number(btn.dataset.idx);
+            const rates = _readTaxRates();
+            rates.splice(idx, 1);
+            _renderTaxRates(rates);
+            state.settingsDirty = true;
+        });
+    });
+}
+
+function _readTaxRates() {
+    const container = document.getElementById('dineinTaxRates');
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('[data-tax-idx]')).map(row => ({
+        name: row.querySelector('.tax-rate-name')?.value?.trim() || '',
+        rate: parseFloat(row.querySelector('.tax-rate-pct')?.value) || 0
+    })).filter(r => r.name && r.rate > 0);
+}
+
+document.getElementById('btnAddTaxRate')?.addEventListener('click', () => {
+    const rates = _readTaxRates();
+    rates.push({ name: '', rate: 5 });
+    _renderTaxRates(rates);
+    state.settingsDirty = true;
+    const container = document.getElementById('dineinTaxRates');
+    const lastInput = container?.querySelector('.tax-rate-name:last-of-type');
+    if (lastInput) lastInput.focus();
+});
+
+// -------------------------------------------------------------------
+// BLOCKED NUMBERS MANAGEMENT
+// -------------------------------------------------------------------
+
+let _blockedNumbersCache = [];
+// ponytail: expose for Chats tab block/unblock — cache + persist
+window.__blockedNumbers = {
+    get list() { return _blockedNumbersCache; },
+    set list(v) { _blockedNumbersCache = v; },
+    save: _saveBlockedNumbers,
+    reload: _loadBlockedNumbers
+};
+
+async function _loadBlockedNumbers() {
+    try {
+        const snap = await get(Outlet.ref('settings/Bot/blockedNumbers'));
+        const val = snap.val();
+        _blockedNumbersCache = Array.isArray(val) ? val.filter(Boolean) : [];
+    } catch (_) {
+        _blockedNumbersCache = [];
+    }
+    _renderBlockedNumbers();
+}
+
+function _renderBlockedNumbers() {
+    const list = document.getElementById('blockedList');
+    const emptyMsg = document.getElementById('blockedEmptyMsg');
+    if (!list) return;
+
+    if (_blockedNumbersCache.length === 0) {
+        list.innerHTML = '';
+        if (emptyMsg) emptyMsg.classList.remove('hidden');
+        return;
+    }
+    if (emptyMsg) emptyMsg.classList.add('hidden');
+
+    list.innerHTML = _blockedNumbersCache.map((num, i) => `
+        <div class="blocked-number-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(239,68,68,.04);border:1px solid rgba(239,68,68,.15);border-radius:8px;margin-bottom:6px">
+            <i data-lucide="shield-off" style="width:14px;height:14px;color:#ef4444;flex:none"></i>
+            <span style="flex:1;font-size:13px;font-family:monospace">${escapeHtml(num)}</span>
+            <button class="btn-icon-danger" data-action="remove-blocked-number" data-idx="${i}" title="Remove from blocklist" style="flex:none">
+                <i data-lucide="x" style="width:14px;height:14px"></i>
+            </button>
+        </div>`).join('');
+    refreshIcons(list);
+}
+
+async function _saveBlockedNumbers() {
+    try {
+        await set(Outlet.ref('settings/Bot/blockedNumbers'), _blockedNumbersCache.length > 0 ? _blockedNumbersCache : null);
+        showToast('Blocked numbers updated', 'success');
+    } catch (e) {
+        console.error('[Settings] Failed to save blocked numbers', e);
+        showToast('Failed to save blocked numbers', 'error');
+    }
+}
+
+document.addEventListener('click', async (e) => {
+    const addBtn = e.target.closest('[data-action="add-blocked-number"]');
+    if (addBtn) {
+        const input = document.getElementById('blockedNumberInput');
+        if (!input) return;
+        let raw = input.value.replace(/\D/g, '');
+        if (raw.length === 10) raw = '91' + raw;
+        if (raw.length !== 12 || !raw.startsWith('91')) {
+            showToast('Enter a valid 10-digit Indian number', 'error');
+            return;
+        }
+        if (_blockedNumbersCache.includes(raw)) {
+            showToast('Number already blocked', 'error');
+            return;
+        }
+        _blockedNumbersCache.push(raw);
+        await _saveBlockedNumbers();
+        _renderBlockedNumbers();
+        input.value = '';
+        state.settingsDirty = true;
+    }
+
+    const removeBtn = e.target.closest('[data-action="remove-blocked-number"]');
+    if (removeBtn) {
+        const idx = Number(removeBtn.dataset.idx);
+        _blockedNumbersCache.splice(idx, 1);
+        await _saveBlockedNumbers();
+        _renderBlockedNumbers();
+        state.settingsDirty = true;
+    }
+});
+
+document.getElementById('blockedNumberInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btnAddBlockedNumber')?.click();
+    }
+});
+
+// Load blocked numbers eagerly on init AND when settings tab is shown
+_loadBlockedNumbers(); // ponytail: cache must exist before any settings save
+const _origShowTab = window._showTab;
+if (typeof _origShowTab === 'function') {
+    window._showTab = function(...args) {
+        _origShowTab.apply(this, args);
+        if (args[0] === 'settings') _loadBlockedNumbers();
+    };
+} else {
+    document.addEventListener('DOMContentLoaded', () => _loadBlockedNumbers());
+}
+
+// --- Change Password ---
+export async function changePassword() {
+    const currentPassword = document.getElementById('currentPassword')?.value;
+    const newPassword = document.getElementById('newPassword')?.value;
+    const confirmPassword = document.getElementById('confirmPassword')?.value;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        showToast('Please fill all fields', 'warning');
+        return;
+    }
+
+    if (newPassword.length < 8) {
+        showToast('New password must be at least 8 characters', 'error');
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        showToast('Passwords do not match', 'error');
+        return;
+    }
+
+    try {
+        const btn = document.getElementById('btnChangePassword');
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader" class="icon-16 spin-icon"></i> Updating...';
+        await refreshIcons(btn);
+
+        const user = auth.currentUser;
+        if (!user || !user.email) throw new Error('No authenticated user');
+
+        // Re-authenticate before changing password
+        const credential = EmailAuthProvider.credential(user.email, document.getElementById('currentPassword').value);
+        await reauthenticateWithCredential(user, credential);
+
+        // Update password
+        await user.updatePassword(newPassword);
+
+        // Clear inputs
+        document.getElementById('currentPassword').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('confirmPassword').value = '';
+        document.getElementById('passwordMatchHint').textContent = '';
+
+        showToast('Password updated successfully', 'success');
+    } catch (e) {
+        console.error('[Settings] Password change failed:', e);
+        const friendly = {
+            'auth/wrong-password': 'Current password is incorrect',
+            'auth/weak-password': 'New password is too weak (min 8 chars)',
+            'auth/requires-recent-login': 'Please log in again and try again'
+        }[e.code] || 'Failed to change password. Please try again.';
+        showToast(friendly, 'error');
+    } finally {
+        const btn = document.getElementById('btnChangePassword');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="lock" class="icon-16"></i> Update Password';
+            await refreshIcons(btn);
+        }
+    }
+}
+
+// --- Password Match Hint ---
+export function initSettingsPasswordMatch() {
+    const newPassword = document.getElementById('newPassword');
+    const confirmPassword = document.getElementById('confirmPassword');
+    const hint = document.getElementById('passwordMatchHint');
+    
+    if (!newPassword || !confirmPassword || !hint) return;
+    
+    const checkMatch = () => {
+        if (!confirmPassword.value) {
+            hint.textContent = '';
+            hint.style.color = '';
+            return;
+        }
+        if (newPassword.value === confirmPassword.value) {
+            hint.textContent = '✓ Passwords match';
+            hint.style.color = 'var(--success)';
+        } else {
+            hint.textContent = '✗ Passwords do not match';
+            hint.style.color = 'var(--error)';
+        }
+    };
+    
+    newPassword.addEventListener('input', checkMatch);
+    confirmPassword.addEventListener('input', checkMatch);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initSettingsPasswordMatch();
+});

@@ -1,0 +1,79 @@
+/**
+ * Menu/js/discount.js
+ * Lightweight discount code validator for the customer-facing menu.
+ * Fetches enabled coupon-type discounts from Firebase and validates
+ * the customer-entered code against them.
+ *
+ * Math + window/channel checks come from menu/shared/discount-rules.js —
+ * the byte-identical twin of shared/discount-rules.js (menu hosting cannot
+ * reach repo-root /shared, same pattern as combo-math.js). Guarded by
+ * tools/check-shared-twins.cjs.
+ */
+import { outletRef, get } from './firebase.js';
+import { discountAmount, discountAllowsChannel, couponStatus } from '../shared/discount-rules.js';
+
+const CACHE_TTL_MS = 60_000;
+let _cache = null;
+let _fetchedAt = 0;
+
+async function fetchDiscounts() {
+    const now = Date.now();
+    if (_cache && (now - _fetchedAt) < CACHE_TTL_MS) return _cache;
+    try {
+        const snap = await get(outletRef('discounts'));
+        const all = snap.val() || {};
+        _cache = Object.entries(all)
+            .filter(([, d]) => d && d.enabled !== false && d.type === 'coupon' && d.couponCode)
+            .map(([id, d]) => ({ id, ...d }));
+    } catch (_) {
+        _cache = _cache || [];
+    }
+    _fetchedAt = now;
+    return _cache;
+}
+
+/**
+ * Validate a coupon code against active discounts.
+ * @param {string} code - Customer-entered code
+ * @param {number} subtotal - Cart subtotal in ₹
+ * @returns {Promise<null|{discountId:string, name:string, couponCode:string, mode:string, value:number, maxCap:number|null, amount:number}>}
+ */
+export async function validateCoupon(code, subtotal) {
+    if (!code || !String(code).trim()) return null;
+    const normalized = String(code).trim().toUpperCase();
+    const discounts = await fetchDiscounts();
+    const now = Date.now();
+
+    for (const d of discounts) {
+        if (String(d.couponCode).toUpperCase() !== normalized) continue;
+        // Lifecycle window (enabled/startsAt/endsAt) — shared rules
+        if (couponStatus(d, now) !== 'valid') continue;
+        // Check min subtotal
+        if (d.minSubtotal && subtotal < d.minSubtotal) continue;
+        // Check global limit
+        if (d.globalLimit && (d.stats?.usedCount || 0) >= d.globalLimit) continue;
+        // Channel gate — QR menu / webview is the "website" channel. Matches
+        // bot/discount-engine.js verify (channel: 'website') so client and
+        // server agree; whatsapp/pos/both coupons are rejected here up-front
+        // instead of being zeroed server-side after placement.
+        if (!discountAllowsChannel(d, 'website')) continue;
+
+        // P2-9 policy (locked): base = food subtotal only (no tax/SC/delivery) —
+        // computed by the shared module so Admin, bot and menu can never drift.
+        const amount = discountAmount(d, subtotal);
+        if (amount <= 0) continue;
+
+        return {
+            discountId: d.id,
+            name: d.name || d.couponCode,
+            label: d.name || d.couponCode, // cart summary + orderPayload.discountLabel read `.label`
+            couponCode: d.couponCode,
+            mode: d.mode,
+            value: d.value,
+            maxCap: d.maxCap || null,
+            amount: Math.round(amount),
+            source: 'coupon:' + d.couponCode,
+        };
+    }
+    return null;
+}

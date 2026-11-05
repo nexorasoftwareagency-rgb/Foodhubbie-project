@@ -1,0 +1,131 @@
+// === src/contexts/RiderContext.tsx ===
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { useRiderProfile } from "@/hooks/useRiderProfile";
+import { setRiderStatus } from "@/services/riderService";
+import { loadOutlets, subscribeRiderStats, type OutletInfo } from "@/services/orderService";
+import { logRiderError } from "@/services/auditService";
+import { toast } from "@/hooks/use-toast";
+import type { Rider, RiderStats } from "@/types";
+import type { OutletId } from "@/lib/constants";
+
+type RiderContextValue = {
+  rider: Rider | null;
+  riderLoading: boolean;
+  riderError: Error | null;
+  isOnline: boolean;
+  toggleOnline: () => Promise<void>;
+  /** Combined totals across all outlets (global rider stats). */
+  stats: RiderStats;
+  /** Per-outlet breakdown — mirrored from global stats for UI compatibility. */
+  statsByOutlet: Record<OutletId, RiderStats>;
+  /** All outlets the rider can access. */
+  outlets: OutletInfo[];
+  outletsLoading: boolean;
+  outletsError: Error | null;
+  retryOutlets: () => void;
+};
+
+const RiderContext = createContext<RiderContextValue | undefined>(undefined);
+
+export function RiderProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuthContext();
+  const { rider, loading: riderLoading, error: riderError } = useRiderProfile(user?.uid);
+  const [statsByOutlet, setStatsByOutlet] = useState<Record<OutletId, RiderStats>>({} as Record<OutletId, RiderStats>);
+  const [outlets, setOutlets] = useState<OutletInfo[]>([]);
+  const [outletsLoading, setOutletsLoading] = useState(true);
+  const [outletsError, setOutletsError] = useState<Error | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
+  const [toggling, setToggling] = useState(false);
+
+  // Subscribe to this outlet's rider stats once the rider's scope is resolved
+  // (riderStats is outlet-scoped like the rider record itself).
+  useEffect(() => {
+    if (!user?.uid || !rider?.outlet) return;
+    const unsub = subscribeRiderStats(user.uid, (globalStats) => {
+      // Mirror the outlet stats to all known outlets for UI compatibility
+      setStatsByOutlet((prev) => {
+        const next = { ...prev };
+        outlets.forEach((o) => { next[o.id] = globalStats; });
+        return next;
+      });
+    });
+    return () => { unsub(); };
+  }, [user?.uid, rider?.outlet, outlets]);
+
+  // Load ONLY the rider's own outlet — riders never see other restaurants
+  useEffect(() => {
+    if (!user?.uid || !rider?.outlet) return;
+    let cancelled = false;
+    setOutletsLoading(true);
+    setOutletsError(null);
+    loadOutlets(rider)
+      .then((list) => {
+        if (!cancelled) {
+          setOutlets(list);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setOutletsError(err);
+        logRiderError(user.uid, "loadOutlets", err);
+        toast.error("Could not load outlet info. Pull to refresh.");
+      })
+      .finally(() => {
+        if (!cancelled) setOutletsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [user?.uid, rider?.outlet, rider?.businessId, retryTick]);
+
+  const isOnline = rider?.status === "Online";
+
+  const toggleOnline = async () => {
+    if (!user?.uid || toggling) return;
+    setToggling(true);
+    const next = isOnline ? "Offline" : "Online";
+    try {
+      await setRiderStatus(user.uid, next);
+      toast[next === "Online" ? "success" : "warning"](next === "Online" ? "You are Online" : "You are Offline", {
+        description:
+          next === "Online" ? "GPS tracking started. New orders will ping you." : "You will not receive new order pings.",
+      });
+    } catch (err) {
+      logRiderError(user.uid, "toggleOnline", err);
+      toast.error("Could not update your status. Check your connection.");
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  // Aggregate stats from global rider stats (same for all outlets)
+  // Find first outlet that has stats (more robust than assuming outlets[0])
+  const stats: RiderStats = outlets.find(o => statsByOutlet[o.id]) 
+    ? statsByOutlet[outlets.find(o => statsByOutlet[o.id])!.id] 
+    : { totalOrders: 0, totalEarnings: 0 };
+
+  return (
+    <RiderContext.Provider
+      value={{
+        rider,
+        riderLoading,
+        riderError,
+        isOnline,
+        toggleOnline,
+        stats,
+        statsByOutlet,
+        outlets,
+        outletsLoading,
+        outletsError,
+        retryOutlets: () => setRetryTick((t) => t + 1),
+      }}
+    >
+      {children}
+    </RiderContext.Provider>
+  );
+}
+
+export function useRiderContext(): RiderContextValue {
+  const ctx = useContext(RiderContext);
+  if (!ctx) throw new Error("useRiderContext must be used within RiderProvider");
+  return ctx;
+}

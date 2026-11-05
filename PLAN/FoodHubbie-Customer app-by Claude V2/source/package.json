@@ -1,0 +1,30 @@
+{
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "build:admin": "node tools/build.mjs --admin",
+    "build:supreme": "node tools/build.mjs --supreme",
+    "deploy:admin": "npm run build:admin && firebase deploy --only hosting:admin",
+    "deploy:supreme": "npm run build:supreme && firebase deploy --only hosting:supreme",
+    "deploy:website": "firebase deploy --only hosting:website",
+    "test": "playwright test",
+    "test:encoding": "node tests/encoding-check.mjs",
+    "test:isolation": "node tests/phase5-rider-isolation.check.cjs && node tests/phase5-rules-isolation.check.cjs",
+    "seo:check-domain": "node tools/check-domain-migration.cjs",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "install:browsers": "playwright install --with-deps chromium"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.1",
+    "playwright": "^1.61.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "esbuild": "^0.28.1",
+    "purgecss": "^8.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}

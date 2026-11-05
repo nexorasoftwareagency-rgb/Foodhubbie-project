@@ -1,0 +1,490 @@
+From 863189071d0833b6d6e3a925dd9c298271e7a412 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 00:27:12 +0000
+Subject: [PATCH] Customer app: direct mode (sign in once, full menu first) +
+ plan for one dedicated app
+
+Phase 1 of docs/PLAN-DEDICATED-CUSTOMER-APP.md
+- no table token / no recent table -> opens as the restaurant's own app: phone (+ optional name) sign-in, then the menu
+- remembered table only reused for 4 hours
+- direct-mode cart is local; Place order shows an order-mode chooser until Phase 2
+- tests/direct-mode.check.mjs (Playwright, stubbed Firebase)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ed5NQtedhQ5SdCJqqDJpCe
+---
+ docs/PLAN-DEDICATED-CUSTOMER-APP.md |  38 +++++++
+ menu/css/app.css                    |  19 ++++
+ menu/index.html                     |  25 +++++
+ menu/js/app.js                      |  78 +++++++++++++-
+ menu/js/customer.js                 |  17 +++
+ menu/js/session.js                  |  19 +++-
+ tests/direct-mode.check.mjs         | 155 ++++++++++++++++++++++++++++
+ 7 files changed, 346 insertions(+), 5 deletions(-)
+ create mode 100644 docs/PLAN-DEDICATED-CUSTOMER-APP.md
+ create mode 100644 tests/direct-mode.check.mjs
+
+diff --git a/docs/PLAN-DEDICATED-CUSTOMER-APP.md b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+new file mode 100644
+index 0000000..3e2d3d4
+--- /dev/null
++++ b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+@@ -0,0 +1,38 @@
++# Plan — One dedicated customer app per restaurant
++
++**Status:** PROPOSED. Phase 1 is implemented on branch `feat/dedicated-customer-app`; Phases 2–5 are not started.
++**Product decision (owner):** the customer app is ONE direct app for one restaurant (Zomato/Swiggy style), not limited to tables or delivery.
++- First open: sign in with **phone number + name** (name is optional, used only for greetings). **No OTP.**
++- After sign-in the first screen is always the restaurant's **full menu**.
++- Pages: menu, cart, orders/history, loyalty card, payment history, account.
++
++## Today (from code review)
++- Two separate apps: `menu/index.html` (table QR) and `menu/delivery.html` (delivery link). Different screens, nav, order code.
++- `index.html` refuses to open without a valid table token (`screenInvalid`), and re-used the last table token forever when the installed icon was opened.
++- Orders: rules only accept source `QR` (table session) or `webview_delivery` (one-time token). No direct / pickup source.
++- Payments: delivery orders are fixed `COD` / `Pending`. No payment history page.
++- Phone is optional and lives under Promos → Account.
++
++## Phases
++| Phase | What | Status |
++|---|---|---|
++| 1 | Sign-in gate (first open), menu as home without a table (direct mode), table token only reused within 4 h, no-table cart shows an order-mode chooser | **Done in this branch** |
++| 2 | Order modes at checkout: Dine-in (table token), Delivery, Pickup. New order sources + rules (`direct_delivery`, `direct_pickup`), emulator-tested | Not started |
++| 3 | Bottom tabs for direct mode: Menu · Cart · Orders · Loyalty · Account (Orders = full phone-keyed history) | Not started |
++| 4 | Payment history: record method/status on orders, show per-order payment and a receipt view | Not started |
++| 5 | Retire `delivery.html` as a separate app (redirect to the single app); migrate service-worker cache | Not started |
++
++## Phase 1 behaviour
++1. URL has a valid table token `?t=` → dine-in exactly as before.
++2. URL has `?t=` but it is invalid → "invalid QR" screen (unchanged).
++3. No `?t=`:
++   - remembered table token younger than 4 hours → dine-in (same visit)
++   - otherwise → **direct mode**: sign-in screen if no saved phone, then the full menu.
++4. Direct mode cart: items can be added locally; "Place order" opens a chooser (Delivery link / "scan the QR at your table") until Phase 2.
++
++## Known risks (unchanged by Phase 1)
++- Phone-only identity: anyone who types a number can read that customer's `customers/{phone}/*` data and write order-history entries. Decision on mitigation (server-mediated reads) is open.
++- Rewards already need a WhatsApp code (branch `feat/loyalty-hardening`).
++
++## Test status
++- Phase 1: Playwright run with a stubbed Firebase (see `tests/direct-mode.check.mjs`). Not run against real Firebase, a real phone, or iOS install.
+diff --git a/menu/css/app.css b/menu/css/app.css
+index 568b337..3a696d8 100644
+--- a/menu/css/app.css
++++ b/menu/css/app.css
+@@ -1058,3 +1058,22 @@ body.onb-open{ overflow:hidden; }
+ .reward-btn:active{ transform:scale(.96); }
+ .reward-btn:disabled{ opacity:.5; cursor:not-allowed; background:var(--border); color:var(--text-sub); }
+ 
++
++/* ===== Direct mode: sign-in + order chooser ===== */
++.signin-card { max-width: 420px; margin: 0 auto; padding: 56px 22px 32px; display: flex; flex-direction: column; gap: 8px; }
++.signin-brand { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--primary, #E84908); }
++.signin-title { font-size: 26px; line-height: 1.2; margin: 4px 0 0; font-weight: 800; }
++.signin-sub { margin: 0 0 14px; color: #64748b; font-size: 14px; }
++.signin-label { font-size: 13px; font-weight: 700; margin-top: 8px; }
++.signin-opt { font-weight: 500; color: #94a3b8; }
++.signin-input { width: 100%; padding: 14px; font-size: 16px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
++.signin-input:focus { outline: 2px solid var(--primary, #E84908); border-color: transparent; }
++.signin-error { color: #b91c1c; font-size: 13px; margin-top: 6px; }
++.signin-btn { display: block; text-align: center; margin-top: 18px; padding: 15px; border: 0; border-radius: 12px; background: var(--primary, #E84908); color: #fff; font-size: 16px; font-weight: 800; text-decoration: none; cursor: pointer; }
++.signin-btn:disabled { opacity: .6; }
++.direct-chooser { position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, .55); display: flex; align-items: flex-end; justify-content: center; }
++.direct-chooser.hidden { display: none; }
++.direct-chooser-card { width: 100%; max-width: 480px; background: #fff; border-radius: 18px 18px 0 0; padding: 22px 20px calc(22px + env(safe-area-inset-bottom)); }
++.direct-chooser-card h3 { margin: 0 0 6px; font-size: 18px; }
++.direct-chooser-card p { margin: 0 0 6px; color: #64748b; font-size: 14px; }
++.direct-chooser-close { width: 100%; margin-top: 10px; padding: 13px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+diff --git a/menu/index.html b/menu/index.html
+index a2eabe3..098f4b1 100644
+--- a/menu/index.html
++++ b/menu/index.html
+@@ -59,6 +59,31 @@
+     </div>
+ 
+     <!-- ============== SCREEN 3: MENU CATEGORIES ============== -->
++    <!-- ============== SIGN IN (direct mode, first open) ============== -->
++    <div id="screenSignIn" class="screen">
++        <form id="signInForm" class="signin-card" novalidate>
++            <div class="signin-brand" id="signInBrand">Welcome</div>
++            <h1 class="signin-title">Order from your favourite kitchen</h1>
++            <p class="signin-sub">Enter your mobile number to continue. No OTP, no password.</p>
++            <label class="signin-label" for="signInPhone">Mobile number</label>
++            <input id="signInPhone" class="signin-input" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="10-digit mobile number">
++            <label class="signin-label" for="signInName">Your name <span class="signin-opt">(optional, for greetings)</span></label>
++            <input id="signInName" class="signin-input" type="text" autocomplete="given-name" maxlength="60" placeholder="e.g. Rahul">
++            <div id="signInError" class="signin-error hidden" role="alert"></div>
++            <button id="btnSignIn" type="submit" class="signin-btn">Continue to menu</button>
++        </form>
++    </div>
++
++    <!-- ============== ORDER MODE CHOOSER (direct mode, until Phase 2) ============== -->
++    <div id="directOrderChooser" class="direct-chooser hidden" role="dialog" aria-modal="true" aria-label="How would you like to order?">
++        <div class="direct-chooser-card">
++            <h3>How would you like to order?</h3>
++            <p>Dining here? Scan the QR code on your table to order to your table.</p>
++            <a id="directDeliveryLink" class="signin-btn direct-chooser-link" href="delivery.html">Order for delivery</a>
++            <button id="btnCloseChooser" type="button" class="direct-chooser-close">Back to menu</button>
++        </div>
++    </div>
++
+     <div id="screenMenu" class="screen">
+         <div class="topbar">
+             <div class="topbar-brand">
+diff --git a/menu/js/app.js b/menu/js/app.js
+index 8f1b2cb..b704a7e 100644
+--- a/menu/js/app.js
++++ b/menu/js/app.js
+@@ -12,7 +12,7 @@ import * as UI from './ui.js';
+ import { haptic } from './ui.js';
+ import { esc } from './ui.js';
+ import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
+-import { initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
++import { signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
+ 
+ // ---------------------------------------------------------------
+ // Module state for menu browsing
+@@ -110,6 +110,13 @@ async function boot() {
+             new Promise(resolve => setTimeout(() => resolve({ ok: false, reason: 'timeout' }), 8000))
+         ]);
+ 
++        // No table at all (installed app / bare link): open as the restaurant's
++        // own app — sign in once, then the full menu.
++        if (!result.ok && result.reason === 'no-table') {
++            await bootDirect();
++            return;
++        }
++
+         if (!result.ok) {
+             console.warn('[Boot] initSession failed — reason:', result.reason, result.error || '');
+             if (result.reason === 'invalid-token') {
+@@ -245,6 +252,68 @@ async function boot() {
+     }
+ }
+ 
++// ---------------------------------------------------------------
++// DIRECT MODE (no table): sign in once with phone (+ optional name), then the
++// full menu is always the first screen. Ordering from here arrives in Phase 2
++// (docs/PLAN-DEDICATED-CUSTOMER-APP.md); until then the cart offers a chooser.
++// ---------------------------------------------------------------
++async function bootDirect() {
++    M.direct = true;
++    document.body.classList.add('direct-mode');
++    // No table: hide table chips and the table-only tabs.
++    document.querySelectorAll('#menuTableChip').forEach(el => el.classList.add('hidden'));
++    document.querySelectorAll('[data-bottom-tab="screenTracking"], [data-bottom-tab="screenHistory"]').forEach(el => el.classList.add('hidden'));
++    document.getElementById('cartHeaderTitle').textContent = 'Your Cart';
++
++    try {
++        const brandSnap = await get(outletRef('settings/Store/storeName'));
++        if (brandSnap.exists() && brandSnap.val()) {
++            UI.applyBrand(brandSnap.val());
++            const b = document.getElementById('signInBrand');
++            if (b) b.textContent = String(brandSnap.val());
++        }
++    } catch (e) { console.warn('[Direct] brand fetch failed:', e?.message || e); }
++
++    await loadMenu();
++    initCustomer({ mode: 'dine-in' });
++    document.getElementById('loadingOverlay').style.display = 'none';
++    _bootReady = true;
++
++    if (isSignedIn()) {
++        const p = getProfile();
++        if (p?.name && p.name !== 'Guest') UI.updateGreeting(p.name);
++        UI.showScreen('screenMenu');
++    } else {
++        UI.showScreen('screenSignIn');
++    }
++}
++
++document.getElementById('signInForm')?.addEventListener('submit', (e) => {
++    e.preventDefault();
++    const errEl = document.getElementById('signInError');
++    const res = signInWithPhone(
++        document.getElementById('signInName').value,
++        document.getElementById('signInPhone').value
++    );
++    if (!res.ok) {
++        errEl.textContent = res.error;
++        errEl.classList.remove('hidden');
++        return;
++    }
++    errEl.classList.add('hidden');
++    if (res.profile?.name && res.profile.name !== 'Guest') UI.updateGreeting(res.profile.name);
++    UI.showScreen('screenMenu');
++});
++
++function showDirectOrderChooser() {
++    const link = document.getElementById('directDeliveryLink');
++    if (link) link.href = `delivery.html${window.location.search}`;
++    document.getElementById('directOrderChooser')?.classList.remove('hidden');
++}
++document.getElementById('btnCloseChooser')?.addEventListener('click', () => {
++    document.getElementById('directOrderChooser')?.classList.add('hidden');
++});
++
+ let _postBootStarted = false;
+ function _afterBoot() {
+     if (_postBootStarted) return;
+@@ -268,7 +337,8 @@ function _afterBoot() {
+         renderPromotionsScreen();
+     }
+ 
+-    if (!params.get('order') && params.get('tab') !== 'notifications') {
++    // Direct mode replaces the identity step with the sign-in screen.
++    if (!M.direct && !params.get('order') && params.get('tab') !== 'notifications') {
+         maybeStartOnboarding({ mode: 'dine-in' });
+     }
+ 
+@@ -912,7 +982,8 @@ document.getElementById('btnAddToOrder')?.addEventListener('click', async () =>
+             UI.showToast('Cannot add items — bill already requested for this group');
+             return;
+         }
+-        const sessResult = await ensureSession();
++        // Direct mode has no table session: the cart is local until checkout.
++        const sessResult = M.direct ? { ok: true } : await ensureSession();
+         if (!sessResult.ok) {
+             UI.showToast('Could not start session. Please scan the QR code again.');
+             return;
+@@ -1037,6 +1108,7 @@ document.getElementById('btnGuestPlus')?.addEventListener('click', () => { hapti
+ document.getElementById('btnPlaceOrder')?.addEventListener('click', async () => {
+     if (M._placing) return;
+     if (cartIsEmpty()) { UI.showToast('Your cart is empty'); return; }
++    if (M.direct) { showDirectOrderChooser(); return; }
+     M._placing = true;
+     const btn = document.getElementById('btnPlaceOrder');
+     btn.disabled = true;
+diff --git a/menu/js/customer.js b/menu/js/customer.js
+index a29f6c5..a124325 100644
+--- a/menu/js/customer.js
++++ b/menu/js/customer.js
+@@ -192,6 +192,23 @@ function setPrefs(partial, { sync = true } = {}) {
+     return _prefs;
+ }
+ 
++// Direct-mode sign-in: phone is the key, name is optional (greeting only).
++// No OTP by owner decision. The server-side profile node requires a 2+ char
++// name, so a blank name is stored as 'Guest'.
++export function signInWithPhone(name, phone) {
++    const cleanPhone = normalizePhone(phone);
++    if (!cleanPhone) return { ok: false, error: 'Enter a valid 10-digit mobile number.' };
++    const typed = String(name || '').trim();
++    if (typed && !validName(typed)) return { ok: false, error: 'Name must be 2-60 characters (or leave it empty).' };
++    const res = saveIdentity(typed || 'Guest', cleanPhone, { source: 'signin' });
++    if (res.ok) markOnboarded();
++    return res;
++}
++
++export function isSignedIn() {
++    return !!_profile?.phone;
++}
++
+ export function getProfile() {
+     return _profile ? { ..._profile, prefs: { ..._prefs } } : null;
+ }
+diff --git a/menu/js/session.js b/menu/js/session.js
+index cbed620..740ae87 100644
+--- a/menu/js/session.js
++++ b/menu/js/session.js
+@@ -37,12 +37,25 @@ function getTokenFromUrl() {
+ // fails validation and falls through to the normal invalid-QR screen.
+ const LAST_TABLE_KEY = `fh_last_table:${OUTLET}`;
+ 
++// A remembered table only counts for the same dining visit. Without a limit an
++// installed app opened at home would still jump to last week's table instead of
++// the restaurant's menu (direct mode).
++const LAST_TABLE_AT_KEY = `fh_last_table_at:${OUTLET}`;
++export const TABLE_MEMORY_MS = 4 * 60 * 60 * 1000;
++
+ function rememberTableToken(token) {
+-    try { localStorage.setItem(LAST_TABLE_KEY, token); } catch { /* private mode */ }
++    try {
++        localStorage.setItem(LAST_TABLE_KEY, token);
++        localStorage.setItem(LAST_TABLE_AT_KEY, String(Date.now()));
++    } catch { /* private mode */ }
+ }
+ 
+ function recallTableToken() {
+-    try { return localStorage.getItem(LAST_TABLE_KEY); } catch { return null; }
++    try {
++        const at = Number(localStorage.getItem(LAST_TABLE_AT_KEY)) || 0;
++        if (!at || Date.now() - at > TABLE_MEMORY_MS) return null;
++        return localStorage.getItem(LAST_TABLE_KEY);
++    } catch { return null; }
+ }
+ 
+ /**
+@@ -198,6 +211,8 @@ export async function initSession() {
+         }
+     }
+ 
++    // No ?t= and no recent table: not an error — the app opens in direct mode.
++    if (!table && !token) return { ok: false, reason: 'no-table' };
+     if (!table) return { ok: false, reason: 'invalid-token' };
+ 
+     rememberTableToken(token);
+diff --git a/tests/direct-mode.check.mjs b/tests/direct-mode.check.mjs
+new file mode 100644
+index 0000000..90e84c4
+--- /dev/null
++++ b/tests/direct-mode.check.mjs
+@@ -0,0 +1,155 @@
++// Direct-mode (no table) check: real menu app in headless Chromium, Firebase CDN
++// modules replaced by an in-memory stub. Not a substitute for a real-device test.
++// Run: NODE_PATH=$(npm root -g) node tests/direct-mode.check.mjs
++import { createRequire } from 'module';
++import http from 'http';
++import fs from 'fs';
++import path from 'path';
++import assert from 'assert/strict';
++import { fileURLToPath } from 'url';
++const require = createRequire(import.meta.url);
++const { chromium } = require('playwright');
++// menu/ is the hosting root in production (absolute /css, /js, /shared URLs)
++const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'menu');
++
++const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
++const server = http.createServer((req, res) => {
++    const p = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
++    if (!p.startsWith(root) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
++    res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
++    fs.createReadStream(p).pipe(res);
++});
++await new Promise(r => server.listen(0, r));
++const base = `http://localhost:${server.address().port}`;
++
++const DB = {
++    businesses: { 'roshani-pizza': { outlets: { pizza: {
++        settings: { Store: { storeName: 'Roshani Pizza' } },
++        categories: { c1: { name: 'Pizza', order: 1 } },
++        dishes: { d1: { name: 'Margherita', category: 'c1', price: 199, stock: true, sizes: [{ label: 'Regular', price: 199 }] } },
++        tables: { t1: { number: 7, token: 'GOODTOKEN', capacity: 4, status: 'free' } }
++    } } } }
++};
++const dbStub = `
++const DB = ${JSON.stringify(DB)};
++const at = (p) => p.split('/').filter(Boolean).reduce((n, k) => (n == null ? n : n[k]), DB);
++const snap = (v) => ({ exists: () => v != null, val: () => (v === undefined ? null : v), forEach: (f) => { Object.entries(v || {}).forEach(([k, x]) => f({ key: k, val: () => x })); }, key: null });
++export const getDatabase = () => ({});
++export const ref = (db, p) => ({ path: p || '', key: (p || '').split('/').pop() });
++export const get = async (r) => snap(at(r.path));
++export const onValue = (r, cb) => { Promise.resolve().then(() => cb(snap(at(r.path)))); return () => {}; };
++export const set = async () => {};
++export const update = async () => {};
++export const push = (r) => ({ path: r.path + '/k' + Math.random().toString(36).slice(2, 8), key: 'k' + Math.random().toString(36).slice(2, 8) });
++export const runTransaction = async () => ({ committed: true, snapshot: snap(null) });
++`;
++const STUBS = {
++    'firebase-app.js': 'export const initializeApp = () => ({});',
++    'firebase-database.js': dbStub,
++    'firebase-auth.js': 'export const getAuth = () => ({}); export const signInAnonymously = async () => ({ user: { uid: "x", getIdToken: async () => "t" } });',
++    'firebase-messaging.js': 'export const getMessaging = () => ({}); export const getToken = async () => null; export const onMessage = () => () => {}; export const deleteToken = async () => true;',
++};
++
++const browser = await chromium.launch();
++let failures = 0;
++async function scenario(name, fn) {
++    const ctx = await browser.newContext({ serviceWorkers: 'block' });
++    await ctx.route('**/*', (route) => {
++        const u = new URL(route.request().url());
++        if (u.hostname === 'www.gstatic.com') {
++            const f = u.pathname.split('/').pop();
++            return route.fulfill({ status: 200, contentType: 'text/javascript', body: STUBS[f] || 'export {};' });
++        }
++        if (u.hostname.startsWith('localhost')) return route.continue();
++        return route.fulfill({ status: 200, contentType: 'text/plain', body: '' });
++    });
++    const page = await ctx.newPage();
++    const errors = [];
++    page.on('pageerror', e => errors.push(e.message));
++    try { await fn(page, ctx); console.log('PASS', name); }
++    catch (e) { failures++; console.log('FAIL', name, '-', e.message.split('\n')[0]); }
++    if (errors.length) { failures++; console.log('  page errors:', errors.slice(0, 3)); }
++    await ctx.close();
++}
++const active = (page) => page.evaluate(() => document.querySelector('.screen.active')?.id);
++const URL_DIRECT = `${base}/index.html?o=pizza&b=roshani-pizza`;
++
++await scenario('first open (no table) shows sign-in, not "invalid QR"', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenSignIn', null, { timeout: 8000 });
++    assert.equal(await page.textContent('#signInBrand'), 'Roshani Pizza');
++});
++
++await scenario('bad phone is rejected, name stays optional', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '12345');
++    await page.click('#btnSignIn');
++    assert.match(await page.textContent('#signInError'), /10-digit/);
++    assert.equal(await active(page), 'screenSignIn');
++});
++
++await scenario('phone only (no name) signs in and lands on the full menu', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    assert.match(await page.textContent('#screenMenu'), /Margherita/, 'menu items are shown');
++    const prof = JSON.parse(await page.evaluate(() => Object.entries(localStorage).find(([k]) => /profile/i.test(k))?.[1] || 'null'));
++    assert.equal(prof.phone, '9876543210'); assert.equal(prof.name, 'Guest');
++});
++
++await scenario('returning visitor skips sign-in and sees the menu first', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210'); await page.fill('#signInName', 'Rahul');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    await page.goto(URL_DIRECT);
++    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenMenu', null, { timeout: 8000 });
++    assert.match(await page.textContent('#menuGreeting'), /Rahul/);
++});
++
++await scenario('invalid ?t= still shows the invalid-QR screen', async (page) => {
++    await page.goto(URL_DIRECT + '&t=WRONG');
++    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenInvalid', null, { timeout: 8000 });
++});
++
++await scenario('valid table token still opens dine-in (welcome screen)', async (page) => {
++    await page.goto(URL_DIRECT + '&t=GOODTOKEN');
++    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenWelcome', null, { timeout: 8000 });
++});
++
++await scenario('table older than 4h is forgotten; recent one is reused', async (page) => {
++    await page.goto(URL_DIRECT + '&t=GOODTOKEN');
++    await page.waitForSelector('#screenWelcome.active');
++    await page.goto(URL_DIRECT);                     // same visit: back to the table
++    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenWelcome', null, { timeout: 8000 });
++    await page.evaluate(() => { const k = Object.keys(localStorage).find(x => x.startsWith('fh_last_table_at')); localStorage.setItem(k, String(Date.now() - 5 * 3600 * 1000)); });
++    await page.goto(URL_DIRECT);                     // next day: restaurant app, not the old table
++    await page.waitForFunction(() => ['screenSignIn', 'screenMenu'].includes(document.querySelector('.screen.active')?.id), null, { timeout: 8000 });
++});
++
++await scenario('direct-mode: add a dish, Place order opens the chooser (no table session)', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    await page.getByText('Margherita').first().click();
++    await page.waitForSelector('#screenCustomize.active');
++    await page.click('#btnAddToOrder');
++    await page.waitForSelector('#screenMenu.active');
++    await page.evaluate(() => document.getElementById('btnOpenCartFromMenu').click());
++    await page.waitForSelector('#screenCart.active');
++    await page.evaluate(() => document.getElementById('btnPlaceOrder').click());
++    await page.waitForSelector('#directOrderChooser:not(.hidden)', { timeout: 5000 });
++    assert.match(await page.getAttribute('#directDeliveryLink', 'href'), /^delivery\.html\?o=pizza/);
++    await page.click('#btnCloseChooser');
++    assert.equal(await page.isVisible('#directOrderChooser'), false);
++});
++
++await browser.close(); server.close();
++console.log(failures ? `${failures} FAILED` : 'direct-mode ALL PASSED');
++process.exit(failures ? 1 : 0);
+-- 
+2.43.0
+

@@ -1,0 +1,503 @@
+From 905f63d27a6df1e3e30b22eb0511edecd207c4b8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 00:11:50 +0000
+Subject: [PATCH] Loyalty: WhatsApp-OTP redemption, points expiry, 2% default
+ earn, fix spent-points wipe
+
+- bot/redeem.js: request first sends a 6-digit WhatsApp code; only a matching code (3 tries, 10 min, 3 codes/phone/10 min) deducts points
+- bot/index.js: earn transaction no longer drops pointsSpent; lapsed balances are written off
+- default earn 1 point per Rs50 (was Rs20); new expiryDays setting (180 default in Admin; existing configs stay never-expire in the bot)
+- Admin loyalty tab: expiry field; menu app: code prompt and lapsed balance display
+- tests/loyalty-redeem.check.cjs
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ed5NQtedhQ5SdCJqqDJpCe
+---
+ Admin/js/features/loyalty.js   |  16 ++++-
+ bot/index.js                   |  22 +++++--
+ bot/redeem.js                  |  95 ++++++++++++++++++++++++++---
+ menu/js/customer.js            |  45 +++++++++++---
+ tests/loyalty-redeem.check.cjs | 107 +++++++++++++++++++++++++++++++++
+ 5 files changed, 263 insertions(+), 22 deletions(-)
+ create mode 100644 tests/loyalty-redeem.check.cjs
+
+diff --git a/Admin/js/features/loyalty.js b/Admin/js/features/loyalty.js
+index 0b9a4ad..5467817 100644
+--- a/Admin/js/features/loyalty.js
++++ b/Admin/js/features/loyalty.js
+@@ -22,7 +22,11 @@ const TIER_LABEL = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' };
+ const TIER_COLOUR = { bronze: '#8a6d3b', silver: '#a8a8a8', gold: '#c5a005' };
+ 
+ const DEFAULTS = {
+-  earnRatePaisePerPoint: 2000,
++  // 5000 paise = 1 point per ₹50; at ₹1/point that is ~2% back, the usual
++  // restaurant-points range (was 5%, which can erase a 3-8% margin).
++  earnRatePaisePerPoint: 5000,
++  // Points lapse after this many days without a paid order. 0 = never.
++  expiryDays: 180,
+   // R2: 1 point redeems for ₹1 of tender (100 paise). Admin-tunable.
+   redeemValuePaisePerPoint: 100,
+   // R9: optional minimum spend AFTER redemption — a bill below this cannot
+@@ -111,6 +115,7 @@ function cloneConfig(c) {
+         redeemValuePaisePerPoint: (Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
+             ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
+         minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
++        expiryDays: c.expiryDays != null && Number.isFinite(Number(c.expiryDays)) ? Math.max(0, Math.round(Number(c.expiryDays))) : DEFAULTS.expiryDays,
+         earnEnabled: c.earnEnabled !== false,
+         dineInEarnEnabled: c.dineInEarnEnabled !== false,
+         clawbackEnabled: c.clawbackEnabled !== false,
+@@ -244,6 +249,7 @@ function renderConfigForm() {
+     const redeemRs = ((Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
+         ? c.redeemValuePaisePerPoint : DEFAULTS.redeemValuePaisePerPoint) / 100;
+     const minSpendRs = Number(c.minSpendAfterRedemption) || 0;
++    const expiryDays = c.expiryDays != null && Number.isFinite(Number(c.expiryDays)) ? Math.max(0, Math.round(Number(c.expiryDays))) : DEFAULTS.expiryDays;
+     const earnOn = c.earnEnabled !== false;
+     const dineInOn = c.dineInEarnEnabled !== false;
+     const clawbackOn = c.clawbackEnabled !== false;
+@@ -279,9 +285,14 @@ function renderConfigForm() {
+                     <input type="number" id="loyalty-min-spend" min="0" step="10"
+                         value="${minSpendRs}" class="mob-input-reward" style="max-width:140px;">
+                 </div>
++                <div style="display:flex;flex-direction:column;gap:4px;">
++                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Points expire after (days idle)</label>
++                    <input type="number" id="loyalty-expiry-days" min="0" step="30"
++                        value="${expiryDays}" class="mob-input-reward" style="max-width:140px;">
++                </div>
+                 <button type="button" data-action="loyalty-save-config" class="btn-primary">Save program settings</button>
+             </div>
+-            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum).</div>
++            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum). Expiry 0 = points never lapse; 90–180 days is the usual range. Redeeming a reward needs a code sent to the customer's WhatsApp.</div>
+             <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;">
+                 ${toggle('loyalty-earn-enabled', earnOn, 'Points earning', 'Turn off to pause all earning')}
+                 ${toggle('loyalty-dinein-earn-enabled', dineInOn, 'Dine-in earning', 'Award points when a table bill is paid')}
+@@ -492,6 +503,7 @@ async function saveConfig() {
+         earnRatePaisePerPoint: Math.round(rateRs * 100),
+         redeemValuePaisePerPoint: Math.round(redeemRs * 100),
+         minSpendAfterRedemption: minSpendRs,
++        expiryDays: Math.max(0, Math.round(parseFloat(document.getElementById('loyalty-expiry-days').value) || 0)),
+         earnEnabled: document.getElementById('loyalty-earn-enabled').checked,
+         dineInEarnEnabled: document.getElementById('loyalty-dinein-earn-enabled').checked,
+         clawbackEnabled: document.getElementById('loyalty-clawback-enabled').checked,
+diff --git a/bot/index.js b/bot/index.js
+index eec781c..c1f3c7e 100644
+--- a/bot/index.js
++++ b/bot/index.js
+@@ -1000,7 +1000,8 @@ async function getLoyaltyConfig(outlet) {
+     const config = (snap && snap.val()) || {};
+     return {
+         ...config,
+-        earnRatePaisePerPoint: config.earnRatePaisePerPoint || 2000, // 5 points per ₹100
++        earnRatePaisePerPoint: config.earnRatePaisePerPoint || 5000, // 1 point per ₹50 (~2% back at ₹1/pt)
++        expiryDays: Number(config.expiryDays) > 0 ? Number(config.expiryDays) : 0, // 0 = never (older configs)
+         tiers: config.tiers || {
+             bronze: { min: 0, multiplier: 1 },
+             silver: { min: 1000, multiplier: 1.25 },
+@@ -1085,15 +1086,22 @@ async function _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBa
+     await loyaltyRef.transaction((cur) => {
+         const c = cur || {};
+         if (c.lastAccruedOrderId === String(orderId)) return undefined;
++        // Inactivity expiry: a lapsed balance is written off by marking it all
++        // spent (tier stays on lifetime). Without carrying pointsSpent forward
++        // this tx used to WIPE it, handing redeemed points back on every earn.
++        const lapsed = redeem.pointsLapsed(c.lastOrderAt, config.expiryDays, now);
++        const spent = lapsed ? (c.lifetimePoints || 0) : (c.pointsSpent || 0);
++        const lifetime = (c.lifetimePoints || 0) + pointsEarned;
+         return {
++            pointsSpent: spent,
+             phone,
+             outlet,
+             business: bid,
+             // points = spendable balance (what the customer app displays).
+             // The tx REPLACES the whole node — omitting this field wiped the
+             // customer's balance on every earn (found in live E2E).
+-            points: (c.points || 0) + pointsEarned,
+-            lifetimePoints: (c.lifetimePoints || 0) + pointsEarned,
++            points: Math.max(0, lifetime - spent),
++            lifetimePoints: lifetime,
+             totalSpent: (c.totalSpent || 0) + total,
+             orderCount: (c.orderCount || 0) + 1,
+             tier: newTier,
+@@ -2223,7 +2231,13 @@ async function startBot() {
+     }
+ 
+     initCommandListener(sock);
+-    redeem.initRedeemListener({ db, resolvePath, OUTLET });
++    redeem.initRedeemListener({
++        db, resolvePath, OUTLET,
++        sendText: async (phone, text) => {
++            try { await sock.sendMessage(`91${phone}@s.whatsapp.net`, { text }); return true; }
++            catch (e) { console.warn('[Redeem] OTP send failed:', e.message); return false; }
++        }
++    });
+ 
+     // Heartbeat & Cleanup & Report Scheduling
+     if (reportInterval) clearInterval(reportInterval);
+diff --git a/bot/redeem.js b/bot/redeem.js
+index 8a0f14f..7e80af8 100644
+--- a/bot/redeem.js
++++ b/bot/redeem.js
+@@ -1,27 +1,64 @@
+ /**
+- * Loyalty redemption (server-authoritative).
++ * Loyalty redemption (server-authoritative, WhatsApp-OTP verified).
+  *
+  * The menu app cannot write redemption records: it pushes a request to
+  * bot/redeemQueue and the bot (admin SDK, rules bypass) is the only writer.
+  * That is what makes a code trustworthy — cost comes from loyalty/config,
+  * never from the client, and the points are actually deducted.
+  *
++ * OTP step: the request alone is NOT enough (anyone can type anyone's phone).
++ * The bot first sends a 6-digit code to that phone on WhatsApp and parks the
++ * request (rewards/{key}.status = 'otp_required'). Only a request that comes
++ * back carrying the right code (3 tries, 10 minutes) is redeemed.
++ *
+  * customers/{phone}/loyalty gains `pointsSpent`; spendable balance is
+  * lifetimePoints - pointsSpent (tiers stay on lifetime, so spending never
+- * demotes anyone).
++ * demotes anyone). Points lapse after `expiryDays` of inactivity (0 = never).
+  */
+ const crypto = require('crypto');
+ 
++const OTP_TTL_MS = 10 * 60 * 1000;
++const OTP_MAX_TRIES = 3;
++const OTP_MAX_SENDS = 3;          // per phone per TTL window
++const DAY_MS = 86400000;
++
+ function canAfford(lifetimePoints, pointsSpent, cost) {
+     const c = Number(cost);
+     if (!Number.isFinite(c) || c <= 0) return false;
+     return (Number(lifetimePoints) || 0) - (Number(pointsSpent) || 0) >= c;
+ }
+ 
+-function initRedeemListener({ db, resolvePath, OUTLET }) {
++// Inactivity expiry: true when the last paid order is older than expiryDays.
++// expiryDays 0/absent = points never lapse. No lastOrderAt = nothing to judge.
++function pointsLapsed(lastOrderAt, expiryDays, now = Date.now()) {
++    const d = Number(expiryDays);
++    const last = Number(lastOrderAt);
++    if (!Number.isFinite(d) || d <= 0 || !Number.isFinite(last) || last <= 0) return false;
++    return now - last > d * DAY_MS;
++}
++
++function hashOtp(key, otp) {
++    return crypto.createHash('sha256').update(`${key}:${otp}`).digest('hex');
++}
++
++function initRedeemListener({ db, resolvePath, OUTLET, sendText }) {
+     const qRef = db.ref(resolvePath('bot/redeemQueue', OUTLET));
++    const sends = new Map(); // phone -> [timestamps]
+     qRef.off('child_added');
+-    qRef.on('child_added', async (snap) => {
++    qRef.off('child_changed');
++
++    const rewardRef = (phone, key) => db.ref(resolvePath(`customers/${phone}/rewards/${key}`, OUTLET));
++    const otpRef = (key) => db.ref(resolvePath(`bot/redeemOtp/${key}`, OUTLET));
++
++    async function reject(phone, key, reason) {
++        if (!key) return;
++        if (!/^[6-9][0-9]{9}$/.test(phone)) { await qRef.child(key).remove().catch(() => {}); return; }
++        await rewardRef(phone, key).set({ status: 'rejected', reason, redeemedAt: Date.now(), outlet: OUTLET }).catch(() => {});
++        await otpRef(key).remove().catch(() => {});
++        await qRef.child(key).remove().catch(() => {});
++    }
++
++    async function handle(snap) {
+         const req = snap.val() || {};
+         const key = String(snap.key || '');
+         const phone = String(req.phone || '');
+@@ -38,6 +75,41 @@ function initRedeemListener({ db, resolvePath, OUTLET }) {
+             // exists (cold transaction queue), and returning undefined aborts.
+             // Seed it from a read so a missing record is the only abort case.
+             const base = (await loyRef.once('value')).val();
++            if (!base) throw new Error('insufficient points');
++            if (pointsLapsed(base.lastOrderAt, cfg.expiryDays)) throw new Error('points expired');
++            if (!canAfford(base.lifetimePoints, base.pointsSpent, cost)) throw new Error('insufficient points');
++
++            // ── Step 1: no code yet → send one and park the request ──
++            if (!req.otp) {
++                if (typeof sendText !== 'function') throw new Error('otp unavailable');
++                const now = Date.now();
++                const recent = (sends.get(phone) || []).filter(t => now - t < OTP_TTL_MS);
++                if (recent.length >= OTP_MAX_SENDS) throw new Error('too many codes');
++                const otp = String(crypto.randomInt(100000, 1000000));
++                await otpRef(key).set({ hash: hashOtp(key, otp), phone, expiresAt: now + OTP_TTL_MS, tries: 0 });
++                const sent = await sendText(phone, `Your ${reward.label || 'reward'} redemption code is ${otp}. It is valid for 10 minutes. If you did not ask for this, ignore this message.`);
++                if (sent === false) { await otpRef(key).remove().catch(() => {}); throw new Error('otp unavailable'); }
++                recent.push(now); sends.set(phone, recent);
++                await rewardRef(phone, key).set({ status: 'otp_required', rewardId: reward.id, redeemedAt: now, outlet: OUTLET });
++                return; // request stays queued until the code comes back
++            }
++
++            // ── Step 2: verify the code ──
++            const rec = (await otpRef(key).once('value')).val();
++            if (!rec || rec.phone !== phone || Date.now() > rec.expiresAt) throw new Error('code expired');
++            if ((rec.tries || 0) >= OTP_MAX_TRIES) throw new Error('too many attempts');
++            const given = Buffer.from(hashOtp(key, String(req.otp)));
++            const want = Buffer.from(rec.hash);
++            if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) {
++                const tries = (rec.tries || 0) + 1;
++                await otpRef(key).update({ tries });
++                if (tries >= OTP_MAX_TRIES) throw new Error('too many attempts');
++                // wrong code: clear it so the customer can try again
++                await qRef.child(key).update({ otp: null });
++                await rewardRef(phone, key).update({ status: 'otp_required', lastError: 'wrong code' });
++                return;
++            }
++
+             const tx = await loyRef.transaction((cur) => {
+                 const node = cur || base;
+                 if (!node) return;
+@@ -48,7 +120,7 @@ function initRedeemListener({ db, resolvePath, OUTLET }) {
+             if (!tx.committed) throw new Error('insufficient points');
+ 
+             const code = 'LOYAL' + crypto.randomInt(100000, 1000000);
+-            await db.ref(resolvePath(`customers/${phone}/rewards/${key}`, OUTLET)).set({
++            await rewardRef(phone, key).set({
+                 rewardId: reward.id,
+                 label: reward.label || reward.id,
+                 cost,
+@@ -57,14 +129,19 @@ function initRedeemListener({ db, resolvePath, OUTLET }) {
+                 redeemedAt: Date.now(),
+                 outlet: OUTLET
+             });
++            await otpRef(key).remove().catch(() => {});
++            await qRef.child(key).remove().catch(() => {});
+             console.log(`[Redeem] ${phone} redeemed ${reward.id} (-${cost} pts) code ${code}`);
+         } catch (e) {
+             console.warn(`[Redeem] rejected ${key}: ${e.message}`);
+-        } finally {
+-            snap.ref.remove().catch(() => {});
++            await reject(phone, key, e.message);
+         }
+-    });
++    }
++
++    qRef.on('child_added', handle);
++    // Customer re-submits the same request with `otp` filled in.
++    qRef.on('child_changed', (snap) => { if ((snap.val() || {}).otp) return handle(snap); });
+     console.log(`[Bot] Redeem listener started on bot/redeemQueue`);
+ }
+ 
+-module.exports = { canAfford, initRedeemListener };
++module.exports = { canAfford, pointsLapsed, hashOtp, initRedeemListener };
+diff --git a/menu/js/customer.js b/menu/js/customer.js
+index a29f6c5..01dff1c 100644
+--- a/menu/js/customer.js
++++ b/menu/js/customer.js
+@@ -10,7 +10,7 @@
+  * The FCM token itself is never stored in localStorage - it only lives in
+  * the outlet's pushSubscriptions record (see pwa-install.js).
+  */
+-import { outletRef, get, set, push, onValue, OUTLET, BUSINESS_ID } from './firebase.js';
++import { outletRef, get, set, push, update, onValue, OUTLET, BUSINESS_ID } from './firebase.js';
+ import * as UI from './ui.js';
+ import { esc } from './ui.js';
+ import {
+@@ -915,9 +915,9 @@ async function loadLoyaltyConfig() {
+     }
+     if (!_loyaltyConfig) {
+         _loyaltyConfig = {
+-            // Same default as the bot (bot/index.js): 2000 paise per point
+-            // = 5 points per ₹100 spent. Admin can override via loyalty/config.
+-            earnRatePaisePerPoint: 2000,
++            // Same default as the bot (bot/index.js): 5000 paise per point
++            // = 1 point per ₹50 spent (~2% back). Admin can override via loyalty/config.
++            earnRatePaisePerPoint: 5000,
+             tiers: {
+                 bronze: { min: 0, label: 'Bronze', multiplier: 1 },
+                 silver: { min: 1000, label: 'Silver', multiplier: 1.25 },
+@@ -978,6 +978,10 @@ function loyaltyPoints() {
+     if (!_loyalty) return 0;
+     const lifetime = Number(_loyalty.lifetimePoints) || 0;
+     const spent = Number(_loyalty.pointsSpent) || 0;
++    // Same inactivity rule as the bot: lapsed points show as 0.
++    const days = Number(_loyaltyConfig && _loyaltyConfig.expiryDays) || 0;
++    const last = Number(_loyalty.lastOrderAt) || 0;
++    if (days > 0 && last > 0 && Date.now() - last > days * 86400000) return 0;
+     return Math.max(0, lifetime - spent);
+ }
+ 
+@@ -1094,16 +1098,21 @@ export async function writeCustomerOrder(order) {
+     }
+ }
+ 
+-function waitForRedemption(phone, reqKey, ms = 15000) {
++// Resolves with the reward record once `pred(record)` is true. The bot writes
++// status 'otp_required' (code sent to WhatsApp), 'rejected', or the final
++// active record with the redemption code.
++function waitForReward(phone, reqKey, pred, ms = 15000) {
+     return new Promise((resolve, reject) => {
+         const r = outletRef(`customers/${phone}/rewards/${reqKey}`);
+         let stop = null;
+         const timer = setTimeout(() => { if (stop) stop(); reject(new Error('timeout')); }, ms);
+         stop = onValue(r, (snap) => {
+             if (!snap.exists()) return;
++            const v = snap.val();
++            if (!pred(v)) return;
+             clearTimeout(timer);
+             if (stop) stop();
+-            resolve(snap.val());
++            resolve(v);
+         }, () => {
+             clearTimeout(timer);
+             if (stop) stop();
+@@ -1112,6 +1121,23 @@ function waitForRedemption(phone, reqKey, ms = 15000) {
+     });
+ }
+ 
++// Ask for the WhatsApp code (up to 3 tries) and wait for the bot's verdict.
++async function completeRedemptionWithOtp(reqRef, phone, key) {
++    for (let attempt = 0; attempt < 3; attempt++) {
++        const otp = window.prompt('We sent a 6-digit code to your WhatsApp. Enter it to redeem:');
++        if (!otp || !/^\d{6}$/.test(otp.trim())) {
++            // (rules forbid clients deleting a request; the bot expires it)
++            throw new Error('cancelled');
++        }
++        await update(reqRef, { otp: otp.trim() });
++        const rec = await waitForReward(phone, key, v => v.status === 'active' || v.status === 'rejected' || v.lastError === 'wrong code', 20000);
++        if (rec.status === 'active' || rec.status === 'rejected') return rec;
++        UI.showToast('Wrong code. Try again.', 'error');
++        await update(outletRef(`customers/${phone}/rewards/${key}`), { lastError: null }).catch(() => {});
++    }
++    throw new Error('rejected');
++}
++
+ function orderItemNames(order) {
+     const items = order.itemsSummary || [];
+     if (!items.length) return `${order.itemCount || 0} item${order.itemCount !== 1 ? 's' : ''}`;
+@@ -1198,13 +1224,18 @@ function bindAccountRatings() {
+                 });
+                 // The bot is the only writer of a redemption (server-minted code,
+                 // points deducted); the reply lands on this request's own key.
+-                const rec = await waitForRedemption(_profile.phone, reqRef.key);
++                let rec = await waitForReward(_profile.phone, reqRef.key, () => true);
++                if (rec.status === 'otp_required') {
++                    rec = await completeRedemptionWithOtp(reqRef, _profile.phone, reqRef.key);
++                }
++                if (rec.status === 'rejected') throw new Error('rejected');
+                 await loadCustomerLoyalty();
+                 renderAccount();
+                 UI.showToast(`Redeemed: ${rec.label || reward.label} — code ${rec.code}`, 'success');
+             } catch (e) {
+                 UI.showToast(e && e.message === 'timeout'
+                     ? 'Still processing — check Account in a minute.'
++                    : e && e.message === 'cancelled' ? 'Redemption cancelled.'
+                     : 'Redemption failed. Try again.', 'error');
+             } finally {
+                 rewardBtn.disabled = false;
+diff --git a/tests/loyalty-redeem.check.cjs b/tests/loyalty-redeem.check.cjs
+new file mode 100644
+index 0000000..ce41ba8
+--- /dev/null
++++ b/tests/loyalty-redeem.check.cjs
+@@ -0,0 +1,107 @@
++// Redemption OTP + expiry check — in-memory fake of the Realtime Database.
++// Run: node tests/loyalty-redeem.check.cjs
++const assert = require('assert/strict');
++const redeem = require('../bot/redeem.js');
++
++const store = {};
++const get = (p) => p.split('/').filter(Boolean).reduce((n, k) => (n == null ? n : n[k]), store);
++const put = (p, v) => {
++    const ks = p.split('/').filter(Boolean); let n = store;
++    ks.slice(0, -1).forEach(k => { n[k] = (n[k] && typeof n[k] === 'object') ? n[k] : {}; n = n[k]; });
++    const last = ks[ks.length - 1];
++    if (v === null || v === undefined) delete n[last]; else n[last] = JSON.parse(JSON.stringify(v));
++};
++const listeners = { child_added: [], child_changed: [] };
++function ref(p) {
++    return {
++        key: p.split('/').pop(),
++        child: (c) => ref(p + '/' + c),
++        once: async () => { const v = get(p); return { val: () => (v === undefined ? null : JSON.parse(JSON.stringify(v))) }; },
++        set: async (v) => put(p, v),
++        update: async (o) => { const cur = get(p) || {}; Object.entries(o).forEach(([k, v]) => { if (v === null) delete cur[k]; else cur[k] = v; }); put(p, cur); },
++        remove: async () => put(p, null),
++        transaction: async (fn) => { const cur = get(p); const out = fn(cur === undefined ? null : JSON.parse(JSON.stringify(cur))); if (out === undefined) return { committed: false }; put(p, out); return { committed: true }; },
++        off: () => {},
++        on: (ev, cb) => listeners[ev].push(cb),
++    };
++}
++const sent = [];
++const db = { ref };
++const resolvePath = (p) => `o/${p}`;
++redeem.initRedeemListener({ db, resolvePath, OUTLET: 'o1', sendText: async (ph, t) => { sent.push({ ph, t }); return true; } });
++const snapOf = (key) => ({ key, val: () => get(`o/bot/redeemQueue/${key}`), ref: ref(`o/bot/redeemQueue/${key}`) });
++const fire = async (ev, key) => { for (const cb of listeners[ev]) await cb(snapOf(key)); };
++const PH = '9876543210';
++
++(async () => {
++    // pure helpers
++    assert.equal(redeem.pointsLapsed(Date.now() - 200 * 86400000, 180), true);
++    assert.equal(redeem.pointsLapsed(Date.now() - 100 * 86400000, 180), false);
++    assert.equal(redeem.pointsLapsed(Date.now() - 900 * 86400000, 0), false, '0 = never');
++
++    put('o/loyalty/config', { rewards: [{ id: 'r1', label: 'Free Samosa', cost: 200 }], expiryDays: 180 });
++    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 500, pointsSpent: 0, lastOrderAt: Date.now() });
++
++    // 1) request without code -> OTP sent, nothing deducted
++    put('o/bot/redeemQueue/k1', { phone: PH, rewardId: 'r1', requestedAt: 1, outlet: 'o1' });
++    await fire('child_added', 'k1');
++    assert.equal(sent.length, 1); assert.match(sent[0].t, /\b\d{6}\b/);
++    assert.equal(get(`o/customers/${PH}/rewards/k1`).status, 'otp_required');
++    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 0, 'no deduction before the code');
++    assert.ok(get('o/bot/redeemQueue/k1'), 'request parked');
++    const otp = sent[0].t.match(/\b(\d{6})\b/)[1];
++
++    // 2) wrong code -> still no deduction, try again allowed
++    put('o/bot/redeemQueue/k1/otp', otp === '111111' ? '222222' : '111111');
++    await fire('child_changed', 'k1');
++    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 0);
++    assert.equal(get(`o/customers/${PH}/rewards/k1`).lastError, 'wrong code');
++
++    // 3) right code -> redeemed once, 200 deducted, code minted, request gone
++    put('o/bot/redeemQueue/k1/otp', otp);
++    await fire('child_changed', 'k1');
++    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 200);
++    assert.equal(get(`o/customers/${PH}/rewards/k1`).status, 'active');
++    assert.match(get(`o/customers/${PH}/rewards/k1`).code, /^LOYAL\d{6}$/);
++    assert.equal(get('o/bot/redeemQueue/k1'), undefined);
++
++    // 4) 3 wrong codes -> rejected, nothing deducted
++    put('o/bot/redeemQueue/k2', { phone: PH, rewardId: 'r1', requestedAt: 2, outlet: 'o1' });
++    await fire('child_added', 'k2');
++    for (let i = 0; i < 3; i++) { put('o/bot/redeemQueue/k2/otp', '000000'); await fire('child_changed', 'k2'); }
++    assert.equal(get(`o/customers/${PH}/rewards/k2`).status, 'rejected');
++    assert.equal(get(`o/customers/${PH}/loyalty`).pointsSpent, 200);
++
++    // 5) lapsed points -> rejected before any code is sent
++    const before = sent.length;
++    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 500, pointsSpent: 0, lastOrderAt: Date.now() - 300 * 86400000 });
++    put('o/bot/redeemQueue/k3', { phone: PH, rewardId: 'r1', requestedAt: 3, outlet: 'o1' });
++    await fire('child_added', 'k3');
++    assert.equal(sent.length, before, 'no code for expired points');
++    assert.equal(get(`o/customers/${PH}/rewards/k3`).reason, 'points expired');
++
++    // 6) too few points -> rejected, no code
++    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 50, pointsSpent: 0, lastOrderAt: Date.now() });
++    put('o/bot/redeemQueue/k4', { phone: PH, rewardId: 'r1', requestedAt: 4, outlet: 'o1' });
++    await fire('child_added', 'k4');
++    assert.equal(sent.length, before);
++    assert.equal(get(`o/customers/${PH}/rewards/k4`).reason, 'insufficient points');
++
++    // 7) rate limit: 3 codes per phone per window
++    put(`o/customers/${PH}/loyalty`, { lifetimePoints: 5000, pointsSpent: 0, lastOrderAt: Date.now() });
++    const base = sent.length; let rejected = 0;
++    for (let i = 0; i < 5; i++) {
++        put(`o/bot/redeemQueue/s${i}`, { phone: PH, rewardId: 'r1', requestedAt: 5, outlet: 'o1' });
++        await fire('child_added', `s${i}`);
++        if (get(`o/customers/${PH}/rewards/s${i}`).status === 'rejected') rejected++;
++    }
++    assert.ok(sent.length - base <= 3, 'no more than 3 codes'); assert.ok(rejected >= 2);
++
++    // 8) source guard: the earn transaction must carry pointsSpent forward
++    // (it used to rebuild the node without it, refunding redeemed points).
++    const src = require('fs').readFileSync(require('path').join(__dirname, '../bot/index.js'), 'utf8');
++    assert.match(src, /pointsSpent: spent,/, 'accrual tx keeps pointsSpent');
++    assert.match(src, /points: Math\.max\(0, lifetime - spent\)/, 'balance = lifetime - spent');
++
++    console.log('loyalty-redeem OK');
++})().catch(e => { console.error(e); process.exit(1); });
+-- 
+2.43.0
+

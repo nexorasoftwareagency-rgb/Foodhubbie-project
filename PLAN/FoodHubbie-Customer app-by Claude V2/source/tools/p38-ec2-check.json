@@ -1,0 +1,1 @@
+{"commands":["free -m | cat; echo SEP1; df -h / | cat; echo SEP2; PM2_HOME=/home/ubuntu/.pm2 pm2 list --no-color 2>&1 | sed 's/[^[:print:][:space:]]//g' | cat; echo SEP3; uptime; echo SEP4; ss -tln | cat; echo SEP5; node --version; echo SEP6; du -sh /var/www/foodhubbie 2>/dev/null; echo SEP7; ps aux --sort=-%mem | awk 'NR<=12 {printf \"%s %s %s %s\\n\", $1, $3, $4, $11}'"]}

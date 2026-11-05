@@ -1,0 +1,397 @@
+From d58113e272d98a2b34afd3d01af1a57933cdbee3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 11:19:22 +0000
+Subject: [PATCH] Customer app: payment history (Orders / Payments switch) +
+ bot payment mirror
+
+- bot/payment-sync.js mirrors paymentStatus/method/paidAt onto customers/{phone}/orders/{id} on every order change (idempotent, never creates a record)
+- loyalty accrual now merges the customer's order record instead of replacing it
+- Orders tab: Orders | Payments switch, paid / to-pay totals, per-order payment details
+- tests: payment-sync.check.cjs, direct-mode payments scenario
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ed5NQtedhQ5SdCJqqDJpCe
+---
+ bot/index.js                        | 17 ++++++-
+ bot/payment-sync.js                 | 51 +++++++++++++++++++++
+ docs/PLAN-DEDICATED-CUSTOMER-APP.md |  8 +++-
+ menu/css/app.css                    | 19 ++++++++
+ menu/index.html                     |  4 ++
+ menu/js/customer.js                 | 71 ++++++++++++++++++++++++++++-
+ tests/direct-mode.check.mjs         | 25 +++++++++-
+ tests/payment-sync.check.cjs        | 56 +++++++++++++++++++++++
+ 8 files changed, 245 insertions(+), 6 deletions(-)
+ create mode 100644 bot/payment-sync.js
+ create mode 100644 tests/payment-sync.check.cjs
+
+diff --git a/bot/index.js b/bot/index.js
+index eec781c..99fa8e7 100644
+--- a/bot/index.js
++++ b/bot/index.js
+@@ -40,6 +40,7 @@ const { resolveOutletId, resolveBusinessIdFor, initializeOutletBusinessIndex } =
+ const { createMetaTransport, getTransportMode, getPhoneNumberId } = require('./transport');
+ const discountEngine = require('./discount-engine');
+ const redeem = require('./redeem');
++const paymentSync = require('./payment-sync');
+ 
+ // Pure order-totals math shared with the menu checkout and Admin POS (same
+ // repo checkout that ships to EC2, so a relative require reaches it).
+@@ -1123,7 +1124,10 @@ async function _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBa
+     });
+ 
+     // Order record with points earned (customer reads this for history).
+-    await db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet)).set({
++    // MERGE (update), not replace: a set() here used to wipe the placement-time
++    // fields (createdAt, itemsSummary, table, paymentStatus) from the customer's
++    // order history. Payment fields come from the order itself.
++    await db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet)).update({
+         orderId: String(orderId),
+         outlet,
+         business: bid,
+@@ -1135,7 +1139,9 @@ async function _writeLoyaltyAccrual({ orderId, order, phone, outlet, bid, earnBa
+         deliveredAt: now,
+         pointsEarned,
+         source: order.source || 'QR',
+-        itemCount: order.itemCount || Object.keys(order.items || {}).length
++        itemCount: order.itemCount || Object.keys(order.items || {}).length,
++        ...(order.paymentStatus ? { paymentStatus: String(order.paymentStatus) } : {}),
++        ...(order.paymentMethod ? { paymentMethod: String(order.paymentMethod) } : {})
+     });
+ 
+     return pointsEarned;
+@@ -2320,6 +2326,13 @@ async function sendDailyReportSafely(dateOverride = null) {
+             // accrual or clawback. Idempotent per orderId, so extra events
+             // are cheap no-ops. Independent of currentSock on purpose.
+             if (order) processLoyalty(snap.key, order).catch(e => console.error("[LOYALTY] processLoyalty error:", e.message));
++            // Customer payment history (Payments tab): mirror status/payment fields.
++            if (order) {
++                const _o = order.outlet || OUTLET;
++                dineInPhoneFor(order, _o)
++                    .then(ph => paymentSync.syncCustomerPayment({ db, resolvePath, phone: ph, orderId: snap.key, order, outlet: _o }))
++                    .catch(e => console.error("[PAYSYNC] error:", e.message));
++            }
+             const now = Date.now();
+             const last = _recentChildChanged.get(snap.key);
+             const sameStatusRecently = last && last.status === order?.status && (now - last.ts) < CHILD_CHANGED_DEBOUNCE_MS;
+diff --git a/bot/payment-sync.js b/bot/payment-sync.js
+new file mode 100644
+index 0000000..4b0c295
+--- /dev/null
++++ b/bot/payment-sync.js
+@@ -0,0 +1,51 @@
++/**
++ * Customer payment history sync.
++ *
++ * The payment truth lives on orders/{id} (Admin/POS set paymentMethod and
++ * paymentStatus at settlement or delivery). Customers cannot read delivery
++ * orders (rules), so the bot mirrors the payment fields onto the customer's
++ * own record customers/{phone}/orders/{id}, which the app's Orders and
++ * Payments tabs read.
++ *
++ * Mirror only: never creates a record (the placement/accrual paths own that),
++ * never writes anything but status/total/payment fields.
++ */
++const PAID = 'Paid';
++
++function str(v) {
++    return typeof v === 'string' && v.trim() ? v.trim().slice(0, 40) : null;
++}
++
++/**
++ * Pure: the fields to merge into the customer's order record.
++ * paidAt is set once, the first time the order is seen as Paid, and cleared
++ * when a settled bill is voided (Paid -> Unpaid).
++ */
++function buildPaymentPatch(order, existing = {}, now = Date.now()) {
++    const paymentStatus = str(order && order.paymentStatus) || 'Pending';
++    const patch = {
++        status: str(order && order.status) || existing.status || 'Placed',
++        total: Number(order && order.total) || 0,
++        paymentStatus,
++        paymentMethod: str(order && order.paymentMethod),
++        paymentUpdatedAt: now,
++    };
++    if (paymentStatus === PAID) patch.paidAt = Number(existing.paidAt) || now;
++    else patch.paidAt = null;
++    return patch;
++}
++
++async function syncCustomerPayment({ db, resolvePath, phone, orderId, order, outlet, now = Date.now() }) {
++    if (!phone || !orderId || !order) return false;
++    const ref = db.ref(resolvePath(`customers/${phone}/orders/${String(orderId)}`, outlet));
++    const snap = await ref.once('value');
++    const existing = snap.val();
++    if (!existing) return false; // not mirrored for this customer: nothing to keep in sync
++    const patch = buildPaymentPatch(order, existing, now);
++    const same = ['status', 'total', 'paymentStatus', 'paymentMethod'].every(k => (existing[k] ?? null) === (patch[k] ?? null));
++    if (same) return false; // idempotent: no write when nothing changed
++    await ref.update(patch);
++    return true;
++}
++
++module.exports = { buildPaymentPatch, syncCustomerPayment };
+diff --git a/docs/PLAN-DEDICATED-CUSTOMER-APP.md b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+index 905e2a9..a2da9c6 100644
+--- a/docs/PLAN-DEDICATED-CUSTOMER-APP.md
++++ b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+@@ -20,7 +20,7 @@
+ | 2a | Delivery from the direct app: cart + profile carry over to the existing delivery checkout (same tab, same origin). No rules, bot or billing change | **Done in branch `feat/direct-ordering`** |
+ | 2b | Pickup, and a native in-app checkout (no hop to `delivery.html`). Needs the decisions below | Not started |
+ | 3 | Bottom tabs for direct mode: Menu · Cart · Orders · Loyalty · Account (Orders = full phone-keyed history) | **Done in branch `feat/app-tabs`** (table app keeps its original tabs) |
+-| 4 | Payment history: record method/status on orders, show per-order payment and a receipt view | Not started |
++| 4 | Payment history: bot mirrors payment method/status onto the customer's order record; Orders tab has an Orders / Payments switch with totals and per-order details (a payment record, not a tax invoice) | **Done in branch `feat/app-payments`** |
+ | 5 | Retire `delivery.html` as a separate app (redirect to the single app); migrate service-worker cache | Not started |
+ 
+ ## Phase 1 behaviour
+@@ -50,3 +50,9 @@ Delivery orders are identified everywhere by `source === 'webview_delivery'`: th
+ - New restaurants start on this package (`mode: 'percentage'` in `shared/billing-defaults.*`). **Existing restaurants keep their current mode** until switched in Supreme Admin (switching re-prices their whole order history, because the wallet is computed from orders).
+ - App orders are recognised by `order.channel === 'app'`, written by `menu/js/delivery-order.js` when the order uses an anonymous app token. Bot/WhatsApp-issued links are not tagged.
+ - Not done: public website pricing page / `PRICING_AND_TERMS.md` still describe ₹1/₹2/₹5 per order and need a reviewed rewrite.
++
++## Phase 4 notes
++- Source of truth: `orders/{id}.paymentMethod/paymentStatus` (set by Admin/POS at settlement or delivery). Customers cannot read delivery orders, so `bot/payment-sync.js` mirrors status, total and payment fields onto `customers/{phone}/orders/{id}` on every order change.
++- The mirror only updates records that already exist (placement/accrual create them) and is idempotent.
++- Fixed on the way: the loyalty accrual replaced the customer's order record (dropping time, items and payment status); it now merges.
++- Limits: online payments (gateway) do not exist, so "payment" means cash/UPI/card as recorded by staff. Orders without a customer phone (anonymous table guests) have no history. Verified with stubs only — not against real Firebase.
+diff --git a/menu/css/app.css b/menu/css/app.css
+index 3a696d8..3e02a0e 100644
+--- a/menu/css/app.css
++++ b/menu/css/app.css
+@@ -1077,3 +1077,22 @@ body.onb-open{ overflow:hidden; }
+ .direct-chooser-card h3 { margin: 0 0 6px; font-size: 18px; }
+ .direct-chooser-card p { margin: 0 0 6px; color: #64748b; font-size: 14px; }
+ .direct-chooser-close { width: 100%; margin-top: 10px; padding: 13px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
++
++/* ===== Orders / Payments switch + payment rows ===== */
++.orders-switch { display: flex; gap: 8px; padding: 12px 16px 0; }
++.orders-switch-btn { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
++.orders-switch-btn.active { background: var(--primary, #E84908); color: #fff; border-color: transparent; }
++.pay-list { display: flex; flex-direction: column; gap: 8px; }
++.pay-row { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; }
++.pay-row summary { display: flex; justify-content: space-between; gap: 10px; cursor: pointer; list-style: none; }
++.pay-row summary::-webkit-details-marker { display: none; }
++.pay-main, .pay-amt { display: flex; flex-direction: column; gap: 2px; }
++.pay-amt { text-align: right; font-weight: 800; }
++.pay-main small, .pay-amt small { font-weight: 600; font-size: 12px; color: #64748b; }
++.pay-pill-paid { color: #15803d !important; }
++.pay-pill-pending { color: #b45309 !important; }
++.pay-pill-refunded, .pay-pill-void { color: #64748b !important; }
++.pay-detail { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
++.pay-detail > div { display: flex; justify-content: space-between; gap: 12px; }
++.pay-detail > div > span:first-child { color: #64748b; }
++.pay-note { margin: 12px 0 0; font-size: 12px; color: #94a3b8; }
+diff --git a/menu/index.html b/menu/index.html
+index 38eb675..10a113f 100644
+--- a/menu/index.html
++++ b/menu/index.html
+@@ -563,6 +563,10 @@
+         <div class="topbar">
+             <span class="topbar-logo" style="margin:0 auto;">Your Orders</span>
+         </div>
++        <div class="orders-switch" role="tablist" aria-label="Orders or payments">
++            <button type="button" class="orders-switch-btn active" data-orders-view="orders" role="tab">Orders</button>
++            <button type="button" class="orders-switch-btn" data-orders-view="payments" role="tab">Payments</button>
++        </div>
+         <div id="ordersScreenBody" class="account-wrap"></div>
+     </div>
+ 
+diff --git a/menu/js/customer.js b/menu/js/customer.js
+index c37044f..d13986c 100644
+--- a/menu/js/customer.js
++++ b/menu/js/customer.js
+@@ -1167,6 +1167,12 @@ function bindAccountRatings() {
+     if (_ratingsDocBound) return;
+     _ratingsDocBound = true;
+     document.addEventListener('click', async (e) => {
++        const viewBtn = e.target.closest('[data-orders-view]');
++        if (viewBtn) {
++            _ordersView = viewBtn.dataset.ordersView === 'payments' ? 'payments' : 'orders';
++            renderTabPanels();
++            return;
++        }
+         const star = e.target.closest('.rating-star');
+         if (star) {
+             const card = star.closest('[data-order-id]');
+@@ -1355,10 +1361,73 @@ function renderCustomerStatsAndHistory() {
+     return renderLoyaltyPanel() + renderOrdersPanel();
+ }
+ 
++// ── Payment history ────────────────────────────────────────────────
++// Reads the payment fields the bot mirrors onto customers/{phone}/orders/{id}
++// (bot/payment-sync.js). This is a payment record, not a tax invoice.
++let _ordersView = 'orders'; // 'orders' | 'payments'
++
++function paymentState(order) {
++    const status = String(order.status || '');
++    const pay = String(order.paymentStatus || 'Pending');
++    if (status === 'Cancelled') return { key: 'void', label: 'No charge' };
++    if (pay === 'Refunded' || status === 'Refunded') return { key: 'refunded', label: 'Refunded' };
++    if (pay === 'Paid') return { key: 'paid', label: 'Paid' };
++    const delivery = String(order.source || '') === 'webview_delivery' || /deliver/i.test(String(order.type || ''));
++    return { key: 'pending', label: delivery ? 'Pay on delivery' : 'Payment pending' };
++}
++
++function whenText(ms) {
++    const v = Number(ms || 0);
++    return v ? new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
++}
++
++function renderPaymentsPanel() {
++    if (!hasIdentity()) {
++        return `<div class="account-empty">Save your mobile number to see your payment history for this kitchen.</div>`;
++    }
++    if (!_orders || _orders.length === 0) {
++        return `<div class="account-empty">No payments yet. Your payments will appear here after you order.</div>`;
++    }
++    let paid = 0, pending = 0;
++    const rows = _orders.map((o) => {
++        const st = paymentState(o);
++        const amount = Number(o.total) || 0;
++        if (st.key === 'paid') paid += amount;
++        if (st.key === 'pending') pending += amount;
++        const method = o.paymentMethod ? esc(String(o.paymentMethod)) : '';
++        return `
++        <details class="pay-row pay-${st.key}" data-order-id="${esc(String(o.id))}">
++            <summary>
++                <span class="pay-main"><strong>Order ${esc(String(o.id))}</strong><small>${esc(orderTime(o))}</small></span>
++                <span class="pay-amt">${UI.fmtMoney(amount)}<small class="pay-pill pay-pill-${st.key}">${esc(st.label)}${st.key === 'paid' && method ? ' · ' + method : ''}</small></span>
++            </summary>
++            <div class="pay-detail">
++                <div><span>Items</span><span>${esc(orderItemNames(o))}</span></div>
++                <div><span>Order status</span><span>${esc(o.status || 'Placed')}</span></div>
++                <div><span>Payment</span><span>${esc(st.label)}${method ? ' · ' + method : ''}</span></div>
++                ${o.paidAt ? `<div><span>Paid on</span><span>${esc(whenText(o.paidAt))}</span></div>` : ''}
++                ${o.table ? `<div><span>Table</span><span>${esc(String(o.table))}</span></div>` : ''}
++                <div><span>Amount</span><span>${UI.fmtMoney(amount)}</span></div>
++            </div>
++        </details>`;
++    }).join('');
++    return `
++    <div class="account-stats">
++        <div class="stat"><div class="stat-value">${UI.fmtMoney(paid)}</div><div class="stat-label">Paid</div></div>
++        <div class="stat"><div class="stat-value">${UI.fmtMoney(pending)}</div><div class="stat-label">To pay</div></div>
++    </div>
++    <div class="account-section">
++        <div class="account-section-head">Payment history</div>
++        <div id="paymentsList" class="pay-list">${rows}</div>
++        <p class="pay-note">This is a payment record for your reference, not a tax invoice.</p>
++    </div>`;
++}
++
+ // Bottom-tab screens of the dedicated app (direct mode): Orders and Loyalty.
+ function renderTabPanels() {
+     const o = document.getElementById('ordersScreenBody');
+-    if (o) o.innerHTML = renderOrdersPanel();
++    document.querySelectorAll('[data-orders-view]').forEach(b => b.classList.toggle('active', b.dataset.ordersView === _ordersView));
++    if (o) o.innerHTML = _ordersView === 'payments' ? renderPaymentsPanel() : renderOrdersPanel();
+     const l = document.getElementById('loyaltyScreenBody');
+     if (l) l.innerHTML = renderLoyaltyPanel();
+ }
+diff --git a/tests/direct-mode.check.mjs b/tests/direct-mode.check.mjs
+index 15d091c..06c115d 100644
+--- a/tests/direct-mode.check.mjs
++++ b/tests/direct-mode.check.mjs
+@@ -30,8 +30,8 @@ const DB = {
+         customers: { '9876543210': {
+             loyalty: { phone: '9876543210', lifetimePoints: 1200, pointsSpent: 200, totalSpent: 2400, orderCount: 2, tier: 'silver', updatedAt: 1 },
+             orders: {
+-                A100: { orderId: 'A100', status: 'Delivered', total: 398, createdAt: 2000, itemsSummary: [{ name: 'Margherita', qty: 2 }] },
+-                A101: { orderId: 'A101', status: 'Out for Delivery', total: 199, createdAt: 3000, itemsSummary: [{ name: 'Garlic Bread', qty: 1 }] }
++                A100: { orderId: 'A100', status: 'Delivered', total: 398, createdAt: 2000, paymentStatus: 'Paid', paymentMethod: 'UPI', paidAt: 2500, source: 'QR', itemsSummary: [{ name: 'Margherita', qty: 2 }] },
++                A101: { orderId: 'A101', status: 'Out for Delivery', total: 199, createdAt: 3000, paymentStatus: 'Pending', source: 'webview_delivery', itemsSummary: [{ name: 'Garlic Bread', qty: 1 }] }
+             }
+         } },
+         tables: { t1: { number: 7, token: 'GOODTOKEN', capacity: 4, status: 'free' } }
+@@ -208,6 +208,27 @@ await scenario('dedicated-app tabs: Menu, Cart, Orders, Loyalty, Account', async
+     assert.doesNotMatch(await page.textContent('#accountProfileCard'), /Order A100/, 'account is profile-only');
+ });
+ 
++await scenario('Payments view: paid vs pay-on-delivery, totals, details', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    await page.click('[data-bottom-tab="screenOrders"]');
++    await page.waitForFunction(() => document.querySelectorAll('#ordersScreenBody .account-order-card').length === 2, null, { timeout: 5000 });
++    await page.click('[data-orders-view="payments"]');
++    await page.waitForSelector('#paymentsList .pay-row', { timeout: 5000 });
++    const text = await page.textContent('#ordersScreenBody');
++    assert.match(text, /Paid · UPI/); assert.match(text, /Pay on delivery/);
++    assert.match(text, /not a tax invoice/);
++    const stats = await page.$$eval('#ordersScreenBody .account-stats .stat', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
++    assert.match(stats[0], /398/); assert.match(stats[0], /Paid/); assert.match(stats[1], /199/); assert.match(stats[1], /To pay/);
++    await page.click('.pay-row[data-order-id="A100"] summary');
++    assert.match(await page.textContent('.pay-row[data-order-id="A100"] .pay-detail'), /Paid on/);
++    await page.click('[data-orders-view="orders"]');
++    await page.waitForSelector('#ordersScreenBody .account-order-card');
++});
++
+ await scenario('table (dine-in) app keeps its original tabs', async (page) => {
+     await page.goto(URL_DIRECT + '&t=GOODTOKEN');
+     await page.waitForSelector('#screenWelcome.active');
+diff --git a/tests/payment-sync.check.cjs b/tests/payment-sync.check.cjs
+new file mode 100644
+index 0000000..d81f955
+--- /dev/null
++++ b/tests/payment-sync.check.cjs
+@@ -0,0 +1,56 @@
++// Customer payment-history mirror check. Run: node tests/payment-sync.check.cjs
++const assert = require('assert/strict');
++const { buildPaymentPatch, syncCustomerPayment } = require('../bot/payment-sync.js');
++
++// ── pure patch ──
++let p = buildPaymentPatch({ status: 'Delivered', total: 398, paymentStatus: 'Paid', paymentMethod: 'UPI' }, {}, 1000);
++assert.equal(p.paymentStatus, 'Paid'); assert.equal(p.paymentMethod, 'UPI'); assert.equal(p.paidAt, 1000);
++p = buildPaymentPatch({ status: 'Delivered', total: 398, paymentStatus: 'Paid', paymentMethod: 'UPI' }, { paidAt: 500 }, 2000);
++assert.equal(p.paidAt, 500, 'paidAt is set once');
++p = buildPaymentPatch({ status: 'Served', total: 100, paymentStatus: 'Unpaid', paymentMethod: null }, { paidAt: 500 }, 3000);
++assert.equal(p.paidAt, null, 'voided bill clears paidAt'); assert.equal(p.paymentMethod, null);
++p = buildPaymentPatch({ total: '12.5' }, {}, 1);
++assert.equal(p.paymentStatus, 'Pending', 'missing status = Pending'); assert.equal(p.total, 12.5); assert.equal(p.status, 'Placed');
++p = buildPaymentPatch({ paymentMethod: '  ', paymentStatus: 'Paid' }, {}, 1);
++assert.equal(p.paymentMethod, null, 'blank method ignored');
++
++// ── mirror against an in-memory db ──
++const store = {};
++const get = (path) => path.split('/').filter(Boolean).reduce((n, k) => (n == null ? n : n[k]), store);
++const put = (path, v) => { const ks = path.split('/').filter(Boolean); let n = store; ks.slice(0, -1).forEach(k => { n[k] = n[k] || {}; n = n[k]; }); n[ks[ks.length - 1]] = v; };
++let writes = 0;
++const db = { ref: (path) => ({
++    once: async () => ({ val: () => { const v = get(path); return v === undefined ? null : JSON.parse(JSON.stringify(v)); } }),
++    update: async (o) => { writes++; const cur = get(path) || {}; put(path, { ...cur, ...o }); },
++}) };
++const resolvePath = (p) => `o/${p}`;
++const PH = '9876543210', ID = 'A100';
++
++(async () => {
++    // no mirror record -> nothing created
++    assert.equal(await syncCustomerPayment({ db, resolvePath, phone: PH, orderId: ID, order: { total: 100 }, outlet: 'o' }), false);
++    assert.equal(get(`o/customers/${PH}/orders/${ID}`), undefined, 'never creates a record');
++
++    put(`o/customers/${PH}/orders/${ID}`, { orderId: ID, status: 'Placed', total: 398, paymentStatus: 'Pending', itemsSummary: [{ name: 'Margherita', qty: 2 }], createdAt: 111 });
++    // paid at settlement
++    assert.equal(await syncCustomerPayment({ db, resolvePath, phone: PH, orderId: ID, order: { status: 'Delivered', total: 398, paymentStatus: 'Paid', paymentMethod: 'Cash' }, outlet: 'o', now: 5000 }), true);
++    let rec = get(`o/customers/${PH}/orders/${ID}`);
++    assert.equal(rec.paymentStatus, 'Paid'); assert.equal(rec.paymentMethod, 'Cash'); assert.equal(rec.paidAt, 5000); assert.equal(rec.status, 'Delivered');
++    assert.deepEqual(rec.itemsSummary, [{ name: 'Margherita', qty: 2 }], 'placement fields kept'); assert.equal(rec.createdAt, 111);
++    // same event again -> no write (idempotent)
++    const before = writes;
++    assert.equal(await syncCustomerPayment({ db, resolvePath, phone: PH, orderId: ID, order: { status: 'Delivered', total: 398, paymentStatus: 'Paid', paymentMethod: 'Cash' }, outlet: 'o', now: 9000 }), false);
++    assert.equal(writes, before); assert.equal(get(`o/customers/${PH}/orders/${ID}`).paidAt, 5000);
++    // void
++    await syncCustomerPayment({ db, resolvePath, phone: PH, orderId: ID, order: { status: 'Served', total: 398, paymentStatus: 'Unpaid', paymentMethod: null }, outlet: 'o', now: 9500 });
++    rec = get(`o/customers/${PH}/orders/${ID}`);
++    assert.equal(rec.paymentStatus, 'Unpaid'); assert.equal(rec.paidAt, null);
++    // no phone -> skipped
++    assert.equal(await syncCustomerPayment({ db, resolvePath, phone: '', orderId: ID, order: { total: 1 }, outlet: 'o' }), false);
++
++    // source guards: hook + merge (not replace) of the accrual mirror
++    const src = require('fs').readFileSync(require('path').join(__dirname, '../bot/index.js'), 'utf8');
++    assert.match(src, /paymentSync\.syncCustomerPayment/, 'child_changed hook wired');
++    assert.doesNotMatch(src, /customers\/\$\{phone\}\/orders\/\$\{String\(orderId\)\}`, outlet\)\)\.set\(\{\s*orderId/, 'accrual mirror must not replace the record');
++    console.log('payment-sync OK');
++})().catch(e => { console.error(e); process.exit(1); });
+-- 
+2.43.0
+

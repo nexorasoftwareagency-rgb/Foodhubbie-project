@@ -1,0 +1,512 @@
+From d0d4191f553d7fc543bc02dfa86ba60e08863730 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 09:23:11 +0000
+Subject: [PATCH] feat(privacy): customer data readable only by registered
+ devices (no OTP)
+
+First device to use a phone number owns it; others join with a short-lived
+link code or an admin reset. Locked-state UI in the app, Reset phone lock in
+Admin, rules + tests.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ed5NQtedhQ5SdCJqqDJpCe
+---
+ Admin/js/features/customers.js      |  24 +++++-
+ database.rules.json                 |  30 +++++--
+ docs/PLAN-DEDICATED-CUSTOMER-APP.md |  15 ++++
+ menu/css/app.css                    |   6 ++
+ menu/js/app.js                      |   7 +-
+ menu/js/customer.js                 | 128 +++++++++++++++++++++++++++-
+ menu/sw.js                          |   2 +-
+ tests/direct-mode.check.mjs         |  51 ++++++++++-
+ tests/rules.emulator.mjs            |  23 ++++-
+ 9 files changed, 271 insertions(+), 15 deletions(-)
+
+diff --git a/Admin/js/features/customers.js b/Admin/js/features/customers.js
+index 1ce96f5..bbbbcf9 100644
+--- a/Admin/js/features/customers.js
++++ b/Admin/js/features/customers.js
+@@ -1,4 +1,4 @@
+-import { Outlet, get } from '../firebase.js';
++import { Outlet, get, remove } from '../firebase.js';
+ import { escapeHtml, showToast } from '../utils.js';
+ import { logger } from '../utils/logger.js';
+ import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
+@@ -68,7 +68,7 @@ function _renderCustomerTable() {
+                     </div>
+                 </div>
+             </td>
+-            <td>${waLink}</td>
++            <td>${waLink}${phone.length === 10 ? `<div><button type="button" class="mob-reset-lock" data-reset-lock="${escapeHtml(phone)}" title="Use when the customer lost or changed their phone: the next phone to open the app with this number becomes the owner.">Reset phone lock</button></div>` : ''}</td>
+             <td><span class="mob-addr-text" title="${escapeHtml(addrFull)}">${escapeHtml(addr)}</span>${mapLink}</td>
+             <td class="mob-th-center"><span class="mob-order-count">${c.orderCount || 0}</span><div class="mob-td-sub">purchases</div></td>
+             <td class="mob-th-center"><span style="color:${tierColor};font-weight:700;text-transform:uppercase;font-size:11px;">${tierLabel}</span><div class="mob-td-sub">${fmtMoney(c.loyaltyPoints || 0)} pts</div></td>
+@@ -76,6 +76,26 @@ function _renderCustomerTable() {
+         </tr>`;
+     }).join('');
+ 
++    if (!tbody.dataset.lockWired) {
++        tbody.dataset.lockWired = '1';
++        tbody.addEventListener('click', async (e) => {
++            const btn = e.target.closest('[data-reset-lock]');
++            if (!btn) return;
++            const ph = btn.dataset.resetLock;
++            if (!window.confirm(`Reset the phone lock for ${ph}?\n\nThe customer's phone(s) will be forgotten. The NEXT phone that opens the app with this number becomes the owner, so only do this when the customer asks (lost or new phone).`)) return;
++            btn.disabled = true;
++            try {
++                await remove(Outlet.ref(`customers/${ph}/devices`));
++                await remove(Outlet.ref(`customers/${ph}/link`));
++                showToast('Phone lock reset. Ask the customer to open the app now.', 'success');
++            } catch (err) {
++                logger.warn('CUSTOMERS', 'reset lock failed', err);
++                showToast('Could not reset the lock.', 'error');
++            }
++            btn.disabled = false;
++        });
++    }
++
+     if (typeof lucide !== 'undefined') lucide.createIcons();
+ }
+ 
+diff --git a/database.rules.json b/database.rules.json
+index 82929fd..aaa5359 100644
+--- a/database.rules.json
++++ b/database.rules.json
+@@ -183,31 +183,45 @@
+               ".indexOn": ["phone"],
+               "$phone": {
+                 "app": {
+-                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
+-                  ".write": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)) || ($phone.matches(/^[6-9][0-9]{9}$/) && newData.exists() && newData.child('phone').val() == $phone)",
++                  ".read": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists()",
++                  ".write": "(auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)) || (auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists() && newData.exists() && newData.child('phone').val() == $phone)",
+                   ".validate": "newData.hasChildren(['name','phone','consent','updatedAt']) && newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('name').val().length <= 60 && newData.child('phone').isString() && newData.child('phone').val() == $phone && newData.child('consent').hasChildren(['offers','orderUpdates']) && newData.child('consent').child('offers').isBoolean() && newData.child('consent').child('orderUpdates').isBoolean() && newData.child('updatedAt').isNumber() && (!newData.hasChild('createdAt') || newData.child('createdAt').isNumber()) && (!newData.hasChild('consentVersion') || newData.child('consentVersion').isNumber()) && (!newData.hasChild('source') || (newData.child('source').isString() && newData.child('source').val().length <= 30))"
+                 },
+                 "orders": {
+-                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
++                  ".read": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists()",
+                   "$orderId": {
+-                    ".write": "$phone.matches(/^[6-9][0-9]{9}$/) && newData.exists() && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('orderId').val() == $orderId && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString() && newData.child('customerPhone').isString() && newData.child('customerPhone').val() == $phone && newData.child('status').isString() && newData.child('total').isNumber() && newData.child('total').val() >= 0 && newData.child('createdAt').isNumber() && (!newData.hasChild('customerName') || newData.child('customerName').isString()) && (!newData.hasChild('source') || newData.child('source').isString()) && (!newData.hasChild('table') || newData.child('table').isString()) && (!newData.hasChild('sessionId') || newData.child('sessionId').isString()) && (!newData.hasChild('orderGroupId') || newData.child('orderGroupId').isString()) && (!newData.hasChild('paymentStatus') || newData.child('paymentStatus').isString()) && (!newData.hasChild('itemCount') || newData.child('itemCount').isNumber())",
++                    ".write": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists() && newData.exists() && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('orderId').val() == $orderId && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString() && newData.child('customerPhone').isString() && newData.child('customerPhone').val() == $phone && newData.child('status').isString() && newData.child('total').isNumber() && newData.child('total').val() >= 0 && newData.child('createdAt').isNumber() && (!newData.hasChild('customerName') || newData.child('customerName').isString()) && (!newData.hasChild('source') || newData.child('source').isString()) && (!newData.hasChild('table') || newData.child('table').isString()) && (!newData.hasChild('sessionId') || newData.child('sessionId').isString()) && (!newData.hasChild('orderGroupId') || newData.child('orderGroupId').isString()) && (!newData.hasChild('paymentStatus') || newData.child('paymentStatus').isString()) && (!newData.hasChild('itemCount') || newData.child('itemCount').isNumber())",
+                     ".validate": "newData.hasChildren(['orderId','outlet','business','customerPhone','status','total','createdAt']) && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('orderId').val() == $orderId && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString() && newData.child('customerPhone').isString() && newData.child('customerPhone').val() == $phone && newData.child('status').isString() && newData.child('total').isNumber() && newData.child('total').val() >= 0 && newData.child('createdAt').isNumber() && (!newData.hasChild('customerName') || newData.child('customerName').isString()) && (!newData.hasChild('source') || newData.child('source').isString()) && (!newData.hasChild('table') || newData.child('table').isString()) && (!newData.hasChild('sessionId') || newData.child('sessionId').isString()) && (!newData.hasChild('orderGroupId') || newData.child('orderGroupId').isString()) && (!newData.hasChild('paymentStatus') || newData.child('paymentStatus').isString()) && (!newData.hasChild('itemCount') || newData.child('itemCount').isNumber())"
+                   }
+                 },
+                 "ratings": {
+-                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
++                  ".read": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists()",
+                   "$orderId": {
+-                    ".write": "$phone.matches(/^[6-9][0-9]{9}$/) && newData.exists() && newData.hasChildren(['rating','orderId','outlet','createdAt']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5 && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('createdAt').isNumber() && (!newData.hasChild('comment') || newData.child('comment').isString() && newData.child('comment').val().length <= 500) && (!newData.hasChild('business') || newData.child('business').isString())",
++                    ".write": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists() && newData.exists() && newData.hasChildren(['rating','orderId','outlet','createdAt']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5 && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('createdAt').isNumber() && (!newData.hasChild('comment') || newData.child('comment').isString() && newData.child('comment').val().length <= 500) && (!newData.hasChild('business') || newData.child('business').isString())",
+                     ".validate": "newData.hasChildren(['rating','orderId','outlet','createdAt']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5 && newData.child('orderId').isString() && newData.child('orderId').val().length >= 1 && newData.child('orderId').val().length <= 100 && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('createdAt').isNumber() && (!newData.hasChild('comment') || newData.child('comment').isString() && newData.child('comment').val().length <= 500) && (!newData.hasChild('business') || newData.child('business').isString())"
+                   }
+                 },
+                 "rewards": {
+-                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)"
++                  ".read": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists()"
+                 },
+                 "loyalty": {
+-                  ".read": "$phone.matches(/^[6-9][0-9]{9}$/)",
++                  ".read": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists()",
+                   ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
+                   ".validate": "newData.hasChildren(['phone','outlet','business','lifetimePoints','totalSpent','orderCount','tier','updatedAt']) && newData.child('phone').isString() && newData.child('phone').val() == $phone && newData.child('outlet').isString() && newData.child('outlet').val() == $outletId && newData.child('business').isString() && newData.child('lifetimePoints').isNumber() && newData.child('lifetimePoints').val() >= 0 && newData.child('totalSpent').isNumber() && newData.child('totalSpent').val() >= 0 && newData.child('orderCount').isNumber() && newData.child('orderCount').val() >= 0 && newData.child('tier').isString() && (newData.child('tier').val() == 'bronze' || newData.child('tier').val() == 'silver' || newData.child('tier').val() == 'gold') && newData.child('updatedAt').isNumber() && (!newData.hasChild('tierReachedAt') || newData.child('tierReachedAt').isNumber()) && (!newData.hasChild('lastOrderAt') || newData.child('lastOrderAt').isNumber())"
++                },
++                "devices": {
++                  "$uid": {
++                    ".read": "auth != null && auth.uid == $uid",
++                    ".write": "(auth != null && auth.uid == $uid && !newData.exists()) || (auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && auth.uid == $uid && $phone.matches(/^[6-9][0-9]{9}$/) && !data.exists() && newData.exists() && (!data.parent().exists() || (newData.hasChild('code') && newData.child('code').val() == data.parent().parent().child('link').child('code').val() && data.parent().parent().child('link').child('exp').val() > now)))",
++                    ".validate": "newData.hasChild('at') && newData.child('at').isNumber() && newData.child('at').val() <= now + 60000 && (!newData.hasChild('code') || (newData.child('code').isString() && newData.child('code').val().length == 8))",
++                    "at": { ".validate": "newData.isNumber()" },
++                    "code": { ".validate": "newData.isString()" },
++                    "$other": { ".validate": false }
++                  }
++                },
++                "link": {
++                  ".read": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists()",
++                  ".write": "auth != null && $phone.matches(/^[6-9][0-9]{9}$/) && root.child('businesses').child($businessId).child('outlets').child($outletId).child('customers').child($phone).child('devices').child(auth.uid).exists() && (!newData.exists() || (newData.hasChildren(['code','exp']) && newData.child('code').isString() && newData.child('code').val().matches(/^[0-9]{8}$/) && newData.child('exp').isNumber() && newData.child('exp').val() > now && newData.child('exp').val() <= now + 900000))"
+                 }
+               }
+             },
+diff --git a/docs/PLAN-DEDICATED-CUSTOMER-APP.md b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+index 63dcc2d..343a7fa 100644
+--- a/docs/PLAN-DEDICATED-CUSTOMER-APP.md
++++ b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+@@ -75,3 +75,18 @@ The app is now complete by itself: menu -> cart -> checkout -> tracking, with no
+ - Item prices in the order come from the customer's device and are not re-checked on the server (same as existing QR / webview flows).
+ - Existing restaurants keep their old billing mode until switched in Supreme Admin.
+ - Website pricing page and `PRICING_AND_TERMS.md` still show the old rates.
++
++## Phone privacy (branch `feat/phone-privacy`) — no OTP kept
++Problem: anyone who typed a customer's phone number could read that customer's orders, points and delivery code.
++Fix: "first phone to use a number owns it".
++- The app signs in anonymously and registers the device at `customers/{phone}/devices/{uid}`. Reads and writes of the customer's profile, orders, ratings, loyalty and rewards now need a registered device (restaurant admins and the bot are unaffected).
++- Another phone joins with an 8-digit code made on the first phone (Account -> Link another phone). Code works for 10 minutes.
++- Lost phone: Admin -> Customers -> "Reset phone lock"; the next phone to use the number becomes the owner.
++- Old rules still deployed: the app detects it and behaves as before ("error" state), so nothing breaks while deploying.
++
++Residual risks (cannot be fixed without a real verification step such as a WhatsApp/SMS code):
++- A stranger who opens the app with a number BEFORE its real owner does becomes the owner (including for numbers that already have history).
++- iPhone: the Safari tab and the installed home-screen app are separate storage, so the installed app may ask for a link code once.
++- Clearing site data / reinstalling loses the device id; use a link code or ask the restaurant to reset.
++- Rules were not run in the emulator (not downloadable here); 19 new `privacy:` cases are in `tests/rules.emulator.mjs`.
++- Future: the WhatsApp bot can write `customers/{phone}/link` and send the code by WhatsApp, giving real verification with the same rules.
+diff --git a/menu/css/app.css b/menu/css/app.css
+index fc0735f..df45811 100644
+--- a/menu/css/app.css
++++ b/menu/css/app.css
+@@ -1110,3 +1110,9 @@ body.onb-open{ overflow:hidden; }
+ .trk-otp small { color: #9a3412; }
+ .trk-cancelled { margin-top: 8px; font-size: 13px; color: #b91c1c; }
+ .trk-cancel { padding: 8px 12px; border: 1px solid #fecaca; border-radius: 10px; background: #fff; color: #b91c1c; font-weight: 700; font-size: 13px; cursor: pointer; }
++
++/* ---- device link card (phone privacy) ---- */
++.access-card { display:flex; flex-direction:column; gap:10px; align-items:stretch; }
++.access-title { font-weight:700; font-size:15px; }
++.access-text { margin:0; font-size:13px; line-height:1.45; opacity:.8; }
++.access-code { font-size:28px; font-weight:800; letter-spacing:4px; text-align:center; padding:10px 0; font-variant-numeric:tabular-nums; }
+diff --git a/menu/js/app.js b/menu/js/app.js
+index 590ba37..4632848 100644
+--- a/menu/js/app.js
++++ b/menu/js/app.js
+@@ -13,7 +13,7 @@ import { haptic } from './ui.js';
+ import { esc } from './ui.js';
+ import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
+ import { initAppCheckout, openCheckout, cancelAppOrder } from './app-checkout.js';
+-import { renderOrdersTab, renderLoyaltyTab, openAccountTab, signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
++import { ensureDeviceAccess, renderOrdersTab, renderLoyaltyTab, openAccountTab, signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
+ 
+ // ---------------------------------------------------------------
+ // Module state for menu browsing
+@@ -308,6 +308,11 @@ document.getElementById('signInForm')?.addEventListener('submit', (e) => {
+     errEl.classList.add('hidden');
+     if (res.profile?.name && res.profile.name !== 'Guest') UI.updateGreeting(res.profile.name);
+     UI.showScreen('screenMenu');
++    // Privacy check runs in the background: if another phone already owns this
++    // number, tell the customer how to link this one (details live in Account).
++    ensureDeviceAccess(res.profile.phone).then((st) => {
++        if (st === 'taken') UI.showToast('This number is already used on another phone. Open Account to enter its link code.', 'error');
++    });
+ });
+ 
+ document.addEventListener('click', async (e) => {
+diff --git a/menu/js/customer.js b/menu/js/customer.js
+index bf90af5..11ac6ca 100644
+--- a/menu/js/customer.js
++++ b/menu/js/customer.js
+@@ -10,7 +10,7 @@
+  * The FCM token itself is never stored in localStorage - it only lives in
+  * the outlet's pushSubscriptions record (see pwa-install.js).
+  */
+-import { outletRef, get, set, push, onValue, OUTLET, BUSINESS_ID } from './firebase.js';
++import { outletRef, get, set, push, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
+ import * as UI from './ui.js';
+ import { esc } from './ui.js';
+ import {
+@@ -121,6 +121,7 @@ function syncProfile(profile) {
+     if (!profile?.phone || !profile?.name) return Promise.resolve(false);
+     const path = `customers/${profile.phone}/app`;
+     const write = async () => {
++        if ((await ensureDeviceAccess(profile.phone)) === 'taken') return false;
+         let existing = null;
+         try {
+             const snap = await get(outletRef(path));
+@@ -192,6 +193,124 @@ function setPrefs(partial, { sync = true } = {}) {
+     return _prefs;
+ }
+ 
++// ---------------------------------------------------------------
++// Phone privacy without OTP: "first phone to use a number owns it".
++// Typing a number is not proof it is yours, so the customer's data
++// (profile, orders, loyalty, rewards, delivery code) is readable only by
++// devices registered under customers/{phone}/devices/{uid}. The first device
++// registers itself; another phone joins with an 8-digit code made on the
++// first one (Account > Link another phone), or the restaurant resets the lock.
++// States: 'owner' | 'taken' (another device owns it) | 'error' (rules not
++// deployed yet / offline: behave as before, nothing is lost).
++// ---------------------------------------------------------------
++let _access = { phone: null, state: 'unknown', pending: null };
++
++export function getAccessState() { return _access.state; }
++
++export function ensureDeviceAccess(phone) {
++    const p = normalizePhone(phone);
++    if (!p) return Promise.resolve('error');
++    if (_access.phone === p && _access.pending) return _access.pending;
++    const rec = { phone: p, state: 'unknown', pending: null };
++    _access = rec;
++    rec.pending = (async () => {
++        let state = 'error';
++        try {
++            const user = await ensureAnonAuth();
++            const mine = outletRef(`customers/${p}/devices/${user.uid}`);
++            let registered = null;
++            try { registered = (await get(mine)).exists(); } catch (e) { registered = null; } // old rules: no devices node
++            if (registered === true) state = 'owner';
++            else if (registered === false) {
++                try { await set(mine, { at: Date.now() }); state = 'owner'; } catch (e) { state = 'taken'; }
++            }
++        } catch (e) { state = 'error'; }
++        rec.state = state;
++        if (_initialized) { try { renderAccount(); } catch (e) { /* DOM not ready */ } }
++        return state;
++    })();
++    return rec.pending;
++}
++
++// Owner device: make a short-lived code to add another phone.
++export async function createLinkCode() {
++    const p = _profile?.phone;
++    if (!p || (await ensureDeviceAccess(p)) !== 'owner') throw new Error('not-owner');
++    const buf = new Uint32Array(1);
++    crypto.getRandomValues(buf);
++    const code = String(buf[0] % 100000000).padStart(8, '0');
++    const exp = Date.now() + 10 * 60 * 1000;
++    await set(outletRef(`customers/${p}/link`), { code, exp });
++    return { code, exp };
++}
++
++// New device: prove you hold the other phone by typing its code.
++export async function linkThisDevice(phone, code) {
++    const p = normalizePhone(phone);
++    const c = String(code || '').replace(/\D/g, '');
++    if (!p) return { ok: false, error: 'Enter a valid 10-digit mobile number.' };
++    if (c.length !== 8) return { ok: false, error: 'Enter the 8-digit code shown on your other phone.' };
++    try {
++        const user = await ensureAnonAuth();
++        await set(outletRef(`customers/${p}/devices/${user.uid}`), { at: Date.now(), code: c });
++    } catch (e) {
++        return { ok: false, error: 'That code is wrong or has expired. Make a new one on your other phone.' };
++    }
++    _access = { phone: p, state: 'owner', pending: Promise.resolve('owner') };
++    set(outletRef(`customers/${p}/link`), null).catch(() => {});
++    if (_profile?.phone === p) { hydrateProfile(); loadCustomerData().catch(() => {}); }
++    if (_initialized) { try { renderAccount(); } catch (e) { /* DOM not ready */ } }
++    return { ok: true };
++}
++
++function lockedPanelHtml() {
++    return `<div class="account-empty">This number is already set up on another phone, so your orders and points are hidden here. Open the <strong>Account</strong> tab and enter the 8-digit link code from your other phone, or ask the restaurant to reset it.</div>`;
++}
++
++function accessCardHtml() {
++    if (!_profile?.phone) return '';
++    if (_access.state === 'taken') {
++        return `<div class="account-card access-card" id="accessCard">
++            <div class="access-title">This number is already set up on another phone</div>
++            <p class="access-text">To keep your orders and points private, they are shown only on a phone you have linked. On your other phone open <strong>Account &rarr; Link another phone</strong> and type the 8-digit code here. Lost that phone? Ask the restaurant to reset it.</p>
++            <input class="onb-input" id="linkCodeInput" type="tel" inputmode="numeric" maxlength="8" placeholder="8-digit code" autocomplete="one-time-code">
++            <button type="button" class="account-save" id="btnLinkDevice">Link this phone</button>
++        </div>`;
++    }
++    if (_access.state === 'owner') {
++        return `<div class="account-card access-card" id="accessCard">
++            <div class="access-title">Use this number on another phone</div>
++            <p class="access-text">Make a code, then type it on the other phone. It works once, for 10 minutes.</p>
++            <div id="linkCodeOut" class="access-code hidden" aria-live="polite"></div>
++            <button type="button" class="account-save" id="btnMakeLinkCode">Link another phone</button>
++        </div>`;
++    }
++    return '';
++}
++
++function bindAccessCard() {
++    document.getElementById('btnLinkDevice')?.addEventListener('click', async (e) => {
++        const btn = e.currentTarget;
++        btn.disabled = true;
++        const res = await linkThisDevice(_profile?.phone, document.getElementById('linkCodeInput')?.value);
++        btn.disabled = false;
++        if (!res.ok) return UI.showToast(res.error, 'error');
++        UI.showToast('Phone linked. Your orders and points are back.', 'success');
++    });
++    document.getElementById('btnMakeLinkCode')?.addEventListener('click', async (e) => {
++        const btn = e.currentTarget;
++        btn.disabled = true;
++        try {
++            const { code } = await createLinkCode();
++            const out = document.getElementById('linkCodeOut');
++            if (out) { out.textContent = code.replace(/(\d{4})(\d{4})/, '$1 $2'); out.classList.remove('hidden'); }
++        } catch (err) {
++            UI.showToast('Could not make a code. Check your connection and try again.', 'error');
++        }
++        btn.disabled = false;
++    });
++}
++
+ // Direct-mode sign-in: phone is the key, name is optional (greeting only).
+ // No OTP by owner decision. The server-side profile node requires a 2+ char
+ // name, so a blank name is stored as 'Guest'.
+@@ -225,6 +344,7 @@ export function rememberIdentity(name, phone) {
+ 
+ async function hydrateProfile() {
+     if (!_profile?.phone) return;
++    if ((await ensureDeviceAccess(_profile.phone)) === 'taken') { try { renderAccount(); } catch (e) { /* DOM not ready */ } return; }
+     try {
+         const snap = await get(outletRef(`customers/${_profile.phone}/app`));
+         const server = snap.val();
+@@ -766,10 +886,12 @@ function renderAccount() {
+         ${installAvailable ? `<button type="button" class="account-install" id="btnAcctInstall">${isIOS() ? 'How to install this app' : 'Install this app'}</button>` : ''}
+         <button type="button" class="account-clear" id="btnAcctClear">Forget me on this device</button>
+         <p class="account-note">Your number is used for order updates and offers only. It is never shown publicly.</p>
++        ${accessCardHtml()}
+         ${renderCustomerStatsAndHistory()}
+     `;
+ 
+     bindAccountRatings();
++    bindAccessCard();
+ 
+     document.getElementById('btnAcctSave')?.addEventListener('click', () => {
+         const saved = saveIdentity(
+@@ -1088,6 +1210,7 @@ export async function writeCustomerOrder(order) {
+     if (!order || !order.customerPhone || !order.orderId || !order.outlet) return false;
+     const phone = String(order.customerPhone);
+     try {
++        if ((await ensureDeviceAccess(phone)) === 'taken') return false; // not this phone's number
+         await set(outletRef(`customers/${phone}/orders/${String(order.orderId)}`), {
+             orderId: String(order.orderId),
+             outlet: order.outlet,
+@@ -1360,6 +1483,7 @@ function ordersListHtml() {
+ 
+ // Loyalty card: tier strip, rank, rewards, headline stats.
+ function renderLoyaltyPanel() {
++    if (_access.state === 'taken') return lockedPanelHtml();
+     const stats = customerStats();
+     if (!hasIdentity()) {
+         return `<div class="account-empty">Save your mobile number to see order history, loyalty points and ratings for this kitchen.</div>`;
+@@ -1374,6 +1498,7 @@ function renderLoyaltyPanel() {
+ 
+ // Order history: every order placed with this phone number at this kitchen.
+ function renderOrdersPanel() {
++    if (_access.state === 'taken') return lockedPanelHtml();
+     if (!hasIdentity()) {
+         return `<div class="account-empty">Save your mobile number to see your order history for this kitchen.</div>`;
+     }
+@@ -1413,6 +1538,7 @@ function whenText(ms) {
+ }
+ 
+ function renderPaymentsPanel() {
++    if (_access.state === 'taken') return lockedPanelHtml();
+     if (!hasIdentity()) {
+         return `<div class="account-empty">Save your mobile number to see your payment history for this kitchen.</div>`;
+     }
+diff --git a/menu/sw.js b/menu/sw.js
+index b92b24d..00dedbd 100644
+--- a/menu/sw.js
++++ b/menu/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE_NAME = 'menu-shell-v30';
++const CACHE_NAME = 'menu-shell-v31';
+ const ASSETS = [
+   './index.html',
+   './delivery.html',
+diff --git a/tests/direct-mode.check.mjs b/tests/direct-mode.check.mjs
+index 55ec9cb..09a41ab 100644
+--- a/tests/direct-mode.check.mjs
++++ b/tests/direct-mode.check.mjs
+@@ -49,7 +49,7 @@ export const getDatabase = () => ({});
+ export const ref = (db, p) => ({ path: p || '', key: (p || '').split('/').pop() });
+ export const get = async (r) => snap(at(r.path));
+ export const onValue = (r, cb) => { Promise.resolve().then(() => cb(snap(at(r.path)))); return () => {}; };
+-export const set = async (r, v) => { window.__writes.push({ path: r.path, value: JSON.parse(JSON.stringify(v)) }); put(r.path, v); };
++export const set = async (r, v) => { if (r.path.includes('/devices/') && window.__denyDevice && !(v && v.code && v.code === window.__linkCode)) throw new Error('PERMISSION_DENIED'); window.__writes.push({ path: r.path, value: JSON.parse(JSON.stringify(v)) }); put(r.path, v); };
+ export const update = async (r, o) => { window.__writes.push({ path: r.path, update: o }); const cur = at(r.path) || {}; put(r.path, { ...cur, ...o }); };
+ export const push = (r) => { const k = 'k' + Math.random().toString(36).slice(2, 8); return { path: r.path + '/' + k, key: k }; };
+ export const runTransaction = async (r, fn) => { const cur = at(r.path); const nv = fn(cur === undefined ? null : cur); put(r.path, nv); return { committed: true, snapshot: snap(nv) }; };
+@@ -293,6 +293,55 @@ await scenario('Payments view: paid vs pay-on-delivery, totals, details', async
+     await page.waitForSelector('#ordersScreenBody .account-order-card');
+ });
+ 
++await scenario('privacy: first phone owns the number and is registered', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    await page.waitForFunction(() => window.__writes.some(w => /customers\/9876543210\/devices\/ANON-TEST$/.test(w.path)), null, { timeout: 5000 });
++    // the profile is only written after the device is registered
++    const order = await page.evaluate(() => window.__writes.map(w => w.path.replace(/^.*customers\/9876543210\//, '')));
++    assert.ok(order.indexOf('devices/ANON-TEST') < order.indexOf('app'), 'device registered before the profile write');
++});
++
++await scenario('privacy: number owned by another phone -> hidden data, link code unlocks', async (page) => {
++    await page.addInitScript(() => { window.__denyDevice = true; window.__linkCode = '12345678'; });
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    await page.waitForFunction(() => /already used on another phone/i.test(document.body.textContent), null, { timeout: 5000 });
++    assert.equal(await page.evaluate(() => window.__writes.some(w => /customers\/9876543210\/app$/.test(w.path))), false, 'no profile write while locked');
++    await page.click('[data-bottom-tab="screenOrders"]');
++    await page.waitForFunction(() => /already set up on another phone/.test(document.getElementById('ordersScreenBody')?.textContent || ''), null, { timeout: 5000 });
++    // account tab: wrong code refused, right code unlocks
++    await page.click('[data-bottom-tab="screenPromotions"]');
++    await page.waitForSelector('#linkCodeInput', { timeout: 5000 });
++    await page.fill('#linkCodeInput', '00000000'); await page.click('#btnLinkDevice');
++    await page.waitForFunction(() => /wrong or has expired/i.test(document.body.textContent), null, { timeout: 5000 });
++    await page.fill('#linkCodeInput', '12345678'); await page.click('#btnLinkDevice');
++    await page.waitForSelector('#btnMakeLinkCode', { timeout: 5000 });
++    assert.equal(await page.locator('#linkCodeInput').count(), 0, 'lock card replaced after linking');
++});
++
++await scenario('privacy: owner can make a link code (8 digits, 10 minutes)', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    await page.click('[data-bottom-tab="screenPromotions"]');
++    await page.waitForSelector('#btnMakeLinkCode', { timeout: 5000 });
++    await page.click('#btnMakeLinkCode');
++    await page.waitForSelector('#linkCodeOut:not(.hidden)', { timeout: 5000 });
++    assert.match(await page.textContent('#linkCodeOut'), /^\d{4} \d{4}$/);
++    const w = await page.evaluate(() => window.__writes.find(x => /customers\/9876543210\/link$/.test(x.path))?.value);
++    assert.match(w.code, /^\d{8}$/); assert.ok(w.exp - Date.now() > 9 * 60000 && w.exp - Date.now() <= 10 * 60000 + 2000);
++});
++
++
+ await scenario('table (dine-in) app keeps its original tabs', async (page) => {
+     await page.goto(URL_DIRECT + '&t=GOODTOKEN');
+     await page.waitForSelector('#screenWelcome.active');
+diff --git a/tests/rules.emulator.mjs b/tests/rules.emulator.mjs
+index 2bb8359..5a16b31 100644
+--- a/tests/rules.emulator.mjs
++++ b/tests/rules.emulator.mjs
+@@ -112,6 +112,27 @@ const cases = [
+   ['client deletes a redeem request', () => call('DELETE', `${OUT}/bot/redeemQueue/req-1`, null), 'deny'],
+   ['client forges a redemption record', () => call('PUT', `${CUST}/rewards/forged`, null, { rewardId: 'free_fries', label: 'Free Fries', cost: 0, code: 'LOYAL0000', status: 'active', redeemedAt: 1, outlet: 'pizza' }), 'deny'],
+   ['client reads its own redemptions', () => call('GET', `${CUST}/rewards`, null), 200]
++  // ── phone privacy: customer data is readable only by registered devices ──
++  ['privacy: owner device reads own loyalty', () => call('GET', `${CUST}/loyalty`, ANON1), 200],
++  ['privacy: stranger device cannot read loyalty', () => call('GET', `${CUST}/loyalty`, ANON2), 'deny'],
++  ['privacy: signed-out cannot read loyalty', () => call('GET', `${CUST}/loyalty`, null), 'deny'],
++  ['privacy: stranger cannot read profile', () => call('GET', `${CUST}/app`, ANON2), 'deny'],
++  ['privacy: stranger cannot read orders (delivery code)', () => call('GET', `${CUST}/orders`, ANON2), 'deny'],
++  ['privacy: stranger cannot read rewards', () => call('GET', `${CUST}/rewards`, ANON2), 'deny'],
++  ['privacy: stranger cannot list devices', () => call('GET', `${CUST}/devices`, ANON2), 'deny'],
++  ['privacy: stranger cannot read link code', () => call('GET', `${CUST}/link`, ANON2), 'deny'],
++  ['privacy: stranger cannot write profile', () => call('PUT', `${CUST}/app`, ANON2, { name: 'Evil', phone: '9876543210', consent: { offers: true, orderUpdates: true }, updatedAt: 2 }), 'deny'],
++  ['privacy: owner writes own profile', () => call('PUT', `${CUST}/app`, ANON1, { name: 'Rahul', phone: '9876543210', consent: { offers: true, orderUpdates: true }, updatedAt: 3 }), 200],
++  ['privacy: stranger cannot claim an owned number', () => call('PUT', `${CUST}/devices/ANON2`, ANON2, { at: Date.now() }), 'deny'],
++  ['privacy: stranger cannot add device with wrong code', () => call('PUT', `${OUT}/customers/9000000001/devices/ANON1`, ANON1, { at: Date.now(), code: '00000000' }), 'deny'],
++  ['privacy: device joins with the right code', () => call('PUT', `${OUT}/customers/9000000001/devices/ANON1`, ANON1, { at: Date.now(), code: '12345678' }), 200],
++  ['privacy: first device claims a fresh number', () => call('PUT', `${OUT}/customers/9123456780/devices/ANON1`, ANON1, { at: Date.now() }), 200],
++  ['privacy: cannot register someone else\'s uid', () => call('PUT', `${OUT}/customers/9111111111/devices/ANON2`, ANON1, { at: Date.now() }), 'deny'],
++  ['privacy: signed-out cannot claim', () => call('PUT', `${OUT}/customers/9222222222/devices/X`, null, { at: Date.now() }), 'deny'],
++  ['privacy: restaurant admin reads customer', () => call('GET', `${CUST}/orders`, ADMIN), 200],
++  ['privacy: restaurant admin resets the lock', () => call('DELETE', `${OUT}/customers/9000000001/devices`, ADMIN), 200],
++  ['privacy: owner makes a link code', () => call('PUT', `${CUST}/link`, ANON1, { code: '87654321', exp: Date.now() + 600000 }), 200],
++  ['privacy: stranger cannot make a link code', () => call('PUT', `${CUST}/link`, ANON2, { code: '87654321', exp: Date.now() + 600000 }), 'deny'],
+ ];
+ 
+ await seed({
+@@ -129,7 +150,7 @@ await seed({
+           },
+           settlements: { RIDER1: { S1: { riderId: 'RIDER1', amountCollected: 5000, createdAt: 1 } } },
+           loyalty: { config: { earnRatePaisePerPoint: 2000, tiers: { bronze: { min: 0 }, silver: { min: 500 }, gold: { min: 1000 } }, rewards: [{ id: 'free_fries', label: 'Free Fries', cost: 200 }] } },
+-          customers: { 9876543210: { loyalty: { phone: '9876543210', outlet: 'pizza', business: 'b1', lifetimePoints: 500, pointsSpent: 100, totalSpent: 1, orderCount: 1, tier: 'silver', updatedAt: 1 } } }
++          customers: { 9000000001: { devices: { ANON2: { at: 1 } }, link: { code: '12345678', exp: 4102444800000 } }, 9876543210: { devices: { ANON1: { at: 1 } }, app: { name: 'Rahul', phone: '9876543210', consent: { offers: true, orderUpdates: true }, updatedAt: 1 }, loyalty: { phone: '9876543210', outlet: 'pizza', business: 'b1', lifetimePoints: 500, pointsSpent: 100, totalSpent: 1, orderCount: 1, tier: 'silver', updatedAt: 1 } } }
+         }
+       }
+     }
+-- 
+2.43.0
+

@@ -1,0 +1,298 @@
+From be3d40039a14db14039f0c68c5fbc2ff030e68a6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 11:17:10 +0000
+Subject: [PATCH] Customer app: Orders and Loyalty tabs for the dedicated
+ (no-table) app
+
+Bottom tabs in direct mode: Menu, Cart, Orders, Loyalty, Account. Orders lists every order
+placed with the phone number; Loyalty shows tier, rank, rewards and totals; Account is
+profile-only. Table (dine-in) app tabs unchanged. Browser checks added.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ed5NQtedhQ5SdCJqqDJpCe
+---
+ docs/PLAN-DEDICATED-CUSTOMER-APP.md |  2 +-
+ menu/index.html                     | 26 +++++++++++-
+ menu/js/app.js                      | 13 +++++-
+ menu/js/customer.js                 | 63 ++++++++++++++++++++---------
+ menu/js/ui.js                       |  3 +-
+ tests/direct-mode.check.mjs         | 44 ++++++++++++++++++++
+ 6 files changed, 128 insertions(+), 23 deletions(-)
+
+diff --git a/docs/PLAN-DEDICATED-CUSTOMER-APP.md b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+index 75e3e15..905e2a9 100644
+--- a/docs/PLAN-DEDICATED-CUSTOMER-APP.md
++++ b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+@@ -19,7 +19,7 @@
+ | 1 | Sign-in gate (first open), menu as home without a table (direct mode), table token only reused within 4 h, no-table cart shows an order-mode chooser | **Done in this branch** |
+ | 2a | Delivery from the direct app: cart + profile carry over to the existing delivery checkout (same tab, same origin). No rules, bot or billing change | **Done in branch `feat/direct-ordering`** |
+ | 2b | Pickup, and a native in-app checkout (no hop to `delivery.html`). Needs the decisions below | Not started |
+-| 3 | Bottom tabs for direct mode: Menu · Cart · Orders · Loyalty · Account (Orders = full phone-keyed history) | Not started |
++| 3 | Bottom tabs for direct mode: Menu · Cart · Orders · Loyalty · Account (Orders = full phone-keyed history) | **Done in branch `feat/app-tabs`** (table app keeps its original tabs) |
+ | 4 | Payment history: record method/status on orders, show per-order payment and a receipt view | Not started |
+ | 5 | Retire `delivery.html` as a separate app (redirect to the single app); migrate service-worker cache | Not started |
+ 
+diff --git a/menu/index.html b/menu/index.html
+index 098f4b1..38eb675 100644
+--- a/menu/index.html
++++ b/menu/index.html
+@@ -558,6 +558,22 @@
+         </div>
+     </div>
+ 
++    <!-- ============== SCREEN: ORDERS (dedicated app tab) ============== -->
++    <div id="screenOrders" class="screen">
++        <div class="topbar">
++            <span class="topbar-logo" style="margin:0 auto;">Your Orders</span>
++        </div>
++        <div id="ordersScreenBody" class="account-wrap"></div>
++    </div>
++
++    <!-- ============== SCREEN: LOYALTY (dedicated app tab) ============== -->
++    <div id="screenLoyalty" class="screen">
++        <div class="topbar">
++            <span class="topbar-logo" style="margin:0 auto;">Loyalty Card</span>
++        </div>
++        <div id="loyaltyScreenBody" class="account-wrap"></div>
++    </div>
++
+     <!-- ============== BOTTOM NAVIGATION ============== -->
+     <nav id="bottomNav" class="bottom-nav hidden">
+         <button class="bottom-nav-item" data-bottom-tab="screenMenu">
+@@ -571,6 +587,14 @@
+             </span>
+             <span>Cart</span>
+         </button>
++        <button class="bottom-nav-item direct-only hidden" data-bottom-tab="screenOrders">
++            <svg class="icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
++            <span>Orders</span>
++        </button>
++        <button class="bottom-nav-item direct-only hidden" data-bottom-tab="screenLoyalty">
++            <svg class="icon" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
++            <span>Loyalty</span>
++        </button>
+         <button class="bottom-nav-item" data-bottom-tab="screenTracking">
+             <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+             <span>Status</span>
+@@ -581,7 +605,7 @@
+         </button>
+         <button class="bottom-nav-item" data-bottom-tab="screenPromotions">
+             <svg class="icon" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+-            <span>Promos</span>
++            <span id="navPromosLabel">Promos</span>
+         </button>
+     </nav>
+ 
+diff --git a/menu/js/app.js b/menu/js/app.js
+index b704a7e..2e989f7 100644
+--- a/menu/js/app.js
++++ b/menu/js/app.js
+@@ -12,7 +12,7 @@ import * as UI from './ui.js';
+ import { haptic } from './ui.js';
+ import { esc } from './ui.js';
+ import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
+-import { signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
++import { renderOrdersTab, renderLoyaltyTab, openAccountTab, signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
+ 
+ // ---------------------------------------------------------------
+ // Module state for menu browsing
+@@ -263,6 +263,10 @@ async function bootDirect() {
+     // No table: hide table chips and the table-only tabs.
+     document.querySelectorAll('#menuTableChip').forEach(el => el.classList.add('hidden'));
+     document.querySelectorAll('[data-bottom-tab="screenTracking"], [data-bottom-tab="screenHistory"]').forEach(el => el.classList.add('hidden'));
++    // Dedicated-app tabs: Menu · Cart · Orders · Loyalty · Account
++    document.querySelectorAll('#bottomNav .direct-only').forEach(el => el.classList.remove('hidden'));
++    const promosLabel = document.getElementById('navPromosLabel');
++    if (promosLabel) promosLabel.textContent = 'Account';
+     document.getElementById('cartHeaderTitle').textContent = 'Your Cart';
+ 
+     try {
+@@ -1245,7 +1249,12 @@ document.querySelectorAll('#bottomNav .bottom-nav-item').forEach(btn => {
+         if (target === 'screenCart') renderCartScreen();
+         if (target === 'screenTracking') renderTrackingOrEmptyState();
+         if (target === 'screenHistory') renderHistoryScreen();
+-        if (target === 'screenPromotions') renderPromotionsScreen();
++        if (target === 'screenOrders') renderOrdersTab();
++        if (target === 'screenLoyalty') renderLoyaltyTab();
++        if (target === 'screenPromotions') {
++            if (M.direct) openAccountTab();   // the "Account" tab of the dedicated app
++            renderPromotionsScreen();
++        }
+         UI.showScreen(target);
+     });
+ });
+diff --git a/menu/js/customer.js b/menu/js/customer.js
+index a124325..c37044f 100644
+--- a/menu/js/customer.js
++++ b/menu/js/customer.js
+@@ -724,6 +724,7 @@ function renderPwaCards() {
+ }
+ 
+ function renderAccount() {
++    renderTabPanels();
+     const card = document.getElementById('accountProfileCard');
+     if (!card) return;
+ 
+@@ -1298,20 +1299,9 @@ function renderRewards() {
+     </div>`;
+ }
+ 
+-function renderCustomerStatsAndHistory() {
+-    const stats = customerStats();
+-    if (!hasIdentity()) {
+-        return `<div class="account-empty">Save your mobile number to see order history, loyalty points and ratings for this kitchen.</div>`;
+-    }
+-    const strip = renderLoyaltyStrip();
+-    const rank = renderRankings();
+-    const rewards = renderRewards();
+-    if (stats.orders === 0) {
+-        return strip + rank + rewards + `<div class="account-empty">No orders yet. Order from the menu to build your history.</div>`;
+-    }
++function ordersListHtml() {
+     const rows = _orders.map((order) => {
+-        const statusKey = String(order.status || 'Placed').toLowerCase();
+-        const rated = _ratings[String(order.id)];
++        const statusKey = String(order.status || 'Placed').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+         return `
+         <div class="account-order-card" data-order-id="${esc(String(order.id))}">
+             <div class="account-order-head">
+@@ -1328,18 +1318,55 @@ function renderCustomerStatsAndHistory() {
+             </div>
+         </div>`;
+     }).join('');
+-    return strip + rank + rewards + `
++    return rows;
++}
++
++// Loyalty card: tier strip, rank, rewards, headline stats.
++function renderLoyaltyPanel() {
++    const stats = customerStats();
++    if (!hasIdentity()) {
++        return `<div class="account-empty">Save your mobile number to see order history, loyalty points and ratings for this kitchen.</div>`;
++    }
++    return renderLoyaltyStrip() + renderRankings() + renderRewards() + `
+     <div class="account-stats">
+         <div class="stat"><div class="stat-value">${UI.fmtMoney(stats.totalSpent)}</div><div class="stat-label">Total spent</div></div>
+         <div class="stat"><div class="stat-value">${stats.orders}</div><div class="stat-label">Orders</div></div>
+         <div class="stat"><div class="stat-value">${stats.points}</div><div class="stat-label">Loyalty points</div></div>
+-    </div>
+-    <div class="account-section">
+-        <div class="account-section-head">Your Orders at this kitchen <span class="account-section-count">(${stats.orders})</span></div>
+-        <div id="accountOrdersList" class="account-orders">${rows}</div>
+     </div>`;
+ }
+ 
++// Order history: every order placed with this phone number at this kitchen.
++function renderOrdersPanel() {
++    if (!hasIdentity()) {
++        return `<div class="account-empty">Save your mobile number to see your order history for this kitchen.</div>`;
++    }
++    if (!_orders || _orders.length === 0) {
++        return `<div class="account-empty">No orders yet. Order from the menu to build your history.</div>`;
++    }
++    return `<div class="account-section">
++        <div class="account-section-head">Your Orders at this kitchen <span class="account-section-count">(${_orders.length})</span></div>
++        <div id="accountOrdersList" class="account-orders">${ordersListHtml()}</div>
++    </div>`;
++}
++
++function renderCustomerStatsAndHistory() {
++    // Dedicated app: Orders and Loyalty have their own tabs; Account stays profile-only.
++    if (document.body.classList.contains('direct-mode')) return '';
++    return renderLoyaltyPanel() + renderOrdersPanel();
++}
++
++// Bottom-tab screens of the dedicated app (direct mode): Orders and Loyalty.
++function renderTabPanels() {
++    const o = document.getElementById('ordersScreenBody');
++    if (o) o.innerHTML = renderOrdersPanel();
++    const l = document.getElementById('loyaltyScreenBody');
++    if (l) l.innerHTML = renderLoyaltyPanel();
++}
++
++export async function renderOrdersTab() { await loadCustomerData(); }
++export async function renderLoyaltyTab() { await loadCustomerData(); }
++export function openAccountTab() { setPromoTab('account'); }
++
+ export async function renderCustomerPromotions(store, mode = 'dine-in') {
+     _mode = mode;
+     bindPromoTabs();
+diff --git a/menu/js/ui.js b/menu/js/ui.js
+index 1f13a45..0836e1d 100644
+--- a/menu/js/ui.js
++++ b/menu/js/ui.js
+@@ -103,7 +103,8 @@ export function updateGreeting(name) {
+ 
+ const BOTTOM_NAV_SCREENS = {
+     screenMenu: 'screenMenu', screenCart: 'screenCart', screenTracking: 'screenTracking',
+-    screenHistory: 'screenHistory', screenPromotions: 'screenPromotions'
++    screenHistory: 'screenHistory', screenPromotions: 'screenPromotions',
++    screenOrders: 'screenOrders', screenLoyalty: 'screenLoyalty'
+ };
+ 
+ const _screenStack = [];
+diff --git a/tests/direct-mode.check.mjs b/tests/direct-mode.check.mjs
+index 97f40be..15d091c 100644
+--- a/tests/direct-mode.check.mjs
++++ b/tests/direct-mode.check.mjs
+@@ -27,6 +27,13 @@ const DB = {
+         settings: { Store: { storeName: 'Roshani Pizza' } },
+         categories: { c1: { name: 'Pizza', order: 1 } },
+         dishes: { d1: { name: 'Margherita', category: 'c1', price: 199, stock: true, sizes: [{ label: 'Regular', price: 199 }] } },
++        customers: { '9876543210': {
++            loyalty: { phone: '9876543210', lifetimePoints: 1200, pointsSpent: 200, totalSpent: 2400, orderCount: 2, tier: 'silver', updatedAt: 1 },
++            orders: {
++                A100: { orderId: 'A100', status: 'Delivered', total: 398, createdAt: 2000, itemsSummary: [{ name: 'Margherita', qty: 2 }] },
++                A101: { orderId: 'A101', status: 'Out for Delivery', total: 199, createdAt: 3000, itemsSummary: [{ name: 'Garlic Bread', qty: 1 }] }
++            }
++        } },
+         tables: { t1: { number: 7, token: 'GOODTOKEN', capacity: 4, status: 'free' } }
+     } } } }
+ };
+@@ -172,6 +179,43 @@ await scenario('chooser -> delivery app keeps the cart and the signed-in profile
+     assert.deepEqual(vals, ['Rahul', '9876543210']);
+ });
+ 
++await scenario('dedicated-app tabs: Menu, Cart, Orders, Loyalty, Account', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210'); await page.fill('#signInName', 'Rahul');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    const labels = await page.$$eval('#bottomNav .bottom-nav-item', els => els.filter(e => getComputedStyle(e).display !== 'none').map(e => [...e.querySelectorAll('span')].pop().textContent.trim()));
++    assert.deepEqual(labels, ['Menu', 'Cart', 'Orders', 'Loyalty', 'Account']);
++
++    await page.click('[data-bottom-tab="screenOrders"]');
++    await page.waitForSelector('#screenOrders.active');
++    await page.waitForFunction(() => document.querySelectorAll('#ordersScreenBody .account-order-card').length === 2, null, { timeout: 5000 });
++    const ordersText = await page.textContent('#ordersScreenBody');
++    assert.match(ordersText, /A101/); assert.match(ordersText, /Out for Delivery/); assert.match(ordersText, /Garlic Bread/);
++
++    await page.click('[data-bottom-tab="screenLoyalty"]');
++    await page.waitForSelector('#screenLoyalty.active');
++    await page.waitForFunction(() => /Silver/i.test(document.getElementById('loyaltyScreenBody')?.textContent || ''), null, { timeout: 5000 });
++    const loy = await page.textContent('#loyaltyScreenBody');
++    assert.match(loy, /1000|Loyalty points/); // spendable = 1200 - 200
++    assert.doesNotMatch(loy, /Order A100/, 'orders live on their own tab');
++
++    await page.click('[data-bottom-tab="screenPromotions"]');
++    await page.waitForSelector('#screenPromotions.active');
++    await page.waitForSelector('#promoPaneAccount:not(.hidden)', { timeout: 5000 });
++    assert.match(await page.textContent('#accountProfileCard'), /Rahul/);
++    assert.doesNotMatch(await page.textContent('#accountProfileCard'), /Order A100/, 'account is profile-only');
++});
++
++await scenario('table (dine-in) app keeps its original tabs', async (page) => {
++    await page.goto(URL_DIRECT + '&t=GOODTOKEN');
++    await page.waitForSelector('#screenWelcome.active');
++    const hidden = await page.$$eval('#bottomNav .direct-only', els => els.map(e => getComputedStyle(e).display));
++    assert.deepEqual(hidden, ['none', 'none']);
++    assert.equal(await page.textContent('#navPromosLabel'), 'Promos');
++});
++
+ await browser.close(); server.close();
+ console.log(failures ? `${failures} FAILED` : 'direct-mode ALL PASSED');
+ process.exit(failures ? 1 : 0);
+-- 
+2.43.0
+

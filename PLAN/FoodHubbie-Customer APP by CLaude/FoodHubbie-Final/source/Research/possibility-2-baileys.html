@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Possibility 2 — Bot + Baileys (QR) | Foodhubbie Cost Analysis</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Possibility 2 — WhatsApp Bot + Baileys (QR link) <span class="pill info">₹0 Meta fees</span></h1>
+  <div class="sub"><b>Unofficial transport.</b> Bot runs full WhatsApp automation by linking the number via QR (<code>transport.js</code> / <code>getTransportMode</code>) — no Meta Cloud API, no per-message billing. Same bot features; the trade-off is ban risk.</div>
+</header>
+
+<nav>
+  <a href="index.html">Hub</a>
+  <a href="possibility-1-no-bot.html">1 · No bot</a>
+  <a href="possibility-2-baileys.html">2 · Baileys</a>
+  <a href="possibility-3-meta-free.html">3 · Meta free</a>
+  <a href="possibility-4-meta-billed.html">4 · Meta billed</a>
+  <a href="index.html#sources">Sources</a>
+</nav>
+
+<h2><span class="n">·</span>What you pay and what you don't</h2>
+<table>
+  <thead><tr><th>Component</th><th>Cost</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><b>Firebase RTDB</b> (menu + admin + rider + orders + KDS + bot listeners)</td><td>base + 0.5 GB/mo/outlet</td><td>bot holds order/session listeners</td></tr>
+    <tr><td><b>Firebase Hosting</b></td><td>₹0–2,298/mo</td><td>same as no-bot</td></tr>
+    <tr><td><b>EC2 server</b></td><td>₹1,338 / ₹5,342 / ₹10,692</td><td>bot workers (110–155 MB/outlet) + webhook :5000 + control-api :4000 + Redis + tunnel; sized by outlet count</td></tr>
+    <tr><td><b>Meta WhatsApp API</b></td><td class="hl">₹0</td><td>Baileys = WhatsApp Web reverse-engineered — messages never touch Meta's paid API</td></tr>
+    <tr><td>Auth · Functions · Storage · Analytics</td><td>₹0</td><td>same as no-bot</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <div class="t">Risk you are trading for ₹0</div>
+  Baileys is <b>unofficial</b> — Meta can ban the linked number (temporary or permanent). Acceptable for pilots/internal numbers; for production customer-facing numbers, budget the official API (Possibilities 3/4).
+</div>
+
+<h2><span class="n">·</span>Full detail — 10 / 25 / 50 / 100 orders per day per restaurant</h2>
+<p class="small"><b>₹/order</b> = total ÷ (orders/day × 30 × restaurants). Note it barely drops with volume — the <b>flat EC2 server</b> dominates at low volume and gets spread over more orders as volume grows.</p>
+
+<h3>Images in Firebase Storage (default)</h3>
+<table>
+  <thead><tr><th class="num">orders/day/rest</th><th class="num">restaurants</th><th class="num">TOTAL ₹/mo</th><th class="num">₹ / order</th><th class="num">₹/restaurant</th></tr></thead>
+  <tbody>
+    <tr><td class="num">10</td><td class="num">10</td><td class="num">₹2,951</td><td class="num">₹0.98</td><td class="num">₹295</td></tr>
+    <tr><td class="num">10</td><td class="num">50</td><td class="num">₹17,205</td><td class="num">₹1.15</td><td class="num">₹344</td></tr>
+    <tr><td class="num">10</td><td class="num">100</td><td class="num">₹35,473</td><td class="num">₹1.18</td><td class="num">₹355</td></tr>
+    <tr><td class="num">25</td><td class="num">10</td><td class="num">₹2,996</td><td class="num">₹0.40</td><td class="num">₹300</td></tr>
+    <tr><td class="num">25</td><td class="num">50</td><td class="num">₹17,679</td><td class="num">₹0.47</td><td class="num">₹354</td></tr>
+    <tr><td class="num">25</td><td class="num">100</td><td class="num">₹36,707</td><td class="num">₹0.49</td><td class="num">₹367</td></tr>
+    <tr><td class="num">50</td><td class="num">10</td><td class="num">₹3,081</td><td class="num">₹0.21</td><td class="num">₹308</td></tr>
+    <tr><td class="num">50</td><td class="num">50</td><td class="num">₹18,706</td><td class="num">₹0.25</td><td class="num">₹374</td></tr>
+    <tr><td class="num">50</td><td class="num">100</td><td class="num">₹38,762</td><td class="num">₹0.26</td><td class="num">₹388</td></tr>
+    <tr><td class="num">100</td><td class="num">10</td><td class="num">₹3,349</td><td class="num">₹0.11</td><td class="num">₹335</td></tr>
+    <tr><td class="num">100</td><td class="num">50</td><td class="num">₹20,761</td><td class="num">₹0.14</td><td class="num">₹415</td></tr>
+    <tr><td class="num">100</td><td class="num">100</td><td class="num hl">₹42,872</td><td class="num hl">₹0.14</td><td class="num">₹429</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">·</span>Reading this outcome</h2>
+<ul>
+  <li><b>Full WhatsApp bot at Firebase+server cost only</b> — Meta bill permanently ₹0 at every volume (compare Possibility 4: saves up to <b>₹3,01,800/mo</b> at 100×100).</li>
+  <li>The <b>EC2 server is the main variable</b>: flat ₹1,338–10,692 regardless of orders/day → it dominates the bill at 10 orders/day, becomes minor at 100.</li>
+  <li>Server sizing is by <b>outlet count, not orders</b> (110–155 MB/bot worker; t3.small caps ~10 outlets).</li>
+  <li>Image mode is <b>Firebase Storage by default</b> — the ₹1,174–27,780 Firebase floor; server & Meta (₹0) unchanged.</li>
+</ul>
+
+<div class="box warn">
+  <div class="t">Who this is for</div>
+  Pilots, internal numbers, or markets where you accept ban risk to eliminate the message bill entirely. If the number gets banned → migrate the same bot to the official API (Possibility 3/4) with almost no code change (transport switch).
+</div>
+
+<h2><span class="n">·</span>Compare all possibilities (same cell)</h2>
+<table>
+  <thead><tr><th>Possibility</th><th class="num">10 orders · 10 rest</th><th class="num">100 orders · 100 rest</th></tr></thead>
+  <tbody>
+    <tr><td><a href="possibility-1-no-bot.html">1 · No bot</a></td><td class="num">₹1,174</td><td class="num">₹27,780</td></tr>
+    <tr><td><b>2 · Bot + Baileys</b> (this page)</td><td class="num hl">₹2,951</td><td class="num hl">₹42,872</td></tr>
+    <tr><td><a href="possibility-3-meta-free.html">3 · Meta API free (till Sep 30)</a></td><td class="num">₹3,209</td><td class="num">₹68,672</td></tr>
+    <tr><td><a href="possibility-4-meta-billed.html">4 · Meta API billed (from Oct 1)</a></td><td class="num">₹5,969</td><td class="num">₹3,44,672</td></tr>
+  </tbody>
+</table>
+
+<a class="back" href="index.html">← All possibilities</a>
+<footer>Research only — no codebase changes · Numbers from <code>node Research\scripts\cost-calc.js --fixed --inr</code> (possibility sections) · 2026-09-27 · ₹88/$</footer>
+</div>
+</body>
+</html>

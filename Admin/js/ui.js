@@ -176,8 +176,9 @@ export async function loadTabData(tabId) {
             break;
         }
         case 'walkin': {
-            const { loadWalkinMenu } = await mod('pos');
+            const { loadWalkinMenu, _initPosKeyboardShortcuts } = await mod('pos');
             loadWalkinMenu();
+            _initPosKeyboardShortcuts();
             break;
         }
         case 'settings': {

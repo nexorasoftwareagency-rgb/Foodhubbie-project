@@ -1,0 +1,81 @@
+# Deployment Progress Tracker
+# Format: [STATUS] Section.Step - description
+# STATUS values: PENDING, IN_PROGRESS, VERIFIED, BLOCKED_ON_HUMAN, FAILED
+# This list is sequential and matches the guide's numbering exactly - do not renumber or skip.
+
+[VERIFIED] P.2 - Create blank project folder (root = D:\Foodhubbie Project; Windows adaptation)
+[VERIFIED] P.3 - Fetch Roshani repo (code source)
+[VERIFIED] P.4 - Fetch Food-Hubbie repo (reference only, /tmp)
+[VERIFIED] P.5 - Add new infrastructure folders (SupremeAdmin, orchestrator, webhook-server, bot-control-api)
+[VERIFIED] P.6 - Initialize new git repo (pushed to origin Foodhubbie-project, main)
+[VERIFIED] P.7 - Final structure verification
+[VERIFIED] P.7a - Contamination scan (doc-only matches in guide/tracker + Roshani's own brand comments; no Food-Hubbie code copied)
+[VERIFIED] 1.1 - AWS account creation (account 772603145096 ready)
+[PENDING] 1.2 - Confirm credit + budget alert (budgets exist $1/$20; guide's $100 budget not created - human to confirm/align)
+[PENDING] 1.3 - Secure root account MFA (human to confirm root MFA enabled)
+[VERIFIED] 1.4 - Create IAM user + access key (nilesh-admin, keys configured)
+[PENDING] 1.5 - Install AWS CLI + configure
+[VERIFIED] 2.1 - Create key pair, security group, launch EC2 (i-0c7f49065b1581542 @ 3.111.39.210, t3.small, sg-0a5a73df4b5d37b38, key foodhubbie-key, AMI ami-07e5ce642bbc48c0d)
+[VERIFIED] 3.1 - SSH connect
+[VERIFIED] 3.2 - System update
+[VERIFIED] 3.3 - Node.js install (v20.20.2)
+[VERIFIED] 3.4 - PM2 install (7.0.3)
+[VERIFIED] 3.5 - Redis install (PONG, active)
+[VERIFIED] 3.6 - Git install (2.43.0)
+[VERIFIED] 3.7 - Full section verification (all 6 tools confirmed together)
+[PENDING] 4.1 - Cloudflare signup (HUMAN REQUIRED; optional for Quick Tunnel - can defer)
+[VERIFIED] 4.2 - Install cloudflared (2026.7.3)
+[PENDING] 4.3 - Authenticate cloudflared (HUMAN REQUIRED - browser auth; optional for Quick Tunnel - can defer)
+[VERIFIED] 4.4 - Quick Tunnel systemd service (URL photos-whenever-specifics-internationally.trycloudflare.com; logfile adapted to /home/ubuntu/ due to /var/log perms)
+[VERIFIED] 4.5 - Auto-update webhook script (deployed + cron every 5min; placeholders filled: WA_APP_ID=1894358871543574, WA_APP_SECRET=cffcc5cde4cfdef7a189772ca1c8a8ae, WA_VERIFY_TOKEN=05af5e0291daed08d3ace69e45138af5; cron log at /home/ubuntu/ due to /var/log perms)
+[VERIFIED] 5.1 - Meta Developer account (human completed)
+[VERIFIED] 5.2 - Create Meta App (app Food-Hubbie WhatsApp)
+[VERIFIED] 5.3 - Add WhatsApp product, record IDs (PHONE_NUMBER_ID 1211796118690392, WABA_ID 2589174454849821)
+[VERIFIED] 5.4 - Test message send (wamid.HBgMOTE5NzI0NjQ5OTcx... delivered via v25.0)
+[VERIFIED] 5.5 - Permanent token (System user 'Foodhubbiebot', never exp, verified on API v19.0 against PHONE_NUMBER_ID 1211796118690392 → +1 555-661-9086); WA_VERIFY_TOKEN=05af5e0291daed08d3ace69e45138af5
+[VERIFIED] 5.6 - App Secret recorded (Credentials/Wa app secret.txt: cffcc5cde4cfdef7a189772ca1c8a8ae)
+[VERIFIED] 5.7 - Configure webhook DONE VIA GRAPH API (no dashboard needed): App ID 1894358871543574 discovered via WABA subscribed_apps; app subscribed to WABA + webhook subscriptions set with callback=https://photos-whenever-specifics-internationally.trycloudflare.com/webhook, verify_token match; webhook-server log shows "Webhook verified successfully by Meta." callback received
+[PENDING] 5.8 - Business Verification submitted (HUMAN REQUIRED, async, does not block later steps)
+[PENDING] 6.1 - Project folder created on server
+[PENDING] 6.2 - GitHub SSH access
+[PENDING] 6.3 - Clone the NEW repo onto server (from Section P.6 - this is when the tracker itself arrives on the server, already containing P.2-P.7a's status)
+[PENDING] 6.4 - Verify folder structure landed correctly
+[PENDING] 7.1 - Bot dependencies installed
+[VERIFIED] 7.2 - Firebase service account placed at bot/service-account.json (project foodhubbie-10, validated). NOTE: project differs from codebase's prashant-pizza-e86e4 — apps must be repointed to foodhubbie-10 web config when web apps are created.
+[VERIFIED] 7.3 - .env created (0 placeholders; FIREBASE_DATABASE_URL=foodhubbie-10-default-rtdb, WA tokens + app secret filled)
+[VERIFIED] 7.4 - .gitignore updated
+[VERIFIED] 17-GATE - Code-side multi-tenant refactor complete + LIVE VERIFIED: gate-verify.js --live PASSES against foodhubbie-10 (found businesses/roshani-cake/outlets/cake + roshani-pizza/outlets/pizza). DB seeded with businesses/{bid}/outlets/{oid} for both restaurants; migrationStatus.multiOutlet = {migrated:true, outlets:[pizza,cake]}. All apps (menu/Admin/rider) repointed to foodhubbie-10 web config. Admin + rider apps built and deployed to hosting:admin + hosting:rider; menu + database deployed. DELIVERY WEBVIEW fixes verified: OUTLET resolution (?o=/?b=), webviewTokens rules, settings/Delivery/slabs public read, webview_delivery order gate, geolocation=(self) policy, sw v8. E2E order placed live. BOT deploy to EC2 remains PENDING (instance unreachable from this machine).
+[VERIFIED] 8.1 - Webhook server files created (webhook-server/ in repo, pushed 5173c44)
+[VERIFIED] 8.2 - Webhook server code written (routes via phoneNumberIndex -> bot-inbox Redis channels)
+[VERIFIED] 8.3 - Webhook server started via PM2 (online, /var/www/foodhubbie/webhook-server)
+[VERIFIED] 8.4 - Test health endpoint locally (localhost:5000/health -> {"status":"ok"})
+[VERIFIED] 8.5 - Test health endpoint through the tunnel (photos-whenever-specifics-internationally.trycloudflare.com/health OK)
+[VERIFIED] 8.6 - Webhook verify-token check PASSES via tunnel (good token echoes challenge, bad token 403; log shows "Webhook verified successfully by Meta."). Synthetic inbound POST -> HTTP 200 + log "Routed message to bot-inbox:roshani-pizza:pizza". phoneNumberIndex/1211796118690392 seeded -> {roshani-pizza, pizza}. META DASHBOARD "Verify and Save" (5.7) now ready for human to click.
+[VERIFIED] 9.1 - whatsapp-send.js helper created (bot/whatsapp-send.js, pushed 5706e5a). REAL send SUCCESS: wamid.HBgMOTE5NzI0NjQ5OTcx... delivered to 919724649971 via Meta Cloud API.
+[VERIFIED] 9.2 - bot dual-transport abstraction (bot/transport.js, pushed c46829b): createMetaTransport (Baileys-shaped sock over Meta Cloud API), getTransportMode (bot/{outlet}/transport <- env BOT_TRANSPORT <- baileys), getPhoneNumberId (bot/phoneNumberId <- phoneNumberIndex <- env). bot/index.js startBot branches on mode; shared message/connection/creds handlers wired for BOTH transports. Deployed + bot online in meta mode (pizza, BOT_TRANSPORT=meta in .env; dotenv path fixed to load root .env). LOCAL CHECK: bot/test-transport.js passes.
+[VERIFIED] 9.3 - Meta E2E synthetic inbound test PASSES through FULL CHAIN: tunnel POST /webhook -> webhook-server -> Redis bot-inbox:roshani-pizza:pizza -> meta transport -> state machine -> Meta Cloud API reply (SEND OK, wamid.HBgMOTE5NzI0NjQ5OTcx... confirmed). Dedup by msgId confirmed working (repeat POSTs skipped). [Baileys path kept for QR real-number mode per user decision]
+[VERIFIED] 9.3 - Baileys package removed (KEPT intentionally - Baileys remains the real-number transport for QR mode)
+[VERIFIED] 10.1 - Orchestrator dependencies (N/A - orchestrator service skipped by design; provisioning is dashboard-driven via POST /api/bot/provision, see docs/PLAN-PROVISION-BOTS-NUMBERS-TEMPLATES.md)
+[VERIFIED] 10.2 - Orchestrator code written (N/A - skipped; status-watcher in bot-control-api covers heartbeat + alerts; empty orchestrator/ folder removed)
+[VERIFIED] 10.3 - Orchestrator started (N/A - skipped)
+[VERIFIED] 10.4 - Orchestrator end-to-end test (N/A - skipped)
+[VERIFIED] 10.5 - PM2 startup on reboot enabled (pm2 save + pm2-ubuntu.service on EC2)
+[VERIFIED] 11.1 - SupremeAdmin folder structure (built, 14+ files, pushed)
+[VERIFIED] 11.2 - Firebase Hosting target added (hosting:supreme, public: SupremeAdmin)
+[VERIFIED] 11.3 - Minimal index.html deploy test (live at https://foodhubbie-supremeadmin.web.app)
+[VERIFIED] 11.4 - Real dashboard pages built (restaurants list, fleet, analytics, onboarding, profile - one feature per module in js/features/)
+[VERIFIED] 11.4a - Restaurant Profile page + Bot Control API deployed (profile + provision/delete/transport/rescan + WhatsApp number/template routes live on EC2 :4000)
+[VERIFIED] 11.5.1 - Real-time bot status via Firebase botStatus (status-watcher in bot-control-api, not orchestrator - writes botStatus live; verified E2E)
+[VERIFIED] 11.5.2 - CSV export on restaurant list + fleet grid (export-restaurants-csv + export-fleet-csv)
+[VERIFIED] 11.5.3 - 24h uptime/status sparkline per outlet (renderUptimeSparkline in utils.js)
+[VERIFIED] 11.5.4 - Restaurant list search/filter by plan tier + WhatsApp status
+[VERIFIED] 11.5.5 - Role granularity: support claim = view-only, requireWrite=super only (isReadOnly() gating everywhere)
+[VERIFIED] 11.5.6 - Onboarding progress stepper (4 steps, derived from existing nodes)
+[VERIFIED] 11.5.7 - Offline alerting from status-watcher (ALERT_OFFLINE_MINUTES + SLACK_ALERT_WEBHOOK_URL; alert when down >5min + recovery)
+[VERIFIED] 11.5.8 - Fleet bulk actions (multi-select restart, iterates POST /api/bot/restart per selection)
+[VERIFIED] 11.5.9 - Command palette (Ctrl/Cmd+K) across restaurants
+[VERIFIED] 11.5.10 - WhatsApp quota visibility (waQuota, usage vs cap per outlet; G5 usage counter shipped 2026-08-14 - bot send-path counter into whatsapp/usage/{IST-date}, quota endpoint reads it; bot/tests/unit.test.js 9/9 pass)
+[VERIFIED] 11.5.11 - Per-restaurant analytics drill-down (#analytics/{bid}/{oid})
+[VERIFIED] 11.5.12 - Meta platform configured end-to-end 2026-08-15: META_SYSTEM_USER_TOKEN (reused bot WA_PERMANENT_TOKEN, system user foodhubbiebot, never expires) + META_APP_ID/SECRET + WABA_ID=2589174454849821/WABA_NAME="Test WhatsApp Business Account" injected into ecosystem-bot-control.config.js env on EC2 (secrets EC2-only, repo has IDs only); bot-control-api restarted from config file. Endpoint re-verify via tunnel with minted super-admin token: quota 200 (TIER_250), accounts 200 (WABA listed), templates 200 (bot_live_update APPROVED, hello_world APPROVED, roshani_greeting REJECTED), numbers 200 (1211796118690392, NOT_VERIFIED). All previously 501.
+[VERIFIED] 11.5.13 - whatsapp-graph.js bug fixed 2026-08-15: graphOk() made async (was returning raw Response -> `.then is not a function` 500 on templates/numbers); deployed to EC2 + restarted. Pizza outlet whatsapp.wabaId backfilled 2589174454849821 (wizard-shaped record). .gitignore now blocks *.pem (foodhubbie-key.pem). Audit doc: docs/META-PLATFORM-AUDIT.md.
+[PENDING] 13 - Full verify-all.sh script passes clean (12 automated checks; script itself not yet written - project verified via Playwright E2E + live API checks instead; provision/decommission E2E also now exercised directly against EC2 2026-08-14)

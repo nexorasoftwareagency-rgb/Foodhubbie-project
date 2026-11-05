@@ -63,7 +63,11 @@ export function isConnected() {
 // Legacy outlets fall back to legacy map for backward compat.
 // ---------------------------------------------------------------
 const pathParts = window.location.pathname.split('/').filter(Boolean);
-export const OUTLET = new URLSearchParams(window.location.search).get('o') || pathParts[0] || 'pizza';
+// pathParts[0] is only a real outlet when it isn't a filename: opening
+// /index.html directly must NOT make OUTLET == "index.html" (that poisons
+// every RTDB path, e.g. businesses/.../outlets/index.html/...).
+const pathOutlet = pathParts[0] && !pathParts[0].includes('.') && pathParts[0] !== 'index.html' ? pathParts[0] : undefined;
+export const OUTLET = new URLSearchParams(window.location.search).get('o') || pathOutlet || 'pizza';
 // Legacy map for backward compatibility with existing QR codes (no ?b= param)
 // New outlets MUST pass `?b=businessId` in the URL
 // SYNC WARNING: an identical copy of this map lives in

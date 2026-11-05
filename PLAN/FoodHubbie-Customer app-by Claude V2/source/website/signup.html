@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register Your Restaurant | FoodHubbie Free Trial</title>
+<meta name="description" content="Register your restaurant for a free FoodHubbie trial: QR ordering, POS billing, kitchen display and rider management. Live in a day, ₹1–5 per order.">
+<link rel="canonical" href="https://foodhubbie.in/signup">
+<link rel="icon" href="/favicon.png" type="image/png" sizes="any">
+<link rel="apple-touch-icon" href="/favicon.png">
+<meta name="theme-color" content="#E84908">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Register Your Restaurant | FoodHubbie Free Trial">
+<meta property="og:description" content="Register your restaurant for a free FoodHubbie trial: QR ordering, POS billing, kitchen display and rider management. Live in a day, ₹1–5 per order.">
+<meta property="og:image" content="https://foodhubbie.in/assets/shots/admin-dashboard.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'"><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="shared.css?v=2">
+  <script src="shared/nav.js" defer></script>
+<style>
+  /* shared.css: vars, reset, nav, hero, forms, bottom-nav, footer base */
+  body{background:var(--soft)}
+
+  .radio-group{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .radio-card{flex:1;min-width:140px;border:2px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s;position:relative}
+  .radio-card:hover{border-color:var(--brand)}
+  .radio-card.selected{border-color:var(--brand);background:var(--brand-light)}
+  .radio-card input{position:absolute;opacity:0;pointer-events:none}
+  .radio-card .radio-title{font-weight:700;font-size:14px;margin-bottom:2px}
+  .radio-card .radio-desc{font-size:12px;color:var(--muted)}
+
+  .terms-check{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.6;color:var(--muted);margin:18px 0 4px;cursor:pointer}
+  .terms-check input{width:16px;height:16px;flex:none;margin-top:3px;accent-color:var(--brand)}
+  .terms-check a{color:var(--brand-dark);font-weight:600}
+
+  .field-error{color:#b91c1c;font-size:13px;margin-top:4px;line-height:1.4}
+  input[aria-invalid="true"]{border-color:#b91c1c}
+  .form-status{font-size:14px;line-height:1.5;margin:14px 0 0;color:#b91c1c}
+  .form-status:empty{display:none}
+  .form-card.is-done .form-fields{display:none}
+  .success{display:none;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:12px;padding:18px 20px;line-height:1.6;font-size:15px}
+  .success.show{display:block}
+
+  footer{margin-top:56px}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+</style>
+<script type="module" src="shared/ga4.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav aria-label="Main">
+      <a class="logo" href="/">Food<span>Hubbie</span></a>
+      <div class="links" id="navLinks">
+        <a class="link" href="/architecture">How It Works</a>
+        <a class="link" href="/qr-ordering">QR Ordering</a>
+        <a class="link" href="/pos-billing">POS Billing</a>
+        <a class="link" href="/kds">Kitchen</a>
+        <a class="link" href="/pricing">Pricing</a>
+        <div class="nav-more">
+          <button class="link nav-more-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="navMoreMenu">More <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="nav-more-menu" id="navMoreMenu">
+            <a class="link" href="/riders">Riders</a>
+            <a class="link" href="/table-management">Tables</a>
+            <a class="link" href="/whatsapp-ordering">WhatsApp Ordering</a>
+            <a class="link" href="/whatsapp-marketing">WhatsApp Marketing</a>
+            <a class="link" href="/customer-database">Customers</a>
+            <a class="link" href="/multi-outlet">Multi-Outlet</a>
+            <a class="link" href="/restaurant-analytics">Reports</a>
+            <a class="link" href="/inventory">Inventory</a>
+            <a class="link" href="/use-cases">Cafes &amp; Restos</a>
+            <a class="link" href="/compare">Compare</a>
+            <a class="link" href="/best-software">2026 Guide</a>
+            <a class="link" href="/contact">Contact</a>
+          </div>
+        </div>
+        <a class="link nav-demo" href="https://foodhubbie-admins.web.app/demo">Live demo</a>
+        <a class="nav-cta" href="/signup">Start free trial</a>
+      </div>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <a href="/" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;margin-bottom:28px">← Back to Home</a>
+    <div class="kicker">New Restaurant Registration</div>
+    <h1>Register Your Restaurant on FoodHubbie</h1>
+    <p class="sub">Fill in your details and we'll create your restaurant dashboard automatically. You can set up your menu and tables right away; to go live, add a minimum wallet balance of ₹1,000 by contacting us.</p>
+  </div>
+</section>
+
+<div class="wrap">
+  <form class="form-card" id="signupForm" onsubmit="return handleSubmit(event)">
+  <div class="form-fields">
+    <div class="row">
+      <div>
+        <label for="fBusiness">Business Name *</label>
+        <input type="text" id="fBusiness" required placeholder="e.g. Spice Garden" minlength="2" maxlength="80">
+      </div>
+      <div>
+        <label for="fOutlet">Outlet Name *</label>
+        <input type="text" id="fOutlet" required placeholder="e.g. Spice Garden — Andheri" minlength="2" maxlength="80">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="fPhone">Contact Phone *</label>
+        <input type="tel" id="fPhone" required placeholder="e.g. 9724649971" minlength="10" maxlength="15" pattern="[0-9+ ]{10,15}" title="10–15 digits">
+      </div>
+      <div>
+        <label for="fEmail">Contact Email *</label>
+        <input type="email" id="fEmail" required placeholder="e.g. owner@spicegarden.com">
+      </div>
+    </div>
+
+    <hr style="border:0;border-top:1px solid var(--line);margin:24px 0">
+
+    <div class="row">
+      <div>
+        <label for="fAdminEmail">Admin Login Email *</label>
+        <input type="email" id="fAdminEmail" required placeholder="e.g. admin@spicegarden.com">
+        <div class="hint">This email will be used to log in to your dashboard</div>
+      </div>
+      <div>
+        <label for="fAdminName">Admin Name *</label>
+        <input type="text" id="fAdminName" required placeholder="e.g. Rahul Sharma">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="fPassword">Admin Password *</label>
+        <input type="password" id="fPassword" required minlength="8" autocomplete="new-password" placeholder="Min 8 characters">
+      </div>
+      <div>
+        <label for="fPassword2">Confirm Password *</label>
+        <input type="password" id="fPassword2" required minlength="8" autocomplete="new-password" placeholder="Re-enter password">
+      </div>
+    </div>
+
+    <hr style="border:0;border-top:1px solid var(--line);margin:24px 0">
+
+    <label>Select Plan *</label>
+    <div class="radio-group" id="planGroup">
+      <label class="radio-card" data-value="starter">
+        <input type="radio" name="plan" value="starter" required>
+        <div class="radio-title">Starter</div>
+        <div class="radio-desc">Single outlet · QR ₹2 + POS ₹1 per order · core stack</div>
+      </label>
+      <label class="radio-card" data-value="growth">
+        <input type="radio" name="plan" value="growth">
+        <div class="radio-title">Growth</div>
+        <div class="radio-desc">Most popular · adds WhatsApp ordering, delivery + promos</div>
+      </label>
+      <label class="radio-card" data-value="enterprise">
+        <input type="radio" name="plan" value="enterprise">
+        <div class="radio-title">Enterprise</div>
+        <div class="radio-desc">Multi-outlet · custom volume rates</div>
+      </label>
+    </div>
+    <div class="hint">No monthly fee on any plan — you pay per order. One-time software setup ₹500, non-refundable, adjusted in your first bill. See <a href="/pricing" style="color:var(--brand-dark);font-weight:600">pricing</a> and the <a href="/billing-policy" style="color:var(--brand-dark);font-weight:600">billing policy</a>.</div>
+
+    <label>WhatsApp Bot *</label>
+    <div class="radio-group" id="waGroup">
+      <label class="radio-card selected" data-value="meta">
+        <input type="radio" name="whatsapp" value="meta" checked required>
+        <div class="radio-title">Meta Official</div>
+        <div class="radio-desc">₹5/order or 1% · official Meta API · promos enabled</div>
+      </label>
+    </div>
+    <div class="hint">Every new restaurant ships on the official Meta API — promo-ready from day one.</div>
+
+    <label class="terms-check" for="fTerms">
+      <input type="checkbox" id="fTerms" required>
+      <span>I have read and agree to the <a href="/billing-policy" target="_blank" rel="noopener">Billing &amp; Cancellation</a>, <a href="/refund-policy" target="_blank" rel="noopener">Refund &amp; Termination</a>, <a href="/whatsapp-policy" target="_blank" rel="noopener">WhatsApp Messaging</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy</a> policies. *</span>
+    </label>
+
+    <div class="form-status" id="formStatus" role="alert" aria-live="polite"></div>
+    <button type="submit" class="submit-btn" id="submitBtn">Register Restaurant</button>
+  </div>
+
+    <div class="success" id="successMsg" role="status" tabindex="-1">
+      ✅ <b>Registration received!</b><br>
+      Your restaurant account is being created. In a few minutes you can log in to your dashboard with the email and password you chose.<br>
+      The first time you log in we'll email you a verification link — click it to activate your restaurant (check spam if it doesn't arrive).<br>
+      Set up your menu and tables first. To start taking orders, add a minimum wallet balance of ₹1,000 by contacting FoodHubbie support from the dashboard.
+    </div>
+  </form>
+</div>
+
+<nav class="bottom-nav" aria-label="Quick access to live apps">
+  <div class="wrap">
+    <a href="https://foodhubbie-admins.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🖥️</span>
+      <span class="nav-label">Admin Dashboard</span>
+    </a>
+    <a href="https://foodhubbie-qrmenu.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🍕</span>
+      <span class="nav-label">Menu App</span>
+    </a>
+    <a href="https://foodhubbie-riderapp.web.app" target="_blank" rel="noopener">
+      <span class="nav-icon">🛵</span>
+      <span class="nav-label">Rider App</span>
+    </a>
+  </div>
+</nav>
+
+<footer>
+  <div class="wrap">
+    <div class="logo">Food<span>Hubbie</span></div>
+    <div><a href="/">Home</a> · <a href="/book">Book a Demo</a> · <a href="/contact">Contact</a> · <a href="/privacy">Privacy</a> · <a href="/billing-policy">Billing</a> · <a href="/refund-policy">Refunds</a> · <a href="/whatsapp-policy">WhatsApp policy</a></div>
+  </div>
+</footer>
+
+<script>
+  var TERMS_VERSION = '2026-10-21';
+
+  // Radio card selection
+  document.querySelectorAll('.radio-group').forEach(function(group) {
+    group.addEventListener('click', function(e) {
+      var card = e.target.closest('.radio-card');
+      if (!card) return;
+      group.querySelectorAll('.radio-card').forEach(function(c) { c.classList.remove('selected'); });
+      card.classList.add('selected');
+      var input = card.querySelector('input');
+      if (input) input.checked = true;
+    });
+  });
+
+  var DB_URL = 'https://foodhubbie-10-default-rtdb.firebaseio.com';
+  // Submission state. A request is created at most once per page visit: if the
+  // password save (step 2) fails, a retry re-sends only step 2 for the same
+  // request instead of creating a duplicate application.
+  var _reqKey = null;
+  var _submitting = false;
+  var _done = false;
+
+  function fieldError(id, msg) {
+    var input = document.getElementById(id);
+    var errId = id + 'Err';
+    var old = document.getElementById(errId);
+    if (old) old.remove();
+    if (!input) return;
+    if (!msg) { input.removeAttribute('aria-invalid'); input.removeAttribute('aria-describedby'); return; }
+    var div = document.createElement('div');
+    div.className = 'field-error';
+    div.id = errId;
+    div.textContent = msg;
+    input.setAttribute('aria-invalid', 'true');
+    input.setAttribute('aria-describedby', errId);
+    input.insertAdjacentElement('afterend', div);
+  }
+
+  function validateForm(v) {
+    // Returns [{id, msg}] in DOM order. Mirrors database.rules.json limits.
+    var errs = [];
+    var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (v.businessName.length < 2) errs.push({ id: 'fBusiness', msg: 'Enter your business name (at least 2 characters).' });
+    if (v.outletName.length < 2) errs.push({ id: 'fOutlet', msg: 'Enter your outlet name (at least 2 characters).' });
+    var digits = v.contactPhone.replace(/[^0-9]/g, '');
+    if (digits.length < 10 || v.contactPhone.length > 15) errs.push({ id: 'fPhone', msg: 'Enter a valid phone number (10 to 15 digits).' });
+    if (!emailRe.test(v.contactEmail)) errs.push({ id: 'fEmail', msg: 'Enter a valid contact email address.' });
+    if (!emailRe.test(v.adminEmail)) errs.push({ id: 'fAdminEmail', msg: 'Enter a valid email address for your dashboard login.' });
+    if (v.adminName.length < 1) errs.push({ id: 'fAdminName', msg: 'Enter the admin name.' });
+    if (v.adminPassword.length < 8) errs.push({ id: 'fPassword', msg: 'Use at least 8 characters.' });
+    else if (v.adminPassword.length > 128) errs.push({ id: 'fPassword', msg: 'Use at most 128 characters.' });
+    if (v.adminPassword !== v.adminPassword2) errs.push({ id: 'fPassword2', msg: 'Passwords do not match.' });
+    if (!v.plan) errs.push({ id: 'planGroup', msg: 'Select a plan.' });
+    if (!v.whatsappConnect) errs.push({ id: 'planGroup', msg: 'Select a WhatsApp option.' });
+    if (!v.terms) errs.push({ id: 'fTerms', msg: 'Please accept the policies to continue.' });
+    return errs;
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (_submitting || _done) return false;
+
+    var plan = document.querySelector('input[name="plan"]:checked');
+    var wa = document.querySelector('input[name="whatsapp"]:checked');
+    var v = {
+      businessName: document.getElementById('fBusiness').value.trim(),
+      outletName: document.getElementById('fOutlet').value.trim(),
+      contactPhone: document.getElementById('fPhone').value.trim(),
+      contactEmail: document.getElementById('fEmail').value.trim(),
+      adminEmail: document.getElementById('fAdminEmail').value.trim(),
+      adminName: document.getElementById('fAdminName').value.trim(),
+      adminPassword: document.getElementById('fPassword').value,
+      adminPassword2: document.getElementById('fPassword2').value,
+      plan: plan ? plan.value : '',
+      whatsappConnect: wa ? wa.value : '',
+      terms: document.getElementById('fTerms').checked
+    };
+
+    ['fBusiness','fOutlet','fPhone','fEmail','fAdminEmail','fAdminName','fPassword','fPassword2','planGroup','fTerms']
+      .forEach(function (id) { fieldError(id, ''); });
+    var status = document.getElementById('formStatus');
+    status.textContent = '';
+
+    var errs = validateForm(v);
+    if (errs.length) {
+      errs.forEach(function (er) {
+        // planGroup is a div, not an input: show its message in the status line instead.
+        if (er.id === 'planGroup') status.textContent = er.msg; else fieldError(er.id, er.msg);
+      });
+      var first = errs.find(function (er) { return er.id !== 'planGroup'; });
+      var target = document.getElementById(first ? first.id : 'planGroup');
+      if (target && target.focus) target.focus();
+      return false;
+    }
+
+    var btn = document.getElementById('submitBtn');
+    _submitting = true;
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    try {
+      if (!_reqKey) {
+        // Step 1: the public request, WITHOUT the password (readable by Supreme reviewers).
+        var res = await fetch(DB_URL + '/onboardingRequests.json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            businessName: v.businessName,
+            outletName: v.outletName,
+            contactPhone: v.contactPhone,
+            contactEmail: v.contactEmail,
+            adminEmail: v.adminEmail,
+            adminName: v.adminName,
+            plan: v.plan,
+            whatsappConnect: v.whatsappConnect,
+            template: '',
+            source: 'website',
+            status: 'pending',
+            termsVersion: TERMS_VERSION,
+            termsAcceptedAt: Date.now(),
+            createdAt: Date.now()
+          })
+        });
+        if (!res.ok) throw new Error('Save failed: ' + res.status);
+        var saved = await res.json();
+        if (!saved || !saved.name) throw new Error('Save returned no key');
+        _reqKey = saved.name;
+      }
+      // Step 2: the password goes to the write-only secrets node (no client read rule;
+      // only the approval backend reads it via the Admin SDK, then deletes it).
+      var secRes = await fetch(DB_URL + '/onboardingSecrets/' + encodeURIComponent(_reqKey) + '.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: v.adminPassword, createdAt: Date.now() })
+      });
+      if (!secRes.ok) throw new Error('Password save failed: ' + secRes.status);
+    } catch (err) {
+      console.warn('Save failed', err);
+      status.textContent = 'We could not submit your application. Your details are still filled in. Check your connection and press Submit again.';
+      _submitting = false;
+      btn.disabled = false;
+      btn.textContent = _reqKey ? 'Retry Submit' : 'Register Restaurant';
+      return false;
+    }
+
+    // Success: lock the form for good (no resubmission) and drop the passwords from the DOM.
+    _done = true;
+    _submitting = false;
+    document.getElementById('fPassword').value = '';
+    document.getElementById('fPassword2').value = '';
+    document.getElementById('signupForm').classList.add('is-done');
+    var ok = document.getElementById('successMsg');
+    ok.classList.add('show');
+    ok.focus();
+    return false;
+  }
+</script>
+
+</body>
+</html>
+
+
+

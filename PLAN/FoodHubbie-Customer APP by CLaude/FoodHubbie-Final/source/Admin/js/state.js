@@ -1,0 +1,64 @@
+/**
+ * FoodHubbie ERP | GLOBAL STATE
+ * Reactive state management for the application.
+ */
+
+export const state = {
+    adminData: null,
+    currentOutlet: 'pizza',
+    categories: [],
+    dishes: [],
+    allWalkinDishes: [],
+    combos: [],
+    activeWalkinCategory: 'All',
+    walkinCart: {},
+    walkinPayMethod: 'Cash',
+    isEditRiderMode: false,
+    currentEditingRiderId: null,
+    editingDishId: null,
+    lastOrdersSnap: null,
+    lastDishesSnap: null,
+    ordersMap: new Map(),
+    liveOrdersMap: new Map(), // Dedicated map for ongoing/recent orders
+
+    // Orders tab pagination
+    ordersPageData: [],
+    ordersPageCursor: null,
+    ordersLoadedKeys: new Set(),
+    hasMoreOrders: true,
+    ordersPageLoading: false,
+
+    notifications: [],
+    isNotificationPending: false,
+    deferredPrompt: null,
+    ridersList: [],
+    riderStatsData: {},
+    walkinDiscount: 0,
+    walkinDiscountPct: 0,
+    walkinAutoDiscount: null,  // { discount, amount, label, source } | null
+    walkinCouponCode: null,    // user-entered coupon code (string) | null
+    currentPOSModalDish: null,
+    currentPOSModalQty: 1,
+    currentPOSModalSize: null,
+    currentPOSModalAddons: {},
+    currentActiveTab: null, // no tab yet — boot switchTab opens (or falls back to) the first allowed one
+    editingCartKey: null,
+
+    settingsDirty: false,      // Tracks unsaved changes in settings form
+    showAllRiders: false,      // Toggle: show all riders in sidebar (including offline)
+
+    // Settings > Features toggles. Absent node reads as OFF — see docs/PLAN-FEATURES-SUBTAB.md
+    features: { discountApproval: false },
+
+    // Outlet role definitions (settings/roles): { key: { name, level, tabs[] } }.
+    // null = not loaded yet / outlet keeps the built-in DEFAULT_ROLES (ui.js).
+    roles: null,
+
+    // Locked outlet — admin can log in but can't use anything until Supreme Admin unlocks
+    locked: false,
+
+    // Continuous notification sound
+    unacknowledgedOrders: new Set(),  // Order IDs with sound playing
+    continuousSoundInterval: null,     // setInterval ID for continuous sound
+    orderStatusSeen: new Map(),       // order key → last seen status (transition dedupe for order notifications)
+};

@@ -1,0 +1,251 @@
+/**
+ * Unit tests for the multi-tenant path resolution layer.
+ * Run: node --test bot/tests/unit.test.js
+ */
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert');
+const path = require('node:path');
+
+const { resolvePath: firebaseResolvePath, stripUndefined } = require('../firebase');
+const helpers = require('../helpers/outlet-resolution');
+const redeem = require('../redeem');
+
+test('resolvePath: shared (platform-root) nodes pass through unchanged', () => {
+    for (const root of ['admins', 'migrationStatus', 'logs', 'phoneNumberIndex']) {
+        assert.strictEqual(firebaseResolvePath(`${root}/x/y`), `${root}/x/y`, `${root} should stay at root`);
+    }
+    // businesses/ absolute passes through too
+    assert.strictEqual(firebaseResolvePath('businesses/bid/outlets/oid/orders'), 'businesses/bid/outlets/oid/orders');
+});
+
+test('resolvePath: rider nodes are outlet-scoped like staff (no global riders)', () => {
+    assert.strictEqual(firebaseResolvePath('riders/uid1'), 'businesses/roshani-pizza/outlets/pizza/riders/uid1');
+    assert.strictEqual(firebaseResolvePath('riderStats/uid1'), 'businesses/roshani-pizza/outlets/pizza/riderStats/uid1');
+    assert.strictEqual(firebaseResolvePath('settlements/uid1'), 'businesses/roshani-pizza/outlets/pizza/settlements/uid1');
+    assert.strictEqual(firebaseResolvePath('riders/uid1', 'cake'), 'businesses/roshani-cake/outlets/cake/riders/uid1');
+});
+
+test('resolvePath: tenant-scoped paths get businesses/{bid}/outlets/{oid} prefix', () => {
+    // default outlet (pizza) maps to its own business
+    assert.strictEqual(firebaseResolvePath('orders'), 'businesses/roshani-pizza/outlets/pizza/orders');
+    assert.strictEqual(firebaseResolvePath('bot/commands'), 'businesses/roshani-pizza/outlets/pizza/bot/commands');
+    assert.strictEqual(firebaseResolvePath('profiles/9197'), 'businesses/roshani-pizza/outlets/pizza/profiles/9197');
+    // cake is its own separate business
+    assert.strictEqual(firebaseResolvePath('inventory', 'cake'), 'businesses/roshani-cake/outlets/cake/inventory');
+});
+
+test('resolvePath: empty/null input returns empty string', () => {
+    assert.strictEqual(firebaseResolvePath(''), '');
+    assert.strictEqual(firebaseResolvePath(null), '');
+    assert.strictEqual(firebaseResolvePath(undefined), '');
+});
+
+test('outlet-resolution: outletPath builds correct tenant path', () => {
+    assert.strictEqual(helpers.outletPath('roshani-pizza', 'pizza', 'orders'), 'businesses/roshani-pizza/outlets/pizza/orders');
+    assert.strictEqual(helpers.outletPath('roshani-pizza', 'pizza'), 'businesses/roshani-pizza/outlets/pizza');
+    assert.strictEqual(helpers.outletPath('roshani-cake', 'cake', 'bot', 'commands'), 'businesses/roshani-cake/outlets/cake/bot/commands');
+    // falsy args fall back to env/defaults (default outlet pizza -> roshani-pizza)
+    assert.strictEqual(helpers.outletPath(null, null, 'orders'), 'businesses/roshani-pizza/outlets/pizza/orders');
+});
+
+test('outlet-resolution: resolvePath(scope, ...rest)', () => {
+    assert.strictEqual(helpers.resolvePath({ businessId: 'b1', outletId: 'o1' }, 'orders'), 'businesses/b1/outlets/o1/orders');
+    // scope outletId only -> business inferred from outlet map
+    assert.strictEqual(helpers.resolvePath({ outletId: 'cake' }, 'settings'), 'businesses/roshani-cake/outlets/cake/settings');
+});
+
+test('outlet-resolution: env vars override defaults', (t) => {
+    process.env.BUSINESS_ID = 'envbiz';
+    process.env.OUTLET_ID = 'envoutlet';
+    try {
+        assert.strictEqual(helpers.resolveBusinessId(), 'envbiz');
+        assert.strictEqual(helpers.resolveOutletId(), 'envoutlet');
+    } finally {
+        delete process.env.BUSINESS_ID;
+        delete process.env.OUTLET_ID;
+    }
+});
+
+test('outlet-resolution: defaults without env', () => {
+    assert.strictEqual(helpers.resolveBusinessId(), 'roshani-pizza');
+    assert.strictEqual(helpers.resolveOutletId(), 'pizza');
+});
+
+test('stripUndefined: removes undefined leaves, keeps null/arrays', () => {
+    assert.deepStrictEqual(stripUndefined({ a: 1, b: undefined }), { a: 1, b: null });
+    assert.deepStrictEqual(stripUndefined([{ a: undefined }, 2]), [{ a: null }, 2]);
+    assert.strictEqual(stripUndefined(null), null);
+    assert.strictEqual(stripUndefined(undefined), null);
+    assert.strictEqual(stripUndefined(5), 5);
+});
+
+// G5 quota: the bot (getISTDateInfo().dateStr) and the quota endpoint (inline
+// IST-shift) must key usage by the SAME day, or `used` never matches the
+// counter. Mirrors the endpoint's exact expression.
+test('quota usage day key matches bot getISTDateInfo().dateStr', () => {
+    const { getISTDateInfo } = require('../utils');
+    const botDay = getISTDateInfo().dateStr;
+    const endpointDay = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
+    assert.strictEqual(botDay, endpointDay);
+});
+
+// F1: template sends must carry a BODY component ONLY when the template has a
+// {{1}} variable. Passing `text` to a no-variable template is rejected by Graph
+// (code 100) — that rejection is what drives the text fallback in SEND_GENERIC
+// _MESSAGE / promos, so the payload shape is load-bearing.
+test('sendWhatsAppTemplate: body component only when a {{1}} variable is supplied', async () => {
+    const waSend = require('../whatsapp-send');
+    const captured = [];
+    Object.defineProperty(global, 'fetch', {
+        value: async (url, opts) => {
+            captured.push({ url, body: JSON.parse(opts.body) });
+            return { ok: true, json: async () => ({ id: 'wamid.X' }) };
+        },
+        writable: true, configurable: true
+    });
+    await waSend.sendWhatsAppTemplate('PN', 'TOK', '919700000000', { name: 'bot_live_update' });
+    await waSend.sendWhatsAppTemplate('PN', 'TOK', '919700000000', { name: 'announcement', components: [{ type: 'BODY', parameters: [{ type: 'text', text: 'Hi {{1}}!' }] }] });
+    assert.strictEqual(captured.length, 2);
+    // no-variable template → no components
+    assert.deepStrictEqual(captured[0].body.template.components, []);
+    assert.deepStrictEqual(captured[0].body.type, 'template');
+    // variable template → BODY component carrying the substituted value in
+    // Meta's parameters array (the Graph API rejects a bare `text` key on a
+    // BODY component with code 100 — this shape is what callers rely on).
+    assert.deepStrictEqual(captured[1].body.template.components, [{ type: 'BODY', parameters: [{ type: 'text', text: 'Hi {{1}}!' }] }]);
+    assert.strictEqual(captured[1].body.template.language.code, 'en');
+});
+
+// Chat history: thread key = last-10-digits of the sender JID — the same
+// convention as customers/{cleanPhone} and promo opt-out keys, so Baileys
+// (9197...@s.whatsapp.net) and Meta (9197...) map to ONE thread.
+test('customerIdFromJid: last-10-digits thread key for Baileys and Meta jids', () => {
+    const { customerIdFromJid } = require('../chat-log');
+    assert.strictEqual(customerIdFromJid('919876543210@s.whatsapp.net'), '9876543210');
+    assert.strictEqual(customerIdFromJid('919876543210'), '9876543210');
+    assert.strictEqual(customerIdFromJid('9876543210'), '9876543210');
+    // too short → null (never a real 10-digit Indian number)
+    assert.strictEqual(customerIdFromJid('123@s.whatsapp.net'), null);
+    assert.strictEqual(customerIdFromJid(null), null);
+});
+
+// P2-9: coupon % / flat / cap base is food subtotal only — same formula in
+// menu/js/discount.js and Admin/js/features/discount-evaluator.js.
+// Stacking uses full food subtotal per discount; grand total capped at subtotal.
+test('discountAmount: food-subtotal base, maxCap, stacking cap', () => {
+    const { discountAmount } = require('../discount-engine');
+    // 10% of ₹500 food subtotal = ₹50
+    assert.strictEqual(discountAmount({ mode: 'percent', value: 10 }, 500), 50);
+    // flat ₹100 off ₹500 food = ₹100 (tax on the bill does not change the base)
+    assert.strictEqual(discountAmount({ mode: 'flat', value: 100 }, 500), 100);
+    // maxCap clamps percent: 50% of ₹500 = ₹250 → cap ₹80
+    assert.strictEqual(discountAmount({ mode: 'percent', value: 50, maxCap: 80 }, 500), 80);
+    // maxCap=0 / missing = uncapped (falsy check, not === null)
+    assert.strictEqual(discountAmount({ mode: 'flat', value: 90, maxCap: 0 }, 500), 90);
+    // stacking: each stacked discount uses FULL food subtotal as base…
+    const a = discountAmount({ mode: 'percent', value: 10, stackable: true }, 500);
+    const b = discountAmount({ mode: 'percent', value: 20, stackable: true }, 500);
+    assert.strictEqual(a + b, 50 + 100);
+    // …and the grand total is capped at food subtotal (evaluateDiscount: Math.min(total, subtotal))
+    const heavy = discountAmount({ mode: 'percent', value: 80, stackable: true }, 500)
+        + discountAmount({ mode: 'percent', value: 80, stackable: true }, 500);
+    assert.strictEqual(Math.min(heavy, 500), 500);
+});
+
+// BAN-PROOFING: 3 continuous wrong messages while the bot waits for
+// "menu"/"order" → 30-min silent freeze; intent resets; outbound pacer
+// enforces the random 4–8s per-chat gap.
+test('ban-proofing: 3 strikes freeze, menu clears, pacer enforces 4-8s gap', async () => {
+    const { isJidFrozen, recordWrongMessage, clearWrongStrikes, paceOutboundTo } = require('../utils');
+    const jid = '919000000001@s.whatsapp.net';
+    // strikes 1-2 → bot still replies
+    assert.strictEqual(recordWrongMessage(jid), false);
+    assert.strictEqual(recordWrongMessage(jid), false);
+    assert.strictEqual(isJidFrozen(jid), false);
+    // strike 3 → freeze triggers, caller must go silent
+    assert.strictEqual(recordWrongMessage(jid), true);
+    assert.strictEqual(isJidFrozen(jid), true);
+    // other jids unaffected
+    assert.strictEqual(isJidFrozen('919000000002@s.whatsapp.net'), false);
+    // menu/order intent clears strikes + freeze
+    clearWrongStrikes(jid);
+    assert.strictEqual(isJidFrozen(jid), false);
+    // unkeyable jid (<10 digits) never counts
+    assert.strictEqual(recordWrongMessage('123'), false);
+    // pacer: first send immediate, second to the same chat waits ≥ 4s
+    const pj = '919000000003@s.whatsapp.net';
+    const t0 = Date.now();
+    await paceOutboundTo(pj);
+    assert.ok(Date.now() - t0 < 2000, 'first send must not wait');
+    const t1 = Date.now();
+    await paceOutboundTo(pj);
+    assert.ok(Date.now() - t1 >= 4000, 'second send must wait the random 4-8s gap');
+});
+
+// BAN-RISK: promotional bulk sends are official-API (meta) only — they are the
+// top account-ban trigger on Baileys, so the promo engine hard-blocks there.
+test('promo transport gate: meta allows, Baileys blocks', () => {
+    const { isMetaTransport } = require('../utils');
+    assert.strictEqual(isMetaTransport({ user: { id: 'meta:1000000000' } }), true);
+    assert.strictEqual(isMetaTransport({ user: { id: '1234567890:abcdefghijklmnop=' } }), false);
+    assert.strictEqual(isMetaTransport({ user: {} }), false);
+    assert.strictEqual(isMetaTransport({}), false);
+    assert.strictEqual(isMetaTransport(null), false);
+    assert.strictEqual(isMetaTransport(undefined), false);
+});
+
+// DOUBLE-POPUP regression: admin FCM must be data-only. A notification
+// payload makes the Firebase SW SDK auto-display its own untagged popup
+// AND THEN call onBackgroundMessage -> two stacked popups whenever the
+// dashboard is hidden. The rider send is data-only for the same reason:
+// its registered /sw.js builds the notification (custom tag/vibrate and
+// deep link), so a `notification` payload would double up there too.
+test('admin and rider FCM sends are data-only', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
+    const adminFn = src.slice(src.indexOf('async function sendFCMToAdmins'), src.indexOf('async function sendFCMToRider'));
+    const riderFn = src.slice(src.indexOf('async function sendFCMToRider'));
+    assert.ok(adminFn.includes('sendEachForMulticast'), 'admin send uses multicast');
+    assert.ok(!adminFn.includes('notification:'), 'sendFCMToAdmins must not send a notification payload');
+    assert.ok(riderFn.includes('data:'), 'sendFCMToRider sends a data payload');
+    assert.ok(!riderFn.includes('notification:'), 'sendFCMToRider must not send a notification payload');
+});
+
+test('loyalty redemption: only an earned, unspent balance can pay', () => {
+    assert.strictEqual(redeem.canAfford(500, 0, 300), true);
+    assert.strictEqual(redeem.canAfford(500, 300, 300), false);
+    assert.strictEqual(redeem.canAfford(undefined, 0, 10), false);
+    assert.strictEqual(redeem.canAfford(500, 0, 0), false);
+    assert.strictEqual(redeem.canAfford(500, 0, NaN), false);
+});
+
+// Phase 2 loyalty math (shared/loyalty-math.js) — the same formulas the bot
+// runs for earn/tender/clawback, exercised directly.
+test('loyalty-math: earn base, two-stage floor, tender caps, bill split', async () => {
+    const lm = await import('../../shared/loyalty-math.js');
+    // R1 earn base: subtotal − discount; legacy orders fall back to total
+    assert.strictEqual(lm.computeEarnBase({ subtotal: 500, discount: 50, total: 525 }), 450);
+    assert.strictEqual(lm.computeEarnBase({ total: 525 }), 525);
+    assert.strictEqual(lm.computeEarnBase({ subtotal: 300, discount: 400 }), 0);
+    assert.strictEqual(lm.computeEarnBase({}), 0);
+    // two-stage floor preserved exactly (floor base/rate, ×tier, floor)
+    assert.strictEqual(lm.computeEarnPoints(500, 2000, 1), 25);
+    assert.strictEqual(lm.computeEarnPoints(500, 2000, 1.5), 37);
+    assert.strictEqual(lm.computeEarnPoints(10, 2000, 1), 0);
+    // tier thresholds inclusive
+    const tiers = { bronze: { min: 0, multiplier: 1 }, silver: { min: 1000, multiplier: 1.25 }, gold: { min: 5000, multiplier: 1.5 } };
+    assert.strictEqual(lm.tierForPoints(1000, tiers), 'silver');
+    assert.strictEqual(lm.tierForPoints(4999, tiers), 'silver');
+    assert.strictEqual(lm.tierForPoints(5000, tiers), 'gold');
+    // R2/R9 tender: points × value, capped at due − minSpend
+    assert.strictEqual(lm.computeTenderPaise({ points: 50, redeemValuePaisePerPoint: 100, totalDuePaise: 50000 }), 5000);
+    assert.strictEqual(lm.computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 30000 }), 30000);
+    assert.strictEqual(lm.computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 30000, minSpendAfterRedemptionPaise: 10000 }), 20000);
+    assert.strictEqual(lm.computeTenderPaise({ points: 500, redeemValuePaisePerPoint: 100, totalDuePaise: 8000, minSpendAfterRedemptionPaise: 10000 }), 0);
+    // bill-discount split: largest-remainder, shares sum EXACTLY
+    const shares = lm.distributeBillDiscountPaise(100, [500, 300, 200]);
+    assert.strictEqual(shares.reduce((s, x) => s + x, 0), 10000);
+    assert.strictEqual(shares[0], 5000);
+    assert.deepStrictEqual(lm.distributeBillDiscountPaise(0.3, [1, 1, 1, 1]), [8, 8, 7, 7]);
+});

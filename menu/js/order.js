@@ -23,7 +23,7 @@
  * and update orders.js's STATUS_SEQUENCES key to match.
  */
 import { outletRef, OUTLET, BUSINESS_ID, set, update, get, runTransaction } from './firebase.js';
-import { Session, attachOrderToSession, ensureSession, assertOutletEnabled } from './session.js';
+import { Session, attachOrderToSession, ensureSession, assertOutletEnabled, assertWalletGate } from './session.js';
 import { writeCustomerOrder } from './customer.js';
 import { Cart, clearCart, subtotal as cartSubtotal, getQRStorageKey } from './cart.js';
 import { computeOrderTotals } from '../../shared/money-math.js';
@@ -78,6 +78,7 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
     // RTT instead of two). generateOrderId stays behind session validation so a
     // failed checkout can't burn a daily sequence number and leave ID gaps.
     const [, sessResult] = await Promise.all([assertOutletEnabled(), ensureSession()]);
+    await assertWalletGate();
     if (!sessResult.ok) throw new Error('Session not available');
     if (sessResult.isNewSession) {
         clearCart();

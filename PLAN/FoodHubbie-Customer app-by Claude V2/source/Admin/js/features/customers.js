@@ -1,0 +1,298 @@
+import { Outlet, get, remove } from '../firebase.js';
+import { escapeHtml, showToast } from '../utils.js';
+import { logger } from '../utils/logger.js';
+import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
+import { ensureXlsx } from '../xlsx.js';
+
+let _customerData = [];
+let _filteredData = [];
+let _sortField = 'ltv', _sortDir = 'desc';
+let _searchTerm = '';
+
+function fmtMoney(n) {
+    const v = Number(n || 0);
+    return '₹' + (v % 1 === 0 ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: 1 }));
+}
+
+function _renderCustomerTable() {
+    const tbody = document.getElementById('customerDataTableBody');
+    const countEl = document.getElementById('custTableCount');
+    if (!tbody) return;
+
+    let data = _customerData;
+    const term = _searchTerm.trim().toLowerCase();
+    if (term) {
+        data = data.filter(c =>
+            (c.name || '').toLowerCase().includes(term) ||
+            (c.displayPhone || '').includes(term) ||
+            (c.address || '').toLowerCase().includes(term)
+        );
+    }
+    _filteredData = data;
+
+    if (countEl) countEl.textContent = `${data.length} customer${data.length === 1 ? '' : 's'}`;
+
+    const sorted = [...data].sort((a, b) => {
+        let av = a[_sortField], bv = b[_sortField];
+        if (_sortField === 'orderCount' || _sortField === 'ltv' || _sortField === 'loyaltyPoints') { av = Number(av || 0); bv = Number(bv || 0); }
+        else { av = String(av || '').toLowerCase(); bv = String(bv || '').toLowerCase(); }
+        const cmp = av > bv ? 1 : av < bv ? -1 : 0;
+        return _sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    if (sorted.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="mob-table-empty">${term ? 'No customers match your search.' : 'No customers found.'}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = sorted.map(c => {
+        const phone = c.phoneClean || '';
+        const waLink = phone.length >= 10
+            ? `<a href="https://wa.me/91${phone}" target="_blank" rel="noopener" class="mob-wa-link"><i data-lucide="message-circle" style="width:12px;height:12px;"></i> ${escapeHtml(c.displayPhone || '')}</a>`
+            : `<span class="mob-td-sub">${escapeHtml(c.displayPhone || '—')}</span>`;
+        const addr = c.address || '—';
+        const addrFull = c.addressFull || '';
+        const mapLink = c.locationLink
+            ? ` <a href="${escapeHtml(c.locationLink)}" target="_blank" rel="noopener" class="mob-map-link">MAP</a>`
+            : '';
+        const tier = c.loyaltyTier || 'bronze';
+        const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+        const tierColor = tier === 'gold' ? '#c5a005' : tier === 'silver' ? '#a8a8a8' : '#8a6d3b';
+        return `<tr>
+            <td>
+                <div class="mob-cust-name">
+                    <span class="mob-cust-avatar">👤</span>
+                    <div>
+                        <div class="mob-td-strong">${escapeHtml(c.name || 'Anonymous')}</div>
+                        <div class="mob-td-sub">Joined: ${escapeHtml(c.joined || 'N/A')}</div>
+                    </div>
+                </div>
+            </td>
+            <td>${waLink}${phone.length === 10 ? `<div><button type="button" class="mob-reset-lock" data-reset-lock="${escapeHtml(phone)}" title="Use when the customer lost or changed their phone: the next phone to open the app with this number becomes the owner.">Reset phone lock</button></div>` : ''}</td>
+            <td><span class="mob-addr-text" title="${escapeHtml(addrFull)}">${escapeHtml(addr)}</span>${mapLink}</td>
+            <td class="mob-th-center"><span class="mob-order-count">${c.orderCount || 0}</span><div class="mob-td-sub">purchases</div></td>
+            <td class="mob-th-center"><span style="color:${tierColor};font-weight:700;text-transform:uppercase;font-size:11px;">${tierLabel}</span><div class="mob-td-sub">${fmtMoney(c.loyaltyPoints || 0)} pts</div></td>
+            <td class="mob-th-right"><span class="mob-td-total">${fmtMoney(c.ltv || 0)}</span></td>
+        </tr>`;
+    }).join('');
+
+    if (!tbody.dataset.lockWired) {
+        tbody.dataset.lockWired = '1';
+        tbody.addEventListener('click', async (e) => {
+            const btn = e.target.closest('[data-reset-lock]');
+            if (!btn) return;
+            const ph = btn.dataset.resetLock;
+            if (!window.confirm(`Reset the phone lock for ${ph}?\n\nThe customer's phone(s) will be forgotten. The NEXT phone that opens the app with this number becomes the owner, so only do this when the customer asks (lost or new phone).`)) return;
+            btn.disabled = true;
+            try {
+                await remove(Outlet.ref(`customers/${ph}/devices`));
+                await remove(Outlet.ref(`customers/${ph}/link`));
+                showToast('Phone lock reset. Ask the customer to open the app now.', 'success');
+            } catch (err) {
+                logger.warn('CUSTOMERS', 'reset lock failed', err);
+                showToast('Could not reset the lock.', 'error');
+            }
+            btn.disabled = false;
+        });
+    }
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+export function filterCustomers(searchTerm) {
+    _searchTerm = (searchTerm || '').trim();
+    _renderCustomerTable();
+}
+
+export async function loadCustomers() {
+    const tbody = document.getElementById('customerDataTableBody');
+    if (!tbody) {
+        logger.warn('CUSTOMERS', 'Customers table not found, skipping load');
+        return;
+    }
+
+    tbody.innerHTML = `<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--mob-sub);font-weight:600;">Loading customers...</td></tr>`;
+    logger.info('CUSTOMERS', 'Loading customers from Firebase...');
+
+    try {
+        const [custSnap, orderSnap, loySnap] = await Promise.all([
+            get(Outlet.ref("customers")),
+            get(Outlet.ref("orders")),
+            get(Outlet.ref("loyalty/rankings"))
+        ]);
+        const orders = [];
+        orderSnap.forEach(o => { orders.push(o.val()); });
+
+        const loyalty = {};
+        loySnap.forEach(l => { loyalty[l.key] = l.val(); });
+
+        const customers = [];
+        custSnap.forEach(child => {
+            const c = child.val();
+            const phone = child.key;
+            const myOrders = orders.filter(o => o.phone === phone);
+            const orderCount = myOrders.length;
+            const ltv = myOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+            const loy = loyalty[phone] || {};
+            customers.push({
+                name: c.name || 'Anonymous',
+                joined: c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : 'N/A',
+                displayPhone: phone,
+                phoneClean: phone.replace(/\D/g, "").slice(-10),
+                address: c.address ? (c.address.length > 30 ? c.address.substring(0, 30) + "..." : c.address) : "Counter Sale / Guest",
+                addressFull: c.address || '',
+                locationLink: c.locationLink || '',
+                orderCount, ltv,
+                loyaltyTier: loy.tier || 'bronze',
+                loyaltyPoints: loy.lifetimePoints || 0,
+                loyaltyRank: loy.rank
+            });
+        });
+
+        _customerData = customers;
+        _renderCustomerTable();
+
+        initCustomerTable();
+
+        logger.success('CUSTOMERS', `Loaded ${customers.length} customers`);
+    } catch (e) {
+        console.error('[Customers] Load error:', e);
+        tbody.innerHTML = `<tr><td colspan="5" style="padding:40px;text-align:center;color:#ef4444;font-weight:600;">⚠️ Error loading customers</td></tr>`;
+    }
+}
+
+export function initCustomerTable() {
+    const table = document.getElementById('customerDataTable');
+    if (!table || table.dataset.wired) return;
+    table.dataset.wired = '1';
+
+    const ths = table.querySelectorAll('th[data-sort]');
+    ths.forEach(th => {
+        th.addEventListener('click', () => {
+            const field = th.dataset.sort;
+            if (_sortField === field) {
+                _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                _sortField = field;
+                _sortDir = field === 'orderCount' || field === 'ltv' ? 'desc' : 'asc';
+            }
+            ths.forEach(h => h.classList.remove('mob-sort-asc', 'mob-sort-desc'));
+            th.classList.add(_sortDir === 'asc' ? 'mob-sort-asc' : 'mob-sort-desc');
+            _renderCustomerTable();
+        });
+    });
+}
+
+export async function downloadCustomerExcel() {
+    if (_filteredData.length === 0) { showToast('No customer data to export.', 'info'); return; }
+    showToast('Generating Excel...', 'info');
+
+    const data = _filteredData.map(c => ({
+        Customer: c.name || 'Anonymous',
+        Phone: c.displayPhone || '',
+        Address: c.addressFull || c.address || '',
+        Orders: c.orderCount || 0,
+        'Total Value (₹)': c.ltv || 0
+    }));
+
+    let XLSX;
+    try {
+        XLSX = await ensureXlsx();
+    } catch (e) {
+        showToast(e.message || 'Excel library not loaded.', 'error');
+        return;
+    }
+
+    setTimeout(() => {
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+        XLSX.writeFile(wb, `Customers_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }, 50);
+}
+
+export async function downloadCustomerPDF() {
+    await loadJSPDF();
+    if (_filteredData.length === 0) { showToast('No customer data to export.', 'warning'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    if (typeof doc.autoTable !== 'function') { showToast('PDF table plugin not ready.', 'error'); return; }
+
+    showToast('Generating PDF...', 'info');
+
+    let storeName = 'FoodHubbie';
+    try {
+        const snap = await get(Outlet.ref('settings/Store'));
+        if (snap.exists() && snap.val().storeName) storeName = snap.val().storeName;
+    } catch (_) {}
+
+    const rs = n => 'Rs.' + Math.round(Number(n || 0)).toLocaleString('en-IN');
+
+    const rows = _filteredData;
+    const totalOrders = rows.reduce((s, c) => s + Number(c.orderCount || 0), 0);
+    const totalRevenue = rows.reduce((s, c) => s + Number(c.ltv || 0), 0);
+    const aov = totalOrders > 0 ? rs(totalRevenue / totalOrders) : '—';
+
+    // Minimal chrome: eyebrow + store name + hairline, neutral KPI cards, ink section label
+    const kpiY = reportHead(doc, {
+        title: 'Customer Directory',
+        subtitle: storeName,
+        meta: `Customer database  ·  ${rows.length} customers  ·  Generated ${new Date().toLocaleDateString('en-IN')}`
+    });
+    const secY = reportKpis(doc, [
+        ['TOTAL CUSTOMERS', String(rows.length)],
+        ['TOTAL ORDERS', totalOrders.toLocaleString('en-IN')],
+        ['TOTAL REVENUE', rs(totalRevenue)],
+        ['AVG ORDER VALUE', aov]
+    ], kpiY);
+    const startY = reportSection(doc, { label: 'CUSTOMER DIRECTORY', right: `${rows.length} records`, y: secY });
+
+    const tableData = rows.map(c => [
+        c.name || 'Anonymous',
+        c.displayPhone || '',
+        c.addressFull || c.address || '—',
+        String(c.orderCount || 0),
+        rs(c.ltv)
+    ]);
+
+    doc.autoTable({
+        head: [['Customer', 'Phone', 'Address', 'Orders', 'Total Value']],
+        body: tableData,
+        foot: [['Grand Total', `${rows.length} customers`, '', String(totalOrders), rs(totalRevenue)]],
+        showFoot: 'lastPage',
+        rowPageBreak: 'avoid',
+        theme: 'plain',
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 8.5 },
+        bodyStyles: {
+            fontSize: 8, textColor: [30, 41, 59], valign: 'middle',
+            cellPadding: { top: 2.4, bottom: 2.4, left: 3, right: 3 }
+        },
+        alternateRowStyles: { fillColor: [250, 250, 251] },
+        footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 8.5 },
+        columnStyles: {
+            0: { cellWidth: 40 },
+            1: { cellWidth: 30, halign: 'center' },
+            2: { cellWidth: 60 },
+            3: { cellWidth: 18, halign: 'center' },
+            4: { cellWidth: 34, halign: 'right' }
+        },
+        margin: { top: 26, left: 14, right: 14, bottom: 18 },
+        startY,
+        didDrawPage: () => {
+            if (doc.internal.getCurrentPageInfo().pageNumber === 1) return;
+            reportContinued(doc, 'Customer Directory', storeName);
+        },
+    });
+
+    // Footer post-pass: Page X of Y on every page
+    reportFoot(doc, storeName);
+
+    doc.setProperties({
+        title: `Customer Database - ${storeName}`,
+        subject: 'Customer export',
+        author: storeName,
+        creator: 'FoodHubbie ERP'
+    });
+
+    doc.save(`Customers_${new Date().toISOString().split('T')[0]}.pdf`);
+}

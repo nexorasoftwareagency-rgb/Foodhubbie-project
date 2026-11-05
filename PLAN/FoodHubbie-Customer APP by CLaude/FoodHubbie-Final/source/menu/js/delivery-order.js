@@ -1,0 +1,161 @@
+/**
+ * Menu/js/delivery-order.js
+ * Places DELIVERY orders directly into the existing {outlet}/orders node —
+ * same pattern as menu/js/order.js (the dine-in QR app), which already
+ * writes orders straight from the browser with no server round-trip.
+ *
+ * Field shape mirrors bot/index.js's processOrderPlacement() "Online" order
+ * exactly (type, phone, lat/lng, deliveryFee, assignedRider, discount*
+ * fields), NOT the Dine-in shape order.js uses — Admin's status pipeline
+ * and the bot's WhatsApp notifier branch on these fields, so keeping the
+ * shape identical is what makes the rest of the system (Admin dashboard,
+ * rider app, status messages) work without any changes.
+ *
+ * What happens after this write, with ZERO new code:
+ *   1. bot/index.js's existing `orderRef.on("child_added", ...)` listener
+ *      picks up the new order, finishes server-side-only steps (stock
+ *      deduction, saving the customer's profile) and sends the customer
+ *      the "🎉 ORDER PLACED!" invoice message.
+ *   2. As Admin/rider-app move the order through its statuses, the
+ *      existing `orderRef.on("child_changed", ...)` listener sends every
+ *      subsequent WhatsApp update (Confirmed, Ready, Rider assigned + OTP,
+ *      Delivered) automatically.
+ */
+import { outletRef, set, get, OUTLET } from './firebase.js';
+import { generateOrderId } from './order.js';
+import { assertOutletEnabled } from './session.js';
+import { calculateDistance, getFeeFromSlabs } from './geo.js';
+import { round2, computeOrderTotals } from '../../shared/money-math.js';
+
+/**
+ * @param {Object} opts
+ * @param {Object[]} opts.cartLines - Object.values(Cart.lines)
+ * @param {string} opts.customerName
+ * @param {string} opts.customerPhone - 10-digit
+ * @param {string} opts.address
+ * @param {{lat:number,lng:number}} opts.location
+ * @param {string} [opts.note]
+ * @param {Object|null} [opts.discount] - result of validateCoupon(), or null
+ * @param {{key:string, code:string}|null} [opts.rewardCode] - claimed loyalty
+ *        reward code (R2 tender). The client sends ONLY the claim — the bot
+ *        validates + burns the code and writes loyaltyTender/totalDue.
+ * @param {string} [opts.sessionId] - Firebase session ID from URL params
+ * @param {string} [opts.source] - 'wa' for WhatsApp, 'qr' for QR code, 'direct' for direct
+ * @param {string} [opts.botPhone] - Bot phone number for wa.me return link
+ * @returns {Promise<{orderId:string, total:number, deliveryFee:number}>}
+ */
+export async function placeDeliveryOrder({ cartLines, customerName, customerPhone, address, location, note = '', discount = null, rewardCode = null, sessionId = '', source = 'webview_delivery', botPhone = '', webviewToken = '' }) {
+    if (!cartLines || cartLines.length === 0) throw new Error('Cart is empty');
+    if (!customerName) throw new Error('Name is required');
+    if (!customerPhone || customerPhone.length !== 10) throw new Error('A valid 10-digit phone number is required');
+    if (!address) throw new Error('Delivery address is required');
+    if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
+        throw new Error('Location permission is required to place a delivery order');
+    }
+
+    // --- Delivery fee: same distance → slabs calc as bot/index.js's
+    //     handleCheckoutFinal(), using menu/js/geo.js (identical logic to
+    //     shared/geo/geo.js). ---
+    // Fee settings fetch runs ∥ (outlet gate → id generation). The gate must
+    // pass BEFORE generateOrderId so a disabled outlet can't burn a daily
+    // sequence number (same rule as dine-in placeOrder); total round-trips
+    // on the critical path are unchanged (gate hides under the fee fetch).
+    const feeP = Promise.all([
+        get(outletRef('settings/Delivery/slabs')),
+        get(outletRef('settings/Store')),
+        get(outletRef('dineinSettings')),  // same tax settings the dine-in checkout uses
+    ]);
+    const orderIdP = (async () => { await assertOutletEnabled(); return generateOrderId(); })();
+    const [orderId, [delSnap, storeSnap, dineSnap]] = await Promise.all([orderIdP, feeP]);
+    const delSettings = delSnap.val() || [];
+    const storeSettings = storeSnap.val() || {};
+    const dineSettings = dineSnap.val() || {};
+    const outletCoords = {
+        lat: parseFloat(storeSettings.lat ?? (OUTLET === 'cake' ? 25.887472 : 25.887944)),
+        lng: parseFloat(storeSettings.lng ?? (OUTLET === 'cake' ? 85.026861 : 85.026194)),
+    };
+    const dist = calculateDistance(location.lat, location.lng, outletCoords.lat, outletCoords.lng);
+    const deliveryFee = getFeeFromSlabs(dist, delSettings);
+
+    // --- Items: same shape bot/index.js's user.cart already uses, so
+    //     formatOrderInvoice() / formatCartSummary() read it unchanged. ---
+    const items = cartLines.map(l => ({
+        name: l.name,
+        size: l.size,
+        unitPrice: l.unitPrice,
+        addons: (l.addons || []).map((n, i) => ({ name: n, price: (l.addonPrices || [])[i] || 0 })),
+        quantity: l.qty,
+        total: round2(l.unitPrice * l.qty),
+        outlet: OUTLET,
+        instructions: l.instructions || '',
+        ...(l.comboId ? { comboId: l.comboId, comboName: l.comboName, comboLineOriginal: l.comboLineOriginal } : {})
+    }));
+
+    const subtotal = round2(items.reduce((s, it) => s + it.total, 0));
+    // Delivery uses the SAME tax model as dine-in (owner decision 2026-10-26):
+    // GST on the net taxable value, delivery fee outside it. Service charge is
+    // dine-in-only and never applies here. Same shared math as order.js/POS/bot.
+    const taxEnabled = dineSettings.taxEnabled !== false;
+    const rates = (dineSettings.taxRates && Array.isArray(dineSettings.taxRates) && dineSettings.taxRates.length > 0)
+        ? dineSettings.taxRates
+        : (taxEnabled ? [{ name: dineSettings.taxName || 'GST', rate: typeof dineSettings.taxPercent === 'number' ? dineSettings.taxPercent : 5 }] : []);
+    const totals = computeOrderTotals({
+        subtotal,
+        discount: discount && discount.amount > 0 ? discount.amount : 0,
+        taxRates: rates,
+        serviceChargeEnabled: false,
+        deliveryFee,
+    });
+    const { tax, taxItems, total } = totals;
+    const discountAmount = totals.discount;
+    const taxName = rates.map(r => r.name).join(' + ');
+
+    const orderPayload = {
+        orderId,
+        outlet: OUTLET,
+        type: 'Online',
+        source: 'webview_delivery',   // bot finalization hook keys on this; src=wa/qr is UI-only
+        // Orders placed in the restaurant's own app (anonymous token minted at checkout, no bot link) are
+        // the billable "Foodhubbie-App Orders" channel (3% in the percentage package). Bot/WhatsApp-issued
+        // tokens stay un-tagged. Read by shared/cost-math.js billingSourceOf().
+        channel: String(webviewToken || '').startsWith('anon') ? 'app' : null,
+        webviewToken: webviewToken || null,
+        sessionId: sessionId || null,
+        botPhone: botPhone || null,
+        customerName,
+        phone: customerPhone,
+        address,
+        lat: location.lat, lng: location.lng,
+        distanceKm: round2(dist),
+        subtotal, deliveryFee, tax, taxItems, taxName, total,
+        status: 'Placed',
+        paymentMethod: 'COD', paymentStatus: 'Pending',
+        createdAt: new Date().toISOString(),
+        // assignedRider explicitly null (not absent, not ""): the rider app's
+        // "New Order Available" list queries orderByChild("assignedRider").
+        // equalTo(null), and RTDB only matches that on missing/null keys —
+        // an empty string would make unassigned orders invisible to riders.
+        assignedRider: null,
+        items,
+        stockDeducted: false,          // bot deducts stock on pickup (see child_added hook)
+        note: note || '',
+    };
+    if (discountAmount > 0) {
+        orderPayload.discount = discountAmount;
+        orderPayload.discountId = discount.discountId || null;
+        orderPayload.discountLabel = discount.name || discount.couponCode || null;
+        orderPayload.discountSource = 'coupon:' + (discount.couponCode || '');
+        orderPayload.discountMode = discount.mode || 'fixed';
+        orderPayload.discountValue = discount.value || 0;
+        orderPayload.discountGlobalLimit = discount.maxCap || 0;
+    }
+    // R2: claim only — the bot's verifyRewardTender computes + burns the
+    // tender server-side. The client never writes loyaltyTender/totalDue.
+    if (rewardCode && rewardCode.key && rewardCode.code) {
+        orderPayload.rewardCode = { key: String(rewardCode.key), code: String(rewardCode.code) };
+    }
+
+    await set(outletRef(`orders/${orderId}`), orderPayload);
+
+    return { orderId, total, deliveryFee };
+}

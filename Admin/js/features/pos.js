@@ -273,14 +273,13 @@ export async function openPOSSelectionModal(dishId) {
             (el || (modal._kbLastFocus?.isConnected ? modal._kbLastFocus : null))?.focus();
         };
         modal._kbClose = hidePOSSelectionModal;
-        // ponytail: .modal transitions visibility .25s — the first rAF fires before that
-        // transition starts, so focus() runs while computed visibility is still hidden (no-op).
-        // Retry once after the transition window instead of stacking rAFs.
-        requestAnimationFrame(() => {
-            const focusFirst = () => modal.querySelector('button, input, select, [tabindex]')?.focus();
-            focusFirst();
-            if (!modal.contains(document.activeElement)) setTimeout(focusFirst, 300);
-        });
+        // Focus the primary action ("Add to Cart") button explicitly so keyboard
+        // users land on the most likely next interaction instead of whichever
+        // focusable element happens to be first in the DOM.
+        const addBtn = document.getElementById('posAddBtn');
+        const focusPrimary = () => addBtn?.focus();
+        requestAnimationFrame(focusPrimary);
+        if (!modal.contains(document.activeElement)) setTimeout(focusPrimary, 300);
         // Ensure all icons (including ones in headers and the button) are rendered
         await loadLucide();
         window.lucide.createIcons({ root: modal });
@@ -296,6 +295,7 @@ export function hidePOSSelectionModal() {
         modal.classList.remove('active', 'side-panel-active');
         modal._kbRestore?.();
         document.body.classList.remove('pos-selection-mode');
+        state.editingCartKey = null;
         logger.info('POS', 'Selection modal closed');
     }
 }
@@ -444,6 +444,9 @@ export async function renderWalkinCart() {
     const list = document.getElementById("walkinCartItems");
     if (!list) return;
 
+    // Re-render discount preset chips based on current cart + eligible offers
+    await _renderDiscountPresets();
+
     const items = Object.entries(state.walkinCart);
     if (items.length === 0) {
         list.innerHTML = `
@@ -466,7 +469,7 @@ export async function renderWalkinCart() {
         const addonText = item.addons && item.addons.length > 0 ? `<div class="cart-item-addons-v4 mt-4">${item.addons.map(a => `<span class="addon-tag">+ ${escapeHtml(a.name)}</span>`).join('')}</div>` : '';
         
         return `
-            <div class="premium-row-v4 p-12 mb-8 br-16 bg-white shadow-sm border-ghost">
+            <div class="premium-row-v4 p-12 mb-8 br-16 bg-white shadow-sm border-ghost walkin-cart-item${key === state.editingCartKey ? ' editing' : ''}">
                 <div class="flex-between flex-center">
                     <div class="identity-info-v4 flex-1">
                         <span class="name font-700 fs-14">${escapeHtml(item.name)} <span class="text-muted font-normal fs-11">(${escapeHtml(item.size)})</span></span>
@@ -766,6 +769,59 @@ export function clearWalkinCoupon() {
  */
 function _walkinSubtotal() {
     return Object.values(state.walkinCart).reduce((s, i) => s + (Number(i.price) * Number(i.qty)), 0);
+}
+
+/**
+ * Render dynamic discount preset chips from eligible POS discounts.
+ * Replaces hardcoded chips — only shows discounts that are actually
+ * applicable to this outlet/channel. Coupon-type discounts are excluded
+ * here (they live in the offers panel / coupon input).
+ */
+export async function _renderDiscountPresets() {
+    const container = document.getElementById('discountPresets');
+    if (!container) return;
+
+    let all;
+    try {
+        all = await getAllDiscounts();
+    } catch (e) {
+        console.warn('[POS] Discount presets: failed to load discounts:', e?.message || e);
+        container.innerHTML = '';
+        return;
+    }
+
+    const now = Date.now();
+    const subtotal = _walkinSubtotal();
+
+    // Build the same eligibility context used by the offers panel
+    const cart = Object.values(state.walkinCart)
+        .filter(i => i.size !== 'Combo')
+        .map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id }));
+
+    const eligible = await getEligibleOffersForDisplay(all, { channel: 'pos', now, cart });
+
+    const chips = eligible
+        .filter(d => d.type !== 'coupon') // coupons handled via offers panel / coupon input
+        .map(d => {
+            const isPct = d.mode === 'percent';
+            const label = isPct
+                ? `${Number(d.value).toFixed(d.value % 1 === 0 ? 0 : 1)}%`
+                : `₹${Number(d.value).toLocaleString()}`;
+            const cap = d.maxCap ? ` (cap ₹${Number(d.maxCap).toLocaleString()})` : '';
+            const min = d.minSubtotal ? ` · min ₹${Number(d.minSubtotal).toLocaleString()}` : '';
+            const disabled = d.minSubtotal && subtotal < d.minSubtotal;
+            return `
+                <button type="button" class="chip btn-discount-preset${disabled ? ' disabled' : ''}"
+                    data-action="applyWalkinDiscount"
+                    ${isPct ? `data-pct="${Number(d.value)}"` : `data-amount="${Number(d.value)}"`}
+                    title="${escapeHtml(d.name || '')}${cap}${min}${disabled ? ' — add more to cart to qualify' : ''}"
+                    ${disabled ? 'disabled' : ''}>
+                    ${label}${cap}
+                </button>`;
+        })
+        .join('');
+
+    container.innerHTML = chips || '<div class="text-muted-small fs-11">No active discounts</div>';
 }
 
 export async function toggleWalkinOffersPanel() {
@@ -1083,6 +1139,8 @@ export async function submitWalkinSale() {
         logger.info('POS', 'Stock deducted');
 
         // 2b. Record discount usage + mark first-order as consumed (best-effort).
+        // The sale is already written — if usage recording fails, warn the cashier
+        // so the discount isn't silently under-tracked (limits/caps could be exceeded).
         if (discountId && discountValue > 0) {
             try {
                 await recordDiscountUsage({
@@ -1097,6 +1155,7 @@ export async function submitWalkinSale() {
                 });
             } catch (e) {
                 console.warn('[POS] recordDiscountUsage failed:', e?.message || e);
+                ui.showToast('Discount usage not recorded — this discount may be reusable.', 'warning');
             }
         }
 
@@ -1342,3 +1401,67 @@ export function addComboToWalkinCart(comboId) {
         ui.showToast('Combo dishes unavailable', 'warning');
     }
 }
+
+/**
+ * Keyboard shortcuts for the POS counter workflow.
+ * Active only when the Walk-in (POS) tab is visible.
+ *
+ *   Enter  → submit sale (if cart non-empty)
+ *   Esc    → close selection modal / offers panel
+ *   c      → clear cart (if cart non-empty)
+ *   ?      → show shortcut hints (toast)
+ *
+ * Ignored while typing into any <input>, <textarea>, or contenteditable.
+ */
+let _keyboardShortcutsActive = false;
+export function _initPosKeyboardShortcuts() {
+    if (_keyboardShortcutsActive) return;
+    _keyboardShortcutsActive = true;
+
+    const isInInput = () => {
+        const el = document.activeElement;
+        return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+    };
+
+    const posTabActive = () => document.getElementById('tab-walkin')?.classList.contains('tab-content') &&
+        !document.getElementById('tab-walkin')?.classList.contains('hidden');
+
+    document.addEventListener('keydown', (e) => {
+        if (!posTabActive()) return;
+        if (isInInput()) return;
+
+        const key = e.key.toLowerCase();
+
+        switch (key) {
+            case 'enter':
+                e.preventDefault();
+                if (Object.values(state.walkinCart).length > 0) {
+                    submitWalkinSale();
+                }
+                break;
+            case 'escape':
+                e.preventDefault();
+                const modal = document.getElementById('posSelectionModal');
+                const panel = document.getElementById('walkinOffersPanel');
+                if (modal && !modal.classList.contains('hidden')) {
+                    hidePOSSelectionModal();
+                } else if (panel && !panel.classList.contains('hidden')) {
+                    toggleWalkinOffersPanel();
+                }
+                break;
+            case 'c':
+                e.preventDefault();
+                if (Object.values(state.walkinCart).length > 0) {
+                    clearWalkinCart();
+                    ui.showToast('Cart cleared', 'warning');
+                }
+                break;
+            case '?':
+                e.preventDefault();
+                ui.showToast('POS shortcuts: Enter = submit sale · Esc = close · c = clear cart · ? = help', 'info');
+                break;
+        }
+    });
+}
+
+

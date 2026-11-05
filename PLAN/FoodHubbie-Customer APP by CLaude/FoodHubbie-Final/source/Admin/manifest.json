@@ -1,0 +1,49 @@
+{
+  "name": "FoodHubbie Admin",
+  "short_name": "FoodHubbie",
+  "id": "/Admin/index.html",
+  "description": "Restaurant management system — orders, tables, menu, riders, and live operations",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#E84908",
+  "scope": "./",
+  "dir": "ltr",
+  "lang": "en-US",
+  "categories": [
+    "business",
+    "food",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "icon-erp-logo.png?v=2",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "./index.html#dashboard",
+      "icons": [
+        {
+          "src": "icon-erp-logo.png?v=2",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "url": "./index.html#orders",
+      "icons": [
+        {
+          "src": "icon-erp-logo.png?v=2",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

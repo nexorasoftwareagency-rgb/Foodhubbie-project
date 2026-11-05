@@ -1,0 +1,266 @@
+diff --git a/bot/index.js b/bot/index.js
+index 90fd658..f35c803 100644
+--- a/bot/index.js
++++ b/bot/index.js
+@@ -1271,6 +1271,27 @@ async function accrueDineInPaidOrder(orderId, order) {
+     }
+ }
+ 
++// R2 fairness: a burned reward code on this order goes back to active so a
++// cancellation/void doesn't eat the customer's reward. The usedOnOrder guard
++// means we only resurrect OUR burn - never a code spent again elsewhere.
++// Idempotent, so it is safe to call from more than one place.
++async function resurrectRewardTender(orderId, order, outlet) {
++    try {
++        const tender = order && order.loyaltyTender;
++        const tenderPhone = order && order.phone ? String(order.phone).replace(/\D/g, '').slice(-10) : '';
++        if (!tender || !tender.rewardKey || !/^[6-9]\d{9}$/.test(tenderPhone)) return;
++        // Cold-tx seed (redeem.js pattern) - null-first attempt otherwise
++        // aborts the resurrect silently.
++        const resRef = db.ref(resolvePath(`customers/${tenderPhone}/rewards/${String(tender.rewardKey)}`, outlet));
++        const resSeed = (await resRef.once('value').catch(() => null) || {}).val();
++        await resRef.transaction((cur) => {
++            const node = cur || resSeed;
++            if (!node || node.usedOnOrder !== String(orderId)) return undefined;
++            return { ...node, status: 'active', usedAt: null, usedOnOrder: null };
++        }).catch(() => {});
++    } catch (e) { console.error('[LOYALTY] resurrectRewardTender error:', e.message); }
++}
++
+ // R3 clawback: reverse an accrual when the sale falls through — the order is
+ // cancelled/refunded, or a settled table bill is voided (paymentStatus flips
+ // back to 'Unpaid' once voidTableBill's revert transaction runs). Deletes the
+@@ -1286,6 +1307,9 @@ async function clawLoyaltyPoints(orderId, order, status) {
+         if (!isCancel && !isVoidedDineIn) return;
+         const outlet = order.outlet || OUTLET;
+         const bid = resolveBusinessIdFor(outlet);
++        // A cancelled order that never earned points (cancelled before delivery,
++        // e.g. the customer cancelled in the app) must still give the reward back.
++        if (isCancel) await resurrectRewardTender(orderId, order, outlet);
+         // Accrual lookup FIRST — unpaid dine-in orders hit this path on every
+         // routine update, and most have nothing to reverse (one cheap read).
+         const accrualRef = db.ref(resolvePath(`loyalty/accruals/${String(orderId)}`, outlet));
+@@ -1306,23 +1330,7 @@ async function clawLoyaltyPoints(orderId, order, status) {
+             reason
+         });
+         await accrualRef.remove();
+-        // R2 fairness: a burned reward code on this order goes back to active
+-        // so a cancellation/void doesn't eat the customer's reward. The
+-        // usedOnOrder guard means we only resurrect OUR burn — never a code
+-        // that was already spent again elsewhere.
+-        const tender = order.loyaltyTender;
+-        const tenderPhone = order.phone ? String(order.phone).replace(/\D/g, '').slice(-10) : '';
+-        if (tender && tender.rewardKey && /^[6-9]\d{9}$/.test(tenderPhone)) {
+-            // Cold-tx seed (redeem.js pattern) — null-first attempt otherwise
+-            // aborts the resurrect silently.
+-            const resRef = db.ref(resolvePath(`customers/${tenderPhone}/rewards/${String(tender.rewardKey)}`, outlet));
+-            const resSeed = (await resRef.once('value').catch(() => null) || {}).val();
+-            await resRef.transaction((cur) => {
+-                const node = cur || resSeed;
+-                if (!node || node.usedOnOrder !== String(orderId)) return undefined;
+-                return { ...node, status: 'active', usedAt: null, usedOnOrder: null };
+-            }).catch(() => {});
+-        }
++        await resurrectRewardTender(orderId, order, outlet);
+         const loyaltyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, outlet));
+         const loyaltySnap = await loyaltyRef.once('value').catch(() => null);
+         const current = (loyaltySnap && loyaltySnap.val()) || {};
+@@ -1410,7 +1418,11 @@ async function notifyCustomerApp(orderId, order, status) {
+         if (existing && existing.exists()) return;
+ 
+         const bid = resolveBusinessIdFor(outlet);
+-        const url = `${WEBVIEW_DELIVERY_HOST}/${outlet}/delivery.html?b=${bid}&o=${outlet}&order=${encodeURIComponent(order.orderId || orderId)}&tab=notifications`;
++        // Restaurant-app customers land back in the app's Orders tab; delivery.html is
++        // only for WhatsApp-bot links.
++        const url = order.source === 'APP'
++            ? `${WEBVIEW_DELIVERY_HOST}/?b=${bid}&o=${outlet}&tab=orders`
++            : `${WEBVIEW_DELIVERY_HOST}/${outlet}/delivery.html?b=${bid}&o=${outlet}&order=${encodeURIComponent(order.orderId || orderId)}&tab=notifications`;
+         const title = `Order #${oid} - ${copy.title}`;
+ 
+         await inboxRef.set({
+@@ -2422,7 +2434,13 @@ async function sendDailyReportSafely(dateOverride = null) {
+         const timeBuffer = isDineIn ? 1800000 : 10000;
+ 
+         const currentProcessedStatus = await getProcessedStatus(snap.key);
+-        const isNewOrder = orderTime > startupTime - timeBuffer;
++        // Catch-up: a web/app order placed while the bot was down or restarting still
++        // needs server-side finalization (discount re-check, stock, profile). Only
++        // recent, still-'Placed' orders that were never finalized qualify.
++        const missedWebOrder = isWebOrderSource(order) && !order.stockDeducted &&
++            String(order.status || '').toLowerCase() === 'placed' &&
++            orderTime > Date.now() - 24 * 3600 * 1000;
++        const isNewOrder = orderTime > startupTime - timeBuffer || missedWebOrder;
+         if (!currentProcessedStatus && isNewOrder) {
+             // --- WEBVIEW DELIVERY ORDER: server-side finalization ---
+             // The delivery webview (menu/delivery.html) writes the order
+@@ -2534,7 +2552,9 @@ async function sendDailyReportSafely(dateOverride = null) {
+                                 location: (order.lat && order.lng) ? { lat: order.lat, lng: order.lng } : (base.location || null),
+                                 mapsLink: mapsLink || base.mapsLink || "",
+                                 lastOrderDate: order.createdAt || new Date().toISOString(),
+-                                promotionalConsent: true,
++                                // App customers choose Offers on/off themselves (customers/{phone}/app.consent);
++                                // never force it on for them. Web/WhatsApp keeps its existing behaviour.
++                                promotionalConsent: order.source === 'APP' ? (base.app?.consent?.offers === true || base.promotionalConsent === true) : true,
+                                 orderCount: (base.orderCount || 0) + 1,
+                                 totalSpent: (base.totalSpent || 0) + (order.total || 0),
+                                 lastSeen: Date.now()
+diff --git a/bot/promotions.js b/bot/promotions.js
+index 5070ebe..10bc95a 100644
+--- a/bot/promotions.js
++++ b/bot/promotions.js
+@@ -165,8 +165,15 @@ async function isOptedOut(phone, OUTLET, db) {
+ async function hasPromoConsent(phone, OUTLET, db) {
+     try {
+         const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
+-        const snap = await db.ref(resolvePath(`customers/${cleanPhone}/promotionalConsent`, OUTLET)).once('value');
+-        return snap.val() === true;
++        const [snap, appSnap] = await Promise.all([
++            db.ref(resolvePath(`customers/${cleanPhone}/promotionalConsent`, OUTLET)).once('value'),
++            db.ref(resolvePath(`customers/${cleanPhone}/app/consent/offers`, OUTLET)).once('value'),
++        ]);
++        // The customer's own "Offers" switch in the restaurant app wins both ways:
++        // switched off = never message (even if an order once flagged consent);
++        // switched on = allowed.
++        if (appSnap.val() === false) return false;
++        return snap.val() === true || appSnap.val() === true;
+     } catch (_) {
+         return false;
+     }
+diff --git a/docs/FINAL-COMPATIBILITY-GUIDE.md b/docs/FINAL-COMPATIBILITY-GUIDE.md
+index 94cd726..a5b5fe2 100644
+--- a/docs/FINAL-COMPATIBILITY-GUIDE.md
++++ b/docs/FINAL-COMPATIBILITY-GUIDE.md
+@@ -52,6 +52,11 @@ Branch with everything together: `final/integrated`. Nothing has been deployed,
+ 7. Wallet/Costs: the APP order is billed 3%.
+ 8. Loyalty: redeem a reward → WhatsApp code arrives → enter it. (Needs a live WhatsApp session.)
+ 
++## 5b. Bot notes
++- Restart the bot after deploying (step 5). On restart it will finalize any recent app/web order it missed while down.
++- Until WhatsApp is working again: in-app loyalty **redemption** will fail (code is sent on WhatsApp); everything else in the app works without WhatsApp.
++- Push links for app orders now open the app (`/?tab=orders`), not `delivery.html`.
++
+ ## 6. Known limits — please read
+ - **Phone privacy is "first phone wins", not verification.** A stranger who opens the app with someone's number *before* the real owner can become the owner (and see old history for that number). Only a real verification step (WhatsApp/SMS code) fixes this; the code path is prepared (the bot can write `customers/{phone}/link` and send the code on WhatsApp) but WhatsApp work is pending.
+ - iPhone: Safari and the installed home-screen app are separate storage; the installed app may ask for a link code once. Clearing site data/reinstalling does the same.
+diff --git a/docs/FINAL-VERIFICATION-REPORT.md b/docs/FINAL-VERIFICATION-REPORT.md
+index 65d10f7..833fa27 100644
+--- a/docs/FINAL-VERIFICATION-REPORT.md
++++ b/docs/FINAL-VERIFICATION-REPORT.md
+@@ -36,3 +36,18 @@ Honesty rule: only what is marked **RAN** was actually executed in this session.
+ - Phone privacy: kept "no OTP" as you asked; trade-offs listed in the guide (first-phone-wins, iPhone storage split).
+ - Pickup/delivery payment: pay on delivery / at the counter only (no online payment in the app yet).
+ - Item prices are client-supplied (existing behaviour).
++
++## F. Bot code review (2026-11-02)
++Read every bot change in this release plus the code paths they touch. **Fixed (commit `fix(bot): review fixes…`, covered by source-guard tests + the browser test for the notification link):**
++1. Customer cancels an app order before it earns points -> the burned reward code was never returned (the return only ran if points had been earned). Now returned on any cancel.
++2. Push notifications for app orders opened `delivery.html` (the WhatsApp page). Now they open the app's Orders tab (`/?tab=orders`).
++3. Promotional consent: the bot forced `promotionalConsent=true` for every web/app order, and promotions ignored the app's "Offers" switch. Now app orders never force it on, and a customer who switches Offers off is never messaged.
++4. An app/web order placed while the bot was down or restarting was never finalized (no stock deduction, customer-claimed discount never re-checked). Now recent (24h) still-"Placed" unfinalized orders are finalized when the bot sees them.
++
++**Found, NOT fixed (your decision):**
++- **Loyalty redemption needs WhatsApp.** The redemption code is sent on WhatsApp, but app customers are deliberately not messaged on WhatsApp and WhatsApp work is pending, so in-app redemption fails with "otp unavailable" until the bot's WhatsApp is live. Option: since the phone-privacy lock now proves the request comes from the owner's registered phone, redemption could be approved by the bot after checking that device instead of a WhatsApp code (needs a small rules + bot change).
++- Stock is not put back when an order is cancelled (true for every cancel, existing behaviour; bigger now because customers can cancel). Reward and loyalty points ARE returned.
++- Item prices are taken from the customer's phone (existing web/QR behaviour); only the discount, tax and total are re-checked.
++- Discount-usage counters are not reversed on cancel (not verified in detail).
++- Push de-duplication reads then writes, so two near-simultaneous events could in rare cases send the same push twice.
++- The bot's new payment/tracking mirror adds 1-2 small database reads on every order change.
+diff --git a/docs/PRICING-CONTEXT-FOR-TERMS.md b/docs/PRICING-CONTEXT-FOR-TERMS.md
+new file mode 100644
+index 0000000..1bfbb50
+--- /dev/null
++++ b/docs/PRICING-CONTEXT-FOR-TERMS.md
+@@ -0,0 +1,37 @@
++# Pricing context for updating PRICING_AND_TERMS.md (facts taken from the code)
++
++Source of truth: `shared/cost-math.js` and `shared/billing-defaults.*`. Use these facts; the wording and any new plan names are yours.
++
++## 1. What the platform actually bills now ("Percentage package" — default for NEW restaurants)
++| Source of the order | Rate | Notes |
++|---|---|---|
++| **Foodhubbie-App Orders** (the restaurant's own app: delivery AND pickup) | **3% of order value** (fixed) | Includes the delivery app and every status notification to the customer inside the app (placed, confirmed, ready, out for delivery, delivered…) |
++| **QR menu** (table ordering) | **1%** | |
++| **POS** (counter billing) | **1%** | |
++| Other / manual | 1% | |
++| **WhatsApp bot ordering** | label: **"Upcoming Feature in 1 month"** | Not being sold yet. The code still has 2% for WhatsApp-based/webview orders; it was deliberately left unchanged, so do not advertise a final WhatsApp price yet. |
++- Cancelled and refunded orders are never billed.
++- Percentage is on the order total as stored on the order (after discount; includes GST and delivery fee as part of "order total").
++- Promotional (marketing) WhatsApp messages: ₹1 each, 15 free welcome tokens (unchanged).
++- WhatsApp provider (Meta) message charges are separate pass-through costs (unchanged).
++
++## 2. Wallet rules (unchanged, but should be stated in the terms)
++- Prepaid wallet. **Minimum first top-up ₹1,000**, paid directly to FoodHubbie by UPI/bank; the owner records it in Supreme Admin.
++- Setup fee in the defaults: ₹500, non-refundable.
++- **Low-balance warning at 25%** of everything topped up so far; "finished" alert when balance reaches 0.
++- Balance = total paid − order fees − promo messages − manual charges.
++
++## 3. Old modes still in the code (existing restaurants keep them until you switch them)
++- Flat per-order: QR ₹2, POS ₹1, WhatsApp/web delivery ₹5.
++- "Official pack" (legacy): 1% on WhatsApp delivery only.
++- **Existing restaurants are NOT changed automatically.** Switching is done per restaurant in Supreme Admin. Billing is computed from all orders, so switching a mode re-prices that restaurant's whole history in the wallet view — warn restaurants or switch at a month boundary.
++
++## 4. Things in the current PRICING_AND_TERMS.md that no longer match
++- Lines ~26-27: "Per-Customer ₹1 / customer" and "Fixed Monthly ₹750/mo (3-month intro ₹500)" — these plans are not what the billing code charges. The code bills per order (old) or percentage (new). Decide whether the monthly plans still exist; if not, remove them.
++- Lines ~46-65: "Premium ₹1,250/month + Meta rates" and WhatsApp Ordering Bot "Included" — conflicts with "WhatsApp ordering = upcoming". Suggest marking it as upcoming / not yet available.
++- Lines ~266-267: break-even calculator "₹1 × orders vs ₹750" — needs redoing for percentage pricing (e.g. 1% of monthly sales vs 3% for app orders).
++- The public website pricing page (`website/index.html`) also still shows ₹1/₹2/₹5.
++- No mention anywhere of: pickup orders, the in-app delivery code (OTP), customer phone privacy ("phone lock"), or the loyalty program rules (earn 1 point per ₹50 by default, redeem with a WhatsApp code, points expire after 180 days of inactivity). Consider adding short terms for these.
++
++## 3-line summary you can reuse
++Foodhubbie-App Orders: 3% of order value (delivery app + all in-app status updates). QR menu and POS: 1%. WhatsApp ordering: upcoming feature (pricing to be announced).
+diff --git a/menu/js/app.js b/menu/js/app.js
+index 4632848..2f6240f 100644
+--- a/menu/js/app.js
++++ b/menu/js/app.js
+@@ -288,6 +288,11 @@ async function bootDirect() {
+         const p = getProfile();
+         if (p?.name && p.name !== 'Guest') UI.updateGreeting(p.name);
+         UI.showScreen('screenMenu');
++        // Notification tap: bot links to /?tab=orders
++        if (new URLSearchParams(window.location.search).get('tab') === 'orders') {
++            UI.showScreen('screenOrders');
++            renderOrdersTab();
++        }
+     } else {
+         UI.showScreen('screenSignIn');
+     }
+diff --git a/tests/direct-mode.check.mjs b/tests/direct-mode.check.mjs
+index 09a41ab..f2a6bdf 100644
+--- a/tests/direct-mode.check.mjs
++++ b/tests/direct-mode.check.mjs
+@@ -122,6 +122,17 @@ await scenario('returning visitor skips sign-in and sees the menu first', async
+     assert.match(await page.textContent('#menuGreeting'), /Rahul/);
+ });
+ 
++await scenario('notification tap (?tab=orders) opens the Orders tab for a signed-in customer', async (page) => {
++    await page.goto(URL_DIRECT);
++    await page.waitForSelector('#screenSignIn.active');
++    await page.fill('#signInPhone', '9876543210');
++    await page.click('#btnSignIn');
++    await page.waitForSelector('#screenMenu.active');
++    await page.goto(URL_DIRECT + '&tab=orders');
++    await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenOrders', null, { timeout: 8000 });
++    await page.waitForSelector('.account-order-card', { timeout: 5000 });
++});
++
+ await scenario('invalid ?t= still shows the invalid-QR screen', async (page) => {
+     await page.goto(URL_DIRECT + '&t=WRONG');
+     await page.waitForFunction(() => document.querySelector('.screen.active')?.id === 'screenInvalid', null, { timeout: 8000 });
+diff --git a/tests/payment-sync.check.cjs b/tests/payment-sync.check.cjs
+index 4f50c28..4fee9d3 100644
+--- a/tests/payment-sync.check.cjs
++++ b/tests/payment-sync.check.cjs
+@@ -66,5 +66,13 @@ const PH = '9876543210', ID = 'A100';
+     assert.match(src, /function isWebOrderSource/, 'APP orders share web-order finalization');
+     assert.match(src, /source\s*===\s*'APP'/, 'bot recognises APP orders');
+     assert.match(src, /'Pickup'/, 'pickup handled (no rider broadcast)');
++    // review fixes (bot)
++    assert.match(src, /async function resurrectRewardTender/, 'reward goes back on cancel even if no points were earned');
++    assert.match(src, /if \(isCancel\) await resurrectRewardTender/, 'cancel path restores the reward before the accrual check');
++    assert.match(src, /order\.source === 'APP'\s*\n?\s*\? `\$\{WEBVIEW_DELIVERY_HOST\}\/\?b=/, 'app push opens the app, not delivery.html');
++    assert.match(src, /missedWebOrder/, 'web/app orders placed during bot downtime are still finalized');
++    assert.match(src, /base\.app\?\.consent\?\.offers/, 'app orders never force promotional consent on');
++    const promo = require('fs').readFileSync(require('path').join(__dirname, '../bot/promotions.js'), 'utf8');
++    assert.match(promo, /app\/consent\/offers/, 'promotions honour the app Offers switch');
+     console.log('payment-sync OK');
+ })().catch(e => { console.error(e); process.exit(1); });

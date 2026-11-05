@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Possibility 1 — No WhatsApp Bot | Foodhubbie Cost Analysis</title>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Possibility 1 — No WhatsApp Bot <span class="pill ok">cheapest</span></h1>
+  <div class="sub"><b>Firebase only.</b> WhatsApp agent off, EC2 box terminated. QR menu ordering, cart, sessions, KDS, orders, riders, POS, promos, analytics all keep running serverlessly. Orders come from QR/POS only.</div>
+</header>
+
+<nav>
+  <a href="index.html">Hub</a>
+  <a href="possibility-1-no-bot.html">1 · No bot</a>
+  <a href="possibility-2-baileys.html">2 · Baileys</a>
+  <a href="possibility-3-meta-free.html">3 · Meta free</a>
+  <a href="possibility-4-meta-billed.html">4 · Meta billed</a>
+  <a href="index.html#sources">Sources</a>
+</nav>
+
+<h2><span class="n">·</span>What you pay and what you don't</h2>
+<table>
+  <thead><tr><th>Component</th><th>Cost</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><b>Firebase RTDB</b> (menu + admin + rider + orders + KDS)</td><td>₹1,174–25,482/mo</td><td>measured traffic; free 10 GB/mo pool first</td></tr>
+    <tr><td><b>Firebase Hosting</b> (menu shell 388 KB/scan + dashboards)</td><td>₹0–2,298/mo</td><td>free 10.9 GB/mo pool first</td></tr>
+    <tr><td><b>EC2 server</b></td><td class="hl">₹0</td><td>box exists only for bots — terminate it</td></tr>
+    <tr><td><b>Meta WhatsApp API</b></td><td class="hl">₹0</td><td>no bot → no sends</td></tr>
+    <tr><td>Auth · Functions · Storage · Analytics</td><td>₹0</td><td>email/password auth, 0 Functions, images in Storage</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">·</span>Full detail — 10 / 25 / 50 / 100 orders per day per restaurant</h2>
+<p class="small"><b>₹/order</b> = total ÷ (orders/day × 30 × restaurants) — the fully-loaded cost of one order. It falls with volume because the server is gone and free allowances are shared pools.</p>
+
+<h3>Images in Firebase Storage (default)</h3>
+<table>
+  <thead><tr><th class="num">orders/day/rest</th><th class="num">restaurants</th><th class="num">TOTAL ₹/mo</th><th class="num">₹ / order</th><th class="num">₹/restaurant</th></tr></thead>
+  <tbody>
+    <tr><td class="num">10</td><td class="num">10</td><td class="num">₹1,174</td><td class="num">₹0.39</td><td class="num">₹117</td></tr>
+    <tr><td class="num">10</td><td class="num">50</td><td class="num">₹9,664</td><td class="num">₹0.64</td><td class="num">₹193</td></tr>
+    <tr><td class="num">10</td><td class="num">100</td><td class="num">₹20,381</td><td class="num">₹0.68</td><td class="num">₹204</td></tr>
+    <tr><td class="num">25</td><td class="num">10</td><td class="num">₹1,218</td><td class="num">₹0.16</td><td class="num">₹122</td></tr>
+    <tr><td class="num">25</td><td class="num">50</td><td class="num">₹10,137</td><td class="num">₹0.27</td><td class="num">₹203</td></tr>
+    <tr><td class="num">25</td><td class="num">100</td><td class="num">₹21,615</td><td class="num">₹0.29</td><td class="num">₹216</td></tr>
+    <tr><td class="num">50</td><td class="num">10</td><td class="num">₹1,304</td><td class="num">₹0.09</td><td class="num">₹130</td></tr>
+    <tr><td class="num">50</td><td class="num">50</td><td class="num">₹11,165</td><td class="num">₹0.15</td><td class="num">₹223</td></tr>
+    <tr><td class="num">50</td><td class="num">100</td><td class="num">₹23,670</td><td class="num">₹0.16</td><td class="num">₹237</td></tr>
+    <tr><td class="num">100</td><td class="num">10</td><td class="num">₹1,571</td><td class="num">₹0.05</td><td class="num">₹157</td></tr>
+    <tr><td class="num">100</td><td class="num">50</td><td class="num">₹13,220</td><td class="num">₹0.09</td><td class="num">₹264</td></tr>
+    <tr><td class="num">100</td><td class="num">100</td><td class="num hl">₹27,780</td><td class="num hl">₹0.09</td><td class="num">₹278</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">·</span>Reading this outcome</h2>
+<ul>
+  <li><b>Floor of the whole analysis.</b> Every other possibility is this number + server + bot Firebase + Meta.</li>
+  <li><b>₹/order falls 4× from 10→100 orders/day</b> (₹0.39→₹0.09): free RTDB/Hosting pools + zero fixed server.</li>
+  <li><b>Images live in Firebase Storage by default</b> — ~75 KB/scan payload, never base64 in RTDB (RTDB-image mode would add ₹259–22,786/mo at scale).</li>
+  <li><b>The customer-first chat channel disappears</b> — customers can't message to order; ordering is QR menu + POS only.</li>
+  <li>1 restaurant = <b>₹0/mo</b>; first bill appears at ~4 busy restaurants (≈₹49) once the shared 10 GB RTDB pool is exhausted.</li>
+</ul>
+
+<div class="box ok">
+  <div class="t">Who this is for</div>
+  Operations that don't want WhatsApp ordering yet, or want the cheapest possible floor while piloting QR ordering. Zero servers, zero Meta risk, zero message bills — and the easiest path to re-enable later (add EC2 + bot back).
+</div>
+
+<h2><span class="n">·</span>Compare all possibilities (same cell)</h2>
+<table>
+  <thead><tr><th>Possibility</th><th class="num">10 orders · 10 rest</th><th class="num">100 orders · 100 rest</th></tr></thead>
+  <tbody>
+    <tr><td><b>1 · No bot</b> (this page)</td><td class="num hl">₹1,174</td><td class="num hl">₹27,780</td></tr>
+    <tr><td><a href="possibility-2-baileys.html">2 · Bot + Baileys</a></td><td class="num">₹2,951</td><td class="num">₹42,872</td></tr>
+    <tr><td><a href="possibility-3-meta-free.html">3 · Meta API free (till Sep 30)</a></td><td class="num">₹3,209</td><td class="num">₹68,672</td></tr>
+    <tr><td><a href="possibility-4-meta-billed.html">4 · Meta API billed (from Oct 1)</a></td><td class="num">₹5,969</td><td class="num">₹3,44,672</td></tr>
+  </tbody>
+</table>
+
+<a class="back" href="index.html">← All possibilities</a>
+<footer>Research only — no codebase changes · Numbers from <code>node Research\scripts\cost-calc.js --fixed --inr</code> (possibility sections) · 2026-09-27 · ₹88/$</footer>
+</div>
+</body>
+</html>

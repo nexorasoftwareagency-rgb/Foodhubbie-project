@@ -1,0 +1,236 @@
+From 7042a7c871e8145b768c4d2ac06bfda3c691bf2a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 01:49:45 +0000
+Subject: [PATCH] Pricing: Foodhubbie-App Orders 3%, QR/POS 1%, WhatsApp marked
+ upcoming
+
+- shared/cost-math.js: 'app' channel (3%) in the percentage package; flat/legacy modes unchanged
+- delivery-order.js tags orders from the restaurant's own app (channel: 'app')
+- new restaurants default to the percentage package; existing restaurants unchanged
+- Admin/Supreme labels renamed; WhatsApp ordering labelled upcoming feature
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ed5NQtedhQ5SdCJqqDJpCe
+---
+ Admin/js/features/costs.js                    |  4 ++--
+ SupremeAdmin/js/features/payment-record.js    |  5 +++--
+ .../js/features/restaurant-profile.js         |  2 +-
+ .../js/features/templates/billing-card.js     |  4 ++--
+ docs/PLAN-DEDICATED-CUSTOMER-APP.md           |  8 +++++++
+ menu/js/delivery-order.js                     |  4 ++++
+ shared/billing-defaults.cjs                   |  4 ++--
+ shared/billing-defaults.js                    |  2 +-
+ shared/cost-math.js                           | 22 ++++++++++++++++---
+ tests/wizard-billing.spec.js                  |  2 +-
+ 10 files changed, 43 insertions(+), 14 deletions(-)
+
+diff --git a/Admin/js/features/costs.js b/Admin/js/features/costs.js
+index 6af779b..6d60cbd 100644
+--- a/Admin/js/features/costs.js
++++ b/Admin/js/features/costs.js
+@@ -110,7 +110,7 @@ const _rangeLabel = () => {
+ const _rates = () => ({ ...DEFAULT_RATES, ...(_billing && typeof _billing === 'object' ? _billing.rates || {} : {}) });
+ const _mode = () => normalizeMode(_billing && typeof _billing === 'object' ? _billing.mode : null);
+ 
+-const LABELS = { QR: 'QR menu', POS: 'POS counter', webview_delivery: 'WhatsApp / webview', WA: 'WhatsApp', other: 'Other' };
++const LABELS = { QR: 'QR menu', POS: 'POS counter', app: 'Foodhubbie-App Orders', webview_delivery: 'WhatsApp / webview (upcoming feature)', WA: 'WhatsApp ordering (upcoming feature)', other: 'Other' };
+ const _label = src => LABELS[src] || src;
+ 
+ function _setText(id, txt) {
+@@ -202,7 +202,7 @@ function _render() {
+             const b = _billing;
+             const rates = _rates();
+             const mode = _mode();
+-            const modeLabel = mode === 'percentage' ? 'Percentage package (1% of order value, 2% on WhatsApp orders)' : mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
++            const modeLabel = mode === 'percentage' ? 'Foodhubbie package (1% on QR menu & POS, 3% on Foodhubbie-App Orders)' : mode === 'commission_1pct' ? 'WhatsApp Official (1% of order total)' : 'Per-order flat rates';
+             const setup = b.setup || {};
+             const setupStatus = setup.status || 'non_refundable';
+             const tp = b.tokenPacks || {};
+diff --git a/SupremeAdmin/js/features/payment-record.js b/SupremeAdmin/js/features/payment-record.js
+index df6b320..bfd974f 100644
+--- a/SupremeAdmin/js/features/payment-record.js
++++ b/SupremeAdmin/js/features/payment-record.js
+@@ -210,8 +210,9 @@ function renderAll() {
+ const SRC_LABEL = {
+   QR: 'QR table orders',
+   POS: 'POS orders',
+-  webview_delivery: 'Webview delivery',
+-  WA: 'WhatsApp orders',
++  app: 'Foodhubbie-App Orders',
++  webview_delivery: 'Webview delivery (WhatsApp, upcoming feature)',
++  WA: 'WhatsApp orders (upcoming feature)',
+   other: 'Other orders',
+ };
+ 
+diff --git a/SupremeAdmin/js/features/restaurant-profile.js b/SupremeAdmin/js/features/restaurant-profile.js
+index e03b897..30ce4d8 100644
+--- a/SupremeAdmin/js/features/restaurant-profile.js
++++ b/SupremeAdmin/js/features/restaurant-profile.js
+@@ -988,7 +988,7 @@ registerAction('scan-baileys', async () => {
+ // ---- Billing & promo tokens ----------------------------------------------
+ const BILLING_MODE_INFO = {
+   per_order: { label: 'flat per-order billing', body: (b) => `Every source is billed at flat per-order rates (QR \u20B9${b.rates?.QR ?? 2} \u00B7 POS \u20B9${b.rates?.POS ?? 1} \u00B7 WhatsApp \u20B9${b.rates?.WA ?? 5}).` },
+-  percentage: { label: 'the percentage package', body: () => 'Every order is billed as a share of its value: 1% on QR, POS and all other features, 2% on WhatsApp-based ordering. Cancelled and refunded orders are not billed. Promo messages stay per token.' },
++  percentage: { label: 'the Foodhubbie package', body: () => 'Every order is billed as a share of its value: 1% on QR menu, POS and other features; 3% on Foodhubbie-App Orders (the restaurant\u2019s own delivery app with every order-status notification sent to the customer in the app). WhatsApp-based ordering is an upcoming feature and is not part of this package yet. Cancelled and refunded orders are not billed. Promo messages stay per token.' },
+   commission_1pct: { label: '1% of sales (WhatsApp only)', body: () => 'WhatsApp delivery orders are billed at 1% of order value. QR, POS and other sources stay per-order.' },
+ };
+ registerAction('billing-set-mode', async (btn) => {
+diff --git a/SupremeAdmin/js/features/templates/billing-card.js b/SupremeAdmin/js/features/templates/billing-card.js
+index 0d6f4ea..98a377a 100644
+--- a/SupremeAdmin/js/features/templates/billing-card.js
++++ b/SupremeAdmin/js/features/templates/billing-card.js
+@@ -38,7 +38,7 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
+     ${header}
+     <div class="collapsible-body${collapsed ? ' collapsed' : ''}" id="billing-body">
+       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">
+-        <div class="detail-cell"><div class="detail-label">Pricing mode</div><div class="detail-value">${mode === 'percentage' ? 'Percentage package (1% / 2% WhatsApp)' : mode === 'commission_1pct' ? '1% of sales' : 'Per order'}</div></div>
++        <div class="detail-cell"><div class="detail-label">Pricing mode</div><div class="detail-value">${mode === 'percentage' ? 'Foodhubbie package (1% QR/POS · 3% App orders)' : mode === 'commission_1pct' ? '1% of sales' : 'Per order'}</div></div>
+         <div class="detail-cell"><div class="detail-label">Setup fee</div><div class="detail-value">₹${b.setup?.amount ?? 500} · ${escapeHtml(String(b.setup?.status || '—'))}</div></div>
+         <div class="detail-cell"><div class="detail-label">Promo token balance</div><div class="detail-value mono">${bal}</div></div>
+       </div>
+@@ -57,7 +57,7 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
+         </button>`}
+       </div>
+       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+-        ${[['per_order', 'Flat per-order'], ['percentage', 'Percentage package (1% / 2% WhatsApp)'], ['commission_1pct', 'WhatsApp 1% only']]
++        ${[['per_order', 'Flat per-order'], ['percentage', 'Foodhubbie package (1% QR/POS · 3% App orders)'], ['commission_1pct', 'WhatsApp 1% only']]
+           .filter(([m]) => m !== mode)
+           .map(([m, label]) => `<button class="btn btn-ghost btn-sm" data-action="billing-set-mode" data-mode="${m}" ${ro} title="${roTitle}">Switch to ${label}</button>`).join('\n        ')}
+         <select id="billingSetupStatus" class="text-input" style="width:auto" data-billing-draft="setup" ${ro}>
+diff --git a/docs/PLAN-DEDICATED-CUSTOMER-APP.md b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+index cdfa943..75e3e15 100644
+--- a/docs/PLAN-DEDICATED-CUSTOMER-APP.md
++++ b/docs/PLAN-DEDICATED-CUSTOMER-APP.md
+@@ -42,3 +42,11 @@
+ Delivery orders are identified everywhere by `source === 'webview_delivery'`: the bot's server-side finalization (discount re-check, reward-code burn, stock deduction, profile save), the Admin order lists, and **billing** (`shared/cost-math.js`: ₹5 flat, or 2% in the percentage package).
+ - A new source (`direct_delivery` / `direct_pickup`) means touching all of those, plus new rules in `database.rules.json` (emulator-tested), plus a Pickup status flow in Admin (no rider).
+ - **Pricing question for the owner:** should an order placed in the restaurant's own app be billed like WhatsApp ordering (₹5 / 2%) or like other channels (₹2 / 1%)? Today's direct delivery already lands as `webview_delivery`, i.e. the WhatsApp rate. This is NOT changed by Phase 2a.
++
++## Pricing decision (owner, 2026-11-01) — implemented in branch `feat/app-orders-pricing`
++- **Foodhubbie-App Orders** = fixed **3%** of order value. Includes the restaurant's own delivery app and every order-status notification sent to the customer in the app.
++- **QR menu and POS** = **1%** of order value (replaces the ₹1 / ₹2 per-order rates in this package).
++- **WhatsApp bot ordering** = labelled "Upcoming feature (within 1 month)"; its pricing logic is untouched and WhatsApp work is paused.
++- New restaurants start on this package (`mode: 'percentage'` in `shared/billing-defaults.*`). **Existing restaurants keep their current mode** until switched in Supreme Admin (switching re-prices their whole order history, because the wallet is computed from orders).
++- App orders are recognised by `order.channel === 'app'`, written by `menu/js/delivery-order.js` when the order uses an anonymous app token. Bot/WhatsApp-issued links are not tagged.
++- Not done: public website pricing page / `PRICING_AND_TERMS.md` still describe ₹1/₹2/₹5 per order and need a reviewed rewrite.
+diff --git a/menu/js/delivery-order.js b/menu/js/delivery-order.js
+index 3d3456c..9699b18 100644
+--- a/menu/js/delivery-order.js
++++ b/menu/js/delivery-order.js
+@@ -115,6 +115,10 @@ export async function placeDeliveryOrder({ cartLines, customerName, customerPhon
+         outlet: OUTLET,
+         type: 'Online',
+         source: 'webview_delivery',   // bot finalization hook keys on this; src=wa/qr is UI-only
++        // Orders placed in the restaurant's own app (anonymous token minted at checkout, no bot link) are
++        // the billable "Foodhubbie-App Orders" channel (3% in the percentage package). Bot/WhatsApp-issued
++        // tokens stay un-tagged. Read by shared/cost-math.js billingSourceOf().
++        channel: String(webviewToken || '').startsWith('anon') ? 'app' : null,
+         webviewToken: webviewToken || null,
+         sessionId: sessionId || null,
+         botPhone: botPhone || null,
+diff --git a/shared/billing-defaults.cjs b/shared/billing-defaults.cjs
+index a8641d4..7a4b98f 100644
+--- a/shared/billing-defaults.cjs
++++ b/shared/billing-defaults.cjs
+@@ -4,7 +4,7 @@
+ function getBillingDefaults() {
+   const now = new Date().toISOString();
+   return {
+-    mode: 'per_order',
++    mode: 'percentage', // new restaurants start on the Foodhubbie percentage package (1% QR/POS, 3% App orders)
+     rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1, commission1pct: 0.01 },
+     setup: { amount: 500, status: 'non_refundable', date: now },
+     tokens: { balance: 15, updatedAt: now },
+@@ -15,7 +15,7 @@ function getBillingDefaults() {
+ function getBillingDefaultsForClient() {
+   // For client-side (uses firebase.database.ServerValue.TIMESTAMP)
+   return {
+-    mode: 'per_order',
++    mode: 'percentage', // new restaurants start on the Foodhubbie percentage package (1% QR/POS, 3% App orders)
+     rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1, commission1pct: 0.01 },
+     setup: { amount: 500, status: 'non_refundable', date: new Date().toISOString() },
+     tokens: { balance: 15, updatedAt: firebase.database.ServerValue.TIMESTAMP },
+diff --git a/shared/billing-defaults.js b/shared/billing-defaults.js
+index fa9a6c8..2a97066 100644
+--- a/shared/billing-defaults.js
++++ b/shared/billing-defaults.js
+@@ -5,7 +5,7 @@
+ 
+ export function getBillingDefaults() {
+   return {
+-    mode: 'per_order',
++    mode: 'percentage', // new restaurants start on the Foodhubbie percentage package (1% QR/POS, 3% App orders)
+     rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1, commission1pct: 0.01 },
+     setup: { amount: 500, status: 'non_refundable', date: new Date().toISOString() },
+     tokens: { balance: 15, updatedAt: firebase.database.ServerValue.TIMESTAMP },
+diff --git a/shared/cost-math.js b/shared/cost-math.js
+index 15bccba..a8e7533 100644
+--- a/shared/cost-math.js
++++ b/shared/cost-math.js
+@@ -19,7 +19,10 @@ export const LOW_BALANCE_RATIO = 0.25;
+ 
+ // Billing modes (outlet billing.mode): 'per_order' flat rates (default), 'commission_1pct' (legacy: 1% on
+ // WhatsApp delivery only) and 'percentage' (percentage package: share of order value on every order).
+-export const PERCENT_RATES = { default: 0.01, webview_delivery: 0.02, WA: 0.02 }; // 1% everything, 2% WhatsApp-based ordering
++// Foodhubbie percentage package: 1% QR menu / POS / other, 3% Foodhubbie-App Orders (own delivery app +
++// every status notification to the customer in the app). WhatsApp-based ordering is an UPCOMING feature;
++// its rate below is left as it was and is not being changed yet.
++export const PERCENT_RATES = { default: 0.01, app: 0.03, webview_delivery: 0.02, WA: 0.02 };
+ export function normalizeMode(mode) {
+     return mode === 'percentage' ? 'percentage' : mode === 'commission_1pct' ? 'commission_1pct' : 'per_order';
+ }
+@@ -71,8 +74,16 @@ export function sourceOf(order) {
+     return (order.type === 'Dine-in' || order.type === 'Walk-in') ? 'POS' : 'other';
+ }
+ 
++/** Source used for billing: in the percentage package, orders placed in the restaurant's own app
++ *  (order.channel === 'app', set by menu/js/delivery-order.js) are their own 3% channel. Other modes
++ *  keep the original source, so legacy flat-rate restaurants are not re-priced. */
++export function billingSourceOf(order, mode = 'per_order') {
++    if (mode === 'percentage' && order && order.channel === 'app') return 'app';
++    return sourceOf(order);
++}
++
+ export function feeOf(order, rates = DEFAULT_RATES, mode = 'per_order') {
+-    const src = sourceOf(order);
++    const src = billingSourceOf(order, mode);
+     if (mode === 'percentage') {
+         return Math.round((Number(order.total) || 0) * percentOf(src) * 100) / 100;
+     }
+@@ -87,7 +98,7 @@ export function computeCostIndex(orders, rates = DEFAULT_RATES, mode = 'per_orde
+     let total = 0, count = 0;
+     for (const o of Object.values(orders || {})) {
+         if (!o || EXCLUDED.has(o.status)) continue;
+-        const src = sourceOf(o);
++        const src = billingSourceOf(o, mode);
+         const fee = feeOf(o, rates, mode);
+         const b = bySource[src] || (bySource[src] = { orders: 0, cost: 0 });
+         b.orders += 1; b.cost += fee;
+@@ -125,6 +136,11 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math'))
+     assert.equal(feeOf({ total: 333.33, source: 'QR' }, DEFAULT_RATES, 'percentage'), 3.33, 'rounded to paise');
+     assert.equal(normalizeMode('percentage'), 'percentage'); assert.equal(normalizeMode('junk'), 'per_order'); assert.equal(normalizeMode('commission_1pct'), 'commission_1pct');
+     assert.equal(rateLabel('webview_delivery', 'percentage'), '2% of order'); assert.equal(rateLabel('QR', 'percentage'), '1% of order'); assert.equal(rateLabel('QR', 'per_order'), '\u20B92/order');
++    // Foodhubbie-App Orders: 3%, only in the percentage package; flat/legacy modes unchanged
++    const ap = computeCostIndex({ a: { total: 1000, source: 'webview_delivery', channel: 'app', status: 'Delivered' }, b: o(1000, 'QR') }, DEFAULT_RATES, 'percentage');
++    assert.equal(ap.total, 30 + 10, '3% app order + 1% QR'); assert.equal(ap.bySource.app.cost, 30);
++    assert.equal(feeOf({ total: 1000, source: 'webview_delivery', channel: 'app' }, DEFAULT_RATES, 'per_order'), 5, 'flat mode not re-priced');
++    assert.equal(rateLabel('app', 'percentage'), '3% of order');
+     const wp = computeWallet({ billing: { mode: 'percentage', payments: { a: { amount: 1000 } } }, orders: { a: o(1000, 'webview_delivery') } });
+     assert.equal(wp.used, 20, 'wallet uses the percentage package');
+     // low balance: <= 25% of everything topped up
+diff --git a/tests/wizard-billing.spec.js b/tests/wizard-billing.spec.js
+index 1218947..3c6e51b 100644
+--- a/tests/wizard-billing.spec.js
++++ b/tests/wizard-billing.spec.js
+@@ -118,7 +118,7 @@ test.describe('wizard billing regression', () => {
+ 
+       // The regression itself: stale monthly-plan model had none of this.
+       expect(billing.monthlyRate).toBeUndefined();
+-      expect(billing.mode).toBe('per_order');
++      expect(billing.mode).toBe('percentage'); // new restaurants start on the Foodhubbie package
+       expect(billing.rates).toEqual(EXPECTED_RATES);
+       expect(billing.setup).toMatchObject({ amount: 500, status: 'non_refundable' });
+       expect(billing.tokens && billing.tokens.balance).toBe(15);
+-- 
+2.43.0
+

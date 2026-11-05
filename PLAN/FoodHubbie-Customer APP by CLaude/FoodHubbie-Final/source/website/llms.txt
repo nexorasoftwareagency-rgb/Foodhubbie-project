@@ -1,0 +1,70 @@
+# FoodHubbie
+
+> Restaurant & cafe software: QR ordering, kitchen display, rider dispatch, WhatsApp ordering,
+> promotions, POS, analytics — three apps (Admin, Customer Menu, Rider) on one realtime system.
+
+## What it is
+- Admin Dashboard (command center): live orders, kitchen display (KDS), tables/dine-in QR,
+  POS counter billing, menu/catalog/categories/combos/menu-browser, inventory, promotions
+  (WhatsApp campaigns), discounts/coupons, customers, riders, live delivery tracking,
+  analytics, feedback/reviews, push notifications, payments, expenses, costs. No app download
+  for customers — browser QR menu.
+- Customer Menu: scan table QR → browse → customize → cart → place → live status →
+  request water/bill → pay. Delivery via WhatsApp webview link (single-use token, GPS fee).
+- Rider App: online/offline, assigned orders, pickup, OTP handoff, cash collection,
+  wallet/settlements, delivery history.
+- WhatsApp: per-outlet transport. WhatsApp Official plan = Meta Cloud API (WhatsApp Business
+  Platform) for ordering + promotional campaigns with Meta-approved templates; a QR-paired
+  (unofficial) connection can still take orders and transactional messages, but the software
+  hard-blocks promotional campaigns on it. STOP opt-out honored; sends paced; emergency stop.
+
+## Marketing engine (verified capabilities)
+- Campaigns: ≤1500 chars, tokens {name} {phone} {lastOrderDate} {storeName} {couponCode},
+  image + menu footer, STOP footer; audience = consenting / active-30d / CSV (300 cap);
+  preview + send-test-to-self; ₹1 token/message money gate; launch now or schedule + quiet
+  hours; live progress; per-campaign stop + EMERGENCY STOP ALL. 25 templates, 7 categories.
+- Discounts: Global / Category / New-Customer / Coupon; % or ₹; channels WhatsApp/POS/Both/
+  Web/All; schedule, min-subtotal, exclusive groups, per-customer/global caps, stackable;
+  same engine scores POS, tables, QR; per-code reports + CSV.
+- Combos: dishes + qty + %/fixed + dates + image → one-tap POS tiles.
+- Safety: 300 recipients/campaign, 300/day, 8–15s pacing + batch pauses, 7-day warmup ramp,
+  >35% failure circuit-breaker, kill-switch, Meta-only promos.
+
+## Pricing (per-order, flat)
+- QR Table ₹2/order + POS counter ₹1/order.
+- WhatsApp Official (Meta Cloud API) ₹5/order or 1% of sales. Official Promo msgs ₹1 each.
+- One-time setup ₹500 (non-refundable, adjusted in first bill).
+
+## Pages
+- https://foodhubbie.in/ — product, features, pricing
+- https://foodhubbie.in/architecture — customer/dine-in/rider/admin flows
+- https://foodhubbie.in/signup — restaurant registration (writes onboardingRequests)
+- https://foodhubbie.in/billing-policy - Billing: per-order rates by channel, 500 setup, cancelled/refunded orders not billed, invoice disputes
+- https://foodhubbie.in/refund-policy - Refunds and termination: setup fee non-refundable, no lock-in, 30-day data retention after closure
+- https://foodhubbie.in/whatsapp-policy - WhatsApp policy: official API only for promos, consent-only audiences, STOP honoured, approved templates, 1/msg
+- https://foodhubbie.in/privacy - privacy policy: what data is stored, who can see it, deletion requests
+- https://foodhubbie.in/book — demo/inquiry via WhatsApp
+- https://foodhubbie.in/contact — WhatsApp +91 97246 49971
+
+- https://foodhubbie.in/qr-ordering — QR code ordering system
+- https://foodhubbie.in/pos-billing — POS billing software
+- https://foodhubbie.in/kds — kitchen display system
+- https://foodhubbie.in/riders — rider delivery management
+- https://foodhubbie.in/whatsapp-ordering — WhatsApp ordering system (official Meta API)
+- https://foodhubbie.in/whatsapp-marketing — WhatsApp promo campaigns, coupons, combos
+- https://foodhubbie.in/table-management — tables, dine-in sessions, split bills
+- https://foodhubbie.in/inventory — stock, recipes, low-stock alerts
+- https://foodhubbie.in/customer-database — customer book, push notifications, reviews
+- https://foodhubbie.in/multi-outlet — several outlets under one login
+- https://foodhubbie.in/restaurant-analytics — sales, channel and item reports
+- https://foodhubbie.in/use-cases — use cases: cafes, family restaurants, cloud kitchens
+- https://foodhubbie.in/pricing — pricing (₹1–5 per order, ₹500 setup)
+- https://foodhubbie.in/compare — vs monthly-fee POS suites
+- https://foodhubbie.in/best-software — 2026 software buyer's guide
+
+## Live apps
+- Admin: https://foodhubbie-admins.web.app
+- Customer menu: https://foodhubbie-qrmenu.web.app
+- Rider: https://foodhubbie-riderapp.web.app
+
+

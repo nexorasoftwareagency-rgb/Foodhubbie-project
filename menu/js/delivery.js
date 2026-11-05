@@ -5,8 +5,8 @@
  * delivery-specific fields (address + location) and a direct order write
  * (menu/js/delivery-order.js) instead of a table-session attach.
  */
-import { outletRef, get, set as fbSet, OUTLET, update, runTransaction, mintAnonWebviewToken } from './firebase.js';
-import { Session } from './session.js';
+import { outletRef, get, set as fbSet, OUTLET, update, runTransaction, mintAnonWebviewToken, assertOutletEnabled } from './firebase.js';
+import { Session, assertWalletGate } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getWebviewStorageKey } from './cart.js';
 import * as UI from './ui.js';
 import { haptic } from './ui.js';
@@ -890,6 +890,10 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
     if (cartIsEmpty()) { UI.showToast('Your cart is empty', 'error'); return; }
     // If no location, button onclick already opens dialog — just bail
     if (!M.location) return;
+
+    // Outlet and wallet gate — same as the WhatsApp delivery webview (delivery-order.js)
+    await assertOutletEnabled();
+    await assertWalletGate();
     // Block if token is invalid/used
     if (M.token && !M._tokenValid) { UI.showToast('This link is no longer valid. Ask the bot for a new one.', 'error'); return; }
 
