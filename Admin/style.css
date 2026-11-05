@@ -6292,8 +6292,9 @@ body {
 }
 
 /* Out-of-stock state for v4 dish cards.
-   `oos-wrap` is on EVERY tile (layout hook) — the disabled state keys off
-   `is-out-of-stock`, which pos.js adds only for stock === false. */
+   pos.js adds `oos-wrap` + `is-out-of-stock` only when stock === false; the
+   disabled state must key off `is-out-of-stock`, never `oos-wrap` alone —
+   the older `.oos-wrap { pointer-events: none }` rule blocked every tile. */
 .pos-dish-btn-v4.is-out-of-stock {
     opacity: 0.4;
     pointer-events: none;
