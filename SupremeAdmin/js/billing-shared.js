@@ -201,7 +201,7 @@ export function recordPaymentModal({ bid, oid, due = 0 }) {
       const okBtn = modal.querySelector('[data-pay="ok"]');
       okBtn.disabled = true; // guard: a second click before set() resolves would push a duplicate payment row
       try {
-        const ref = firebase.database().ref(`businesses/${bid}/outlets/${oid}/billing/payments`).push();
+        const ref = firebase.database().ref(`walletBilling/${bid}/${oid}/payments`).push();
         const now = Date.now();
         const d = new Date(now);
         const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -213,7 +213,7 @@ export function recordPaymentModal({ bid, oid, due = 0 }) {
           const base = `businesses/${bid}/outlets/${oid}`;
           const [lk, pays] = await Promise.all([
             firebase.database().ref(`${base}/locked`).once('value'),
-            firebase.database().ref(`${base}/billing/payments`).once('value'),
+            firebase.database().ref(`walletBilling/${bid}/${oid}/payments`).once('value'),
           ]);
           const total = Object.values(pays.val() || {}).reduce((a, p) => a + Number((p && p.amount) || 0), 0);
           if (lk.val() === true && total >= MIN_TOPUP) {
@@ -264,7 +264,7 @@ export function addChargeModal({ bid, oid }) {
       const okBtn = modal.querySelector('[data-ch="ok"]');
       okBtn.disabled = true; // guard: a second click before set() resolves would push a duplicate charge row
       try {
-        const ref = firebase.database().ref(`businesses/${bid}/outlets/${oid}/billing/charges`).push();
+        const ref = firebase.database().ref(`walletBilling/${bid}/${oid}/charges`).push();
         await ref.set({ amount, reason, period: per, createdAt: Date.now(), createdBy: uid() });
         showToast(`Charge of ${inr(amount)} added.`, 'success');
         done({ amount, reason, period: per, id: ref.key });

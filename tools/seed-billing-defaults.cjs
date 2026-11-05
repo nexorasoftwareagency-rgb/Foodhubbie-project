@@ -1,6 +1,7 @@
 // seed-billing-defaults.cjs — idempotent billing defaults + 15 FREE promo tokens.
-// Creates businesses/{bid}/outlets/{oid}/billing for every outlet missing it.
-// Re-run: outlets that already have billing are skipped (token balance untouched).
+// Seeds the ROOT node walletBilling/{bid}/{oid} (money is server-owned; it must
+// not live under businesses/{bid}, which the tenant can write).
+// Re-run: outlets that already have a wallet are skipped (token balance untouched).
 //
 // DRY RUN by default — pass --apply to write. A mode change re-prices every historical
 // order in the wallet (computeCostIndex runs over all orders), so an accidental run
@@ -41,7 +42,7 @@ async function main() {
   let seeded = 0, skipped = 0;
   for (const [bid, biz] of Object.entries(bizSnap.val())) {
     for (const oid of Object.keys(biz.outlets || {})) {
-      const base = `businesses/${bid}/outlets/${oid}/billing`;
+      const base = `walletBilling/${bid}/${oid}`;
       const cur = await db.ref(base).get();
       if (cur.exists()) {
         const val = cur.val() || {};

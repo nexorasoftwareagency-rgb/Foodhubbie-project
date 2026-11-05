@@ -1011,7 +1011,7 @@ registerAction('billing-set-mode', async (btn) => {
   });
   if (!ok) return;
   try {
-    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}/billing`).update({ mode: next });
+    await firebase.database().ref(`walletBilling/${currentBid}/${currentOid}`).update({ mode: next });
     showToast(`Billing mode \u2192 ${info.label}.`, 'success');
   } catch (err) {
     console.error('billing mode switch failed', err);
@@ -1041,7 +1041,7 @@ registerAction('billing-toggle-gate', async (btn) => {
   });
   if (!ok) return;
   try {
-    await firebase.database().ref(`businesses/${currentBid}/outlets/${currentOid}/billing/wallet`).update({
+    await firebase.database().ref(`walletBilling/${currentBid}/${currentOid}/wallet`).update({
       enforce: next,
       updatedAt: firebase.database.ServerValue.TIMESTAMP,
       updatedBy: firebase.auth().currentUser?.uid || 'unknown',
@@ -1078,7 +1078,7 @@ registerAction('billing-grant-tokens', async () => {
   if (!ok) return;
   try {
     const user = firebase.auth().currentUser;
-    const base = `businesses/${currentBid}/outlets/${currentOid}/billing`;
+    const base = `walletBilling/${currentBid}/${currentOid}`;
     // History push first, balance transaction last. If anything fails in
     // between, only an orphan history row remains (cosmetic) — never a
     // credited balance with no record, which the "Grant failed" toast could
@@ -1108,8 +1108,8 @@ registerAction('billing-grant-tokens', async () => {
 
 // ---- Payment Management (profile side) ------------------------------------
 // Same modal + receipt as the Payment Management tab and record page — all
-// three write businesses/{bid}/outlets/{oid}/billing/payments, so a payment
-// recorded here shows up on the tab immediately (one data-store listener).
+// three write walletBilling/{bid}/{oid}/payments (root, server-owned), so a
+// payment recorded here shows up on the tab immediately (one data-store listener).
 registerAction('profile-record-payment', async () => {
   if (isReadOnly()) return showToast("Your account is view-only.", 'error');
   const outlet = lastRaw?.[currentBid]?.outlets?.[currentOid];

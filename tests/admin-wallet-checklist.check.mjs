@@ -9,6 +9,7 @@ copy('Admin/js/features/costs.js'); copy('Admin/js/features/setup-checklist.js')
 put('Admin/js/state.js', 'export const state = { locked: false };');
 put('Admin/js/ui.js', "export const SUPPORT_WA = 'https://wa.me/919724649971?text=x'; export const supportWa = (t) => 'https://wa.me/919724649971?text=' + encodeURIComponent(t); export const canAccessTab = () => true; export const switchTab = async (t) => { (globalThis.__TABS ||= []).push(t); };");
 put('Admin/js/firebase.js', `export const Outlet = { ref: (p) => p, current: 'o1' };
+export const billingRef = () => 'billing';
 export const limitToLast = () => null, query = (p) => p;
 export const get = async (p) => { const v = globalThis.DATA[p]; if (v === 'ERR') throw new Error('x'); return { exists: () => v != null, val: () => v ?? null }; };
 export const onValue = (p, cb) => { cb({ val: () => globalThis.DATA[p] ?? null }); return () => {}; };

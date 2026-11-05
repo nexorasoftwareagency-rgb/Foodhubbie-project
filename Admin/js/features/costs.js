@@ -10,12 +10,12 @@
  *   - promo token balance KPI + promo usage cost = sent tokens × ₹1 (campaigns totalSent)
  *
  * Data: businesses/{bid}/outlets/{oid}/orders/{id}   (existing)
- *       businesses/{bid}/outlets/{oid}/billing/*     (seeded, rules-gated)
+ *       walletBilling/{bid}/{oid}/*                  (root node: server-owned money)
  *       businesses/{bid}/outlets/{oid}/bot/promotions/campaigns (existing)
  * Pure math lives in ../../shared/cost-math.js (node-runnable self-check).
  * ============================================================================
  */
-import { Outlet, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
+import { Outlet, billingRef, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { state } from '../state.js';
 import { SUPPORT_WA } from '../ui.js';
 import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel } from '../../shared/cost-math.js';
@@ -352,7 +352,7 @@ export function loadCosts() {
     _range = _range || _monthRange(0);
     _applyRange(_range);
 
-    _unsubs.push(onValue(Outlet.ref('billing'),
+    _unsubs.push(onValue(billingRef(),
         s => { _billing = s.val() || null; _scheduleRender(); },
         () => { _billing = false; _scheduleRender(); }));
     _unsubs.push(onValue(Outlet.ref('walletGate'),

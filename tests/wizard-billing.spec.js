@@ -51,6 +51,7 @@ test.describe('wizard billing regression', () => {
     const email = `e2e-wizard-${stamp}@foodhubbie-test.dev`;
     let uid = null;
     let bid = null;
+    let oid = null;
 
     try {
       // Temp super: claims for auth.js role gate, admins node for security rules.
@@ -112,9 +113,9 @@ test.describe('wizard billing regression', () => {
       expect(biz, 'wizard-created business should appear in RTDB').not.toBeNull();
       bid = biz[0];
       const outlets = biz[1].outlets || {};
-      const oid = Object.keys(outlets)[0];
+      oid = Object.keys(outlets)[0];
       expect(oid, 'outlet should exist').toBeTruthy();
-      const billing = outlets[oid].billing || {};
+      const billing = (await admin.database().ref(`walletBilling/${bid}/${oid}`).get()).val() || {};
 
       // The regression itself: stale monthly-plan model had none of this.
       expect(billing.monthlyRate).toBeUndefined();
@@ -130,7 +131,18 @@ test.describe('wizard billing regression', () => {
         const orphan = await findBusinessByName(businessName).catch(() => null);
         if (orphan) bid = orphan[0];
       }
-      if (bid) await admin.database().ref(`businesses/${bid}`).remove().catch(() => {});
+      if (bid) {
+        await admin.database().ref(`businesses/${bid}`).remove().catch(() => {});
+        if (oid) await admin.database().ref(`walletBilling/${bid}/${oid}`).remove().catch(() => {});
+        else {
+          // Creation failed before the outlet was read back: clear every outlet
+          // still registered under the business by name.
+          const orphan = await findBusinessByName(businessName).catch(() => null);
+          for (const o of Object.keys((orphan && orphan[1] && orphan[1].outlets) || {})) {
+            await admin.database().ref(`walletBilling/${orphan[0]}/${o}`).remove().catch(() => {});
+          }
+        }
+      }
       if (uid) {
         await admin.database().ref(`admins/${uid}`).remove().catch(() => {});
         await admin.auth().deleteUser(uid).catch(() => {});

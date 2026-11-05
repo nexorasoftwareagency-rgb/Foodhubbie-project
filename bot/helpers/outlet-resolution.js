@@ -67,6 +67,19 @@ function resolvePath(scope, ...rest) {
     return outletPath(businessId, outletId, ...rest);
 }
 
+/**
+ * Wallet/ledger path: `walletBilling/{bid}/{oid}/rest...` — a ROOT node.
+ * Money must live outside `businesses/{bid}`: the tenant holds `.write` on
+ * that subtree and an ancestor grant cannot be denied deeper down.
+ */
+function billingPath(scope, ...rest) {
+    const outletId = scope?.outletId || resolveOutletId();
+    const oid = normalizeOutletId(outletId);
+    const businessId = scope?.businessId || resolveBusinessIdFor(oid);
+    const tail = rest.filter(Boolean).join('/');
+    return `walletBilling/${businessId}/${oid}${tail ? `/${tail}` : ''}`;
+}
+
 /** businessId for an outlet — env wins, else reverse index, else legacy map, else throw. */
 function resolveBusinessIdFor(outletId) {
     outletId = normalizeOutletId(outletId);
@@ -120,5 +133,6 @@ module.exports = {
     resolveOutletId,
     outletPath,
     resolvePath,
+    billingPath,
     initializeOutletBusinessIndex
 };

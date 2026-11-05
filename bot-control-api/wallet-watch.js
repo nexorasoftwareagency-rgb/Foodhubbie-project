@@ -9,12 +9,14 @@
  *
  *   - recomputes the wallet with the exact same math as the Admin Costs tab and
  *     Supreme (shared/cost-math.js over billing + orders + promo campaigns),
+ *     reading the ledger from the ROOT `walletBilling/{bid}/{oid}` node (money
+ *     must live outside the tenant-writable `businesses/{bid}` subtree),
  *   - publishes only for outlets whose FoodHubbie plan has armed
  *     `billing.wallet.enforce === true` (Supreme switches it on),
  *   - clears the node for every other outlet, so nothing is gated by accident,
  *   - hard-skips the demo tenant (its seeded history is not a real wallet).
  *
- * One cheap pass per minute: `outletIndex` + each outlet's `billing` node. The
+ * One cheap pass per minute: `outletIndex` + each outlet's `walletBilling` node. The
  * expensive all-order read only happens for armed outlets (today: none).
  * Requires Node >= 22.12 for require(esm) of shared/cost-math.js.
  * Self-check: node bot-control-api/wallet-watch.js
@@ -44,7 +46,7 @@ async function publishWalletGate(admin, bid, oid) {
     const base = `businesses/${bid}/outlets/${oid}`;
     const db = admin.database();
     const [billingSnap, gateSnap] = await Promise.all([
-        db.ref(`${base}/billing`).get(),
+        db.ref(`walletBilling/${bid}/${oid}`).get(),
         db.ref(`${base}/walletGate`).get(),
     ]);
     const billing = billingSnap.val() || null;

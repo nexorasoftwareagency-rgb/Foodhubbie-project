@@ -82,6 +82,20 @@ export function tenantPath(outlet, path) {
     return `businesses/${BUSINESS_ID()}/outlets/${oid}${cleanPath ? `/${cleanPath}` : ''}`;
 }
 
+// Money ledger ref: walletBilling/{bid}/{oid} — a ROOT node on purpose.
+// businesses/{bid}/.write is granted to the tenant, and an ancestor grant
+// cannot be denied deeper down, so money must live outside that subtree.
+// Read = super/supreme/own business; write = super/supreme only.
+export function billingRef(path) {
+    const cleanPath = (path || '').replace(/^\/+/, '');
+    return ref(db, `walletBilling/${BUSINESS_ID()}/${Outlet.current}${cleanPath ? `/${cleanPath}` : ''}`);
+}
+
+export function billingPath(path) {
+    const cleanPath = (path || '').replace(/^\/+/, '');
+    return `walletBilling/${BUSINESS_ID()}/${Outlet.current}${cleanPath ? `/${cleanPath}` : ''}`;
+}
+
 export const Outlet = {
     get current() {
         let outlet = window.currentOutlet || sessionStorage.getItem('adminSelectedOutlet') || 'pizza';

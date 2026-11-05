@@ -14,7 +14,7 @@
  * so that step hands off to support instead of linking to a tab the owner cannot use.
  */
 import { state } from '../state.js';
-import { Outlet, get, query, limitToLast } from '../firebase.js';
+import { Outlet, billingRef, get, query, limitToLast } from '../firebase.js';
 import { canAccessTab, switchTab, supportWa } from '../ui.js';
 import { computeWallet, MIN_TOPUP } from '../../shared/cost-math.js';
 
@@ -39,7 +39,7 @@ async function collectTasks() {
         exists('tables'),
         exists('orders'),
         get(Outlet.ref('whatsapp/status')).catch(() => null),
-        get(Outlet.ref('billing')).catch(() => null),
+        get(billingRef()).catch(() => null),
     ]);
     // A brand-new outlet simply has no Store node yet — that is "not done", not "unknown".
     // `null` is reserved for a read that actually failed.

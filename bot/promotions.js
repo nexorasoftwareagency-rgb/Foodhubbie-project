@@ -8,7 +8,7 @@ const {
     formatJid, getISTDateInfo, randomBetween, isSocketDead, OutboundTracker,
     isJidFrozen, maskJid, isMetaTransport
 } = require('./utils');
-const { db, resolvePath } = require('./firebase');
+const { db, resolvePath, billingPath } = require('./firebase');
 const { paceBurstSend } = require('./send-pacer');
 const outboundTracker = new OutboundTracker(db, resolvePath);
 
@@ -356,7 +356,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 // turn into free marketing sends. Recharge + re-issue to go on.
                 let tokenBalance;
                 try {
-                    const balSnap = await db.ref(resolvePath('billing/tokens/balance', OUTLET)).once('value');
+                    const balSnap = await db.ref(billingPath('tokens/balance', OUTLET)).once('value');
                     tokenBalance = Number(balSnap.val() || 0);
                 } catch (e) {
                     console.warn(`[Promo] Balance read failed — pausing ${campaignId}:`, e.message);
@@ -429,7 +429,7 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                     // so a concurrent write can't lose the decrement; clamped so
                     // a race can't drive the balance negative.
                     try {
-                        await db.ref(resolvePath('billing/tokens/balance', OUTLET)).transaction(v => Math.max(Number(v || 0) - 1, 0));
+                        await db.ref(billingPath('tokens/balance', OUTLET)).transaction(v => Math.max(Number(v || 0) - 1, 0));
                     } catch (e) {
                         console.warn('[Promo] Token decrement failed (message already sent):', e.message);
                     }

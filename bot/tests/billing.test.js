@@ -1,30 +1,30 @@
 /**
  * Promo-token billing path checks — the campaign guard/decrement read and
- * write billing/tokens/balance on every send; if resolvePath ever stopped
- * tenant-scoping `billing` the guard would read null (pause everything) or
- * the decrement would land nowhere.
+ * write the promo token balance on every send. The balance is MONEY, so it
+ * lives at the root `walletBilling/{bid}/{oid}` node, never under
+ * `businesses/{bid}` (the tenant holds `.write` on that subtree).
  * Run: node --test bot/tests/billing.test.js
  */
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { resolvePath } = require('../firebase');
+const { billingPath } = require('../firebase');
 
-test('billing/tokens/balance resolves tenant-scoped per outlet', () => {
+test('wallet ledger resolves to the root walletBilling node per outlet', () => {
     assert.strictEqual(
-        resolvePath('billing/tokens/balance'),
-        'businesses/roshani-pizza/outlets/pizza/billing/tokens/balance'
+        billingPath('tokens/balance'),
+        'walletBilling/roshani-pizza/pizza/tokens/balance'
     );
     assert.strictEqual(
-        resolvePath('billing/tokens/balance', 'cake'),
-        'businesses/roshani-cake/outlets/cake/billing/tokens/balance'
+        billingPath('tokens/balance', 'cake'),
+        'walletBilling/roshani-cake/cake/tokens/balance'
     );
 });
 
-test('billing is not a platform-shared root passthrough', () => {
-    // Shared nodes (admins, logs, …) return unchanged; billing must not.
-    assert.notStrictEqual(resolvePath('billing/tokens/balance'), 'billing/tokens/balance');
+test('wallet ledger never lives under the tenant-writable businesses subtree', () => {
+    assert.ok(!billingPath('tokens/balance').startsWith('businesses/'));
+    assert.ok(!billingPath('payments').startsWith('businesses/'));
 });
 
 test('token decrement clamp math', () => {

@@ -88,20 +88,6 @@
               ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)"
             },
             "outletNo": { ".read": "true" },
-            "billing": {
-              ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('outlet').val() == $outletId)",
-              ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
-              "payments": {
-                "$id": {
-                  ".validate": "newData.val() == null || (newData.hasChildren(['amount','method','period','createdAt']) && newData.child('amount').isNumber() && newData.child('amount').val() >= 0.01 && newData.child('amount').val() <= 10000000 && newData.child('method').isString() && (newData.child('method').val() == 'UPI' || newData.child('method').val() == 'Cash' || newData.child('method').val() == 'Card' || newData.child('method').val() == 'Bank') && newData.child('period').val().matches(/^[0-9]{4}-[0-9]{2}$/) && newData.child('createdAt').isNumber() && (!newData.child('note').exists() || (newData.child('note').isString() && newData.child('note').val().length <= 500)))"
-                }
-              },
-              "charges": {
-                "$id": {
-                  ".validate": "newData.val() == null || (newData.hasChildren(['amount','reason','period','createdAt']) && newData.child('amount').isNumber() && newData.child('amount').val() >= 0.01 && newData.child('amount').val() <= 10000000 && newData.child('reason').isString() && newData.child('reason').val().length <= 200 && newData.child('period').val().matches(/^[0-9]{4}-[0-9]{2}$/) && newData.child('createdAt').isNumber())"
-                }
-              }
-            },
             "otpAttempts": {
               "$orderId": {
                 ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('businessId').val() == $businessId || (root.child('admins').child(auth.uid).child('outlet').exists() && root.child('outletIndex').child(root.child('admins').child(auth.uid).child('outlet').val()).child('bid').val() == $businessId) || root.child('businesses').child($businessId).child('outlets').child($outletId).child('riders').child(auth.uid).exists())",
@@ -602,6 +588,24 @@
         }
       }
       },
+    "walletBilling": {
+      "$businessId": {
+        "$outletId": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true || root.child('admins').child(auth.uid).child('businessId').val() == $businessId || (root.child('admins').child(auth.uid).child('outlet').exists() && root.child('outletIndex').child(root.child('admins').child(auth.uid).child('outlet').val()).child('bid').val() == $businessId))",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",
+          "payments": {
+            "$id": {
+              ".validate": "newData.val() == null || (newData.hasChildren(['amount','method','period','createdAt']) && newData.child('amount').isNumber() && newData.child('amount').val() >= 0.01 && newData.child('amount').val() <= 10000000 && newData.child('method').isString() && (newData.child('method').val() == 'UPI' || newData.child('method').val() == 'Cash' || newData.child('method').val() == 'Card' || newData.child('method').val() == 'Bank') && newData.child('period').val().matches(/^[0-9]{4}-[0-9]{2}$/) && newData.child('createdAt').isNumber() && (!newData.child('note').exists() || (newData.child('note').isString() && newData.child('note').val().length <= 500)))"
+            }
+          },
+          "charges": {
+            "$id": {
+              ".validate": "newData.val() == null || (newData.hasChildren(['amount','reason','period','createdAt']) && newData.child('amount').isNumber() && newData.child('amount').val() >= 0.01 && newData.child('amount').val() <= 10000000 && newData.child('reason').isString() && newData.child('reason').val().length <= 200 && newData.child('period').val().matches(/^[0-9]{4}-[0-9]{2}$/) && newData.child('createdAt').isNumber())"
+            }
+          }
+        }
+      }
+    },
     "riderIndex": {
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).child('isSuper').val() == true || root.child('admins').child(auth.uid).child('isSupreme').val() == true)",

@@ -57,6 +57,17 @@ function resolvePath(path, outlet = 'pizza') {
     return outletPath(resolveBusinessIdFor(outlet), outlet, path);
 }
 
+/**
+ * Wallet/ledger path: walletBilling/{bid}/{oid}/{path} (ROOT node, server-owned).
+ * Never resolve money through businesses/{bid}: the tenant holds .write there.
+ * @param {string} path
+ * @param {string} [outlet='pizza']
+ */
+function billingPath(path, outlet = 'pizza') {
+    const { billingPath: build } = require('./helpers/outlet-resolution');
+    return build({ outletId: outlet || 'pizza' }, path);
+}
+
 // =============================
 // CACHE LAYER
 // =============================
@@ -147,6 +158,7 @@ async function saveUserProfile(jid, data, outlet = 'pizza') {
 module.exports = {
     db,
     resolvePath,
+    billingPath,
     getData,
     setData,
     updateData,

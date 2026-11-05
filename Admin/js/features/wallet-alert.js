@@ -7,7 +7,7 @@
  * balance needs lifetime usage; restaurants that never topped up are skipped (the setup
  * checklist covers them) so new outlets cost no extra read.
  */
-import { Outlet, get } from '../firebase.js';
+import { Outlet, billingRef, get } from '../firebase.js';
 import { state } from '../state.js';
 import { canAccessTab, SUPPORT_WA } from '../ui.js';
 import { computeWallet, LOW_BALANCE_RATIO } from '../../shared/cost-math.js';
@@ -20,7 +20,7 @@ const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFract
 
 async function loadWallet() {
     if (_cache && _cache.outlet === Outlet.current && Date.now() - _cache.at < CACHE_MS) return _cache.wallet;
-    const billingSnap = await get(Outlet.ref('billing'));
+    const billingSnap = await get(billingRef());
     const billing = billingSnap.val() || {};
     // Never topped up: nothing to warn about, skip the heavy orders read.
     const paidAny = Object.values(billing.payments || {}).some((p) => Number(p && p.amount) > 0);

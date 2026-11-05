@@ -7,7 +7,7 @@
 
 import {
     db, auth, Outlet, tenantRef, ref, get, onValue, set, update, remove, push, runTransaction,
-    query, orderByChild, equalTo, limitToLast, serverTimestamp,
+    query, orderByChild, equalTo, limitToLast, serverTimestamp, billingRef,
     isConnected, onConnectionChange
 } from '../firebase.js';
 import { PROMO_RATE } from '../../shared/cost-math.js';
@@ -492,7 +492,7 @@ async function _launchCampaign() {
 
     // Pre-flight promo token check — hard block if insufficient
     try {
-        const balSnap = await get(_ref('billing/tokens/balance'));
+        const balSnap = await get(billingRef('tokens/balance'));
         const tokenBalance = balSnap.exists() ? Number(balSnap.val() || 0) : 0;
         const needed = recipients.length;
         const estimatedCost = (needed * PROMO_RATE).toFixed(2);

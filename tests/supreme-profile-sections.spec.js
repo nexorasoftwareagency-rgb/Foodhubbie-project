@@ -91,19 +91,26 @@ async function createTempBusiness() {
       verifiedName: 'E2E Store',
       phoneNumberId: '123456789',
     },
-    billing: {
-      mode: 'per_order',
-      setup: { amount: 500, status: 'non_refundable' },
-      tokens: { balance: 15 },
-      rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1 },
-      tokenPacks: { welcome: { qty: 15 } },
-    },
+  });
+  // Money lives at the root (server-owned; businesses/{bid} is tenant-writable).
+  await admin.database().ref(`walletBilling/${bid}/${oid}`).set({
+    mode: 'per_order',
+    setup: { amount: 500, status: 'non_refundable' },
+    tokens: { balance: 15 },
+    rates: { QR: 2, POS: 1, webview_delivery: 5, WA: 5, other: 2, promo: 1 },
+    tokenPacks: { welcome: { qty: 15 } },
   });
   return { bid, oid };
 }
 
 async function cleanup(uid, bid) {
-  if (bid) await admin.database().ref(`businesses/${bid}`).remove().catch(() => {});
+  if (bid) {
+    const outlets = ((await admin.database().ref(`businesses/${bid}/outlets`).get()).val()) || {};
+    for (const oid of Object.keys(outlets)) {
+      await admin.database().ref(`walletBilling/${bid}/${oid}`).remove().catch(() => {});
+    }
+    await admin.database().ref(`businesses/${bid}`).remove().catch(() => {});
+  }
   if (uid) {
     await admin.database().ref(`admins/${uid}`).remove().catch(() => {});
     await admin.auth().deleteUser(uid).catch(() => {});

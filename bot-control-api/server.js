@@ -497,11 +497,12 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
             // Email only. The password lives in Firebase Auth and nowhere else — this node
             // inherits businesses/{bid}/.read, which every staff role of the tenant can read.
             adminLogin: { email: adminEmail, updatedAt: now },
-            billing: getBillingDefaults(),
             settings: { ...(tplDefaults?.settings || {}), features: { ...(tplDefaults?.settings?.features || {}), discountApproval: false } },
           },
         },
       },
+      // Money lives at the ROOT, outside businesses/{bid} (tenant-writable).
+      [`walletBilling/${bid}/${oid}`]: getBillingDefaults(),
       // Required by the admins/{uid} create rule and the riderIndex validate — without it the
       // owner cannot add staff or riders (the write fails AFTER the Auth user is created).
       [`outletIndex/${oid}`]: { bid, name: outletName, createdAt: now },
@@ -684,7 +685,7 @@ async function runUnverifiedCleanup() {
     const base = `businesses/${r.bid}/outlets/${r.oid}`;
     const [orders, payments] = await Promise.all([
       admin.database().ref(`${base}/orders`).limitToFirst(1).get(),
-      admin.database().ref(`${base}/billing/payments`).limitToFirst(1).get(),
+      admin.database().ref(`walletBilling/${r.bid}/${r.oid}/payments`).limitToFirst(1).get(),
     ]);
     if (orders.exists() || payments.exists()) continue;
 

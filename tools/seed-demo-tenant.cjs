@@ -1436,7 +1436,6 @@ function buildSettings({ rnd, fx }) {
         feedbacks,
         loyalty: { config: loyaltyData.config, rankings: loyaltyData.rankings },
         audit: { staffChanges: staffData.staffChanges },
-        billing: buildBilling(),
         settings,
         dineinSettings: {
             taxEnabled: true,
@@ -1517,6 +1516,10 @@ function buildSettings({ rnd, fx }) {
     // 2. Business subtree (whole-node replace: the demo tenant has no live writers)
     await db.ref(`businesses/${BID}`).set(business);
     console.log('[demo-seed] wrote businesses/' + BID);
+
+    // Money lives at the ROOT (server-owned): businesses/{bid} is tenant-writable.
+    await db.ref(`walletBilling/${BID}/${OID}`).set(buildBilling());
+    console.log('[demo-seed] wrote walletBilling/' + BID + '/' + OID);
 
     // 3. Admin node
     await db.ref(`admins/${user.uid}`).set({

@@ -1,10 +1,12 @@
 /**
  * Single source of live data for the whole app.
  *
- * Keeps ONE `.on('value')' listener on `businesses` for the entire
- * session — every feature module subscribes here instead of attaching
- * its own Firebase listener. This is what makes bot status "real-time"
- * (improvement: Orchestrator/status-watcher writes to
+ * Keeps TWO `.on('value')' listeners for the entire session — `businesses`
+ * plus the root `walletBilling` node (money lives outside the tenant's own
+ * write subtree; it is merged back into `outlet.billing` below, so features
+ * never learn the difference). Every feature module subscribes here instead
+ * of attaching its own Firebase listener. This is what makes bot status
+ * "real-time" (improvement: Orchestrator/status-watcher writes to
  * businesses/{bid}/outlets/{oid}/botStatus on every state change; this
  * store's existing listener picks it up for free, no polling).
  *
@@ -18,10 +20,38 @@
 import { showToast } from '/js/utils.js';
 
 let raw = {};              // last snapshot of the `businesses` node
+let walletRaw = {};        // last snapshot of the `walletBilling` node (root, server-owned)
 let ready = false;
 let started = false;
 let dbRef = null;
 const subscribers = new Set();
+
+// Money lives at the ROOT (walletBilling/{bid}/{oid}) because the tenant holds
+// businesses/{bid}/.write — an ancestor grant RTDB cannot deny deeper down.
+// Merge it into the same `outlet.billing` shape every feature already reads, so
+// the relocation is invisible above this line.
+function merged() {
+  if (!walletRaw || !Object.keys(walletRaw).length) return raw;
+  const out = {};
+  for (const [bid, biz] of Object.entries(raw)) {
+    const wb = walletRaw[bid];
+    const outlets = biz.outlets || {};
+    if (!wb) { out[bid] = biz; continue; }
+    const nextOutlets = {};
+    for (const [oid, outlet] of Object.entries(outlets)) {
+      nextOutlets[oid] = wb[oid] ? { ...outlet, billing: wb[oid] } : outlet;
+    }
+    out[bid] = { ...biz, outlets: nextOutlets };
+  }
+  return out;
+}
+
+function emit() {
+  const snap = merged();
+  subscribers.forEach((fn) => {
+    try { fn(snap); } catch (err) { console.error('data-store: subscriber error', err); }
+  });
+}
 
 function start() {
   if (started) return;
@@ -33,12 +63,18 @@ function start() {
     // One subscriber's exception must not starve the rest of the app of live
     // updates — forEach stops at the first throw, silently killing delivery
     // to every subscriber after the broken one. Isolate each call.
-    subscribers.forEach((fn) => {
-      try { fn(raw); } catch (err) { console.error('data-store: subscriber error', err); }
-    });
+    emit();
   }, (err) => {
     console.error('data-store: businesses listener error', err);
     showToast('Lost the live connection — reconnecting…', 'error');
+  });
+
+  firebase.database().ref('walletBilling').on('value', (snap) => {
+    walletRaw = snap.val() || {};
+    if (ready) emit();
+  }, (err) => {
+    // Read is super/supreme/own-business; a support role must not break the store.
+    console.error('data-store: walletBilling listener error', err);
   });
 }
 
@@ -47,12 +83,12 @@ function start() {
 export function subscribe(fn) {
   start();
   subscribers.add(fn);
-  if (ready) fn(raw); // fire immediately with whatever we already have
+  if (ready) fn(merged()); // fire immediately with whatever we already have
   return () => subscribers.delete(fn);
 }
 
 export function getRawBusinesses() {
-  return raw;
+  return merged();
 }
 
 // Flattens businesses -> outlets into the row shape every table/grid
@@ -60,7 +96,7 @@ export function getRawBusinesses() {
 // on field names.
 export function flattenOutlets({ includeDisabled = false } = {}) {
   const rows = [];
-  Object.entries(raw).forEach(([bid, biz]) => {
+  Object.entries(merged()).forEach(([bid, biz]) => {
     Object.entries(biz.outlets || {}).forEach(([oid, outlet]) => {
       const disabled = outlet.disabled === true;
       if (disabled && !includeDisabled) return; // disabled rows only on the Disabled tab

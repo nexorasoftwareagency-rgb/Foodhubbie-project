@@ -388,8 +388,6 @@ async function handleSubmit(e) {
             ...(outletNo ? { outletNo } : {}),
             whatsapp: { status: 'pending' },
             ...(tplDefaults || {}),
-            // Billing defaults from shared module
-            billing: getBillingDefaults(),
             // Feature flags default OFF for new restaurants (user scope answer).
             // Nested merge so a template's own settings AND feature flags
             // survive; our discountApproval flag still wins.
@@ -397,6 +395,9 @@ async function handleSubmit(e) {
           },
         },
       },
+      // Billing defaults live at the ROOT (walletBilling/{bid}/{oid}) — money
+      // must sit outside businesses/{bid}, whose .write is granted to the tenant.
+      [`walletBilling/${bid}/${oid}`]: getBillingDefaults(),
       // Rider-readable enumerization index (riders cannot read `businesses`).
       [`outletIndex/${oid}`]: {
         bid,
