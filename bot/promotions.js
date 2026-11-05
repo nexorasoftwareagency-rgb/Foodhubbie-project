@@ -265,6 +265,12 @@ async function runPromotionCampaign(sock, cmd, ctx) {
         console.warn(`[Promo] Invalid campaign command: ${campaignId}`);
         return;
     }
+    // A self-test is never billed: it goes to the owner's own number, consumes no
+    // token, and the Admin/Supreme promo line skips campaigns marked isTest (the
+    // `test_` id prefix covers campaigns written before this flag existed).
+    if (isTest) {
+        await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}/isTest`, OUTLET)).set(true).catch(() => {});
+    }
     // BAN-RISK: campaigns never start on Baileys — pause with a visible reason
     // (Admin shows pauseReason). Re-enabled automatically when meta transport
     // (official WhatsApp API) is active.

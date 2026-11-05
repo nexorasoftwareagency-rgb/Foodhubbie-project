@@ -76,6 +76,17 @@ const _r2 = (x) => Math.round(x * 100) / 100;
 export function minTopUpFor(hasWhatsApp) { return hasWhatsApp ? MIN_TOPUP_WITH_WA : MIN_TOPUP; }
 
 /**
+ * True when a campaign's sends count toward billing. A self-test goes to the
+ * owner's own number, is never paced, and the bot skips its token decrement —
+ * so it must never reach the wallet either. The `test_` id prefix covers
+ * campaigns written before the `isTest` flag existed (Admin mints `test_<ts>`).
+ */
+export function isBilledCampaign(id, campaign) {
+    if (campaign && campaign.isTest === true) return false;
+    return !(id && /^test_/i.test(String(id)));
+}
+
+/**
  * Prepaid wallet view of the existing billing ledger.
  * balance = paid - (order fees + promo sends + manual charges). Same numbers as Supreme's "due", sign flipped.
  * `billing` = outlet.billing node, `orders` = all outlet orders, `campaigns` = bot.promotions.campaigns,
@@ -87,7 +98,7 @@ export function computeWallet({ billing, orders, campaigns, hasWhatsApp = false 
     const mode = normalizeMode(b.mode);
     const idx = computeCostIndex(orders || {}, rates, mode);
     let promoSent = 0;
-    for (const c of Object.values(campaigns || {})) promoSent += _n(c && c.totalSent);
+    for (const [id, c] of Object.entries(campaigns || {})) if (isBilledCampaign(id, c)) promoSent += _n(c && c.totalSent);
     const sum = (node) => Object.values(node || {}).reduce((a, x) => a + _n(x && x.amount), 0);
     const paid = _r2(sum(b.payments));
     const charges = _r2(sum(b.charges));
@@ -232,6 +243,12 @@ function selfCheck(assert) {
     assert.equal(computeWallet({ hasWhatsApp: true }).minTopUp, MIN_TOPUP_WITH_WA, 'minTopUp is exposed for the UI');
     assert.equal(minTopUpFor(false), MIN_TOPUP); assert.equal(minTopUpFor(true), MIN_TOPUP_WITH_WA);
     assert.equal(computeWallet({}).balance, 0, 'empty is zero');
+    // a promo self-test is never billable (it consumes no token either)
+    assert.equal(isBilledCampaign('c_offer', { totalSent: 209 }), true, 'a real campaign bills');
+    assert.equal(isBilledCampaign('c_demo_done', {}), true, 'a campaign with no sends still bills nothing');
+    assert.equal(isBilledCampaign('test_muo2vog7', { totalSent: 4 }), false, 'legacy test_ campaign excluded');
+    assert.equal(isBilledCampaign('c_x', { isTest: true, totalSent: 4 }), false, 'isTest flag excluded');
+    assert.equal(computeWallet({ campaigns: { test_a: { totalSent: 5 }, real: { totalSent: 2 } } }).used, 2, 'only real sends bill');
     // percentage package: 1% QR/POS, 3% WhatsApp, 2% Customer App; cancelled still excluded
     const pkPct = computeCostIndex({ a: o(1000, 'QR'), b: o(500, 'POS'), c: o(1000, 'webview_delivery'), d: o(200, 'WA'), e: o(100, 'other'), f: o(9999, 'QR', 'Cancelled') }, DEFAULT_RATES, 'percentage');
     assert.equal(pkPct.total, 10 + 5 + 30 + 6 + 3, '1% QR/POS + 3% WhatsApp/other');

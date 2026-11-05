@@ -18,7 +18,7 @@
 import { Outlet, billingRef, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { state } from '../state.js';
 import { SUPPORT_WA } from '../ui.js';
-import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel, isBilledOrder } from '../../shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel, isBilledOrder, isBilledCampaign } from '../../shared/cost-math.js';
 
 let _unsubs = [];
 let _orders = {};
@@ -184,10 +184,9 @@ function _render() {
     const w = _billing && typeof _billing === 'object' ? _billing.tokenPacks?.welcome : null;
     if (w && bal === w.qty) _setText('costKpiTokensTrend', 'free welcome pack untouched');
 
-    // --- promo usage (campaign sends) ---
+    // --- promo usage (campaign sends; a self-test is never billed) ---
     let used = 0;
-    if (_campaigns) for (const c of Object.values(_campaigns)) used += Number(c?.totalSent || 0);
-    _setText('costPromoUsed', String(used));
+    if (_campaigns) for (const [id, c] of Object.entries(_campaigns)) if (isBilledCampaign(id, c)) used += Number(c?.totalSent || 0);
     _setText('costKpiPromo', _inr(used * PROMO_RATE));
     _setText('costKpiPromoTrend', `${used} token${used === 1 ? '' : 's'} used × ₹${PROMO_RATE}`);
 

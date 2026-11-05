@@ -30,6 +30,10 @@ assert.equal(e.walletBalance.textContent, '₹989', e.walletBalance.textContent)
 assert.ok(e.walletStatus.textContent.includes('Your restaurant is live.'), e.walletStatus.textContent);
 assert.ok(e.walletHistoryBody.innerHTML.includes('RCP-1') && e.walletHistoryBody.innerHTML.includes('UPI'));
 console.log('PASS wallet = topped up - usage; history listed; live status');
+e = await run({ billing: { payments: { a: { amount: 1000, createdAt: 1 } } }, orders: {}, 'bot/promotions/campaigns': { c: { totalSent: 10 }, test_1: { totalSent: 3 }, t2: { isTest: true, totalSent: 2 } } });
+assert.equal(e.walletBalance.textContent, '₹990', e.walletBalance.textContent);
+assert.equal(e.costKpiPromo.textContent, '₹10', e.costKpiPromo.textContent);
+console.log('PASS promo self-tests are never billed (wallet + KPI)');
 e = await run({ billing: { payments: {} }, orders: {} }, true);
 assert.ok(e.walletStatus.textContent.includes('Top up at least ₹1,000')); assert.ok(e.walletHistoryBody.innerHTML.includes('No top-ups yet'));
 console.log('PASS no top-up: prompts for minimum');
@@ -191,6 +195,15 @@ console.log('ALL PASSED');
 `);
 
 let bad = 0;
+// --- source guards: one promo billing rule, applied by every surface ---
+try {
+  const read = (p) => fs.readFileSync(p, 'utf8');
+  if (!read('shared/cost-math.js').includes('export function isBilledCampaign')) throw new Error('shared promo billing rule missing');
+  if (!read('Admin/js/features/costs.js').includes('isBilledCampaign(')) throw new Error('Admin Costs does not apply the rule');
+  if (!read('SupremeAdmin/js/billing-shared.js').includes('billableCampaignsOf')) throw new Error('Supreme does not apply the rule');
+  if (!read('bot/promotions.js').includes('campaigns/${campaignId}/isTest')) throw new Error('the bot does not stamp test campaigns');
+  console.log('PASS promo self-test rule is shared by Admin, Supreme and the bot');
+} catch (e) { bad++; console.error('FAIL ' + e.message); }
 for (const f of ['wallet.mjs', 'checklist.mjs', 'alert.mjs']) {
   const r = spawnSync(process.execPath, [f], { cwd: tmp, encoding: 'utf8' });
   process.stdout.write(r.stdout); if (r.status !== 0) { bad++; process.stderr.write(r.stderr); }

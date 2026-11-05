@@ -8,7 +8,7 @@
  * sends at PROMO_RATE. Scope = time window over createdAt (ISO string or ms).
  * Months are Asia/Kolkata calendar months.
  */
-import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, computeCostIndex, normalizeMode } from '/shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, computeCostIndex, normalizeMode, isBilledCampaign } from '/shared/cost-math.js';
 import { escapeHtml, showToast } from '/js/utils.js';
 
 const IST = '+05:30';
@@ -64,6 +64,8 @@ export const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximum
 
 const list = (obj) => (obj ? Object.entries(obj).map(([id, v]) => ({ id, ...(v || {}) })) : []);
 const ordersOf = (o) => list(o.orders);
+// a promo self-test consumes no token and is never billed (shared rule)
+const billableCampaignsOf = (o) => list(o.bot?.promotions?.campaigns).filter((c) => isBilledCampaign(c.id, c));
 
 function billingOf(outlet) {
   const b = outlet.billing || {};
@@ -80,7 +82,7 @@ export function scopeStats(outlet, scope) {
   const orders = {};
   let promo = 0, promoTokens = 0;
   for (const o of ordersOf(outlet)) if (inScope(tsOf(o), scope)) orders[o.id] = o;
-  for (const c of list(outlet.bot?.promotions?.campaigns)) {
+  for (const c of billableCampaignsOf(outlet)) {
     if (inScope(tsOf(c), scope)) {
       const sent = Number(c.totalSent || 0);
       promoTokens += sent;
@@ -109,7 +111,7 @@ export function monthlyRows(outlet) {
     return b;
   };
   for (const o of ordersOf(outlet)) bucket(tsOf(o)).orders[o.id] = o;
-  for (const c of list(outlet.bot?.promotions?.campaigns)) bucket(tsOf(c)).promo += Number(c.totalSent || 0) * PROMO_RATE;
+  for (const c of billableCampaignsOf(outlet)) bucket(tsOf(c)).promo += Number(c.totalSent || 0) * PROMO_RATE;
   for (const c of list(outlet.billing?.charges)) bucket(tsOf(c)).charges += Number(c.amount || 0);
   for (const p of list(outlet.billing?.payments)) bucket(tsOf(p)).paid += Number(p.amount || 0);
   return [...buckets.entries()]
