@@ -1191,13 +1191,13 @@ function buildBilling() {
         },
         payments: {
             pay_demo_1: {
-                amount: 1500, method: 'UPI', period: ymd(NOW - 56 * DAY).slice(0, 7),
+                amount: 10000, method: 'UPI', period: ymd(NOW - 56 * DAY).slice(0, 7),
                 note: 'Advance top-up', createdAt: NOW - 56 * DAY,
                 createdBy: 'system', receiptNo: 'RCP-DEMO-0001',
             },
             pay_demo_2: {
-                amount: 1990, method: 'Card', period: ymd(NOW - 27 * DAY).slice(0, 7),
-                note: 'Monthly settlement', createdAt: NOW - 27 * DAY,
+                amount: 5000, method: 'Card', period: ymd(NOW - 27 * DAY).slice(0, 7),
+                note: 'Quarterly top-up', createdAt: NOW - 27 * DAY,
                 createdBy: 'system', receiptNo: 'RCP-DEMO-0002',
             },
         },

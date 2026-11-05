@@ -79,6 +79,13 @@ This rule applies to:
 - **Live proof:** owner reads own ledger 200 but cannot write mode / mint a payment / delete history / disarm `wallet.enforce` (all 401) or read another tenant (401); super reads+writes; anonymous 401 and cannot list ledgers; `walletGate` still publicly readable. All 19 legacy `businesses/*/outlets/*/billing` nodes pruned; `walletBilling` intact (pizza 3 payments / 26 tokens, demo 2 payments + 2 charges, cake/e2e 15 tokens each). Admin demo Costs renders balance + payments and Supreme profile card/payment/mode round-trip reads/writes the root node with 0 page errors (11/11). EC2 md5-matched, pm2 2/6/35 online with no restart loop.
 - **Gotcha fixed during the prune:** before the prune, Supreme's root `walletBilling` listener was quietly failing (a child grant does not allow a parent listener) and the card was still being served by the legacy node. With the legacy node gone the card showed "Not seeded"; adding the super/supreme root `.read` fixed it and the isolation probe still passes. Any future root-level listener needs a root read rule.
 
+### ✅ Audit item C — demo/copy: healthy public demo + tenant-facing wallet copy (2026-11-05)
+- **Stage:** `done` — demo reseeded live, Admin hosting deployed, EC2 demo seeder synced.
+- **Problem:** the public demo opened with a red "Wallet balance finished −₹910" dashboard banner, and Costs showed the legacy per-order rate card plus "Non-refundable · ₹500" setup (the demo ledger predated the 2026-11-03 percentage/no-setup switch). The tenant status line also leaked internal gate states: "(Wallet gate: observe mode — not enforced.)".
+- **Fix:** `tools/seed-demo-tenant.cjs` payments now total ₹15,000 (₹10,000 + ₹5,000) so the seeded demo wallet stays ~+₹9.2k after usage + charges (nightly reseed keeps it healthy); `Admin/js/features/costs.js` drops the internal gate suffix and only states the consequence when the gate is enforced ("New orders pause automatically if the balance runs out."). Demo reseeded now (percentage plan, setup ₹0/none, 353 orders).
+- **Verified live 11/11:** no dashboard wallet alert; balance ₹9,182.45; "Your restaurant is live." with no gate jargon; rate card App 2% / WhatsApp 3% / QR+POS 1%; "No setup fee"; no ₹500/legacy copy; Supreme demo row no longer "wallet empty" and is Settled; 0 page errors. Admin shell `v5.12.18`; `hosting:admin` deployed; EC2 `/home/ubuntu/demo-seed/tools/seed-demo-tenant.cjs` md5-matched.
+
+
 
 
 ### ✅ D5 — Pricing / percentage-package marketing consistency

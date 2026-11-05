@@ -313,10 +313,10 @@ function _renderWallet() {
         else if (w.level === 'empty') msg = 'Your wallet balance is finished. Please top up now to avoid interruption.';
         else if (w.level === 'low') msg = `Low balance: 25% or less of your top-ups is left. Please top up soon.`;
         else msg = 'Your restaurant is live.';
-        if (!published) {
-            msg = enforce
-                ? `${msg} (Wallet gate: enforced — new orders pause when the balance runs out.)`
-                : `${msg} (Wallet gate: observe mode — not enforced.)`;
+        if (!published && enforce) {
+            // Never show internal gate terminology to a tenant: only the
+            // consequence matters ("new orders pause automatically").
+            msg = `${msg} New orders pause automatically if the balance runs out.`;
         }
         _setText('walletStatus', msg);
         const hero = document.getElementById('walletHero');
