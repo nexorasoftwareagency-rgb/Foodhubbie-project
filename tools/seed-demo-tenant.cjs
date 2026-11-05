@@ -1188,6 +1188,13 @@ function buildBilling() {
                 qty: 15, priceRs: 0, note: 'Free welcome pack',
                 grantedAt: NOW - 88 * DAY, grantedBy: 'system',
             },
+            // 200 of the 209 campaign sends were paid from this prepaid pack; the
+            // remaining 9 bill at ₹1 on the wallet. Keeps the demo honest under the
+            // prepaid-token model (tokens pay for sends, the wallet bills the rest).
+            pack_demo: {
+                qty: 200, priceRs: 200, note: 'Prepaid promo tokens',
+                grantedAt: NOW - 40 * DAY, grantedBy: 'system',
+            },
         },
         payments: {
             pay_demo_1: {

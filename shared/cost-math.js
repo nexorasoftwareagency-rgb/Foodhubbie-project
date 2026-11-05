@@ -87,6 +87,48 @@ export function isBilledCampaign(id, campaign) {
 }
 
 /**
+ * Promo token pool: `issued` = welcome pack + every granted pack, `remaining` =
+ * the prepaid balance the bot still has to spend, `used` = tokens already
+ * consumed by sends. A pack is prepaid money (the restaurant bought or was
+ * granted it), so a consumed token pays for one send — the wallet never
+ * charges that send again.
+ */
+export function tokenPool(billing) {
+    let issued = 0;
+    for (const p of Object.values((billing && billing.tokenPacks) || {})) issued += _n(p && p.qty);
+    const remaining = Math.max(0, _n(billing && billing.tokens && billing.tokens.balance));
+    return { issued: _r2(issued), remaining, used: Math.max(0, _r2(issued - remaining)) };
+}
+
+/**
+ * Promo sends split by who pays for them. Prepaid tokens cover sends oldest
+ * first, so a dated report and the all-time wallet add up to the same number:
+ * `cost` is only the sends the token balance did not cover. Test sends are
+ * excluded entirely (isBilledCampaign). `per[campaignId]` lets the Supreme
+ * record page bill a scope without re-deriving the split.
+ */
+export function promoSendUsage({ billing, campaigns } = {}) {
+    const rows = [];
+    for (const [id, c] of Object.entries(campaigns || {})) {
+        if (!isBilledCampaign(id, c)) continue;
+        const sent = _n(c && c.totalSent);
+        if (sent > 0) rows.push({ id, sent, ts: _n(c && (c.startedAt ?? c.createdAt ?? c.completedAt)) });
+    }
+    rows.sort((a, b) => (a.ts - b.ts) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    let pool = tokenPool(billing).used;
+    let covered = 0, billed = 0;
+    const per = {};
+    for (const r of rows) {
+        const take = Math.min(pool, r.sent);
+        pool -= take;
+        covered += take;
+        billed += r.sent - take;
+        per[r.id] = { sent: r.sent, covered: take, billed: r.sent - take };
+    }
+    return { sends: covered + billed, covered, billed, cost: _r2(billed * PROMO_RATE), per };
+}
+
+/**
  * Prepaid wallet view of the existing billing ledger.
  * balance = paid - (order fees + promo sends + manual charges). Same numbers as Supreme's "due", sign flipped.
  * `billing` = outlet.billing node, `orders` = all outlet orders, `campaigns` = bot.promotions.campaigns,
@@ -97,14 +139,17 @@ export function computeWallet({ billing, orders, campaigns, hasWhatsApp = false 
     const rates = { ...DEFAULT_RATES, ...(b.rates || {}) };
     const mode = normalizeMode(b.mode);
     const idx = computeCostIndex(orders || {}, rates, mode);
-    let promoSent = 0;
-    for (const [id, c] of Object.entries(campaigns || {})) if (isBilledCampaign(id, c)) promoSent += _n(c && c.totalSent);
+    const promo = promoSendUsage({ billing: b, campaigns });
     const sum = (node) => Object.values(node || {}).reduce((a, x) => a + _n(x && x.amount), 0);
     const paid = _r2(sum(b.payments));
     const charges = _r2(sum(b.charges));
-    const used = _r2(idx.total + promoSent * PROMO_RATE);
+    const used = _r2(idx.total + promo.cost);
     const minTopUp = minTopUpFor(hasWhatsApp);
-    return { paid, charges, used, balance: _r2(paid - used - charges), topUpDone: paid >= minTopUp, minTopUp, level: walletLevel({ paid, used, charges }) };
+    return {
+        paid, charges, used, balance: _r2(paid - used - charges), topUpDone: paid >= minTopUp, minTopUp,
+        level: walletLevel({ paid, used, charges }),
+        promoSends: promo.sends, promoCovered: promo.covered, promoBilled: promo.billed,
+    };
 }
 
 /** 'none' (never topped up) | 'ok' | 'low' (balance <= 25% of total topped up) | 'empty' (balance <= 0). */
@@ -249,6 +294,22 @@ function selfCheck(assert) {
     assert.equal(isBilledCampaign('test_muo2vog7', { totalSent: 4 }), false, 'legacy test_ campaign excluded');
     assert.equal(isBilledCampaign('c_x', { isTest: true, totalSent: 4 }), false, 'isTest flag excluded');
     assert.equal(computeWallet({ campaigns: { test_a: { totalSent: 5 }, real: { totalSent: 2 } } }).used, 2, 'only real sends bill');
+    // --- prepaid promo tokens: a consumed token already paid for one send ---
+    const pool = { tokenPacks: { welcome: { qty: 15 } }, tokens: { balance: 15 } };
+    assert.deepEqual(tokenPool(pool), { issued: 15, remaining: 15, used: 0 });
+    assert.equal(promoSendUsage({ billing: pool, campaigns: { a: { totalSent: 10, startedAt: 1 } } }).cost, 10, 'an unused token covers nothing yet');
+    const spent = { tokenPacks: { welcome: { qty: 15 } }, tokens: { balance: 5 } };
+    assert.equal(promoSendUsage({ billing: spent, campaigns: { a: { totalSent: 10, startedAt: 1 } } }).cost, 0, '10 consumed tokens cover 10 sends');
+    const split = promoSendUsage({
+        billing: { tokenPacks: { welcome: { qty: 15 }, p2: { qty: 5 } }, tokens: { balance: 12 } },
+        campaigns: { late: { totalSent: 4, startedAt: 2 }, early: { totalSent: 10, startedAt: 1 } }, // unsorted on purpose
+    });
+    assert.equal(split.sends, 14); assert.equal(split.covered, 8); assert.equal(split.billed, 6); assert.equal(split.cost, 6);
+    assert.deepEqual(split.per.early, { sent: 10, covered: 8, billed: 2 }, 'oldest sends take the tokens first');
+    assert.deepEqual(split.per.late, { sent: 4, covered: 0, billed: 4 });
+    assert.equal(promoSendUsage({ billing: pool, campaigns: { t: { totalSent: 5, isTest: true } } }).cost, 0, 'a test is never billed even with no tokens');
+    assert.equal(computeWallet({ billing: { ...spent, payments: { p: { amount: 1000 } } }, campaigns: { a: { totalSent: 10, startedAt: 1 } } }).balance, 1000, 'prepaid sends never touch the wallet');
+    assert.equal(computeWallet({ billing: spent, campaigns: { a: { totalSent: 10, startedAt: 1 } } }).promoBilled, 0, 'exposes how many sends were billed');
     // percentage package: 1% QR/POS, 3% WhatsApp, 2% Customer App; cancelled still excluded
     const pkPct = computeCostIndex({ a: o(1000, 'QR'), b: o(500, 'POS'), c: o(1000, 'webview_delivery'), d: o(200, 'WA'), e: o(100, 'other'), f: o(9999, 'QR', 'Cancelled') }, DEFAULT_RATES, 'percentage');
     assert.equal(pkPct.total, 10 + 5 + 30 + 6 + 3, '1% QR/POS + 3% WhatsApp/other');

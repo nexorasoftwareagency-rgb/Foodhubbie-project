@@ -8,7 +8,7 @@
  * sends at PROMO_RATE. Scope = time window over createdAt (ISO string or ms).
  * Months are Asia/Kolkata calendar months.
  */
-import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, computeCostIndex, normalizeMode, isBilledCampaign } from '/shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, computeCostIndex, normalizeMode, isBilledCampaign, promoSendUsage } from '/shared/cost-math.js';
 import { escapeHtml, showToast } from '/js/utils.js';
 
 const IST = '+05:30';
@@ -82,11 +82,13 @@ export function scopeStats(outlet, scope) {
   const orders = {};
   let promo = 0, promoTokens = 0;
   for (const o of ordersOf(outlet)) if (inScope(tsOf(o), scope)) orders[o.id] = o;
+  // Prepaid tokens pay for sends (oldest first); only uncovered sends bill at ₹1.
+  const alloc = promoSendUsage({ billing: outlet.billing, campaigns: outlet.bot?.promotions?.campaigns });
   for (const c of billableCampaignsOf(outlet)) {
-    if (inScope(tsOf(c), scope)) {
-      const sent = Number(c.totalSent || 0);
-      promoTokens += sent;
-      promo += sent * PROMO_RATE;
+    const a = alloc.per[c.id];
+    if (a && inScope(tsOf(c), scope)) {
+      promoTokens += a.sent;
+      promo += a.billed * PROMO_RATE;
     }
   }
   const idx = computeCostIndex(orders, rates, mode);
@@ -111,7 +113,12 @@ export function monthlyRows(outlet) {
     return b;
   };
   for (const o of ordersOf(outlet)) bucket(tsOf(o)).orders[o.id] = o;
-  for (const c of billableCampaignsOf(outlet)) bucket(tsOf(c)).promo += Number(c.totalSent || 0) * PROMO_RATE;
+  // Prepaid tokens pay for sends (oldest first); bill only the uncovered ones.
+  const alloc = promoSendUsage({ billing: outlet.billing, campaigns: outlet.bot?.promotions?.campaigns });
+  for (const c of billableCampaignsOf(outlet)) {
+    const a = alloc.per[c.id];
+    if (a) bucket(tsOf(c)).promo += a.billed * PROMO_RATE;
+  }
   for (const c of list(outlet.billing?.charges)) bucket(tsOf(c)).charges += Number(c.amount || 0);
   for (const p of list(outlet.billing?.payments)) bucket(tsOf(p)).paid += Number(p.amount || 0);
   return [...buckets.entries()]

@@ -34,6 +34,13 @@ Current revenue rates â€” **percentage plan, in force since 2026-11-01** (`
 
 Cancelled and refunded orders are never billed.
 
+**Promo tokens are prepaid.** A purchased or granted token pays for one already-sent
+marketing message, so the wallet bills only the sends the prepaid balance did **not**
+cover (`shared/cost-math.js promoSendUsage`, consumed tokens applied oldest-send-first).
+Self-test sends are never billed and never consume a token. Buying a token pack is
+therefore not double-charged: the pack is the prepayment, the wallet sees ₹0 for the
+sends it covers.
+
 **Superseded model:** the flat â‚¹2 QR / â‚¹1 POS / â‚¹5 WhatsApp per-order rates and the
 `commission_1pct` option are **legacy modes only** â€” they stay readable so old rows still compute,
 but every outlet is migrated to `percentage` (`tools/seed-billing-defaults.cjs`, `--apply`).

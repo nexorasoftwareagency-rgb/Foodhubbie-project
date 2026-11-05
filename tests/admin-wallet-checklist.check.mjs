@@ -34,6 +34,11 @@ e = await run({ billing: { payments: { a: { amount: 1000, createdAt: 1 } } }, or
 assert.equal(e.walletBalance.textContent, '₹990', e.walletBalance.textContent);
 assert.equal(e.costKpiPromo.textContent, '₹10', e.costKpiPromo.textContent);
 console.log('PASS promo self-tests are never billed (wallet + KPI)');
+e = await run({ billing: { payments: { a: { amount: 1000 } }, tokenPacks: { welcome: { qty: 15 } }, tokens: { balance: 5 } }, orders: {}, 'bot/promotions/campaigns': { c: { totalSent: 10 } } });
+assert.equal(e.walletBalance.textContent, '₹1,000', e.walletBalance.textContent);
+assert.equal(e.costKpiPromo.textContent, '₹0', e.costKpiPromo.textContent);
+assert.ok(e.costKpiPromoTrend.textContent.includes('10 prepaid'), e.costKpiPromoTrend.textContent);
+console.log('PASS prepaid tokens pay for sends: nothing is billed twice');
 e = await run({ billing: { payments: {} }, orders: {} }, true);
 assert.ok(e.walletStatus.textContent.includes('Top up at least ₹1,000')); assert.ok(e.walletHistoryBody.innerHTML.includes('No top-ups yet'));
 console.log('PASS no top-up: prompts for minimum');
@@ -199,8 +204,9 @@ let bad = 0;
 try {
   const read = (p) => fs.readFileSync(p, 'utf8');
   if (!read('shared/cost-math.js').includes('export function isBilledCampaign')) throw new Error('shared promo billing rule missing');
-  if (!read('Admin/js/features/costs.js').includes('isBilledCampaign(')) throw new Error('Admin Costs does not apply the rule');
-  if (!read('SupremeAdmin/js/billing-shared.js').includes('billableCampaignsOf')) throw new Error('Supreme does not apply the rule');
+  if (!read('shared/cost-math.js').includes('export function promoSendUsage')) throw new Error('shared prepaid-token split missing');
+  if (!read('Admin/js/features/costs.js').includes('promoSendUsage(')) throw new Error('Admin Costs does not apply the prepaid split');
+  if (!read('SupremeAdmin/js/billing-shared.js').includes('promoSendUsage(')) throw new Error('Supreme does not apply the prepaid split');
   if (!read('bot/promotions.js').includes('campaigns/${campaignId}/isTest')) throw new Error('the bot does not stamp test campaigns');
   console.log('PASS promo self-test rule is shared by Admin, Supreme and the bot');
 } catch (e) { bad++; console.error('FAIL ' + e.message); }
