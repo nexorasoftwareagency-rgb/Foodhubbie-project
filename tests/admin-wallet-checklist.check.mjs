@@ -33,6 +33,10 @@ console.log('PASS wallet = topped up - usage; history listed; live status');
 e = await run({ billing: { payments: {} }, orders: {} }, true);
 assert.ok(e.walletStatus.textContent.includes('Top up at least ₹1,000')); assert.ok(e.walletHistoryBody.innerHTML.includes('No top-ups yet'));
 console.log('PASS no top-up: prompts for minimum');
+e = await run({ billing: { payments: {} }, orders: {}, 'bot/transport': 'baileys' }, true);
+assert.ok(e.walletStatus.textContent.includes('Top up at least ₹1,500'), e.walletStatus.textContent);
+assert.equal(e.walletMinLabel.textContent, '₹1,500');
+console.log('PASS WhatsApp outlet: published ₹1,500 minimum');
 e = await run({ billing: { payments: { a: { amount: 1000, createdAt: 1 } } }, orders: {} }, true);
 assert.ok(e.walletStatus.textContent.includes('Top-up received')); console.log('PASS topped up but still locked: activation message');
 e = await run({ billing: { payments: { a: { amount: 1000, createdAt: 1 } } }, orders: 'ERR' });
@@ -121,6 +125,10 @@ console.log('PASS menu done: top-up is the hero step with a support hand-off');
 e = await run({ ...profile, ...menu, billing: { payments: { p: { amount: 999 } } } });
 assert(e.innerHTML.includes('Add ₹1,000 to your wallet'), '999 is below the minimum');
 console.log('PASS 999 is below the minimum -> top-up still pending');
+
+e = await run({ ...profile, ...menu, 'bot/transport': 'baileys', billing: { payments: { p: { amount: 1000 } } } });
+assert(e.innerHTML.includes('Add ₹1,500 to your wallet'), 'a WhatsApp outlet needs the ₹1,500 minimum');
+console.log('PASS WhatsApp outlet: ₹1,000 does not satisfy the ₹1,500 minimum');
 
 assert(e.innerHTML.includes('data-setup-goto="order" disabled'), 'first order not actionable while locked');
 assert(e.innerHTML.includes('after go-live'), 'the blocked step says why');

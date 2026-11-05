@@ -19,7 +19,9 @@ import { canAccessTab, switchTab, supportWa } from '../ui.js';
 import { computeWallet, MIN_TOPUP } from '../../shared/cost-math.js';
 
 const PANEL_ID = 'setupChecklist';
-const WALLET_AMOUNT = `\u20B9${MIN_TOPUP.toLocaleString('en-IN')}`;
+// Published minimum: ₹1,000, or ₹1,500 once the outlet has a WhatsApp bot. Recomputed
+// per load from the bot node, so the copy and the pay request always agree.
+let WALLET_AMOUNT = `\u20B9${MIN_TOPUP.toLocaleString('en-IN')}`;
 const WA_CONNECTED = ['active', 'connected'];
 
 async function exists(path) {
@@ -32,7 +34,7 @@ async function exists(path) {
 }
 
 async function collectTasks() {
-    const [storeSnap, hasCategories, hasDishes, hasTables, hasOrders, waSnap, billingSnap] = await Promise.all([
+    const [storeSnap, hasCategories, hasDishes, hasTables, hasOrders, waSnap, billingSnap, botSnap] = await Promise.all([
         get(Outlet.ref('settings/Store')).catch(() => null),
         exists('categories'),
         exists('dishes'),
@@ -40,13 +42,17 @@ async function collectTasks() {
         exists('orders'),
         get(Outlet.ref('whatsapp/status')).catch(() => null),
         get(billingRef()).catch(() => null),
+        get(Outlet.ref('bot/transport')).catch(() => null),
     ]);
     // A brand-new outlet simply has no Store node yet — that is "not done", not "unknown".
     // `null` is reserved for a read that actually failed.
     const store = storeSnap ? (storeSnap.exists() ? storeSnap.val() : {}) : null;
     const waStatus = waSnap && waSnap.exists() ? String(waSnap.val()) : '';
     // null = could not read billing (never claim done / not done)
-    const topUpDone = billingSnap ? computeWallet({ billing: billingSnap.val() || {} }).topUpDone : null;
+    const hasWhatsApp = !!(botSnap && botSnap.exists());
+    const wallet = billingSnap ? computeWallet({ billing: billingSnap.val() || {}, hasWhatsApp }) : null;
+    const topUpDone = wallet ? wallet.topUpDone : null;
+    WALLET_AMOUNT = `\u20B9${(wallet ? wallet.minTopUp : MIN_TOPUP).toLocaleString('en-IN')}`;
     const waConnected = waSnap ? WA_CONNECTED.includes(waStatus) : null;
 
     const tasks = [

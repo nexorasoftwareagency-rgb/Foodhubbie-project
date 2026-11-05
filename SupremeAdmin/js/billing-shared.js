@@ -28,8 +28,11 @@ export function monthEndMs(ym) {
   return Date.parse(`${ny}-${String(nm).padStart(2, '0')}-01T00:00:00${IST}`);
 }
 
+// Orders and money rows carry createdAt; a promo campaign only carries startedAt
+// (written by bot/promotions.js) — without the fallback its ₹1 sends land in 1970
+// and vanish from every Monthly/Yearly/Custom view.
 export function tsOf(x) {
-  const c = x && x.createdAt;
+  const c = x && (x.createdAt ?? x.startedAt ?? x.completedAt);
   if (typeof c === 'number') return c;
   const t = Date.parse(c);
   return isNaN(t) ? 0 : t;

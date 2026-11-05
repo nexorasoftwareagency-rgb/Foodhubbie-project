@@ -85,6 +85,15 @@ This rule applies to:
 - **Fix:** `tools/seed-demo-tenant.cjs` payments now total ₹15,000 (₹10,000 + ₹5,000) so the seeded demo wallet stays ~+₹9.2k after usage + charges (nightly reseed keeps it healthy); `Admin/js/features/costs.js` drops the internal gate suffix and only states the consequence when the gate is enforced ("New orders pause automatically if the balance runs out."). Demo reseeded now (percentage plan, setup ₹0/none, 353 orders).
 - **Verified live 11/11:** no dashboard wallet alert; balance ₹9,182.45; "Your restaurant is live." with no gate jargon; rate card App 2% / WhatsApp 3% / QR+POS 1%; "No setup fee"; no ₹500/legacy copy; Supreme demo row no longer "wallet empty" and is Settled; 0 page errors. Admin shell `v5.12.18`; `hosting:admin` deployed; EC2 `/home/ubuntu/demo-seed/tools/seed-demo-tenant.cjs` md5-matched.
 
+### ✅ Audit item D — money correctness: billing filter, ₹1,500 minimum, campaign dates (2026-11-05)
+- **Stage:** `done` — deployed `hosting:admin,hosting:supreme`, live E2E 12/12; Admin shell `v5.12.19`.
+- **Drift 1 — billed statuses:** `computeCostIndex` excluded only the exact strings `Cancelled`/`Refunded`. Live buyers carry lowercase `cancelled`/`refunded` (the bot writes both), so those were billed; so were `Pending` QR carts abandoned after a closed tab (the published terms only bill placed orders). New `isBilledOrder(order)` in `shared/cost-math.js` trims + lowercases and excludes `cancelled`/`refunded`/`pending`; an order with no status still bills (legacy). `computeCostIndex` uses it, so Admin Costs, Supreme's record page and the 60 s wallet publisher share one answer.
+- **Drift 2 — top-up minimum:** the published rate card says ₹1,500 with WhatsApp, ₹1,000 without, but `computeWallet` hard-coded ₹1,000. Added `minTopUpFor(hasWhatsApp)`; `computeWallet({..., hasWhatsApp})` now returns `minTopUp` (and `topUpDone` uses it). `Admin/js/features/costs.js` + `setup-checklist.js` read `bot/transport` to decide (NOT `bot/status`: the demo seeds a fake `Online` with no bot, and `bot/status` alone must not raise the minimum).
+- **Drift 3 — campaign dates:** `SupremeAdmin/js/billing-shared.js tsOf` read only `createdAt`, but `bot/promotions.js` writes campaigns with `startedAt` only — every real campaign landed in a 1970 bucket, so Monthly/Yearly/Custom scopes hid real promo spend. `tsOf` now falls back `startedAt` → `completedAt`.
+- **Also fixed:** the Costs custom-range upper bound had been saved as `ï£¿` (cp1252 misread of `\uf8ff`) instead of `\uf8ff`; restored, and `tests/encoding-check.mjs` now flags that byte signature.
+- **Verified:** cost-math self-check (+7 assertions), `tests/admin-wallet-checklist.check.mjs` (₹1,000/₹1,500 cases), twins 5/5, encoding, copy-consistency, both builds. **Live E2E 12/12** (`%TEMP%/opencode/e2e-itemd-money.js`): demo Costs shows ₹1,000 + "restaurant is live"; a temp admin on the e2e WhatsApp outlet shows ₹1,500 in both the minimum label and the status line; a `startedAt`-only campaign bills ₹3 (all-time ₹30.48 = ₹27.48 orders + ₹3 promo) and appears in the Nov 2026 monthly row with no 1970 row; fixture removed; 0 page errors.
+
+
 
 
 

@@ -70,11 +70,18 @@ export function walletGate(w = {}) {
 const _r2 = (x) => Math.round(x * 100) / 100;
 
 /**
+ * Minimum first top-up for an outlet: ₹1,500 when it has a WhatsApp bot, ₹1,000 without
+ * (published on the pricing page). Callers that can see the bot node pass `hasWhatsApp`.
+ */
+export function minTopUpFor(hasWhatsApp) { return hasWhatsApp ? MIN_TOPUP_WITH_WA : MIN_TOPUP; }
+
+/**
  * Prepaid wallet view of the existing billing ledger.
  * balance = paid - (order fees + promo sends + manual charges). Same numbers as Supreme's "due", sign flipped.
- * `billing` = outlet.billing node, `orders` = all outlet orders, `campaigns` = bot.promotions.campaigns.
+ * `billing` = outlet.billing node, `orders` = all outlet orders, `campaigns` = bot.promotions.campaigns,
+ * `hasWhatsApp` = the outlet has a WhatsApp bot (raises the first top-up minimum to ₹1,500).
  */
-export function computeWallet({ billing, orders, campaigns } = {}) {
+export function computeWallet({ billing, orders, campaigns, hasWhatsApp = false } = {}) {
     const b = billing || {};
     const rates = { ...DEFAULT_RATES, ...(b.rates || {}) };
     const mode = normalizeMode(b.mode);
@@ -85,7 +92,8 @@ export function computeWallet({ billing, orders, campaigns } = {}) {
     const paid = _r2(sum(b.payments));
     const charges = _r2(sum(b.charges));
     const used = _r2(idx.total + promoSent * PROMO_RATE);
-    return { paid, charges, used, balance: _r2(paid - used - charges), topUpDone: paid >= MIN_TOPUP, minTopUp: MIN_TOPUP, level: walletLevel({ paid, used, charges }) };
+    const minTopUp = minTopUpFor(hasWhatsApp);
+    return { paid, charges, used, balance: _r2(paid - used - charges), topUpDone: paid >= minTopUp, minTopUp, level: walletLevel({ paid, used, charges }) };
 }
 
 /** 'none' (never topped up) | 'ok' | 'low' (balance <= 25% of total topped up) | 'empty' (balance <= 0). */
@@ -97,7 +105,17 @@ export function walletLevel({ paid = 0, used = 0, charges = 0 } = {}) {
     return bal <= p * LOW_BALANCE_RATIO ? 'low' : 'ok';
 }
 
-const EXCLUDED = new Set(['Cancelled', 'Refunded']);
+// Billing only sees orders that were actually placed. Cancelled/refunded never bill
+// (published terms), and a QR order written as 'Pending' is cancelled on the failure
+// path — one left behind by a closed tab was never placed either. Status is compared
+// case-insensitively: the bot already treats 'cancelled'/'refunded' as the same value.
+const EXCLUDED = new Set(['cancelled', 'refunded', 'pending']);
+
+/** True when this order counts toward platform billing. */
+export function isBilledOrder(order) {
+    if (!order) return false;
+    return !EXCLUDED.has(String(order.status || '').trim().toLowerCase());
+}
 
 // Live orders carry both 'WA' and 'wa' (2 lowercase ones exist on roshani-pizza); an exact-case
 // lookup would silently bill those at the default rate. Canonicalise once, here. Unknown source
@@ -138,7 +156,7 @@ export function computeCostIndex(orders, rates = DEFAULT_RATES, mode = 'percenta
     const bySource = {};
     let total = 0, count = 0;
     for (const o of Object.values(orders || {})) {
-        if (!o || EXCLUDED.has(o.status)) continue;
+        if (!isBilledOrder(o)) continue;
         const src = billingSourceOf(o, mode);
         const fee = feeOf(o, rates, mode);
         const b = bySource[src] || (bySource[src] = { orders: 0, cost: 0 });
@@ -170,6 +188,12 @@ function selfCheck(assert) {
     assert.equal(pk.count, 5, 'cancelled + refunded excluded');
     assert.equal(pk.total, 10 + 5 + 30 + 6 + 3, '1% QR/POS + 3% WhatsApp/other');
     assert.equal(pk.bySource.webview_delivery.cost, 30, 'WhatsApp delivery ₹1000 → ₹30');
+    assert.equal(isBilledOrder({ status: 'Placed' }), true, 'placed order bills');
+    assert.equal(isBilledOrder({ status: 'cancelled' }), false, 'lowercase status never bills');
+    assert.equal(isBilledOrder({ status: ' Refunded ' }), false, 'padded status never bills');
+    assert.equal(isBilledOrder({ status: 'Pending' }), false, 'abandoned QR cart never bills');
+    assert.equal(isBilledOrder({}), true, 'legacy order with no status still bills');
+    assert.equal(computeCostIndex({ a: o(100, 'QR'), b: o(100, 'QR', 'pending') }).total, 1, 'pending excluded from the total');
     assert.equal(feeOf({ total: 333.33, source: 'QR' }), 3.33, 'rounded to paise');
     assert.equal(sourceOf({ source: 'wa' }), 'WA', 'lowercase wa canonicalised (2 live orders)');
     assert.equal(sourceOf({ source: 'WEBVIEW_DELIVERY' }), 'webview_delivery', 'case-insensitive source');
@@ -202,6 +226,11 @@ function selfCheck(assert) {
     assert.equal(w.paid, 1500); assert.equal(w.used, 13, 'legacy QR2 + POS1 + 10 promo'); assert.equal(w.charges, 200);
     assert.equal(w.balance, 1287, 'paid - used - charges'); assert.equal(w.topUpDone, true);
     assert.equal(computeWallet({ billing: { payments: { a: { amount: 999 } } } }).topUpDone, false, 'below minimum');
+    assert.equal(computeWallet({ billing: { payments: { a: { amount: 1000 } } } }).topUpDone, true, '₹1,000 without WhatsApp');
+    assert.equal(computeWallet({ billing: { payments: { a: { amount: 1000 } } }, hasWhatsApp: true }).topUpDone, false, '₹1,500 with a WhatsApp bot');
+    assert.equal(computeWallet({ billing: { payments: { a: { amount: 1500 } } }, hasWhatsApp: true }).topUpDone, true, '₹1,500 reaches the WhatsApp minimum');
+    assert.equal(computeWallet({ hasWhatsApp: true }).minTopUp, MIN_TOPUP_WITH_WA, 'minTopUp is exposed for the UI');
+    assert.equal(minTopUpFor(false), MIN_TOPUP); assert.equal(minTopUpFor(true), MIN_TOPUP_WITH_WA);
     assert.equal(computeWallet({}).balance, 0, 'empty is zero');
     // percentage package: 1% QR/POS, 3% WhatsApp, 2% Customer App; cancelled still excluded
     const pkPct = computeCostIndex({ a: o(1000, 'QR'), b: o(500, 'POS'), c: o(1000, 'webview_delivery'), d: o(200, 'WA'), e: o(100, 'other'), f: o(9999, 'QR', 'Cancelled') }, DEFAULT_RATES, 'percentage');

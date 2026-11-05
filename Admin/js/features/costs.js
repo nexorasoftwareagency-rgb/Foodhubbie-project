@@ -18,7 +18,7 @@
 import { Outlet, billingRef, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { state } from '../state.js';
 import { SUPPORT_WA } from '../ui.js';
-import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel } from '../../shared/cost-math.js';
+import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel, isBilledOrder } from '../../shared/cost-math.js';
 
 let _unsubs = [];
 let _orders = {};
@@ -31,6 +31,7 @@ let _rangeWired = false;
 let _range = null;           // { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
 let _orderUnsubs = [];
 let _allOrders = null;       // all-time orders (one-time read) for the wallet balance; null = not loaded
+let _hasWhatsApp = null;     // outlet has a bot → first top-up minimum is ₹1,500; null = not known yet
 let _gate = null;            // published outlets/{oid}/walletGate: 'low' | 'closed' | '' | null
 let _walletWired = false;
 
@@ -90,7 +91,7 @@ function _subscribeOrders() {
     _orderUnsubs = [];
     _orders = {}; _lastIndex = 0;
     // end bound: day + U+F8FF (highest BMP char) = inclusive prefix upper bound
-    const q = query(Outlet.ref('orders'), orderByChild('createdAt'), startAt(_range.from), endAt(_range.to + 'ï£¿'));
+    const q = query(Outlet.ref('orders'), orderByChild('createdAt'), startAt(_range.from), endAt(_range.to + '\uf8ff'));
     _orderUnsubs.push(onChildAdded(q, s => { _orders[s.key] = s.val(); _scheduleRender(); }));
     _orderUnsubs.push(onChildChanged(q, s => { _orders[s.key] = s.val(); _scheduleRender(); }));
 }
@@ -264,7 +265,7 @@ function _render() {
             .slice(0, 20);
         fb.innerHTML = list.length ? list.map(([id, o]) => {
             const src = sourceOf(o);
-            const excluded = o.status === 'Cancelled' || o.status === 'Refunded';
+            const excluded = !isBilledOrder(o);
             const fee = excluded ? null : feeOf(o, rates, mode);
             return `<tr class="${excluded ? 'cost-row-excluded' : ''}">
                 <td>#${o.orderId || id}${excluded ? ' <span class="cost-excluded-tag">(excluded)</span>' : ''}</td>
@@ -291,7 +292,8 @@ function _renderWallet() {
         return;
     }
     if (_allOrders === null || _billing === null) { _setText('walletStatus', 'Calculating\u2026'); }
-    const w = computeWallet({ billing: _billing || {}, orders: _allOrders || {}, campaigns: _campaigns || {} });
+    const w = computeWallet({ billing: _billing || {}, orders: _allOrders || {}, campaigns: _campaigns || {}, hasWhatsApp: _hasWhatsApp === true });
+    _setText('walletMinLabel', _inr(w.minTopUp));
     const el = document.getElementById('walletBalance');
     if (el) {
         el.textContent = (w.balance < 0 ? '\u2212' : '') + _inr(Math.abs(w.balance));
@@ -308,7 +310,7 @@ function _renderWallet() {
         let msg;
         if (published === 'closed') msg = 'Ordering is paused (wallet finished). Top up to resume.';
         else if (published === 'low') msg = 'Bot order links are paused (wallet low). Top up to resume.';
-        else if (!w.topUpDone) msg = `Top up at least ${_inr(MIN_TOPUP)} to go live.`;
+        else if (!w.topUpDone) msg = `Top up at least ${_inr(w.minTopUp)} to go live.`;
         else if (state.locked) msg = 'Top-up received. Your restaurant is being switched live.';
         else if (w.level === 'empty') msg = 'Your wallet balance is finished. Please top up now to avoid interruption.';
         else if (w.level === 'low') msg = `Low balance: 25% or less of your top-ups is left. Please top up soon.`;
@@ -348,9 +350,17 @@ export function loadCosts() {
     _wireSubtabs();
     _wireRange();
     _wireWallet();
-    _billing = null; _campaigns = null; _allOrders = null; _gate = null;
+    _billing = null; _campaigns = null; _allOrders = null; _gate = null; _hasWhatsApp = null;
     _range = _range || _monthRange(0);
     _applyRange(_range);
+
+    // The published minimum is ₹1,500 once the outlet has a WhatsApp bot. A bot worker
+    // writes bot/transport ('baileys' | 'meta'); bot/status alone is seeded on the demo,
+    // so it must not count as a bot.
+    get(Outlet.ref('bot/transport')).catch(() => null).then(t => {
+        _hasWhatsApp = !!(t && t.exists());
+        _scheduleRender();
+    });
 
     _unsubs.push(onValue(billingRef(),
         s => { _billing = s.val() || null; _scheduleRender(); },

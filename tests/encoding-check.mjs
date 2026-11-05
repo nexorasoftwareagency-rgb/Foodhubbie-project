@@ -39,6 +39,7 @@ const MOJIBAKE = [
   'Ã—', // ×
   'Â·', // ·
   'ðŸ', // emoji
+  '\u00ef\u00a3\u00bf', // U+F8FF read back as cp1252 (date-range upper bound)
 ];
 // C1 control chars are the fingerprint of a cp1252 round-trip; they never
 // belong in source. U+FFFD means a byte was already lost (the tail of a
