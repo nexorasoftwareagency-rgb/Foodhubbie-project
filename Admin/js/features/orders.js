@@ -320,7 +320,20 @@ function getStatusOptions(currentStatus, type = 'Online') {
     return options;
 }
 
+// Orders with a line the menu could not verify (bot sets order.priceReview) get a
+// visible chip so staff check the price before preparing.
+function priceReviewChip(order) {
+    const r = order && order.priceReview;
+    if (!r || !Array.isArray(r.lines) || !r.lines.length) return '';
+    const names = r.lines.map(n => String(n)).join(', ');
+    return `<span class="status-badge status-pending-payment" title="${escapeHtml('Not on the menu / unverified: ' + names + ' (customer price Rs ' + (Number(r.unverifiedAmount) || 0) + ')')}">⚠ Check prices</span> `;
+}
+
 function renderStatusDropdown(currentStatus, type, orderId, order) {
+    return priceReviewChip(order) + renderStatusDropdownCore(currentStatus, type, orderId, order);
+}
+
+function renderStatusDropdownCore(currentStatus, type, orderId, order) {
     const options = getStatusOptions(currentStatus, type);
     if (options.length === 0) {
         const badge = `<span class="status-badge status-${(currentStatus||'').toLowerCase()}">${currentStatus}</span>`;

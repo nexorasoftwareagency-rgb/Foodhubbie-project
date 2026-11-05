@@ -1655,6 +1655,9 @@ async function notifyAdmin(sock, orderId, order, type = 'NEW') {
             let itemsText = (order.items || []).map(i => `• ${i.name} (${i.size}) x${i.quantity}`).join('\n');
             let adminMsg = type === 'NEW' ? `🔔 *NEW ORDER RECEIVED!* 🔔\n════════════════════════\n` : `📦 *ORDER UPDATE* 📦\n════════════════════════\n`;
             adminMsg += `🆔 ID: #${formatOrderId(order.orderId || orderId)}\n👤 Customer: ${order.customerName}\n📞 Phone: ${order.phone}\n📍 Address: ${order.address}\n════════════════════════\n📦 Items:\n${itemsText}\n════════════════════════\n💰 Total: ₹${order.total || 0}${order.loyaltyTender && order.loyaltyTender.amountPaise > 0 ? `\n🎁 Loyalty tender (${order.loyaltyTender.points} pts): -₹${order.loyaltyTender.amount}\n💵 Payable: ₹${order.totalDue != null ? order.totalDue : Math.max(0, (order.total || 0) - order.loyaltyTender.amount)}` : ''}\n💳 Method: ${order.paymentMethod}`;
+            if (order.priceReview && order.priceReview.lines && order.priceReview.lines.length) {
+                adminMsg += `\n⚠️ *CHECK PRICES:* not on the menu / unverified: ${order.priceReview.lines.join(', ')} (customer price ₹${order.priceReview.unverifiedAmount || 0}).`;
+            }
             msg = adminMsg;
         }
 
@@ -2732,7 +2735,14 @@ async function sendDailyReportSafely(dateOverride = null) {
                             subtotal: order.subtotal,
                         });
                         if (priced.unmatched.length) {
-                            console.warn(`[WebOrder] ${snap.key}: no catalog match for "${priced.unmatched.join('", "')}" — claimed price kept.`);
+                            console.warn(`[WebOrder] ${snap.key}: no catalog match for "${priced.unmatched.join('", "')}" — claimed price kept, order flagged for review.`);
+                            // Flag it for the restaurant: Admin shows a "Check prices" chip
+                            // and the new-order alert says so. The order still goes through
+                            // (an item removed from the menu mid-order is legitimate), but
+                            // it is never silently accepted.
+                            const review = orderPricing.buildPriceReview(priced);
+                            await updateData(`orders/${snap.key}`, { priceReview: review }, order.outlet).catch(() => {});
+                            order.priceReview = review;
                         }
                         if (priced.changed) {
                             console.warn(`[WebOrder] Price correction on ${snap.key}: client subtotal ₹${order.subtotal} (${(order.items || []).length} lines), catalog ₹${priced.subtotal}.`);

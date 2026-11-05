@@ -160,6 +160,7 @@ function repriceOrder({ items, dishes, combos, subtotal: claimedSubtotal }) {
     const list = isMap ? Object.values(items) : (Array.isArray(items) ? items : []);
     const out = list.map(it => (it && typeof it === 'object' ? { ...it } : null));
     const unmatched = [];
+    const unmatchedIdx = [];
     const comboLines = new Map();       // comboId -> [{ index, base, qty }]
     let changed = false;
 
@@ -188,12 +189,13 @@ function repriceOrder({ items, dishes, combos, subtotal: claimedSubtotal }) {
         const found = resolveDish(dishes, it);
         if (!found) {
             unmatched.push(String(it.name || '').trim() || `line ${index + 1}`);
+            unmatchedIdx.push(index);
             return;
         }
         const { size } = splitSize(it.name);
         const sizeLabel = it.size || size || '';
         const price = it.comboId ? comboBase(found.dish) : basePrice(found.dish, sizeLabel);
-        if (price == null) { unmatched.push(String(it.name || '').trim() || `line ${index + 1}`); return; }
+        if (price == null) { unmatched.push(String(it.name || '').trim() || `line ${index + 1}`); unmatchedIdx.push(index); return; }
         const unit = round2(price + addonsPrice(found.dish, it.addons));
 
         if (it.comboId) {
@@ -236,10 +238,28 @@ function repriceOrder({ items, dishes, combos, subtotal: claimedSubtotal }) {
         result = {};
         Object.keys(items).forEach((k, i) => { result[k] = out[i]; });
     }
-    return { items: result, subtotal, changed, unmatched };
+    // Money the menu could not vouch for: the customer's own price on lines we
+    // could not match. The caller flags the order for the restaurant instead of
+    // silently accepting it (a renamed item must not be a way around re-pricing).
+    const unverifiedAmount = round2(unmatchedIdx.reduce((s, i) => {
+        const it = out[i];
+        return s + (Number(it.unitPrice ?? it.price) || 0) * qtyOf(it);
+    }, 0));
+    return { items: result, subtotal, changed, unmatched, unverifiedAmount };
 }
 
-module.exports = { normText, splitSize, sizeEntries, basePrice, comboBase, addonsPrice, resolveDish, comboPriceTotal, repriceOrder };
+// What the bot stores on the order (`priceReview`) and the Admin panel shows.
+// null when every line was verified against the menu.
+function buildPriceReview(priced, now = Date.now()) {
+    if (!priced || !priced.unmatched || !priced.unmatched.length) return null;
+    return {
+        lines: priced.unmatched.slice(0, 10).map(n => String(n).slice(0, 80)),
+        unverifiedAmount: priced.unverifiedAmount || 0,
+        at: now,
+    };
+}
+
+module.exports = { buildPriceReview, normText, splitSize, sizeEntries, basePrice, comboBase, addonsPrice, resolveDish, comboPriceTotal, repriceOrder };
 
 // ── self-check ────────────────────────────────────────────────────────────
 if (require.main === module) {
@@ -361,5 +381,18 @@ if (require.main === module) {
     assert.equal(r.items.item_0.unitPrice, 199);
     assert.equal(r.subtotal, 398);
 
+    // renamed / unknown items cannot slip through unflagged
+    {
+        const d = { d1: { name: 'Cheese Pizza', price: 299, sizes: { Small: 199, Large: 399 } } };
+        const line = (o) => ({ quantity: 1, ...o, total: o.unitPrice * (o.quantity || 1) });
+        let r = repriceOrder({ dishes: d, items: [line({ dishId: 'd1', name: 'Cheese Pizza', size: 'Large', unitPrice: 399 })] });
+        assert.equal(r.unmatched.length, 0); assert.equal(r.unverifiedAmount, 0); assert.equal(buildPriceReview(r), null);
+        r = repriceOrder({ dishes: d, items: [line({ dishId: 'zzz', name: 'Cheese Pizza Special', unitPrice: 1 })] });
+        assert.deepEqual(r.unmatched, ['Cheese Pizza Special']); assert.equal(r.unverifiedAmount, 1);
+        let pr = buildPriceReview(r, 5);
+        assert.deepEqual(pr, { lines: ['Cheese Pizza Special'], unverifiedAmount: 1, at: 5 });
+        r = repriceOrder({ dishes: d, items: [line({ name: 'Cheese Piza', unitPrice: 1, quantity: 3 }), line({ dishId: 'd1', name: 'Cheese Pizza', size: 'Large', unitPrice: 1 })] });
+        assert.equal(r.unverifiedAmount, 3); assert.equal(r.subtotal, 402); assert.equal(buildPriceReview(r).lines.length, 1);
+    }
     console.log('order-pricing OK');
 }

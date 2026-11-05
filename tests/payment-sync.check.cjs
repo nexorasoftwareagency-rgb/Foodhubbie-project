@@ -137,5 +137,11 @@ const PH = '9876543210', ID = 'A100';
     assert.ok(cta.indexOf('walletGateBlocks') < cta.indexOf('getOrCreateWebviewToken'), 'gate blocks BEFORE minting a webview token');
     assert.ok(cta.indexOf('walletGateBlocks') < cta.indexOf('sendOrderCTA'), 'gate blocks the order CTA');
     assert.match(fs2.readFileSync(path2.join(__dirname, '../bot/utils.js'), 'utf8'), /function walletGateBlocks/, 'decision helper lives with the other bot pure utils');
+    // unmatched order lines are flagged, alerted and shown - never silently accepted
+    assert.match(src, /buildPriceReview\(priced\)/, 'bot flags orders with unverified lines');
+    assert.match(src, /CHECK PRICES/, 'restaurant alert mentions unverified prices');
+    const adminOrders = require('fs').readFileSync(require('path').join(__dirname, '../Admin/js/features/orders.js'), 'utf8');
+    assert.match(adminOrders, /function priceReviewChip/, 'Admin shows a Check prices chip');
+    assert.match(adminOrders, /priceReviewChip\(order\) \+ renderStatusDropdownCore/, 'chip is attached to every order card');
     console.log('payment-sync OK');
 })().catch(e => { console.error(e); process.exit(1); });
