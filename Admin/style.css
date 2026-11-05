@@ -3048,12 +3048,12 @@ tr.premium-row-v4:focus-visible {
 
 .walkin-dish-grid {
     display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     max-height: 70vh;
     overflow-y: auto;
     scrollbar-width: none;
-    padding: 4px;
+    padding: 6px;
 }
 
 .walkin-dish-grid::-webkit-scrollbar {
@@ -3070,6 +3070,53 @@ tr.premium-row-v4:focus-visible {
 }
 .cart-items-container::-webkit-scrollbar {
     display: none;
+}
+
+.cart-row-v5:hover {
+    background: #f8fafc;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+    border-color: var(--primary-rgb, 232, 73, 8);
+}
+
+.cart-row-v5 .qty-btn:hover {
+    background: var(--primary-dark);
+    color: white;
+    transform: scale(1.05);
+}
+
+.cart-row-v5 .btn-remove-v4:hover {
+    opacity: 1;
+    background: linear-gradient(135deg, #EF4444, #DC2626);
+    color: white;
+    transform: scale(1.05);
+}
+
+/* Empty cart state styling */
+.empty-cart {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--text-muted);
+}
+.empty-cart-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.4;
+}
+.empty-cart-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 4px;
+}
+.empty-cart-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
 }
 
 /* The "sticky-cart" name was never actually wired up to position:sticky —
@@ -6184,6 +6231,38 @@ body {
     box-shadow: 0 4px 10px rgba(232, 73, 8, 0.1);
 }
 
+.pos-dish-btn-v4:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.2);
+}
+
+.pos-dish-btn-v4:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+}
+
+.pos-dish-btn-v4.is-out-of-stock {
+    opacity: 0.4;
+    pointer-events: none;
+    filter: grayscale(0.5);
+}
+
+.pos-dish-btn-v4.is-out-of-stock .dish-visual {
+    position: relative;
+}
+
+.pos-dish-btn-v4.is-out-of-stock .dish-visual::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.pos-dish-btn-v4.is-out-of-stock .dish-visual img {
+    filter: grayscale(0.3);
+}
+
 .dish-visual {
     position: relative;
     aspect-ratio: 4/3;
@@ -6195,11 +6274,15 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform 0.5s ease;
+    transition: transform 0.3s ease;
 }
 
-.pos-dish-btn-v4:hover .dish-visual img {
-    transform: scale(1.1);
+.pos-dish-btn-v4:not(.is-out-of-stock):hover .dish-visual img {
+    transform: scale(1.05);
+}
+
+.pos-dish-btn-v4:not(.is-out-of-stock):focus-within .dish-visual img {
+    transform: scale(1.05);
 }
 
 .dish-overlay {

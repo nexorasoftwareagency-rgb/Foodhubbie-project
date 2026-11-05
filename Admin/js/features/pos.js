@@ -468,7 +468,10 @@ export async function renderWalkinCart() {
     const items = Object.entries(state.walkinCart);
     if (items.length === 0) {
         list.innerHTML = `
-            <p id="walkinEmptyMsg" class="text-muted fs-13 center-text p-32">Tap dishes to add them here</p>
+            <div class="empty-cart">
+                <div class="empty-cart-title">Your cart is empty</div>
+                <div class="empty-cart-subtitle">Browse dishes to add items</div>
+            </div>
         `;
         document.getElementById("walkinSubtotal").innerText = "\u20B90";
         document.getElementById("walkinTotal").innerText = "\u20B90";

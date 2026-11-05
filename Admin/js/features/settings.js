@@ -1122,4 +1122,5 @@ export function initSettingsPasswordMatch() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initSettingsPasswordMatch();
+    initCustomerAppCard();
 });

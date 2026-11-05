@@ -8,6 +8,7 @@ import { detailValues, renderDetailView, renderDetailForm } from './templates/de
 import { renderAdminCreds, renderAdminForm } from './templates/admin-creds.js';
 import { loadWaTemplates, registerWaTemplateView, waTemplatesLoadedFor, waTemplatesHtml, waLibrary } from './templates/wa-templates.js';
 import { loadQuota } from './templates/quota.js';
+import { appLink } from '/shared/app-link.js';
 
 const mainEl = document.getElementById('app-main');
 let currentBid = null;
