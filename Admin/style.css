@@ -3417,7 +3417,7 @@ tr.premium-row-v4:focus-visible {
     box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.15);
     border-radius: 12px;
 }
-.walkin-cart-item.editing .item-name::after {
+.walkin-cart-item.editing .name::after {
     content: " (editing)";
     font-size: 10px;
     font-weight: 600;
@@ -6291,12 +6291,14 @@ body {
     opacity: 1;
 }
 
-/* Out-of-stock state for v4 dish cards */
-.pos-dish-btn-v4.oos-wrap {
+/* Out-of-stock state for v4 dish cards.
+   `oos-wrap` is on EVERY tile (layout hook) — the disabled state keys off
+   `is-out-of-stock`, which pos.js adds only for stock === false. */
+.pos-dish-btn-v4.is-out-of-stock {
     opacity: 0.4;
     pointer-events: none;
 }
-.pos-dish-btn-v4.oos-wrap .dish-visual {
+.pos-dish-btn-v4.is-out-of-stock .dish-visual {
     position: relative;
 }
 .pos-dish-btn-v4 .oos-overlay {
@@ -6307,9 +6309,6 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 2;
-}
-.pos-dish-btn-v4 .oos-overlay::before {
-    content: "Unavailable";
     color: #fff;
     font-weight: 700;
     font-size: 11px;
@@ -8682,6 +8681,7 @@ body.pos-selection-mode .walkin-picker {
 .discount-presets { display: flex; gap: 6px; align-items: center; }
 .chip { background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #6366f1; transition: all 0.2s; }
 .chip:hover { background: rgba(99, 102, 241, 0.16); }
+.chip.active { background: #6366f1; border-color: #6366f1; color: #fff; }
 .divider-top { border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 12px; }
 
 /* =============================

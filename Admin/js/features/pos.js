@@ -158,7 +158,7 @@ export function renderWalkinDishGrid(dishes) {
     grid.innerHTML = comboTiles + dishes.map(d => {
         const price = d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0);
         const isOos = d.stock === false;
-        const oosClass = isOos ? ' oos-wrap is-out-of-stock' : ' oos-wrap';
+        const oosClass = isOos ? ' oos-wrap is-out-of-stock' : '';
         const oosOverlay = isOos ? '<div class="oos-overlay">Currently Unavailable</div>' : '';
         return `
             <div class="pos-dish-btn-v4${oosClass}" role="button" data-action="openPOSSelectionModal" data-id="${d.id}"${isOos ? ' data-out-of-stock="true"' : ''}>
@@ -291,11 +291,13 @@ export async function openPOSSelectionModal(dishId) {
 export function hidePOSSelectionModal() {
     const modal = document.getElementById('posSelectionModal');
     if (modal) {
+        const wasEditing = !!state.editingCartKey;
         modal.classList.add('hidden');
         modal.classList.remove('active', 'side-panel-active');
         modal._kbRestore?.();
         document.body.classList.remove('pos-selection-mode');
         state.editingCartKey = null;
+        if (wasEditing) renderWalkinCart().catch(() => {});
         logger.info('POS', 'Selection modal closed');
     }
 }
@@ -413,13 +415,28 @@ export function walkinQtyChange(cartKey, delta) {
     }
 }
 
-export function clearWalkinCart() {
+export async function clearWalkinCart({ confirm = true } = {}) {
     const count = Object.keys(state.walkinCart).length;
+    if (count === 0) return;
+
+    // Confirm before clearing - prevents accidental loss of cart contents.
+    // Programmatic clears (after a completed sale) pass confirm:false.
+    if (confirm) {
+        const confirmed = await ui.showConfirm(
+            `Clear cart?`,
+            `You have ${count} item${count !== 1 ? 's' : ''} in your cart. Clear everything?`,
+            'Clear Cart',
+            'Cancel'
+        );
+        if (!confirmed) return;
+    }
+
     state.walkinCart = {};
     state.walkinDiscount = 0;
     state.walkinDiscountPct = 0;
     state.walkinAutoDiscount = null;
     state.walkinCouponCode = null;
+    state.walkinPinnedDiscountId = null;
     if (document.getElementById('walkinCustPhone')) document.getElementById('walkinCustPhone').value = "";
     if (document.getElementById('walkinCustName')) document.getElementById('walkinCustName').value = "";
     if (document.getElementById('walkinTableNo')) document.getElementById('walkinTableNo').value = "";
@@ -444,8 +461,9 @@ export async function renderWalkinCart() {
     const list = document.getElementById("walkinCartItems");
     if (!list) return;
 
-    // Re-render discount preset chips based on current cart + eligible offers
-    await _renderDiscountPresets();
+    // Chips re-render independently — a cold-cache discount read must never
+    // delay painting the cart rows.
+    _renderDiscountPresets().catch(() => {});
 
     const items = Object.entries(state.walkinCart);
     if (items.length === 0) {
@@ -501,12 +519,21 @@ export async function renderWalkinCart() {
         `;
     }).join('');
 
+    // Disable submit button when cart is empty
+    const submitBtn = document.getElementById('walkinSubmitBtn');
+    if (submitBtn) submitBtn.disabled = items.length === 0;
+
     await loadLucide();
     window.lucide.createIcons({ root: list });
 
     // Re-evaluate the auto discount when the cart total changed (a frozen amount
     // would show a stale total that differs from what submit re-computes).
-    if (state.walkinAutoDiscount && state.walkinAutoDiscount.subtotal !== subtotal) {
+    const pinnedId = state.walkinPinnedDiscountId || null;
+    // A cached preview is stale when the cart total moved, or when the pin changed.
+    if (state.walkinAutoDiscount && (
+        state.walkinAutoDiscount.subtotal !== subtotal ||
+        (pinnedId && state.walkinAutoDiscount.discount?.id !== pinnedId)
+    )) {
         state.walkinAutoDiscount = null;
     }
     let discountValue = state.walkinDiscount;
@@ -524,6 +551,7 @@ export async function renderWalkinCart() {
             const nonCombo = items.filter(i => i.size !== 'Combo');
             const evalResult = await evaluateDiscount({
                 customer: null, subtotal, couponCode: state.walkinCouponCode || null,
+                onlyDiscountId: pinnedId || undefined,
                 cart: nonCombo.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
                 channel: 'pos'
             });
@@ -531,6 +559,12 @@ export async function renderWalkinCart() {
                 state.walkinAutoDiscount = { ...evalResult, subtotal };
                 discountValue = evalResult.amount;
                 discountLabel = evalResult.label;
+            } else if (pinnedId && state.walkinPinnedDiscountId === pinnedId) {
+                // The pinned offer stopped qualifying (cart shrank, cap hit by
+                // another terminal, window closed) — drop it rather than show a
+                // discount submit will refuse.
+                state.walkinPinnedDiscountId = null;
+                console.warn('[POS] Pinned offer no longer applies:', pinnedId);
             }
         } catch (e) { console.warn('[POS] auto-discount eval failed:', e?.message || e); }
     }
@@ -555,9 +589,10 @@ export async function renderWalkinCart() {
     const discVal = document.getElementById("walkinDiscountVal");
     if (discountValue > 0) {
         if (discRow) discRow.classList.remove('hidden');
-        const isPct = state.walkinDiscountPct > 0 || state.walkinAutoDiscount?.discount?.mode === 'percent';
-        if (discVal) discVal.innerText = isPct
-            ? `-₹${roundedDiscount.toLocaleString()} (${state.walkinDiscountPct || state.walkinAutoDiscount?.discount?.value}%)`
+        // Show the offer name when we have one — a capped percentage would
+        // otherwise print "10%"-style text next to an amount that isn't 10%.
+        if (discVal) discVal.innerText = state.walkinDiscountPct > 0
+            ? `-₹${roundedDiscount.toLocaleString()} (${state.walkinDiscountPct}%)`
             : discountLabel
             ? `-₹${roundedDiscount.toLocaleString()} (${discountLabel})`
             : `-₹${roundedDiscount.toLocaleString()}`;
@@ -588,9 +623,10 @@ export async function renderWalkinCart() {
                 const val = parseFloat(e.target.value) || 0;
                 state.walkinDiscount = val;
                 state.walkinDiscountPct = 0;
-                // Manual discount overrides any auto-applied discount
+                // Manual discount overrides any auto-applied discount or pinned offer
                 if (val > 0) {
                     state.walkinAutoDiscount = null;
+                    state.walkinPinnedDiscountId = null;
                     state.walkinCouponCode = null;
                     if (document.getElementById('walkinCouponCode')) document.getElementById('walkinCouponCode').value = "";
                     if (document.getElementById('walkinCouponHint'))  document.getElementById('walkinCouponHint').classList.add('hidden');
@@ -673,12 +709,36 @@ export async function checkWalkinCustomer() {
 export function setDiscount(amt) {
     state.walkinDiscount = amt;
     state.walkinDiscountPct = 0;
+    state.walkinPinnedDiscountId = null;
     renderWalkinCart();
 }
 
 export function setDiscountPct(pct) {
     state.walkinDiscountPct = pct;
     state.walkinDiscount = 0;
+    state.walkinPinnedDiscountId = null;
+    renderWalkinCart();
+}
+
+/**
+ * Apply a configured offer from a preset chip by pinning its id. The amount is
+ * NOT frozen: renderWalkinCart and submitWalkinSale both re-evaluate that exact
+ * offer through evaluateDiscount, so maxCap / category scope / limits / windows
+ * are enforced. Tapping the active chip removes it.
+ */
+export function setPinnedDiscount(id) {
+    if (!id) return;
+    state.walkinPinnedDiscountId = state.walkinPinnedDiscountId === id ? null : id;
+    state.walkinDiscount = 0;
+    state.walkinDiscountPct = 0;
+    state.walkinAutoDiscount = null;
+    state.walkinCouponCode = null;
+    const input = document.getElementById('walkinCouponCode');
+    if (input) input.value = "";
+    const hint = document.getElementById('walkinCouponHint');
+    if (hint) hint.classList.add('hidden');
+    const clear = document.getElementById('walkinCouponClearBtn');
+    if (clear) clear.classList.add('hidden');
     renderWalkinCart();
 }
 
@@ -730,6 +790,7 @@ export async function applyWalkinCoupon() {
         }
         state.walkinAutoDiscount = { ...evalResult, subtotal };
         state.walkinCouponCode = code;
+        state.walkinPinnedDiscountId = null; // coupon takes over from any pinned offer
         if (hint) {
             hint.classList.remove('hidden');
             hint.innerText = `✅ Applied: ${evalResult.label} (saved ₹${evalResult.amount.toLocaleString()})`;
@@ -771,22 +832,29 @@ function _walkinSubtotal() {
     return Object.values(state.walkinCart).reduce((s, i) => s + (Number(i.price) * Number(i.qty)), 0);
 }
 
+let _presetsSeq = 0;
+
 /**
  * Render dynamic discount preset chips from eligible POS discounts.
  * Replaces hardcoded chips — only shows discounts that are actually
  * applicable to this outlet/channel. Coupon-type discounts are excluded
  * here (they live in the offers panel / coupon input).
+ *
+ * A chip pins the offer's ID (nothing else) — the amount is re-evaluated by
+ * the shared rules engine on every cart render and at submit, so maxCap,
+ * category scope, minSubtotal, schedule and redemption limits all apply.
  */
 export async function _renderDiscountPresets() {
     const container = document.getElementById('discountPresets');
     if (!container) return;
+    const seq = ++_presetsSeq;
 
     let all;
     try {
         all = await getAllDiscounts();
     } catch (e) {
         console.warn('[POS] Discount presets: failed to load discounts:', e?.message || e);
-        container.innerHTML = '';
+        if (seq === _presetsSeq) container.innerHTML = '';
         return;
     }
 
@@ -799,7 +867,9 @@ export async function _renderDiscountPresets() {
         .map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id }));
 
     const eligible = await getEligibleOffersForDisplay(all, { channel: 'pos', now, cart });
+    if (seq !== _presetsSeq) return; // a newer render already won
 
+    const pinnedId = state.walkinPinnedDiscountId;
     const chips = eligible
         .filter(d => d.type !== 'coupon') // coupons handled via offers panel / coupon input
         .map(d => {
@@ -809,12 +879,16 @@ export async function _renderDiscountPresets() {
                 : `₹${Number(d.value).toLocaleString()}`;
             const cap = d.maxCap ? ` (cap ₹${Number(d.maxCap).toLocaleString()})` : '';
             const min = d.minSubtotal ? ` · min ₹${Number(d.minSubtotal).toLocaleString()}` : '';
-            const disabled = d.minSubtotal && subtotal < d.minSubtotal;
+            const active = pinnedId === d.id;
+            // An already-applied offer stays tappable (tap = remove) even if the
+            // cart shrank below its minimum — otherwise it could never be undone.
+            const disabled = !!d.minSubtotal && subtotal < d.minSubtotal && !active;
             return `
-                <button type="button" class="chip btn-discount-preset${disabled ? ' disabled' : ''}"
+                <button type="button" class="chip btn-discount-preset${disabled ? ' disabled' : ''}${active ? ' active' : ''}"
                     data-action="applyWalkinDiscount"
-                    ${isPct ? `data-pct="${Number(d.value)}"` : `data-amount="${Number(d.value)}"`}
-                    title="${escapeHtml(d.name || '')}${cap}${min}${disabled ? ' — add more to cart to qualify' : ''}"
+                    data-id="${escapeHtml(d.id)}"
+                    aria-pressed="${active ? 'true' : 'false'}"
+                    title="${escapeHtml(d.name || '')}${cap}${min}${disabled ? ' — add more to cart to qualify' : active ? ' — applied (tap to remove)' : ' — tap to apply'}"
                     ${disabled ? 'disabled' : ''}>
                     ${label}${cap}
                 </button>`;
@@ -930,6 +1004,13 @@ export async function submitWalkinSale() {
     const note = document.getElementById("walkinCustNote").value.trim() || "";
     const combinedNote = tableNo ? `[Table: ${tableNo}] ${note}` : note;
     const btn = document.getElementById('walkinSubmitBtn');
+
+    // In-flight guard: Enter is a direct call, so the disabled button alone
+    // cannot stop a second submission (which would write the sale twice).
+    if (btn?.disabled) {
+        logger.warn('POS', 'Submit ignored: sale already in progress');
+        return;
+    }
     
     logger.info('POS', `Submitting walkin sale: ${items.length} items`, { items: items.map(i => `${i.qty}x ${i.name}`), name, phone, tableNo });
 
@@ -1044,20 +1125,30 @@ export async function submitWalkinSale() {
                     customer,
                     subtotal,
                     couponCode: state.walkinCouponCode || null,
+                    onlyDiscountId: state.walkinPinnedDiscountId || undefined,
                     cart: nonCombo.map(i => ({ category: i.category, categories: i.categories, name: i.name, id: i.id })),
                     channel: 'pos'
                 });
                 if (evalResult && evalResult.amount > 0) {
                     discountValue = evalResult.amount;
                     discountId = evalResult.discount.id;
-                    discountLabel = evalResult.discount.mode === 'percent'
-                        ? `${evalResult.discount.value}%`
-                        : evalResult.label;
+                    // Offer name beats "10%" — a capped percent would otherwise
+                    // record a rate that doesn't match the amount given.
+                    discountLabel = evalResult.label || evalResult.discount.name || 'Discount';
                     discountSource = evalResult.source;
                     discountGlobalLimit = evalResult.discount.globalLimit;
                 }
             } catch (e) {
                 console.warn('[POS] auto-discount evaluation failed:', e?.message || e);
+            }
+            // A pinned offer that no longer qualifies must stop the sale, not
+            // silently re-price it to a different (or no) discount.
+            if (state.walkinPinnedDiscountId && discountValue <= 0) {
+                state.walkinPinnedDiscountId = null;
+                state.walkinAutoDiscount = null;
+                renderWalkinCart().catch(() => {});
+                ui.showToast('That offer no longer applies and was removed. Check the total, then submit again.', 'warning');
+                return;
             }
         }
         discountValue = Math.max(0, Math.round(discountValue));
@@ -1207,15 +1298,15 @@ export async function submitWalkinSale() {
         printOrderReceipt(orderData).catch(e => console.warn('[POS] receipt print failed:', e?.message || e));
         logger.info('POS', 'Receipt printed');
 
-        // 4. Reset
-        clearWalkinCart();
+        // 4. Reset (no confirm — the sale is already written)
+        clearWalkinCart({ confirm: false });
 
     } catch (e) {
         if (savedOrderId) {
             // Order already written — never invite a retry that duplicates it.
             logger.error('POS', `Sale #${savedOrderId} saved, post-sale step failed: ${e.message}`, e);
             ui.showToast(`Sale #${savedOrderId} was saved, but a follow-up step failed: ${e.message}`, "warning");
-            clearWalkinCart();
+            clearWalkinCart({ confirm: false });
             return;
         }
         logger.error('POS', `Sale failed: ${e.message}`, e);
@@ -1227,7 +1318,8 @@ export async function submitWalkinSale() {
         }
     } finally {
         if (btn) {
-            btn.disabled = false;
+            // Respect the empty-cart rule from renderWalkinCart.
+            btn.disabled = Object.keys(state.walkinCart).length === 0;
             btn.innerHTML = '\u2705 Record Sale';
             logger.info('POS', 'Submit button re-enabled');
         }
@@ -1296,6 +1388,8 @@ export async function openCartAddonPicker(cartKey) {
     }
 
     state.editingCartKey = cartKey;
+    // Repaint the cart so the "editing" highlight follows the row being edited.
+    renderWalkinCart().catch(() => {});
 
     const submitBtn = document.getElementById('posAddBtn');
     if (submitBtn) {
@@ -1404,56 +1498,72 @@ export function addComboToWalkinCart(comboId) {
 
 /**
  * Keyboard shortcuts for the POS counter workflow.
- * Active only when the Walk-in (POS) tab is visible.
+ * Active only when the Walk-in (POS) tab is visible and no dialog/panel is open.
  *
- *   Enter  → submit sale (if cart non-empty)
+ *   Enter  → submit sale (if cart non-empty; never while a button/tile has focus)
  *   Esc    → close selection modal / offers panel
  *   c      → clear cart (if cart non-empty)
  *   ?      → show shortcut hints (toast)
  *
- * Ignored while typing into any <input>, <textarea>, or contenteditable.
+ * Ignored while typing, with any modifier held (Ctrl+C must stay copy),
+ * while the selection modal / offers panel is open, and on key repeat.
  */
 let _keyboardShortcutsActive = false;
 export function _initPosKeyboardShortcuts() {
     if (_keyboardShortcutsActive) return;
     _keyboardShortcutsActive = true;
 
-    const isInInput = () => {
-        const el = document.activeElement;
-        return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-    };
-
     const posTabActive = () => document.getElementById('tab-walkin')?.classList.contains('tab-content') &&
         !document.getElementById('tab-walkin')?.classList.contains('hidden');
 
+    const overlayOpen = () => {
+        const modal = document.getElementById('posSelectionModal');
+        const panel = document.getElementById('walkinOffersPanel');
+        return !!(modal?.classList.contains('active') ||
+            (panel && !panel.classList.contains('hidden')));
+    };
+
     document.addEventListener('keydown', (e) => {
+        if (e.defaultPrevented || e.repeat) return;
+        // Never eat browser/OS combos — Ctrl/Cmd+C is copy, not "clear cart".
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (!posTabActive()) return;
-        if (isInInput()) return;
 
-        const key = e.key.toLowerCase();
+        // An open dialog owns the keyboard; only Esc does something here.
+        if (overlayOpen()) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                const modal = document.getElementById('posSelectionModal');
+                if (modal?.classList.contains('active')) hidePOSSelectionModal();
+                else toggleWalkinOffersPanel();
+            }
+            return;
+        }
 
-        switch (key) {
+        const el = document.activeElement;
+        const tag = el?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+
+        // Let native activation win: Enter on #posAddBtn must add the dish,
+        // not submit the sale from behind the modal.
+        if (e.key === 'Enter' && (tag === 'BUTTON' || tag === 'A' || el?.getAttribute?.('role') === 'button')) return;
+
+        switch (e.key.toLowerCase()) {
             case 'enter':
                 e.preventDefault();
                 if (Object.values(state.walkinCart).length > 0) {
                     submitWalkinSale();
                 }
                 break;
-            case 'escape':
-                e.preventDefault();
-                const modal = document.getElementById('posSelectionModal');
-                const panel = document.getElementById('walkinOffersPanel');
-                if (modal && !modal.classList.contains('hidden')) {
-                    hidePOSSelectionModal();
-                } else if (panel && !panel.classList.contains('hidden')) {
-                    toggleWalkinOffersPanel();
-                }
-                break;
             case 'c':
                 e.preventDefault();
                 if (Object.values(state.walkinCart).length > 0) {
-                    clearWalkinCart();
-                    ui.showToast('Cart cleared', 'warning');
+                    // clearWalkinCart is async (confirm dialog) — toast only if it really cleared.
+                    Promise.resolve(clearWalkinCart()).then(() => {
+                        if (Object.values(state.walkinCart).length === 0) {
+                            ui.showToast('Cart cleared', 'warning');
+                        }
+                    }).catch(() => {});
                 }
                 break;
             case '?':

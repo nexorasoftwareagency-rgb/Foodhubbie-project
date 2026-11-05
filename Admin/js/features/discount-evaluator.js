@@ -146,13 +146,14 @@ async function _isFeatureEnabled() {
  * @returns {Promise<null | { discount, allApplied, amount, label, source }>}
  */
 export async function evaluateDiscount(ctx = {}) {
-    const { subtotal = 0 } = ctx;
+    const { subtotal = 0, onlyDiscountId = null } = ctx;
     if (!subtotal || subtotal <= 0) return null;
     if (!await _isFeatureEnabled()) return null;
 
     const all = await getAllDiscounts();
     const list = Object.entries(all)
         .filter(([, d]) => d && d.type && d.value != null)
+        .filter(([id]) => !onlyDiscountId || id === onlyDiscountId)
         .map(([id, d]) => ({ id, ...d }));
     // Only touch the categories node when a category discount could win —
     // keeps the common checkout read count unchanged.

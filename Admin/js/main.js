@@ -440,12 +440,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 case 'hideCategoryModal': logger.info('CATALOG', 'Hide category modal'); (await useMod('catalog')).hideCategoryModal(); break;
                 case 'saveRiderAccount': logger.info('RIDERS', 'Save rider account'); (await useMod('riders')).saveRiderAccount(); break;
                 case 'applyWalkinDiscount': {
-                    const amt = el.getAttribute('data-amount');
-                    const pct = el.getAttribute('data-pct');
-                    logger.info('POS', `Apply discount: ${amt ? '₹' + amt : pct + '%'}`);
-                    const p = await useMod('pos');
-                    if (amt) p.setDiscount(parseFloat(amt));
-                    else if (pct) p.setDiscountPct(parseFloat(pct));
+                    const id = el.getAttribute('data-id');
+                    logger.info('POS', `Apply discount offer: ${id}`);
+                    (await useMod('pos')).setPinnedDiscount(id);
                     break;
                 }
                 case 'applyWalkinCoupon': {

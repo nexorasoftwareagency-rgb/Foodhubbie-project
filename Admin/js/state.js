@@ -37,6 +37,7 @@ export const state = {
     walkinDiscountPct: 0,
     walkinAutoDiscount: null,  // { discount, amount, label, source } | null
     walkinCouponCode: null,    // user-entered coupon code (string) | null
+    walkinPinnedDiscountId: null, // configured offer applied from a preset chip — re-evaluated on every render/submit
     currentPOSModalDish: null,
     currentPOSModalQty: 1,
     currentPOSModalSize: null,

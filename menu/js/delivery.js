@@ -5,8 +5,8 @@
  * delivery-specific fields (address + location) and a direct order write
  * (menu/js/delivery-order.js) instead of a table-session attach.
  */
-import { outletRef, get, set as fbSet, OUTLET, update, runTransaction, mintAnonWebviewToken, assertOutletEnabled } from './firebase.js';
-import { Session, assertWalletGate } from './session.js';
+import { outletRef, get, set as fbSet, OUTLET, update, runTransaction, mintAnonWebviewToken } from './firebase.js';
+import { Session, assertOutletEnabled, assertWalletGate } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getWebviewStorageKey } from './cart.js';
 import * as UI from './ui.js';
 import { haptic } from './ui.js';
@@ -891,9 +891,15 @@ document.getElementById('btnPlaceOrder')?.addEventListener('click', async (e) =>
     // If no location, button onclick already opens dialog — just bail
     if (!M.location) return;
 
-    // Outlet and wallet gate — same as the WhatsApp delivery webview (delivery-order.js)
-    await assertOutletEnabled();
-    await assertWalletGate();
+    // Outlet and wallet gate — same as the WhatsApp delivery webview (delivery-order.js).
+    // Pre-check before minting a token; placeDeliveryOrder re-checks server-side-ish inside its try.
+    try {
+        await assertOutletEnabled();
+        await assertWalletGate();
+    } catch (err) {
+        UI.showToast(err?.userMessage || 'Ordering is temporarily unavailable', 'error');
+        return;
+    }
     // Block if token is invalid/used
     if (M.token && !M._tokenValid) { UI.showToast('This link is no longer valid. Ask the bot for a new one.', 'error'); return; }
 
