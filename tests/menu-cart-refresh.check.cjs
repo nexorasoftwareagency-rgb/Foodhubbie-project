@@ -28,8 +28,15 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     globalThis.CustomEvent = class { constructor(type) { this.type = type; } };
 
     const cart = await import(require('url').pathToFileURL(path.join(ROOT, 'menu/js/cart.js')).href);
-    const { Cart, restoreCart, addLine, setQty, clearCart, getWebviewStorageKey } = cart;
+    const { Cart, restoreCart, addLine, setQty, clearCart, getWebviewStorageKey, getQRStorageKey, setCartScope } = cart;
     const line = (dishId) => ({ dishId, name: dishId, img: '', size: 'Regular', addons: [], unitPrice: 100, qty: 1 });
+
+    // QR keys come from the session id the caller passes; the old helper read a
+    // non-existent global `Session`, so every QR basket silently shared the
+    // default key (and could be restored at a different table).
+    assert.equal(getQRStorageKey('S1'), 'foodhubbie_cart_qr_S1', 'QR key is session-scoped');
+    assert.notEqual(getQRStorageKey('S1'), getQRStorageKey('S2'), 'different sessions never share a key');
+    assert.equal(getQRStorageKey(), 'foodhubbie_cart', 'no session id falls back to the default key');
 
     restoreCart('foodhubbie_cart_webview_T1');
     const id = addLine(line('d1'));
@@ -52,17 +59,31 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     addLine(line('d3'), 'scope_b');
     assert.ok(store.has('scope_b'), 'an explicit key still overrides the restored scope');
 
+    // A QR session created on the first add moves the scope without dropping
+    // the draft that triggered it.
+    store.clear();
+    restoreCart(getQRStorageKey());
+    addLine(line('d4'));
+    assert.ok(store.has('foodhubbie_cart'), 'QR basket starts on the default key before a session exists');
+    setCartScope(getQRStorageKey('S1'));
+    assert.ok(store.has('foodhubbie_cart'), 'switching scope does not rewrite storage on its own');
+    addLine(line('d5'));
+    assert.equal(Object.keys(JSON.parse(store.get('foodhubbie_cart_qr_S1'))).length, 2, 'in-memory lines move to the session key on the next mutation');
+    restoreCart(getQRStorageKey('S1'));
+    assert.equal(Object.keys(Cart.lines).length, 2, 'the session basket survives a reload');
+
     // ---- 2. source guards ------------------------------------------------
     const app = read('menu/js/app.js');
     const session = read('menu/js/session.js');
 
     assert.ok(/export function detachSessionListeners\(/.test(session), 'session.js exports detachSessionListeners');
+    assert.ok(/export function reattachSessionWatch\(/.test(session), 'session.js exports reattachSessionWatch');
     assert.ok(/export function cleanupSession\([\s\S]{0,120}?detachSessionListeners\(\)/.test(session), 'cleanupSession still tears listeners down');
 
     const cleanupStart = session.indexOf('export function cleanupSession(');
     const cleanupBody = session.slice(cleanupStart, cleanupStart + 600);
     assert.ok(/removeItem\(`_pizza_group_\$\{Session\.sessionId\}`\)/.test(cleanupBody), 'a real session end still drops the group choice');
-    assert.ok(/clearCart\(getQRStorageKey\(\)\)/.test(cleanupBody), 'a real session end still clears the cart');
+    assert.ok(/clearCart\(getQRStorageKey\(Session\.sessionId\)\)/.test(cleanupBody), 'a real session end still clears the session cart');
 
     const unload = app.match(/window\.addEventListener\('(?:beforeunload|pagehide)'[\s\S]*?\);/g) || [];
     assert.equal(unload.length, 2, 'both unload listeners are present');
@@ -70,12 +91,27 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
         assert.ok(/detachSessionListeners\(\)/.test(h), 'unload detaches listeners');
         assert.ok(!/cleanupSession\(\)/.test(h), 'unload must NOT clear the cart / group choice');
     });
+    assert.ok(/addEventListener\('pageshow',[\s\S]{0,80}e\.persisted[\s\S]{0,80}reattachSessionWatch\(\)/.test(app), 'bfcache restore re-arms the session watch');
+    assert.ok(/const qrKey = getQRStorageKey\(Session\.sessionId\);[\s\S]{0,120}?setCartScope\(qrKey\)/.test(app), 'the first QR add binds the basket to the session key');
 
     // ---- 3. toast surface ------------------------------------------------
     // ui.js bails out (and wedges _toastShowing) when #toast is missing, so the
     // prune announcement — and every other customer message — silently vanished.
-    assert.ok(/id="toast"/.test(read('menu/index.html')), 'menu/index.html has the #toast element');
-    assert.ok(/getElementById\('toast'\)/.test(read('menu/js/ui.js')), 'ui.js showToast targets #toast');
+    const html = read('menu/index.html');
+    const ui = read('menu/js/ui.js');
+    assert.ok(/id="toast"/.test(html), 'menu/index.html has the #toast element');
+    assert.ok(/getElementById\('toast'\)/.test(ui), 'ui.js showToast targets #toast');
+    assert.ok(/if \(!t\) \{ _toastShowing = false; return; \}/.test(ui), 'a missing surface can never wedge the toast queue');
+
+    const css = read('menu/css/app.css');
+    const toastRule = (css.match(/\.toast\{[^}]*\}/) || [''])[0];
+    assert.ok(toastRule, 'app.css defines .toast');
+    const toastZ = Number((toastRule.match(/z-index:(\d+)/) || [])[1]);
+    const onbZ = Number((css.match(/\.onb-overlay\{[^}]*z-index:(\d+)/) || [])[1]);
+    assert.ok(toastZ > onbZ, 'toast renders above the onboarding sheet');
+    const toastBottom = Number((toastRule.match(/bottom:calc\((\d+)px/) || [])[1]);
+    assert.ok(toastBottom >= 120, 'toast clears the bottom nav + cart bar');
+    assert.ok(/width:max-content/.test(toastRule), 'toast sizes to its message, not 50vw');
 
     console.log('menu-cart-refresh OK — scope + unload + toast guards pass');
 })().catch((e) => { console.error('FAIL', e.message); process.exit(1); });

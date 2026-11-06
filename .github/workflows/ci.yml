@@ -20,6 +20,9 @@ jobs:
       - name: Encoding guard (no mojibake / BOM / C1 controls)
         run: node tests/encoding-check.mjs
 
+      - name: Menu cart persistence guard
+        run: node tests/menu-cart-refresh.check.cjs
+
       - name: Install bot dependencies
         working-directory: bot
         run: npm ci
