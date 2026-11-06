@@ -10,9 +10,10 @@ export function NotificationsPage() {
   const [filter, setFilter] = useState<"all" | "order" | "promo">("all");
 
   const filteredNotifications = notifications.filter((n) => {
+    const type = n.type as string;
     if (filter === "all") return true;
-    if (filter === "order") return n.type === "order";
-    if (filter === "promo") return n.type !== "order";
+    if (filter === "order") return type === "order";
+    if (filter === "promo") return type !== "order";
     return true;
   });
 

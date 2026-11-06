@@ -3,10 +3,7 @@ import { useState } from "react";
 import { PromoCard } from "@/components/promotions/PromoCard";
 import { PromoCodeInput } from "@/components/promotions/PromoCodeInput";
 import { PromoRecordItem } from "@/components/promotions/PromoRecordItem";
-import { formatCurrency } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
 
-// Sample promo codes - in production these come from the outlet's promotion config
 const samplePromos = [
   {
     code: "WELCOME20",
@@ -15,6 +12,8 @@ const samplePromos = [
     description: "20% off your first order",
     valid: "Valid for 7 days",
     discount: 0.2,
+    usedAt: Date.now() - 86400000,
+    orderId: "ORD-2026-001",
   },
   {
     code: "WEEKEND10",
@@ -23,6 +22,8 @@ const samplePromos = [
     description: "10% off orders above ₹500",
     valid: "Sat & Sun only",
     discount: 0.1,
+    usedAt: Date.now() - 172800000,
+    orderId: "ORD-2026-005",
   },
   {
     code: "FESTIVE15",
@@ -31,17 +32,13 @@ const samplePromos = [
     description: "15% off all items",
     valid: "Valid until month-end",
     discount: 0.15,
+    usedAt: Date.now() - 259200000,
+    orderId: "ORD-2026-012",
   },
 ];
 
-// Simulated promo usage history (in production this comes from Firebase)
-const samplePromoHistory = [
-  { code: "WELCOME20", discount: 200, usedAt: Date.now() - 86400000, orderId: "261105-001" },
-  { code: "WEEKEND10", discount: 50, usedAt: Date.now() - 172800000, orderId: "261104-005" },
-];
-
 export function PromotionsPage() {
-  const [promoCodes, setPromoCodes] = useState<{ code: string; title: string; subtitle: string; description: string; valid: string; discount: number }[]>(samplePromos);
+  const [promoCodes] = useState<{ code: string; title: string; subtitle: string; description: string; valid: string; discount: number; usedAt: number; orderId: string }[]>(samplePromos);
   const [isApplied, setIsApplied] = useState<Record<string, boolean>>({});
 
   const handleApplyCode = (code: string) => {
@@ -88,7 +85,7 @@ export function PromotionsPage() {
           ))
         ) : (
           <div className="col-span-2 flex flex-col items-center justify-center py-12 text-muted-foreground">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 opacity-40">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: "0 auto 16px", display: "block", opacity: 0.4 }}>
               <path d="M3 3l18 18" />
               <circle cx="12" cy="9" r="2" />
             </svg>
@@ -113,7 +110,7 @@ export function PromotionsPage() {
               <path d="M20.5 3.5A11 11 0 0 0 2.1 17.6L1 23l5.5-1.4A11 11 0 1 0 20.5 3.5zM12 20.9a9 9 0 0 1-4.6-1.3l-.3-.2-3.4.9.9-3.3-.2-.3A9 9 0 1 1 12 20.9z" />
             </svg>
           </span>
-          <span class="promo-link-body">
+          <span className="promo-link-body">
             <span className="promo-link-title">Chat on WhatsApp</span>
             <span className="promo-link-sub">Questions or feedback? Message us</span>
           </span>
@@ -127,14 +124,14 @@ export function PromotionsPage() {
       <div className="promo-divider"></div>
       <div className="promo-section-label">Promo History</div>
       <div className="promo-record-list">
-        {samplePromos.length > 0 ? (
-          samplePromos.map((record) => (
+        {promoCodes.length > 0 ? (
+          promoCodes.map((promo) => (
             <PromoRecordItem
-              key={record.code}
-              code={record.code}
-              discount={record.discount}
-              usedAt={record.usedAt}
-              orderId={record.orderId}
+              key={promo.code}
+              code={promo.code}
+              discount={promo.discount}
+              usedAt={promo.usedAt ?? 0}
+              orderId={promo.orderId ?? ""}
             />
           ))
         ) : (

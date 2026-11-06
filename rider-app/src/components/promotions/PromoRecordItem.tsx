@@ -11,7 +11,6 @@ interface PromoRecordItemProps {
 export function PromoRecordItem({
   code,
   discount,
-  usedAt,
   orderId,
 }: PromoRecordItemProps) {
   return (
