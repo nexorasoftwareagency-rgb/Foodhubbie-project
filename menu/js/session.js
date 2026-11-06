@@ -345,7 +345,12 @@ export async function ensureSession() {
         // shared across every tab of the same browser). This is what stops
         // one tab's group choice from silently overwriting another tab's.
         const savedGroupId = sessionStorage.getItem(`_pizza_group_${session.id}`);
-        if (savedGroupId && session.orderGroups[savedGroupId] && session.orderGroups[savedGroupId].status === 'active') {
+        const savedGroup = savedGroupId ? session.orderGroups?.[savedGroupId] : null;
+        // A bill that is being settled is still the guest's bill. Accept every
+        // non-terminal group status (active -> billing -> paid) so a refresh
+        // while staff settle the table cannot drop the guest on the
+        // "Split or Share?" screen with their own order unreachable.
+        if (savedGroup && (savedGroup.status === 'active' || savedGroup.status === 'billing' || savedGroup.status === 'paid')) {
             Session.currentGroupId = savedGroupId;
             watchSession();
             return { ok: true, groupChoiceNeeded: false, isNewSession: _isNewSession };

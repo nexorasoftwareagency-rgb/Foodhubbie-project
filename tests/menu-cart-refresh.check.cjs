@@ -76,6 +76,14 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     const app = read('menu/js/app.js');
     const session = read('menu/js/session.js');
 
+    // Refresh must not lose the guest's own bill: restoring the saved group
+    // while staff settle it (billing) or after payment (paid) is the fix for
+    // the "Split or Share? / No joinable groups" dead end.
+    const restoreAt = session.indexOf('const savedGroup =');
+    const restoreBlock = restoreAt >= 0 ? session.slice(restoreAt, restoreAt + 700) : '';
+    assert.ok(/savedGroup\.status === 'billing'/.test(restoreBlock), 'a bill being settled still restores the guest group');
+    assert.ok(/savedGroup\.status === 'paid'/.test(restoreBlock), 'a paid group still restores (receipt view)');
+
     assert.ok(/export function detachSessionListeners\(/.test(session), 'session.js exports detachSessionListeners');
     assert.ok(/export function reattachSessionWatch\(/.test(session), 'session.js exports reattachSessionWatch');
     assert.ok(/export function cleanupSession\([\s\S]{0,120}?detachSessionListeners\(\)/.test(session), 'cleanupSession still tears listeners down');
