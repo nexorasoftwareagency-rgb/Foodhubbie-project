@@ -2719,19 +2719,20 @@
     position: sticky;
     top: 0;
     z-index: 1;
-    background: var(--mob-ink);
-    color: #fff;
+    color: var(--mob-sub);
     text-align: left;
     padding: 12px 14px;
     font-size: 11.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
     cursor: pointer;
     white-space: nowrap;
     user-select: none;
+    border-bottom: 2px solid var(--mob-border);
+    background: transparent;
 }
-.mob-data-table thead th:hover { background: #1e293b; }
+.mob-data-table thead th:hover { background: transparent; }
 .mob-data-table thead th.mob-sort-asc::after { content: ' \25B2'; font-size: 9px; }
 .mob-data-table thead th.mob-sort-desc::after { content: ' \25BC'; font-size: 9px; }
 .mob-data-table tbody td {
@@ -2796,6 +2797,9 @@
 .mob-badge-pay-cash { background: var(--mob-green); }
 .mob-badge-pay-upi { background: var(--mob-orange); }
 .mob-badge-pay-cod { background: var(--mob-blue); }
+.mob-badge-status-placed { background: var(--mob-blue); }
+.mob-badge-status-confirmed { background: var(--mob-amber); }
+.mob-badge-status-ready { background: var(--mob-green); }
 .mob-badge-status-delivered { background: var(--mob-green); }
 .mob-badge-status-cancelled { background: var(--mob-red); }
 .mob-badge-status-pending { background: var(--mob-amber); }
