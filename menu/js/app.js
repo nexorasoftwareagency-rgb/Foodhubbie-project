@@ -1457,7 +1457,7 @@ function closeHamburger() {
 
 async function buildHamburgerMenu() {
     const isDirect = !!M.direct;
-    const activeTab = state.currentActiveTab || '';
+    const activeTab = (typeof state !== 'undefined' && state?.currentActiveTab) || '';
 
     // Build menu HTML first — never depends on Firebase, so the drawer
     // always has content even if the brand fetch fails.
@@ -1585,10 +1585,9 @@ hamburgerClose?.addEventListener('click', closeHamburger);
 hamburgerOverlay?.addEventListener('click', (e) => { if (e.target === hamburgerOverlay) closeHamburger(); });
 
 // Build menu on boot
-buildHamburgerMenu().catch(() => {});
-
-// Boot
-boot().catch(err => {
+boot().then(() => {
+    buildHamburgerMenu().catch(() => {});
+}).catch(err => {
     console.error('[Boot]', err);
     if (!_bootReady) _showConnectionIssue();
 });
