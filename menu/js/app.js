@@ -1416,6 +1416,20 @@ const hamburgerBrand = document.getElementById('hamburgerBrand');
 const hamburgerBtns = document.querySelectorAll('.hamburger-btn');
 const hamburgerClose = document.getElementById('btnHamburgerClose');
 
+// Icon map — single source of truth for SVG icons used in the drawer
+const ICONS = {
+    menu: '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>',
+    cart: '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
+    orders: '<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+    loyalty: '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>',
+    status: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+    history: '<svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>',
+    promotions: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
+    account: '<svg viewBox="0 0 24 24"><path d="M16 9c2.8 0 5 2.2 5 5s-2.2 5-5 5-5-2.2-5-5 2.2-5 5-5zM12 12c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3z"/></svg>',
+    help: '<svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>',
+    signout: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+};
+
 function openHamburger() {
     const badge = document.getElementById('hamburgerCartBadge');
     if (badge) badge.textContent = String(lineCount());
@@ -1437,36 +1451,66 @@ async function buildHamburgerMenu() {
         hamburgerBrand.textContent = brandSnap.val();
     }
 
-    const items = [
-        { id: 'screenMenu', label: 'Menu', icon: '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>' },
-        { id: 'screenCart', label: 'Cart', icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>', badge: true },
+    const activeTab = state.currentActiveTab || '';
+
+    // Sectioned menu structure
+    const sections = [
+        {
+            label: 'MENU',
+            items: [
+                { id: 'screenMenu', label: 'Menu', icon: 'menu' },
+                { id: 'screenCart', label: 'Cart', icon: 'cart', badge: true },
+            ],
+        },
     ];
 
     if (isDirect) {
-        items.push(
-            { id: 'screenOrders', label: 'Orders', icon: '<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' },
-            { id: 'screenLoyalty', label: 'Loyalty', icon: '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>' },
-            { id: 'screenTracking', label: 'Status', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>' },
-            { id: 'screenHistory', label: 'History', icon: '<svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>' },
-            { id: 'screenPromotions', label: 'Promos', icon: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>' },
-        );
+        sections.push({
+            label: 'ORDERS',
+            items: [
+                { id: 'screenOrders', label: 'Orders', icon: 'orders' },
+                { id: 'screenLoyalty', label: 'Loyalty', icon: 'loyalty' },
+                { id: 'screenTracking', label: 'Status', icon: 'status' },
+                { id: 'screenHistory', label: 'History', icon: 'history' },
+            ],
+        });
     } else {
-        items.push(
-            { id: 'screenTracking', label: 'Status', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>' },
-            { id: 'screenHistory', label: 'History', icon: '<svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>' },
-            { id: 'screenPromotions', label: 'Promos', icon: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>' },
-        );
+        sections.push({
+            label: 'ORDERS',
+            items: [
+                { id: 'screenTracking', label: 'Status', icon: 'status' },
+                { id: 'screenHistory', label: 'History', icon: 'history' },
+            ],
+        });
     }
+    sections.push({
+        label: 'PROMOTIONS',
+        items: [
+            { id: 'screenPromotions', label: 'Promos', icon: 'promotions' },
+        ],
+    });
 
-    hamburgerList.innerHTML = items.map(item => {
-        const badgeHtml = item.badge ? `<span class="hamburger-badge" id="hamburgerCartBadge">${lineCount()}</span>` : '';
+    // Build HTML from sections
+    const html = sections.map(section => {
+        const itemsHtml = section.items.map(item => {
+            const isActive = activeTab === item.id;
+            const badgeHtml = item.badge ? `<span class="hamburger-badge" id="hamburgerCartBadge">${lineCount()}</span>` : '';
+            return `
+                <button class="hamburger-item${isActive ? ' active' : ''}" data-hamburger-tab="${item.id}">
+                    ${ICONS[item.icon]}
+                    <span class="hamburger-label">${item.label}</span>
+                    ${badgeHtml}
+                </button>`;
+        }).join('');
         return `
-            <button class="hamburger-item" data-hamburger-tab="${item.id}">
-                ${item.icon}
-                <span>${item.label}</span>
-                ${badgeHtml}
-            </button>`;
+            <div class="hamburger-section">
+                <div class="hamburger-section-label">${section.label}</div>
+                ${itemsHtml}
+            </div>
+        `;
     }).join('');
+
+    hamburgerList.innerHTML = html;
 
     hamburgerList.querySelectorAll('.hamburger-item').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1488,16 +1532,16 @@ async function buildHamburgerMenu() {
     });
 
     const footerItems = [
-        { label: 'Account', icon: '<svg viewBox="0 0 24 24"><path d="M16 9c2.8 0 5 2.2 5 5s-2.2 5-5 5-5-2.2-5-5 2.2-5 5-5zM12 12c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3z"/></svg>', directOnly: true },
-        { label: 'Help / Contact', icon: '<svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' },
-        { label: 'Sign out', icon: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+        { label: 'Account', icon: 'account', directOnly: true },
+        { label: 'Help / Contact', icon: 'help' },
+        { label: 'Sign out', icon: 'signout' },
     ];
 
     hamburgerFooter.innerHTML = footerItems
         .filter(item => !item.directOnly || isDirect)
         .map(item => `
             <div class="hamburger-footer-item" data-hamburger-action="${item.label.toLowerCase().replace(/\s+/g,'-')}">
-                ${item.icon}
+                ${ICONS[item.icon]}
                 <span>${item.label}</span>
             </div>
         `).join('');

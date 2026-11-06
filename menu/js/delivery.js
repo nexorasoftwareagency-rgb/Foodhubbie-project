@@ -1042,6 +1042,15 @@ const dhHamburgerBrand = document.getElementById('hamburgerBrand');
 const dhHamburgerBtns = document.querySelectorAll('.hamburger-btn');
 const dhHamburgerClose = document.getElementById('btnHamburgerClose');
 
+// Icon map — single source of truth for SVG icons used in the drawer
+const DH_ICONS = {
+    menu: '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>',
+    cart: '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
+    promotions: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
+    help: '<svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>',
+    signout: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+};
+
 function dhOpenHamburger() {
     const badge = document.getElementById('hamburgerCartBadge');
     if (badge) badge.textContent = String(lineCount());
@@ -1062,20 +1071,41 @@ async function dhBuildHamburgerMenu() {
         dhHamburgerBrand.textContent = brandSnap.val();
     }
 
-    const items = [
-        { id: 'screenMenu', label: 'Menu', icon: '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>' },
-        { id: 'screenCart', label: 'Cart', icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>', badge: true },
-        { id: 'screenPromotions', label: 'Promos', icon: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>' },
+    const activeTab = state.currentActiveTab || '';
+
+    const sections = [
+        {
+            label: 'MENU',
+            items: [
+                { id: 'screenMenu', label: 'Menu', icon: 'menu' },
+                { id: 'screenCart', label: 'Cart', icon: 'cart', badge: true },
+            ],
+        },
+        {
+            label: 'PROMOTIONS',
+            items: [
+                { id: 'screenPromotions', label: 'Promos', icon: 'promotions' },
+            ],
+        },
     ];
 
-    dhHamburgerList.innerHTML = items.map(item => {
-        const badgeHtml = item.badge ? `<span class="hamburger-badge" id="hamburgerCartBadge">${lineCount()}</span>` : '';
+    dhHamburgerList.innerHTML = sections.map(section => {
+        const itemsHtml = section.items.map(item => {
+            const isActive = activeTab === item.id;
+            const badgeHtml = item.badge ? `<span class="hamburger-badge" id="hamburgerCartBadge">${lineCount()}</span>` : '';
+            return `
+                <button class="hamburger-item${isActive ? ' active' : ''}" data-hamburger-tab="${item.id}">
+                    ${DH_ICONS[item.icon]}
+                    <span class="hamburger-label">${item.label}</span>
+                    ${badgeHtml}
+                </button>`;
+        }).join('');
         return `
-            <button class="hamburger-item" data-hamburger-tab="${item.id}">
-                ${item.icon}
-                <span>${item.label}</span>
-                ${badgeHtml}
-            </button>`;
+            <div class="hamburger-section">
+                <div class="hamburger-section-label">${section.label}</div>
+                ${itemsHtml}
+            </div>
+        `;
     }).join('');
 
     dhHamburgerList.querySelectorAll('.hamburger-item').forEach(btn => {
@@ -1089,9 +1119,14 @@ async function dhBuildHamburgerMenu() {
         });
     });
 
+    const footerItems = [
+        { label: 'Help / Contact', icon: 'help' },
+        { label: 'Sign out', icon: 'signout' },
+    ];
+
     dhHamburgerFooter.innerHTML = footerItems.map(item => `
         <div class="hamburger-footer-item" data-hamburger-action="${item.label.toLowerCase().replace(/\s+/g,'-')}">
-            ${item.icon}
+            ${DH_ICONS[item.icon]}
             <span>${item.label}</span>
         </div>
     `).join('');
