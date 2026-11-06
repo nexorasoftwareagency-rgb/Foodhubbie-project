@@ -21,21 +21,11 @@ const TIER_LABEL = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' };
 const TIER_COLOUR = { bronze: '#8a6d3b', silver: '#a8a8a8', gold: '#c5a005' };
 
 const DEFAULTS = {
-  // 5000 paise = 1 point per ₹50; at ₹1/point that is ~2% back, the usual
-  // restaurant-points range (was 5%, which can erase a 3-8% margin).
   earnRatePaisePerPoint: 5000,
-  // Points lapse after this many days without a paid order. 0 = never.
   expiryDays: 180,
-  // R2: 1 point redeems for ₹1 of tender (100 paise). Admin-tunable.
   redeemValuePaisePerPoint: 100,
-  // R9: optional minimum spend AFTER redemption — a bill below this cannot
-  // use reward tender. 0 = disabled.
   minSpendAfterRedemption: 0,
-  // R10: Zomato-style per-order cap — one bill's tender can never exceed
-  // this % of its own subtotal. 0 = no cap (pre-R10 behavior).
   maxRedeemPercentOfOrder: 0,
-  // Toggles (Phase 2): master earn switch, dine-in settlement earn, and
-  // clawback on cancellation/void.
   earnEnabled: true,
   dineInEarnEnabled: true,
   clawbackEnabled: true,
@@ -51,9 +41,9 @@ const DEFAULTS = {
   ]
 };
 
-let _config = null;   // deep copy of what is shown in the form
-let _server = null;   // last fetched server value, for change detection
-let _editingReward = null;  // reward id currently edited inline, or null
+let _config = null;
+let _server = null;
+let _editingReward = null;
 let _formListenersAttached = false;
 
 function normPhone(raw) {
@@ -127,9 +117,6 @@ function cloneConfig(c) {
     };
 }
 
-// Single payload builder — set() overwrites the whole loyalty/config node,
-// so EVERY writer must carry ALL fields or an unrelated save (e.g. adding a
-// reward) would silently reset the rest to defaults.
 function buildConfigPayload(overrides = {}) {
     const c = _config || {};
     return {
@@ -148,9 +135,6 @@ function buildConfigPayload(overrides = {}) {
     };
 }
 
-// R8: what one rupee of spend is actually worth when redeemed, per tier —
-// (pointValue / earnRate) × multiplier, shown as a percentage. Makes the
-// earn↔burn relationship visible before an admin changes either number.
 function effectiveCashback(config) {
     const earn = Number(config && config.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint;
     const redeem = Number(config && config.redeemValuePaisePerPoint) || DEFAULTS.redeemValuePaisePerPoint;
@@ -248,6 +232,24 @@ function renderAddRewardRow() {
     </tr>`;
 }
 
+// Tier progress mini-ring — one data hue on the customer's progress (§6: one hue per chart)
+function tierRing(pts, nt, disp) {
+    if (!nt || nt.k === null) return `<div style="font-size:11.5px;color:var(--mob-sub);">Top tier reached</div>`;
+    return `
+    <div style="display:flex;align-items:center;gap:10px;">
+        <div style="font-size:11.5px;color:var(--mob-sub);">
+            ${Math.max(0, nt.min - pts)} points to ${tierLabel(nt.k)}
+        </div>
+        <svg width="56" height="56" viewBox="0 0 56 56" role="img" aria-label="Tier progress: ${nt.percent}%">
+            <circle cx="28" cy="28" r="24" fill="none" stroke="var(--mob-border)" stroke-width="4"/>
+            <circle cx="28" cy="28" r="24" fill="none" stroke="${disp}" stroke-width="4"
+                stroke-dasharray="150" stroke-dashoffset="${150 - (150 * nt.percent / 100)}"
+                style="stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%;"/>
+            <text x="28" y="34" text-anchor="middle" fill="var(--mob-ink)" font-size="14" font-weight="800">${nt.percent}%</text>
+        </svg>
+    </div>`;
+}
+
 function renderConfigForm() {
     const c = _config;
     const rateRs = (c.earnRatePaisePerPoint || DEFAULTS.earnRatePaisePerPoint) / 100;
@@ -268,26 +270,26 @@ function renderConfigForm() {
     return `
     <div class="mob-card mob-table-card" style="margin:0;">
         <div class="mob-section-head-row">
-            <h3 class="mob-card-title">Configure the program</h3>
+            <h3 class="mob-card-title">Program settings</h3>
             <p class="mob-td-sub" style="margin-left:auto;max-width:420px;color:var(--mob-sub);">
                 Customers earn <b>${ptsPer100(c)} points per ₹100 spent</b> (${money(c.earnRatePaisePerPoint / 100)} spent per point).
-                Points redeem at <b>${money(redeemRs)} per point</b> as payment tender on delivery checkout.
+                Points redeem at <b>${money(redeemRs)} per point</b> as payment tender at checkout.
             </p>
         </div>
         <div style="padding:16px;">
             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                 <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Amount spent for 1 point (?)</label>
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Amount spent for 1 point</label>
                     <input type="number" id="loyalty-earn-rate" min="1" step="1"
                         value="${Number(rateRs).toFixed(rateRs % 1 === 0 ? 0 : 2)}" class="mob-input-reward">
                 </div>
                 <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Value of 1 point (?)</label>
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Value of 1 point</label>
                     <input type="number" id="loyalty-redeem-value" min="0.25" step="0.25"
                         value="${Number(redeemRs).toFixed(redeemRs % 1 === 0 ? 0 : 2)}" class="mob-input-reward">
                 </div>
                 <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Min spend after redemption (?)</label>
+                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Min spend after redemption</label>
                     <input type="number" id="loyalty-min-spend" min="0" step="10"
                         value="${minSpendRs}" class="mob-input-reward" style="max-width:140px;">
                 </div>
@@ -303,7 +305,7 @@ function renderConfigForm() {
                 </div>
                 <button type="button" data-action="loyalty-save-config" class="btn-primary">Save program settings</button>
             </div>
-            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum). Max tender 0 = no cap; e.g. 10 caps one bill's redemption at 10% of its own subtotal (Zomato-style), protecting margin on large orders. Expiry 0 = points never lapse; 180 days is the default. Customers redeem rewards directly in the app — points are deducted as payment tender at checkout. No WhatsApp code needed.</div>
+            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. Max tender 0 = no cap; e.g. 10 caps one bill's redemption at 10% of its own subtotal. Expiry 0 = points never lapse; 180 days is the default. Customers redeem rewards directly in the app — no WhatsApp code needed.</div>
             <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;">
                 ${toggle('loyalty-earn-enabled', earnOn, 'Points earning', 'Turn off to pause all earning')}
                 ${toggle('loyalty-dinein-earn-enabled', dineInOn, 'Dine-in earning', 'Award points when a table bill is paid')}
@@ -383,11 +385,7 @@ function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsRec, ordersSn
         ? `<span class="mob-td-strong">Rank #${rankRec.rank}</span> <span class="mob-td-sub">among this kitchen's customers</span>`
         : `<span class="mob-td-sub">Not ranked yet</span>`;
 
-    const progress = nt ? `<div style="font-size:11.5px;color:var(--mob-sub);margin-top:2px;">
-        ${nt.k === null ? 'Top tier reached' : `${Math.max(0, nt.min - pts)} points to ${tierLabel(nt.k)}`}
-        <div style="margin-top:4px;height:6px;background:var(--mob-line);border-radius:3px;overflow:hidden;">
-            <div style="height:100%;width:${nt.percent || 0}%;background:${disp};"></div>
-        </div></div>` : `<div style="font-size:11.5px;color:var(--mob-sub);margin-top:2px;">Top tier reached</div>`;
+    const progress = tierRing(pts, nt, disp);
 
     const recentOrders = orders.map(o => `
         <tr>
@@ -419,7 +417,7 @@ function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsRec, ordersSn
                 </div>
                 <div style="display:flex;flex-direction:column;gap:4px;">
                     <span class="mob-td-sub">Points</span>
-                    <span class="mob-td-strong" style="font-size:20px;">${pts}</span>
+                    <span class="mob-td-strong" style="font-size:28px;font-variant-numeric:tabular-nums;">${pts}</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:4px;">
                     <span class="mob-td-sub">Lifetime spent</span>
@@ -434,7 +432,7 @@ function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsRec, ordersSn
                 </div>
             </div>
             <div style="margin-top:10px;">${progress}</div>
-            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--mob-line);">
+            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--mob-border);">
                 <div style="display:flex;flex-direction:column;gap:4px;">
                     <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Adjust points (±)</label>
                     <input type="number" id="loyalty-adj-delta" step="1" class="mob-input-reward" style="max-width:120px;" placeholder="e.g. -50 or 25">
@@ -526,8 +524,6 @@ async function saveConfig() {
     }
     if (!ok) { showToast('Enter valid tier thresholds and multipliers', 'error'); return; }
 
-    // Update the in-memory config first so buildConfigPayload carries every
-    // field (set() overwrites the whole node).
     _config = {
         ...(_config || {}),
         earnRatePaisePerPoint: Math.round(rateRs * 100),
@@ -613,7 +609,7 @@ async function refreshKpis() {
         const valueRs = Math.round((lifetime * (Number(_config && _config.redeemValuePaisePerPoint) || DEFAULTS.redeemValuePaisePerPoint)) / 100);
         issuedEl.textContent = lifetime > 0
             ? `${lifetime.toLocaleString('en-IN')} pts · ${money(valueRs)} value`
-            : '0 pts';
+            : '0 pts · ₹0 value';
         membersEl.textContent = String(rows.length);
     } catch (e) {
         console.warn('[Loyalty] KPI read failed:', e);
@@ -652,8 +648,6 @@ async function adjustPoints(phone) {
     try {
         const result = await runTransaction(Outlet.ref(`customers/${phone}/loyalty`), (cur) => {
             const c = cur || null;
-            // No existing loyalty record — refuse to fabricate one. A manual
-            // adjustment can only touch a customer who has already earned points.
             if (!c || !c.phone) return null;
             const curPoints = Number.isFinite(Number(c.points)) ? Number(c.points) : 0;
             const newPoints = Math.max(0, curPoints + delta);
@@ -698,6 +692,19 @@ async function lookupCustomer() {
             get(Outlet.ref(`customers/${phone}/orders`)),
             get(Outlet.ref(`customers/${phone}/app`))
         ]);
+        if (!loyalSnap || !loyalSnap.exists()) {
+            container.innerHTML = `
+                <div class="mob-card mob-table-card" style="margin:0;padding:24px;">
+                    <div class="mob-section-head-row">
+                        <h3 class="mob-card-title">Customer: ${escapeHtml(phone)}</h3>
+                    </div>
+                    <div style="padding:16px;text-align:center;color:var(--mob-sub);">
+                        <p style="margin:0 0 8px 0;">No loyalty record yet.</p>
+                        <p style="margin:0; font-size:12px;">This customer hasn't earned any points at this outlet. Points are awarded on paid orders.</p>
+                    </div>
+                </div>`;
+            return;
+        }
         container.innerHTML = renderCustomerCard(phone,
             appSnap && appSnap.exists() ? appSnap.val() : null,
             loyalSnap && loyalSnap.exists() ? loyalSnap.val() : null,
@@ -716,48 +723,49 @@ function renderAll() {
     const rateRs = (_config && _config.earnRatePaisePerPoint) ? _config.earnRatePaisePerPoint / 100 : 20;
     const configured = _server != null;
     container.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:14px;">
+    <div style="display:flex;flex-direction:column;gap:16px;">
         <div class="mob-section-head-row" style="align-items:flex-start;">
             <div>
                 <h2 class="mob-card-title" style="font-size:22px;">Loyalty</h2>
-                <p class="mob-td-sub">Points, tiers and rewards customers earn at this kitchen.</p>
+                <p class="mob-td-sub">Points, tiers and rewards customers earn at ${escapeHtml(Outlet.current)}.</p>
             </div>
         </div>
-        <div class="mob-card" style="padding:14px 16px;margin:0;">
-            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <span class="mob-td-sub">Program</span>
-                    <span class="mob-td-strong">${configured ? 'Configured' : 'Using defaults'}</span>
+        <div class="mob-card mob-table-card" style="margin:0;">
+            <div style="padding:16px;">
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <span class="mob-td-sub">Program</span>
+                        <span class="mob-td-strong">${configured ? 'Configured' : 'Using defaults'}</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <span class="mob-td-sub">Earn rate</span>
+                        <span class="mob-td-strong">${ptsPer100(_config)} points per ₹100</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <span class="mob-td-sub">Rewards in catalog</span>
+                        <span class="mob-td-strong">${((_config && _config.rewards) || DEFAULTS.rewards).length}</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <span class="mob-td-sub">Ranked members</span>
+                        <span class="mob-td-strong" id="loyalty-kpi-members">…</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <span class="mob-td-sub">Points ever issued</span>
+                        <span class="mob-td-strong" id="loyalty-kpi-issued">…</span>
+                    </div>
+                    <div style="margin-left:auto;display:flex;flex-direction:column;gap:2px;text-align:right;">
+                        <span class="mob-td-sub">Outlet</span>
+                        <span class="mob-td-sub" style="font-size:11px;text-transform:uppercase;">${escapeHtml(Outlet.current)}</span>
+                    </div>
                 </div>
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <span class="mob-td-sub">Earn rate</span>
-                    <span class="mob-td-strong">${ptsPer100(_config)} points per ₹100</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <span class="mob-td-sub">Rewards in catalog</span>
-                    <span class="mob-td-strong">${((_config && _config.rewards) || DEFAULTS.rewards).length}</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <span class="mob-td-sub">Ranked members</span>
-                    <span class="mob-td-strong" id="loyalty-kpi-members">…</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <span class="mob-td-sub">Points ever issued</span>
-                    <span class="mob-td-strong" id="loyalty-kpi-issued">…</span>
-                </div>
-                <div style="margin-left:auto;display:flex;flex-direction:column;gap:2px;text-align:right;">
-                    <span class="mob-td-sub">Outlet</span>
-                    <span class="mob-td-sub" style="font-size:11px;text-transform:uppercase;">${escapeHtml(Outlet.current)}</span>
-                </div>
+                ${!configured ? `<p class="mob-table-empty" style="margin:8px 0 0 0;">Not yet configured by an admin — customers earn at the default rates shown below. Open any panel to save your own settings.</p>` : ''}
             </div>
-            ${!configured ? `<p class="mob-table-empty" style="margin:8px 0 0 0;">Not yet configured by an admin — customers earn at the default rates shown below. Open any panel to save your own settings.</p>` : ''}
         </div>
-        ${renderConfigForm()}
-        ${renderRewardsCatalog()}
+        <!-- Customer lookup is the most frequent job — placed first -->
         <div class="mob-card mob-table-card" style="margin:0;">
             <div class="mob-section-head-row">
                 <h3 class="mob-card-title">Look up a customer</h3>
-                <p class="mob-td-sub" style="margin-left:auto;">Search by phone to see their tier, points, rank and redemptions.</p>
+                <p class="mob-td-sub" style="margin-left:auto;">Search by phone to see tier, points, rank and redemptions.</p>
             </div>
             <div style="padding:16px;">
                 <div style="display:flex;gap:8px;align-items:flex-end;">
@@ -768,6 +776,8 @@ function renderAll() {
                 <div id="loyalty-customer-result"></div>
             </div>
         </div>
+        ${renderConfigForm()}
+        ${renderRewardsCatalog()}
     </div>`;
     document.getElementById('loyalty-search-customer')?.addEventListener('click', () => lookupCustomer());
     document.getElementById('loyalty-lookup-phone')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') lookupCustomer(); });
