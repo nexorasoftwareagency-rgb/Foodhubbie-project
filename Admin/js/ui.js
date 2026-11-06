@@ -22,10 +22,17 @@ export async function loadLucide() {
 
 
 
+let _sidebarLastClick = 0;
+
 export const toggleSidebar = () => {
     const sidebar = document.getElementById('sidebarNav');
     const overlay = document.getElementById('sidebarOverlay');
     if (!sidebar) return;
+
+    // Rapid-click guard: ignore clicks within 300ms of the last one
+    const now = Date.now();
+    if (now - _sidebarLastClick < 300) return;
+    _sidebarLastClick = now;
 
     haptic(15);
 

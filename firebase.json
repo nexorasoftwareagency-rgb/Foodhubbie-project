@@ -4,7 +4,16 @@
   },
   "auth": {
     "authorizedDomains": [
-      "localhost"
+      "localhost",
+      "https://app.foodhubbie.in",
+      "https://menu.foodhubbie.in",
+      "https://control.foodhubbie.in",
+      "https://foodhubbie.in",
+      "https://foodhubbie-admins.web.app",
+      "https://foodhubbie-supremeadmin.web.app",
+      "https://foodhubbie-riderapp.web.app",
+      "https://foodhubbie-qrmenu.web.app",
+      "https://foodhubbie-web.web.app"
     ],
     "providers": {
       "emailPassword": true,
