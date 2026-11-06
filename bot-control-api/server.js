@@ -368,18 +368,44 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
     if (!reqData) throw httpError(404, 'Onboarding request not found');
     if (reqData.status !== 'pending') throw httpError(409, `Request already ${reqData.status}`);
 
-    // Password: prefer the write-only secrets node (new flow — never client-readable);
-    // fall back to the legacy inline field for requests submitted before the cutover.
-    let adminPassword = null;
-    try {
-      const secSnap = await admin.database().ref(`onboardingSecrets/${reqKey}`).get();
-      adminPassword = secSnap.val()?.password || null;
-    } catch (e) {
-      console.warn('[approve-onboarding] secret read failed (non-fatal, trying legacy):', e.message);
-    }
-    if (!adminPassword) adminPassword = reqData.adminPassword || null;
-    if (!adminPassword || adminPassword.length < 6) {
-      throw httpError(422, 'Password secret missing or too short — ask the applicant to re-submit.');
+    // Resolve the owner's dashboard account. New requests carry `authUid`: the
+    // applicant's browser created the Firebase Auth user at signup, so the
+    // password travelled browser -> Firebase over TLS and was never stored here.
+    // Legacy requests (submitted before the cutover) still carry a password to
+    // replay — write-only secret node first, then the old inline field. That
+    // branch exists for one release so a pending request is not stranded.
+    const authUid = typeof reqData.authUid === 'string' && reqData.authUid ? reqData.authUid : null;
+    let uid = null;
+    let legacyPassword = null;
+
+    if (authUid) {
+      if (String(adminEmail || '').toLowerCase() !== String(reqData.adminEmail || '').toLowerCase()) {
+        throw httpError(422, 'The admin email cannot be changed after the signup account was created.');
+      }
+      let user = null;
+      try {
+        user = await admin.auth().getUser(authUid);
+      } catch (err) {
+        if (err.code !== 'auth/user-not-found') throw err;
+      }
+      if (!user) {
+        throw httpError(422, 'The dashboard account recorded on this request no longer exists — ask the applicant to submit the form again.');
+      }
+      if (String(user.email || '').toLowerCase() !== String(adminEmail || '').toLowerCase()) {
+        throw httpError(422, 'The dashboard account does not match the admin email on this request.');
+      }
+      uid = user.uid;
+    } else {
+      try {
+        const secSnap = await admin.database().ref(`onboardingSecrets/${reqKey}`).get();
+        legacyPassword = secSnap.val()?.password || null;
+      } catch (e) {
+        console.warn('[approve-onboarding] secret read failed (non-fatal, trying legacy):', e.message);
+      }
+      if (!legacyPassword) legacyPassword = reqData.adminPassword || null;
+      if (!legacyPassword || legacyPassword.length < 6) {
+        throw httpError(422, 'No signup account on this request — ask the applicant to submit the form again.');
+      }
     }
 
     // Ids are decided here but only STAMPED after the duplicate-email check: the stamp is the
@@ -390,15 +416,19 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
     const bid = reqData.bid || admin.database().ref('businesses').push().key.toLowerCase();
     const oid = reqData.oid || admin.database().ref(`businesses/${bid}/outlets`).push().key.toLowerCase();
 
-    // Duplicate admin email — a first attempt is always rejected (the account may belong to a
-    // rider or a previous tenant). Only a retry of THIS request may reuse the Auth user it
-    // already created, otherwise a real signup dies with an orphan account.
-    try {
-      await admin.auth().getUserByEmail(adminEmail);
-      if (!isRetry) throw httpError(409, `Admin email ${adminEmail} already exists`);
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      if (err.code !== 'auth/user-not-found') throw err;
+    // Duplicate admin email — a first LEGACY attempt is always rejected (the account may
+    // belong to a rider or a previous tenant). Only a retry of THIS request may reuse the
+    // Auth user it already created, otherwise a real signup dies with an orphan account.
+    // An `authUid` request is different: the account was created (or password-proven) at
+    // signup, so it is expected to exist — the email match above is the binding check.
+    if (!authUid) {
+      try {
+        await admin.auth().getUserByEmail(adminEmail);
+        if (!isRetry) throw httpError(409, `Admin email ${adminEmail} already exists`);
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        if (err.code !== 'auth/user-not-found') throw err;
+      }
     }
 
     // Stamp bid/oid BEFORE creating anything. A retry after a mid-flight failure then reuses the
@@ -455,20 +485,27 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
       });
     }
 
-    // Create Auth user
-    let uid;
-    try {
-      const user = await admin.auth().getUserByEmail(adminEmail);
-      uid = user.uid;
-      await admin.auth().updateUser(uid, { password: adminPassword });
-    } catch (err) {
-      if (err.code !== 'auth/user-not-found') throw err;
-      const created = await admin.auth().createUser({ email: adminEmail, password: adminPassword });
-      uid = created.uid;
+    // Create/refresh the Auth user. New flow: already created at signup and only
+    // proven here — there is genuinely no password in this process to set.
+    if (!uid) {
+      try {
+        const user = await admin.auth().getUserByEmail(adminEmail);
+        uid = user.uid;
+        await admin.auth().updateUser(uid, { password: legacyPassword });
+      } catch (err) {
+        if (err.code !== 'auth/user-not-found') throw err;
+        const created = await admin.auth().createUser({ email: adminEmail, password: legacyPassword });
+        uid = created.uid;
+      }
     }
 
     // Write admins/{uid} mirror — merge (never clobber owner-managed name/fcmToken/isSuper); seed name only for new records
     const curAdmin = (await admin.database().ref(`admins/${uid}`).get()).val();
+    // An account that already owns a different outlet must not be repointed at this one
+    // (the signup resume path accepts any existing account whose password was proven).
+    if (curAdmin && (curAdmin.businessId !== bid || curAdmin.outlet !== oid)) {
+      throw httpError(409, 'This login already belongs to another outlet. Sign up with a different email.');
+    }
     await admin.database().ref(`admins/${uid}`).update({
       email: adminEmail, outlet: oid, businessId: bid, role: 'owner',
       ...(curAdmin ? {} : { name: adminName || outletName }),
@@ -515,7 +552,9 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
       console.warn('[approve-onboarding] secret delete failed (non-fatal):', e.message);
     });
 
-    // Update onboarding request
+    // Update onboarding request. The old inline `adminPassword` is burned by the
+    // rule schema (values are forbidden, deletion allowed), and the response
+    // below never carries a credential.
     await admin.database().ref(`onboardingRequests/${reqKey}`).update({
       status: 'approved',
       bid, oid,
@@ -524,7 +563,7 @@ async function approveOnboardingRequest(reqKey, f, reviewerUid) {
       adminPassword: null,
     });
 
-  return { bid, oid, uid, email: adminEmail, password: adminPassword };
+  return { bid, oid, uid, email: adminEmail };
 }
 
 // Manual approval (Supreme Admin UI). Unchanged contract: same body, same response.

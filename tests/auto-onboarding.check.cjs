@@ -9,7 +9,7 @@ let code = src.slice(a, b)
   .replace(/^function startAutoApproval[\s\S]*?\r?\n\}\r?\n/m, '');      // watcher wiring is exercised separately
 
 function makeFake(db0, users0, verified0 = []) {
-  const db = JSON.parse(JSON.stringify(db0)), users = { ...users0 }, verified = new Set(verified0), deleted = [];
+  const db = JSON.parse(JSON.stringify(db0)), users = { ...users0 }, verified = new Set(verified0), deleted = [], updated = [];
   const get = (path) => path.split('/').filter(Boolean).reduce((o, k) => (o == null ? o : o[k]), db);
   const set = (path, v) => { const ks = path.split('/').filter(Boolean), last = ks.pop(); let o = db; for (const k of ks) o = o[k] = o[k] || {}; if (v === null) delete o[last]; else o[last] = v; };
   let pk = 0;
@@ -30,12 +30,17 @@ function makeFake(db0, users0, verified0 = []) {
   const database = () => ({ ref });
   database.ServerValue = { TIMESTAMP: 'TS' };
   const auth = () => ({
-    getUserByEmail: async (e) => { if (users[e]) return { uid: users[e], emailVerified: verified.has(e) }; const er = new Error('nf'); er.code = 'auth/user-not-found'; throw er; },
+    getUserByEmail: async (e) => { if (users[e]) return { uid: users[e], email: e, emailVerified: verified.has(e) }; const er = new Error('nf'); er.code = 'auth/user-not-found'; throw er; },
+    getUser: async (uid) => {
+      const email = Object.keys(users).find((e) => users[e] === uid);
+      if (!email) { const er = new Error('nf'); er.code = 'auth/user-not-found'; throw er; }
+      return { uid, email, emailVerified: verified.has(email) };
+    },
     createUser: async ({ email }) => { users[email] = 'uid_' + email; return { uid: users[email] }; },
-    updateUser: async () => {},
+    updateUser: async (uid, fields) => { updated.push({ uid, ...fields }); },
     deleteUser: async (uid) => { deleted.push(uid); for (const [e, u] of Object.entries(users)) if (u === uid) delete users[e]; },
   });
-  return { admin: { database, auth }, db, users, verified, deleted };
+  return { admin: { database, auth }, db, users, verified, deleted, updated };
 }
 const mk = (fake, env = {}) => {
   const ctx = { admin: fake.admin, console: { log() {}, warn() {}, error() {} }, process: { env }, setTimeout, getBillingDefaults: () => ({ mode: 'per_order' }), Promise, Date, Error, Set, Number, String, Object, Math, RegExp, JSON };
@@ -49,7 +54,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let f = makeFake({ onboardingRequests: { r1: req() }, onboardingSecrets: { r1: { password: 'secret123' } } }, {});
   let c = mk(f); await c.autoApproveOne('r1');
   const r = f.db.onboardingRequests.r1, o = Object.values(Object.values(f.db.businesses)[0].outlets)[0];
-  assert.equal(r.status, 'approved'); assert.equal(r.reviewedBy, 'auto-onboarding'); assert.equal(r.adminPassword, null);
+  assert.equal(r.status, 'approved'); assert.equal(r.reviewedBy, 'auto-onboarding'); assert.ok(!r.adminPassword);
   assert.equal(o.locked, true, 'new outlet must be locked'); assert.ok(!(f.db.onboardingSecrets && f.db.onboardingSecrets.r1), 'secret burned');
   assert.ok(f.users['a@x.com'], 'auth user created');
   assert.equal(f.db.admins['uid_a@x.com'].name, 'Asha', 'admins.name is the person, not the outlet');
@@ -117,6 +122,50 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   assert.equal(f.db.meta, undefined, 'counter not advanced on a retry');
   console.log('PASS retry: previous outlet number reused, counter untouched');
 
+  // ---- New signup flow: the browser created the Auth account, so approval only
+  // resolves the uid. There is no password in this process to set or echo.
+  f = makeFake({ onboardingRequests: { r1: req({ authUid: 'uid_new' }) } }, { 'a@x.com': 'uid_new' });
+  c = mk(f); await c.autoApproveOne('r1');
+  const ar = f.db.onboardingRequests.r1;
+  assert.equal(ar.status, 'approved', 'authUid request approved');
+  assert.ok(ar.bid && ar.oid);
+  assert.equal(f.db.admins.uid_new.outlet, ar.oid, 'signup account mirrored as owner');
+  assert.equal(f.db.admins.uid_new.role, 'owner');
+  assert.equal(f.updated.length, 0, 'approval never touches the existing account password');
+  assert.equal(f.db.businesses[ar.bid].outlets[ar.oid].adminLogin.email, 'a@x.com');
+  console.log('PASS authUid: existing signup account adopted, password untouched');
+
+  // A mismatched email on the recorded account must never be approved.
+  f = makeFake({ onboardingRequests: { r1: req({ authUid: 'uid_new' }) } }, { 'other@x.com': 'uid_new' });
+  c = mk(f); await c.autoApproveOne('r1');
+  assert.ok(!f.db.businesses, 'email mismatch creates nothing');
+  assert.notEqual(f.db.onboardingRequests.r1.status, 'approved');
+  console.log('PASS authUid: account email mismatch is refused');
+
+  // A uid whose account disappeared (deleted in Firebase) is a clear failure.
+  f = makeFake({ onboardingRequests: { r1: req({ authUid: 'gone' }) } }, {});
+  c = mk(f); await c.autoApproveOne('r1');
+  assert.ok(!f.db.businesses); assert.notEqual(f.db.onboardingRequests.r1.status, 'approved');
+  console.log('PASS authUid: missing account is refused');
+
+  // Resume sign-in accepts an existing account — but it must not steal an outlet.
+  f = makeFake({ onboardingRequests: { r1: req({ authUid: 'uid_new' }) }, admins: { uid_new: { outlet: 'o9', businessId: 'b9' } } }, { 'a@x.com': 'uid_new' });
+  c = mk(f); await c.autoApproveOne('r1');
+  assert.ok(!f.db.businesses, 'an account that owns another outlet creates no tenant');
+  assert.notEqual(f.db.onboardingRequests.r1.status, 'approved');
+  console.log('PASS authUid: an account that already owns an outlet is not repointed');
+
+  // The approval body cannot repoint a signup account at a different email.
+  f = makeFake({ onboardingRequests: { r1: req({ authUid: 'uid_new' }) } }, { 'a@x.com': 'uid_new' });
+  c = mk(f);
+  let threw = null;
+  try {
+    await c.approveOnboardingRequest('r1', { businessName: 'B', outletName: 'O', adminEmail: 'b@x.com', plan: 'starter' }, 'sup');
+  } catch (e) { threw = e; }
+  assert.equal(threw && threw.status, 422, 'email cannot be changed after signup');
+  assert.ok(!f.db.businesses);
+  console.log('PASS authUid: approval cannot change the signup email');
+
   f = makeFake({ onboardingRequests: { r1: req() }, onboardingSecrets: { r1: { password: 'secret123' } } }, {});
   c = mk(f); for (let i = 0; i < 20; i++) c._autoRecent.push(Date.now());
   await c.autoApproveOne('r1');
@@ -130,6 +179,20 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   f = makeFake({ onboardingRequests: { r1: req() }, onboardingSecrets: { r1: { password: 'abc' } } }, {}); c = mk(f);
   await c.autoApproveOne('r1'); await sleep(40); assert.equal(f.db.onboardingRequests.r1.status, 'pending');
   console.log('PASS short password never creates an account');
+
+  // Legacy inline password (pre-cutover request shape): approval still works, then burns it.
+  f = makeFake({ onboardingRequests: { r1: req({ adminPassword: 'legacyPass1' }) } }, {});
+  c = mk(f); await c.autoApproveOne('r1');
+  assert.equal(f.db.onboardingRequests.r1.status, 'approved');
+  assert.ok(!f.db.onboardingRequests.r1.adminPassword, 'legacy inline password burned on approval');
+  assert.ok(f.users['a@x.com'], 'legacy inline password replayed into the Auth user');
+  console.log('PASS legacy inline password: approved, replayed, then burned');
+
+  // The new shape has no inline password and no secret -> a clear 422, not a silent tenant.
+  f = makeFake({ onboardingRequests: { r1: req() } }, {});
+  c = mk(f); await c.autoApproveOne('r1'); await sleep(40);
+  assert.equal(f.db.onboardingRequests.r1.status, 'pending'); assert.ok(!f.db.businesses);
+  console.log('PASS request without an account or legacy secret is refused');
   f = makeFake({ onboardingRequests: { old: req({ createdAt: Date.now() - 3600000 }), legacy: req({ createdAt: Date.now() - 86400000 * 30, adminPassword: 'plaintext1' }) } }, {});
   c = mk(f); await c.autoApproveOne('old'); await c.autoApproveOne('legacy');
   assert.ok(!f.db.businesses && !f.users['a@x.com']); assert.equal(f.db.onboardingRequests.old.status, 'pending'); assert.equal(f.db.onboardingRequests.legacy.status, 'pending');

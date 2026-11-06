@@ -290,7 +290,7 @@ async function checkFeatureOnNoCeiling(findings) {
     if (state.features?.discountApproval) {
         const secSnap = await get(Outlet.ref('settings/Security'));
         const sec = secSnap.val() || {};
-        const hasAnyCeiling = sec.discountCeilingPct > 0 || sec.managerPinHash;
+        const hasAnyCeiling = sec.discountCeilingPct > 0 || sec.pinHash || sec.managerPinHash;
         
         if (!hasAnyCeiling) {
             findings.push({
@@ -334,8 +334,10 @@ async function checkPinNoCeiling(findings) {
 // --- FIX ACTIONS ---
 
 async function fixSetCounterPin(uid) {
-    // Generate temp PIN and update
-    const tempPin = String(Math.floor(1000 + Math.random() * 9000));
+    // Generate temp PIN (crypto-secure) and update
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    const tempPin = String(1000 + (arr[0] % 9000));
     const hash = await hashPin(tempPin);
     if (!hash) return showToast('PIN hashing unavailable — app must run over HTTPS.', 'error');
     

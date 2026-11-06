@@ -233,12 +233,58 @@
   });
 
   var DB_URL = 'https://foodhubbie-10-default-rtdb.firebaseio.com';
-  // Submission state. A request is created at most once per page visit: if the
-  // password save (step 2) fails, a retry re-sends only step 2 for the same
-  // request instead of creating a duplicate application.
+  // Submission state. A request is created at most once per page visit. The
+  // login account is created first, so a failed request write is retried with
+  // the same account instead of creating a second one.
   var _reqKey = null;
+  var _accountUid = null;
   var _submitting = false;
   var _done = false;
+
+  // The password never touches the database. It goes straight to Firebase
+  // Auth (which stores a salted scrypt hash); we keep only the account uid.
+  // window.__fhSignupAuth is a test seam — production loads signup-auth.js.
+  async function signupAuthModule() {
+    if (window.__fhSignupAuth) return window.__fhSignupAuth;
+    return import('./signup-auth.js');
+  }
+
+  async function ensureAdminAccount(v) {
+    if (_accountUid) return _accountUid;
+    var mod = await signupAuthModule();
+    try {
+      var created = await mod.createAccount(v.adminEmail, v.adminPassword);
+      _accountUid = created.uid;
+      return _accountUid;
+    } catch (err) {
+      if (err && err.code === 'auth/email-already-in-use') {
+        // Resume: the applicant may have started before (reload, failed
+        // network). Knowing the password proves the account is theirs.
+        try {
+          var existing = await mod.signInExisting(v.adminEmail, v.adminPassword);
+          _accountUid = existing.uid;
+          return _accountUid;
+        } catch (err2) {
+          var e2 = new Error('This email already has a login. Enter the password for that account, or reset it from the Admin sign-in page.');
+          e2.code = 'signup/email-taken';
+          throw e2;
+        }
+      }
+      throw err;
+    }
+  }
+
+  function signupErrorMessage(err) {
+    var code = err && err.code;
+    return ({
+      'auth/email-already-in-use': 'This email already has a login. Enter the password for that account, or reset it from the Admin sign-in page.',
+      'auth/invalid-email': 'That dashboard email address is not valid.',
+      'auth/weak-password': 'Choose a stronger password (at least 8 characters).',
+      'auth/too-many-requests': 'Too many attempts. Please wait a few minutes and try again.',
+      'auth/network-request-failed': 'We could not reach the sign-in service. Check your connection and press Retry.',
+      'signup/email-taken': err && err.message
+    })[code] || 'We could not create your login. Please try again in a moment.';
+  }
 
   function fieldError(id, msg) {
     var input = document.getElementById(id);
@@ -319,8 +365,13 @@
     btn.textContent = 'Submitting…';
 
     try {
+      // Step 1: create the Firebase Auth account. The password goes browser ->
+      // Firebase over TLS and is stored there as a salted scrypt hash. It is
+      // deliberately NOT written to the database.
+      await ensureAdminAccount(v);
+
+      // Step 2: the public request. Only a uid pointer, never a credential.
       if (!_reqKey) {
-        // Step 1: the public request, WITHOUT the password (readable by Supreme reviewers).
         var res = await fetch(DB_URL + '/onboardingRequests.json', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -331,6 +382,7 @@
             contactEmail: v.contactEmail,
             adminEmail: v.adminEmail,
             adminName: v.adminName,
+            authUid: _accountUid,
             plan: v.plan,
             whatsappConnect: v.whatsappConnect,
             template: '',
@@ -346,20 +398,17 @@
         if (!saved || !saved.name) throw new Error('Save returned no key');
         _reqKey = saved.name;
       }
-      // Step 2: the password goes to the write-only secrets node (no client read rule;
-      // only the approval backend reads it via the Admin SDK, then deletes it).
-      var secRes = await fetch(DB_URL + '/onboardingSecrets/' + encodeURIComponent(_reqKey) + '.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: v.adminPassword, createdAt: Date.now() })
-      });
-      if (!secRes.ok) throw new Error('Password save failed: ' + secRes.status);
     } catch (err) {
-      console.warn('Save failed', err);
-      status.textContent = 'We could not submit your application. Your details are still filled in. Check your connection and press Submit again.';
+      console.warn('Signup failed', err && err.code ? err.code : err);
+      var isAuth = err && typeof err.code === 'string' && err.code.indexOf('auth/') === 0;
+      var isTaken = err && err.code === 'signup/email-taken';
+      status.textContent = (isAuth || isTaken)
+        ? signupErrorMessage(err)
+        : 'We could not submit your application. Your details are still filled in. Check your connection and press Submit again.';
+      if (isAuth || isTaken) fieldError('fAdminEmail', isTaken ? signupErrorMessage(err) : '');
       _submitting = false;
       btn.disabled = false;
-      btn.textContent = _reqKey ? 'Retry Submit' : 'Register Restaurant';
+      btn.textContent = (_reqKey || _accountUid) ? 'Retry Submit' : 'Register Restaurant';
       return false;
     }
 

@@ -9,6 +9,8 @@
     "test": "playwright test",
     "test:encoding": "node tests/encoding-check.mjs",
     "test:menu-cart": "node tests/menu-cart-refresh.check.cjs",
+    "test:pin": "node tests/pin-crypto.check.mjs",
+    "test:onboarding": "node tests/auto-onboarding.check.cjs",
     "test:isolation": "node tests/phase5-rider-isolation.check.cjs && node tests/phase5-rules-isolation.check.cjs",
     "seo:check-domain": "node tools/check-domain-migration.cjs",
     "test:headed": "playwright test --headed",

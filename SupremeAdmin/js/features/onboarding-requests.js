@@ -166,7 +166,7 @@ async function approveRequest(key) {
     body: `
       <div style="text-align:left;font-size:14px;line-height:1.8">
         This will create a new outlet for <strong>${escapeHtml(r.businessName)}</strong>:<br><br>
-        • Firebase Auth user for <strong>${escapeHtml(r.adminEmail)}</strong><br>
+        • Dashboard login for <strong>${escapeHtml(r.adminEmail)}</strong> (uses the password chosen at signup)<br>
         • Outlet record with billing defaults<br>
         • 15 free welcome tokens<br>
         • Locked state (admin can log in but can't use until unlocked)<br><br>
@@ -204,7 +204,7 @@ async function approveRequest(key) {
           <strong>Business:</strong> ${escapeHtml(r.businessName)}<br>
           <strong>Outlet:</strong> ${escapeHtml(r.outletName)}<br>
           <strong>Admin Email:</strong> ${escapeHtml(data.email)}<br>
-          <strong>Password:</strong> <code>${escapeHtml(data.password)}</code><br>
+          <strong>Password:</strong> the one the owner chose at signup (never stored or shown here)<br>
           <strong>Login URL:</strong> <a href="${data.loginUrl}" target="_blank">${data.loginUrl}</a><br><br>
           <span style="color:var(--status-degraded,#d97706)">⚠️ The outlet is locked. Unlock it from the restaurant profile to grant access.</span>
         </div>
@@ -243,14 +243,18 @@ async function rejectRequest(key) {
   }
 
   try {
+    // A rejection only changes the request's status. The signup Auth account is
+    // deliberately NOT deleted: `authUid` is written by an unauthenticated page,
+    // so deleting from it would let anyone destroy another user's login. The
+    // applicant keeps their account and can resubmit.
     await firebase.database().ref(`onboardingRequests/${key}`).update({
       status: 'rejected',
       rejectReason: reasonText,
       reviewedAt: Date.now(),
       reviewedBy: firebase.auth().currentUser.uid,
-      adminPassword: null, // burn any legacy inline password on reject
+      adminPassword: null, // burn a legacy inline password, if one survives
     });
-    // Burn the write-only secret too (create-or-delete rule allows key-holder delete).
+    // Burn the write-only legacy secret too (delete-only rule).
     await firebase.database().ref(`onboardingSecrets/${key}`).set(null).catch(() => {});
     showToast('Application rejected.', 'success');
   } catch (err) {

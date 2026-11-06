@@ -23,6 +23,12 @@ jobs:
       - name: Menu cart persistence guard
         run: node tests/menu-cart-refresh.check.cjs
 
+      - name: PIN hashing guard (PBKDF2, legacy upgrade)
+        run: node tests/pin-crypto.check.mjs
+
+      - name: Onboarding approval guard (authUid + legacy)
+        run: node tests/auto-onboarding.check.cjs
+
       - name: Install bot dependencies
         working-directory: bot
         run: npm ci

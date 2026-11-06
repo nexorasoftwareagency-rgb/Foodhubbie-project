@@ -39,6 +39,12 @@ export { formatOrderId };
 import { showToast, showConfirm, showPinPrompt } from './ui-utils.js';
 export { showToast, showConfirm, showPinPrompt };
 
+// PIN hashing lives in its own module (PBKDF2-SHA256, 600k iterations, per-PIN
+// salt). Re-exported here so every existing importer of `hashPin` from
+// utils.js keeps working unchanged.
+import { hashPin, verifyPin } from './pin-crypto.js';
+export { hashPin, verifyPin };
+
 // ── Audio (pre-created, unlocked on first user interaction) ──
 let _alertAudio = null;
 let _audioUnlocked = false;
@@ -238,21 +244,6 @@ export async function pruneOldLogs() {
 // ── Manager PIN gates: manual-discount approval ceiling + payment void ──
 
 /**
- * SHA-256 hex of a PIN — what gets stored at settings/Security/pinHash so
- * the DB never holds a readable credential.
- * ponytail: a short numeric PIN hash is still brute-forceable by anyone who
- * can read it, so this is leak-hygiene, not a security boundary. Real
- * enforcement needs a server; Spark plan means no Cloud Functions here.
- * Returns null when crypto.subtle is unavailable (non-secure context) so
- * callers can decide whether to fail open instead of throwing.
- */
-export const hashPin = async (pin) => {
-    if (!globalThis.crypto?.subtle) return null;
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
-/**
  * Shared manager-PIN prompt: reads settings/Security and asks until the PIN
  * matches or the operator gives up.
  * Resolves false ONLY when the operator cancels or stops retrying a wrong
@@ -275,15 +266,26 @@ export async function gateManagerPin({ message, auditAction, auditDetails = {} }
         return true;
     }
     for (;;) {
-        const pin = await showPinPrompt(message);
-        if (!pin) return false;
-        const hash = await hashPin(pin);
-        if (hash === null) { console.warn('[Security] PIN hashing unavailable — failing open'); return true; }
-        if (hash === sec.pinHash) {
-            logAudit(auditAction, auditDetails);
+        if (!globalThis.crypto?.subtle) {
+            console.warn('[Security] PIN hashing unavailable (non-secure context) — failing open');
             return true;
         }
-        showToast('Incorrect manager PIN. Try again.', 'error', 3000, 'pin-err');
+        const pin = await showPinPrompt(message);
+        if (!pin) return false;
+        const check = await verifyPin(pin, sec.pinHash);
+        if (!check.ok) {
+            showToast('Incorrect manager PIN. Try again.', 'error', 3000, 'pin-err');
+            continue;
+        }
+        // Transparent upgrade: a PIN saved before the PBKDF2 switch is still a
+        // bare SHA-256 hex. Re-hash it now that the plaintext is in hand.
+        if (check.legacy) {
+            hashPin(pin)
+                .then(upgraded => upgraded && update(Outlet.ref('settings/Security'), { pinHash: upgraded }))
+                .catch(e => console.warn('[Security] PIN upgrade failed:', e?.message || e));
+        }
+        logAudit(auditAction, auditDetails);
+        return true;
     }
 }
 
