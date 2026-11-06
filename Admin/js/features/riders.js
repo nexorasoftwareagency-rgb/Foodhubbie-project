@@ -278,6 +278,7 @@ export function showRiderModal() {
     document.getElementById('riderEmail').disabled = false;
     document.getElementById('riderPassHint').classList.add('hidden');
     document.getElementById('riderPassLabel').innerText = "Portal Password";
+    document.getElementById('riderPassHint').textContent = "Leave blank to generate a secure password automatically.";
 
     const fields = ['riderName', 'riderEmail', 'riderPhone', 'riderAltPhone', 'riderFatherName', 'riderAge', 'riderAadharNo', 'riderQual', 'riderAddress', 'riderPass'];
     fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
@@ -319,6 +320,7 @@ export function editRider(id) {
     document.getElementById('riderEmail').disabled = true;
     document.getElementById('riderPassHint').classList.remove('hidden');
     document.getElementById('riderPassLabel').innerText = "Update Password (Optional)";
+    document.getElementById('riderPassHint').textContent = "Enter a new password to send a reset link to the rider's email.";
 
     document.getElementById('riderName').value = r.name || "";
     document.getElementById('riderEmail').value = r.email || "";
@@ -344,6 +346,7 @@ export function editRider(id) {
     document.getElementById('riderEmail').disabled = true;
     document.getElementById('riderPassHint').classList.remove('hidden');
     document.getElementById('riderPassLabel').innerText = "Update Password (Optional)";
+    document.getElementById('riderPassHint').textContent = "Enter a new password to send a reset link to the rider's email.";
     document.getElementById('riderPass').value = "";
 
     document.getElementById('riderModal').classList.add('active');
@@ -408,6 +411,20 @@ export async function saveRiderAccount() {
             const riderId = state.currentEditingRiderId;
             await update(Outlet.ref(`riders/${riderId}`), riderData);
             logAudit("Riders", `Updated Rider: ${name}`, riderId);
+
+            // Direct password reset from Admin Dashboard — triggers a
+            // Firebase password-reset email to the rider so they can set
+            // a new password. Client-side Auth cannot update another
+            // user's password without their current credentials, so the
+            // reset email is the supported direct path.
+            if (pass) {
+                const _sa = getSecondaryAuth();
+                if (_sa) {
+                    await sendPasswordResetEmail(_sa, email);
+                    logAudit("Riders", `Password Reset Triggered: ${email} (by Admin)`, riderId);
+                }
+            }
+
             showToast("Rider updated successfully!", "success");
             hideRiderModal();
         } else {
@@ -448,7 +465,9 @@ export async function resetRiderPassword(email) {
     if (!(await showConfirm(`Send password reset email to ${email}?`))) return;
     haptic();
     try {
-        await sendPasswordResetEmail(auth, email);
+        const _sa = getSecondaryAuth();
+        if (!_sa) { showToast("Secondary Auth Service unavailable.", "error"); return; }
+        await sendPasswordResetEmail(_sa, email);
         logAudit("Riders", `Sent Password Reset: ${email}`, "Global");
         showToast("Reset link sent to rider email.", "success");
     } catch (error) { showToast(standardizeAuthError(error), "error"); }
