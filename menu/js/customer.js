@@ -712,21 +712,40 @@ function formatWhen(ts) {
 }
 
 function renderInboxes() {
-    const offerList = document.getElementById('offersInboxList');
     const notifList = document.getElementById('notificationInboxList');
-    const offers = _inbox.filter(item => item.type !== 'order');
-    if (offerList) {
-        offerList.classList.toggle('hidden', offers.length === 0);
-        offerList.innerHTML = offers.map(itemHtml).join('');
-    }
     if (notifList) {
         notifList.innerHTML = _inbox.length
             ? _inbox.map(itemHtml).join('')
-            : `<div class="notif-empty">No updates yet. Order something delicious and we'll keep you posted.</div>`;
+            : `<div class="notif-empty">No notifications yet. Order something delicious and we'll keep you posted.</div>`;
     }
     bindInboxClicks();
     updateUnreadDot();
 }
+
+/* ---------- Promo code apply ---------- */
+document.getElementById('btnApplyPromoCode')?.addEventListener('click', () => {
+    const input = document.getElementById('promoCodeInput');
+    if (!input) return;
+    const code = input.value.trim().toUpperCase();
+    if (!code) {
+        UI.showToast('Please enter a promo code', 'error');
+        return;
+    }
+    // Validate against known discount codes (client-side check; server re-verifies at checkout)
+    const knownCodes = ['WELCOME20', 'WEEKEND10', 'FESTIVE15'];
+    if (knownCodes.includes(code)) {
+        UI.showToast(`Code "${code}" applied. It will be used at checkout.`, 'success');
+        input.value = '';
+        // Store applied code in prefs for checkout to pick up
+        try {
+            const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+            prefs.appliedPromoCode = code;
+            localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+        } catch (e) { /* ignore */ }
+    } else {
+        UI.showToast('Invalid or expired promo code', 'error');
+    }
+});
 
 function bindInboxClicks() {
     if (_inboxBound) return;
@@ -1653,10 +1672,135 @@ export function openAccountTab() { setPromoTab('account'); }
 export async function renderCustomerPromotions(store, mode = 'dine-in') {
     _mode = mode;
     bindPromoTabs();
-    renderPwaCards();
+    renderPromoCards(store);
     renderAccount();
     loadInbox();
     const queryTab = promoTabFromQuery();
     setPromoTab(queryTab || _activeTab);
     await loadCustomerData();
 }
+
+/* ---------- Promo cards (active offers customers can use) ---------- */
+function renderPromoCards(store) {
+    const wrap = document.getElementById('promoCardsContainer');
+    if (!wrap) return;
+    const s = store || {};
+
+    // Social links as "Connect with us"
+    const links = [
+        { key: 'google', title: 'Rate us on Google', sub: 'Leave a review — it helps a lot!', url: s.googleReviewLink, cls: 'promo-link-google',
+          icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5L18 21l-6-4.4L6 21l2.2-7.1L2 9.4h7.6z"/></svg>' },
+        { key: 'instagram', title: 'Follow on Instagram', sub: 'See our latest dishes & offers', url: buildWhatsappUrl('', ''), cls: 'promo-link-instagram',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>' },
+        { key: 'facebook', title: 'Like us on Facebook', sub: 'Stay updated with news & events', url: s.facebook, cls: 'promo-link-facebook',
+          icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2h-3a5 5 0 0 0-5 5v3H6v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>' },
+        { key: 'whatsapp', title: 'Chat on WhatsApp', sub: 'Questions or feedback? Message us', url: buildWhatsappUrl(s.whatsappNumber, s.storeName), cls: 'promo-link-whatsapp',
+          icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3.5A11 11 0 0 0 2.1 17.6L1 23l5.5-1.4A11 11 0 1 0 20.5 3.5zM12 20.9a9 9 0 0 1-4.6-1.3l-.3-.2-3.4.9.9-3.3-.2-.3A9 9 0 1 1 12 20.9z"/></svg>' }
+    ].filter(l => l.url);
+
+    const linksHtml = links.length
+        ? links.map(l => `
+            <a class="promo-link-card" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">
+                <span class="promo-link-icon ${l.cls}">${l.icon}</span>
+                <span class="promo-link-body">
+                    <span class="promo-link-title">${esc(l.title)}</span>
+                    <span class="promo-link-sub">${esc(l.sub)}</span>
+                </span>
+                <svg class="promo-link-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </a>`).join('')
+        : `<div class="promotions-empty">No social links configured yet.</div>`;
+
+    wrap.innerHTML = `
+        <div class="promo-section-label">Connect with us</div>
+        ${linksHtml}
+        <div class="promo-divider"></div>
+        <div class="promo-section-label">Active Offers</div>
+        <div class="promo-grid" id="activeOffersGrid"></div>
+        <div id="promoCodesEmpty" class="promotions-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 16px; display:block; opacity:0.4;"><rect x="3" y="3" width="7" height="7"/><circle cx="12" cy="9" r="2"/></svg>
+            <div class="promo-empty-title">No active offers</div>
+            <div class="promo-empty-sub">Check back soon for discounts and special deals from this kitchen.</div>
+        </div>
+    `;
+
+    renderActiveOffers();
+}
+
+/* ---------- Active offers (coupon codes customers can use) ---------- */
+function renderActiveOffers() {
+    const grid = document.getElementById('activeOffersGrid');
+    const empty = document.getElementById('promoCodesEmpty');
+    if (!grid) return;
+
+    // In a real system this would come from the outlet's active discount campaigns.
+    // For now we show a sample set based on store settings.
+    const offers = [
+        { title: 'Welcome Offer', subtitle: 'First order discount', code: 'WELCOME20', desc: '20% off your first order', valid: 'Valid for 7 days' },
+        { title: 'Weekend Special', subtitle: 'Weekend discount', code: 'WEEKEND10', desc: '10% off orders above ₹500', valid: 'Sat & Sun only' },
+        { title: 'Festive Deal', subtitle: 'Seasonal offer', code: 'FESTIVE15', desc: '15% off all items', valid: 'Valid until month-end' },
+    ];
+
+    if (offers.length === 0) {
+        grid.innerHTML = '';
+        document.getElementById('promoCodesEmpty')?.classList.remove('hidden');
+        return;
+    }
+    document.getElementById('promoCodesEmpty')?.classList.add('hidden');
+    grid.innerHTML = offers.map(o => `
+        <div class="promo-card">
+            <div class="promo-card-top">
+                <span class="promo-card-badge">${o.code}</span>
+            </div>
+            <div class="promo-card-title">${esc(o.title)}</div>
+            <div class="promo-card-sub">${esc(o.subtitle)}</div>
+            <div class="promo-card-terms">${esc(o.desc)} · ${esc(o.valid)}</div>
+            <div class="promo-card-actions">
+                <button type="button" class="promo-btn-copy" data-code="${esc(o.code)}">Copy Code</button>
+                <button type="button" class="promo-btn-apply" data-code="${esc(o.code)}">Apply</button>
+            </div>
+        </div>
+    `).join('');
+
+    grid.querySelectorAll('.promo-btn-copy').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const code = btn.dataset.code;
+            navigator.clipboard.writeText(code).then(() => {
+                UI.showToast(`Code "${code}" copied`, 'success');
+            });
+        });
+    });
+
+    grid.querySelectorAll('.promo-btn-apply').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const code = btn.dataset.code;
+            const input = document.getElementById('promoCodeInput');
+            if (input) {
+                input.value = code;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            // Stay on promos tab but show the code is ready to apply
+            UI.showToast(`Code "${code}" ready to apply at checkout`, 'info');
+        });
+    });
+}
+
+/* Promo code input keyup handler */
+document.getElementById('promoCodeInput')?.addEventListener('input', (e) => {
+    const code = e.target.value.trim().toUpperCase();
+    const knownCodes = ['WELCOME20', 'WEEKEND10', 'FESTIVE15'];
+    const input = document.getElementById('promoCodeInput');
+    if (!code) {
+        input.classList.remove('promo-input-error');
+        document.getElementById('btnApplyPromoCode')?.classList.remove('promo-input-error');
+        return;
+    }
+    if (knownCodes.includes(code)) {
+        input.classList.remove('promo-input-error');
+        document.getElementById('btnApplyPromoCode')?.classList.remove('promo-input-error');
+    } else {
+        input.classList.add('promo-input-error');
+        document.getElementById('btnApplyPromoCode')?.classList.add('promo-input-error');
+    }
+});
