@@ -599,7 +599,7 @@ function onSessionUpdated(session) {
         const nameInput = document.getElementById('checkoutName');
         const phoneInput = document.getElementById('checkoutPhone');
         if (nameInput && !nameInput.value) nameInput.value = session.customerName || savedProfile.name || '';
-        if (phoneInput && !phoneInput.value) phoneInput.value = session.customerPhone || savedProfile.phone || '';
+        if (phoneInput && !phoneInput.value) phoneInput.value = session.customerPhone || savedProfile?.phone || '';
     }
     // Pre-fill guest count from session (only if user hasn't manually changed it)
     if (!M._guestCountDirty && session.guestCount && session.guestCount > 0) {

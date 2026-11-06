@@ -1,6 +1,6 @@
 // === src/components/layout/BottomNav.tsx ===
 import { Link, useLocation } from "wouter";
-import { Home, ShoppingBag, Navigation, Wallet } from "lucide-react";
+import { Home, ShoppingBag, Navigation, Wallet, Gift, Bell } from "lucide-react";
 import { useAvailableOrders } from "@/hooks/useAvailableOrders";
 import { CountBadge } from "@/components/shared/CountBadge";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,8 @@ const TABS = [
   { path: "/available", label: "PICKUP", icon: ShoppingBag, alsoMatch: [] as string[] },
   { path: "/active", label: "LIVE", icon: Navigation, alsoMatch: [] as string[] },
   { path: "/wallet", label: "WALLET", icon: Wallet, alsoMatch: [] as string[] },
+  { path: "/promos", label: "PROMOS", icon: Gift, alsoMatch: [] as string[] },
+  { path: "/notifications", label: "NOTIFY", icon: Bell, alsoMatch: [] as string[] },
 ];
 
 export function BottomNav() {

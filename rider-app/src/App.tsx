@@ -17,6 +17,8 @@ const CompletedPage = lazy(() => import("@/pages/CompletedPage").then((m) => ({ 
 const WalletPage = lazy(() => import("@/pages/WalletPage").then((m) => ({ default: m.WalletPage })));
 const EarningsPage = lazy(() => import("@/pages/EarningsPage").then((m) => ({ default: m.EarningsPage })));
 const ProfilePage = lazy(() => import("@/pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+const PromotionsPage = lazy(() => import("@/pages/PromotionsPage").then((m) => ({ default: m.PromotionsPage })));
+const NotificationsPage = lazy(() => import("@/pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
 const NotFoundPage = lazy(() => import("@/pages/NotFoundPage").then((m) => ({ default: m.NotFoundPage })));
 
 function AppRoutes() {
@@ -33,6 +35,8 @@ function AppRoutes() {
         <Route path="/wallet" component={WalletPage} />
         <Route path="/earnings" component={EarningsPage} />
         <Route path="/profile" component={ProfilePage} />
+        <Route path="/promos" component={PromotionsPage} />
+        <Route path="/notifications" component={NotificationsPage} />
         <Route component={NotFoundPage} />
       </Switch>
     </Suspense>
