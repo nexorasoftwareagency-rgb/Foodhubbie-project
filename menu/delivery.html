@@ -76,6 +76,11 @@
     <!-- ============== SCREEN: MENU CATALOG ============== -->
     <div id="screenMenu" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerMenu" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <div class="topbar-brand">
                 <span class="topbar-logo">FoodHubbie</span>
             </div>
@@ -122,6 +127,11 @@
     <!-- ============== SCREEN: ITEM CUSTOMIZATION (identical to QR app) ============== -->
     <div id="screenCustomize" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerCustomize" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <button class="topbar-back" id="btnBackFromCustomize" aria-label="Back to menu">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
@@ -173,6 +183,11 @@
          code entry point is IDENTICAL (menu/js/discount.js, unmodified). ============== -->
     <div id="screenCart" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerCart" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <button class="topbar-back" id="btnBackFromCart" aria-label="Back to menu">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
@@ -224,6 +239,11 @@
     <!-- ============== SCREEN: PROMOTIONS ============== -->
     <div id="screenPromotions" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerPromos" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
         </div>
         <div class="promo-head">
@@ -304,9 +324,18 @@
         </button>
     </nav>
 
-</div>
+    <!-- ============== SIDE HAMBURGER MENU ============== -->
+    <div class="hamburger-overlay" id="hamburgerOverlay" aria-hidden="true"></div>
+    <div class="hamburger-drawer" id="hamburgerDrawer" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="hamburger-header">
+            <span class="hamburger-brand" id="hamburgerBrand">FoodHubbie</span>
+            <button class="hamburger-close" id="btnHamburgerClose" aria-label="Close menu">✕</button>
+        </div>
+        <nav class="hamburger-list" id="hamburgerList"></nav>
+        <div class="hamburger-footer" id="hamburgerFooter"></div>
+    </div>
 
-<!-- Location Permission Dialog -->
+</div>
 <div id="locDialogOverlay" class="loc-dialog-overlay">
     <div class="loc-dialog">
         <div class="loc-dialog-icon">📍</div>

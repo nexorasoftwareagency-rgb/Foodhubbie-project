@@ -132,6 +132,11 @@
 
     <div id="screenMenu" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerMenu" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <div class="topbar-brand">
                 <span class="topbar-logo">FoodHubbie</span>
                 <span class="topbar-greeting hidden" id="menuGreeting"></span>
@@ -196,6 +201,11 @@
     <!-- ============== SCREEN 3: ITEM CUSTOMIZATION ============== -->
     <div id="screenCustomize" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerCustomize" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <button class="topbar-back" id="btnBackFromCustomize" aria-label="Back to menu">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
@@ -245,6 +255,11 @@
     <!-- ============== SCREEN 4: CART / CHECKOUT ============== -->
     <div id="screenCart" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerCart" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <button class="topbar-back" id="btnBackFromCart" aria-label="Back to menu">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
@@ -301,6 +316,11 @@
     <!-- ============== SCREEN 5: ORDER TRACKING / RUNNING BILL ============== -->
     <div id="screenTracking" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerTracking" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <button class="topbar-back" id="btnMenuFromTracking" aria-label="Order more" title="Order more">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
             </button>
@@ -407,6 +427,11 @@
     <!-- ============== SCREEN 6: CALL WAITER ============== -->
     <div id="screenWaiter" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerWaiter" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <button class="topbar-back" id="btnBackFromWaiter" aria-label="Back">
                 <svg class="icon" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
             </button>
@@ -537,6 +562,11 @@
     <!-- ============== SCREEN: ORDER HISTORY (this visit) ============== -->
     <div id="screenHistory" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerHistory" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
         </div>
         <div style="padding:14px 16px 0; font-size:15px; font-weight:800;">Your Orders This Visit</div>
@@ -546,6 +576,11 @@
     <!-- ============== SCREEN: PROMOTIONS ============== -->
     <div id="screenPromotions" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerPromos" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <span class="topbar-logo" style="margin:0 auto;">FoodHubbie</span>
         </div>
         <div class="promo-head">
@@ -607,6 +642,11 @@
     <!-- ============== SCREEN: ORDERS (dedicated app tab) ============== -->
     <div id="screenOrders" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerOrders" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <span class="topbar-logo" style="margin:0 auto;">Your Orders</span>
         </div>
         <div class="orders-switch" role="tablist" aria-label="Orders or payments">
@@ -619,6 +659,11 @@
     <!-- ============== SCREEN: LOYALTY (dedicated app tab) ============== -->
     <div id="screenLoyalty" class="screen">
         <div class="topbar">
+            <button class="hamburger-btn" id="btnHamburgerLoyalty" aria-label="Menu">
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+                <div class="hamburger-line"></div>
+            </button>
             <span class="topbar-logo" style="margin:0 auto;">Loyalty Card</span>
         </div>
         <div id="loyaltyScreenBody" class="account-wrap"></div>
@@ -659,9 +704,18 @@
         </button>
     </nav>
 
-</div>
+    <!-- ============== SIDE HAMBURGER MENU ============== -->
+    <div class="hamburger-overlay" id="hamburgerOverlay" aria-hidden="true"></div>
+    <div class="hamburger-drawer" id="hamburgerDrawer" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="hamburger-header">
+            <span class="hamburger-brand" id="hamburgerBrand">FoodHubbie</span>
+            <button class="hamburger-close" id="btnHamburgerClose" aria-label="Close menu">✕</button>
+        </div>
+        <nav class="hamburger-list" id="hamburgerList"></nav>
+        <div class="hamburger-footer" id="hamburgerFooter"></div>
+    </div>
 
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
 
 <script type="module" src="js/app.js"></script>
 <script>

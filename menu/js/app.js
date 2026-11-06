@@ -1401,6 +1401,131 @@ window.addEventListener('pagehide', () => { cleanupSession(); _cleanupOrderListe
 window.addEventListener('popstate', UI.handlePopState);
 window.addEventListener('fh:open-order', (e) => openOrderFromPush(e.detail?.orderId));
 
+// ---------------------------------------------------------------
+// SIDE HAMBURGER MENU
+// ---------------------------------------------------------------
+const hamburgerOverlay = document.getElementById('hamburgerOverlay');
+const hamburgerDrawer = document.getElementById('hamburgerDrawer');
+const hamburgerList = document.getElementById('hamburgerList');
+const hamburgerFooter = document.getElementById('hamburgerFooter');
+const hamburgerBrand = document.getElementById('hamburgerBrand');
+
+const hamburgerBtns = document.querySelectorAll('.hamburger-btn');
+const hamburgerClose = document.getElementById('btnHamburgerClose');
+
+function openHamburger() {
+    const badge = document.getElementById('hamburgerCartBadge');
+    if (badge) badge.textContent = String(lineCount());
+    hamburgerOverlay.classList.add('open');
+    hamburgerDrawer.classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeHamburger() {
+    hamburgerOverlay.classList.remove('open');
+    hamburgerDrawer.classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+async function buildHamburgerMenu() {
+    const isDirect = !!M.direct;
+    const brandSnap = await get(outletRef('settings/Store/storeName')).catch(() => null);
+    if (brandSnap?.exists()) {
+        hamburgerBrand.textContent = brandSnap.val();
+    }
+
+    const items = [
+        { id: 'screenMenu', label: 'Menu', icon: '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>' },
+        { id: 'screenCart', label: 'Cart', icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>', badge: true },
+    ];
+
+    if (isDirect) {
+        items.push(
+            { id: 'screenOrders', label: 'Orders', icon: '<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' },
+            { id: 'screenLoyalty', label: 'Loyalty', icon: '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>' },
+            { id: 'screenTracking', label: 'Status', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>' },
+            { id: 'screenHistory', label: 'History', icon: '<svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>' },
+            { id: 'screenPromotions', label: 'Promos', icon: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>' },
+        );
+    } else {
+        items.push(
+            { id: 'screenTracking', label: 'Status', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>' },
+            { id: 'screenHistory', label: 'History', icon: '<svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>' },
+            { id: 'screenPromotions', label: 'Promos', icon: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>' },
+        );
+    }
+
+    hamburgerList.innerHTML = items.map(item => {
+        const badgeHtml = item.badge ? `<span class="hamburger-badge" id="hamburgerCartBadge">${lineCount()}</span>` : '';
+        return `
+            <button class="hamburger-item" data-hamburger-tab="${item.id}">
+                ${item.icon}
+                <span>${item.label}</span>
+                ${badgeHtml}
+            </button>`;
+    }).join('');
+
+    hamburgerList.querySelectorAll('.hamburger-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.hamburgerTab;
+            closeHamburger();
+            haptic(10);
+            touchSession();
+            if (target === 'screenCart') renderCartScreen();
+            if (target === 'screenTracking') renderTrackingOrEmptyState();
+            if (target === 'screenHistory') renderHistoryScreen();
+            if (target === 'screenOrders') renderOrdersTab();
+            if (target === 'screenLoyalty') renderLoyaltyTab();
+            if (target === 'screenPromotions') {
+                if (M.direct) openAccountTab();
+                renderPromotionsScreen();
+            }
+            UI.showScreen(target);
+        });
+    });
+
+    const footerItems = [
+        { label: 'Account', icon: '<svg viewBox="0 0 24 24"><path d="M16 9c2.8 0 5 2.2 5 5s-2.2 5-5 5-5-2.2-5-5 2.2-5 5-5zM12 12c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3z"/></svg>', directOnly: true },
+        { label: 'Help / Contact', icon: '<svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' },
+        { label: 'Sign out', icon: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+    ];
+
+    hamburgerFooter.innerHTML = footerItems
+        .filter(item => !item.directOnly || isDirect)
+        .map(item => `
+            <div class="hamburger-footer-item" data-hamburger-action="${item.label.toLowerCase().replace(/\s+/g,'-')}">
+                ${item.icon}
+                <span>${item.label}</span>
+            </div>
+        `).join('');
+
+    hamburgerFooter.querySelectorAll('.hamburger-footer-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            closeHamburger();
+            const action = btn.dataset.hamburgerAction;
+            if (action === 'account') {
+                if (M.direct) openAccountTab();
+                renderPromotionsScreen();
+                UI.showScreen('screenPromotions');
+            } else if (action === 'help-contact') {
+                UI.showToast('Opening WhatsApp…', 'info');
+            } else if (action === 'sign-out') {
+                clearWalkinCart({ confirm: false });
+                UI.showScreen('screenWelcome');
+                UI.showToast('Signed out', 'info');
+            }
+        });
+    });
+}
+
+// Wire open/close
+hamburgerBtns.forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openHamburger(); }));
+hamburgerClose?.addEventListener('click', closeHamburger);
+hamburgerOverlay?.addEventListener('click', (e) => { if (e.target === hamburgerOverlay) closeHamburger(); });
+
+// Build menu on boot
+buildHamburgerMenu().catch(() => {});
+
 // Boot
 boot().catch(err => {
     console.error('[Boot]', err);

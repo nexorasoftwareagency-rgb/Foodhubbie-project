@@ -364,6 +364,46 @@
     border:1px solid rgba(255,255,255,0.3);
     margin-bottom:0;
   }
+
+  /* ---------- Side hamburger menu ---------- */
+  .hamburger-btn{
+    width:34px; height:34px; border-radius:50%; background:var(--primary);
+    border:none; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; color:#fff; }
+  .hamburger-line{ width:18px; height:2px; background:#fff; border-radius:1px; margin:3px 0; }
+  .hamburger-overlay{
+    position:fixed; inset:0; z-index:1000; background:rgba(22,14,8,.5);
+    opacity:0; visibility:hidden;
+    transition:opacity .22s ease, visibility .22s ease; }
+  .hamburger-overlay.open{ opacity:1; visibility:visible; }
+  .hamburger-drawer{
+    position:fixed; top:0; left:0; width:280px; height:100vh;
+    background:#fff; z-index:1001;
+    transform:translateX(-100%); transition:transform .22s ease;
+    box-shadow:6px 0 32px rgba(0,0,0,.14); display:flex; flex-direction:column; }
+  .hamburger-drawer.open{ transform:translateX(0); }
+  .hamburger-header{
+    padding:14px 16px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; }
+  .hamburger-brand{ font-weight:900; font-size:17px; color:var(--primary); font-family:Georgia,"Times New Roman",serif; font-style:italic; }
+  .hamburger-close{
+    width:34px; height:34px; border-radius:50%; background:var(--bg);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    color:var(--text); font-size:18px; line-height:1; }
+  .hamburger-list{ flex:1; overflow-y:auto; padding:10px 0; }
+  .hamburger-item{
+    display:flex; align-items:center; gap:12px; padding:12px 16px;
+    color:var(--text); font-size:14px; font-weight:700; text-decoration:none;
+    border-bottom:1px solid var(--border); cursor:pointer; touch-action:manipulation; }
+  .hamburger-item:active{ background:rgba(232,73,8,.06); }
+  .hamburger-item svg{ width:20px; height:20px; flex-shrink:0; color:var(--primary); }
+  .hamburger-footer{ padding:14px 16px; border-top:1px solid var(--border); }
+  .hamburger-footer-item{
+    display:flex; align-items:center; gap:12px; padding:12px 16px;
+    color:var(--text-sub); font-size:13px; text-decoration:none; cursor:pointer;
+    border-bottom:1px solid var(--border); touch-action:manipulation; }
+  .hamburger-footer-item svg{ width:18px; height:18px; color:var(--text-sub); flex-shrink:0; }
+  .hamburger-footer-item:active{ background:rgba(0,0,0,.03); color:var(--text); }
 </style>
 </head>
 <body>
@@ -471,6 +511,17 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Side hamburger menu -->
+  <div class="hamburger-overlay" id="hamburgerOverlay" aria-hidden="true"></div>
+  <div class="hamburger-drawer" id="hamburgerDrawer" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="hamburger-header">
+          <span class="hamburger-brand">FoodHubbie</span>
+          <button class="hamburger-close" id="btnHamburgerClose" aria-label="Close menu">✕</button>
+      </div>
+      <nav class="hamburger-list" id="hamburgerList"></nav>
+      <div class="hamburger-footer" id="hamburgerFooter"></div>
   </div>
 
   <canvas id="scanner-canvas" style="display:none"></canvas>
@@ -621,6 +672,55 @@
       const nameSnap = await get(outletRef('settings/Store/storeName'));
       if (nameSnap.exists()) applyBrand(nameSnap.val());
     } catch (_) { /* non-critical — keep static brand on failure */ }
+
+    // ---------- Side hamburger menu (home.html) ----------
+    const hhOverlay = document.getElementById('hamburgerOverlay');
+    const hhDrawer = document.getElementById('hamburgerDrawer');
+    const hhList = document.getElementById('hamburgerList');
+    const hhFooter = document.getElementById('hamburgerFooter');
+    const hhBtns = document.querySelectorAll('.hamburger-btn');
+    const hhClose = document.getElementById('btnHamburgerClose');
+
+    function hhOpen() { hhOverlay.classList.add('open'); hhDrawer.classList.add('open'); document.body.style.overflow = 'hidden'; }
+    function hhClose() { hhOverlay.classList.remove('open'); hhDrawer.classList.remove('open'); document.body.style.overflow = ''; }
+
+    hhList.innerHTML = `
+        <button class="hamburger-item" data-hh-action="rescan">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-dasharray="2 2"/></svg>
+            <span>Rescan Table QR</span>
+        </button>
+        <button class="hamburger-item" data-hh-action="menu">
+            <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+            <span>Go to Menu</span>
+        </button>`;
+
+    hhFooter.innerHTML = `
+        <div class="hamburger-footer-item" data-hh-action="menu">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Sign out</span>
+        </div>`;
+
+    hhList.querySelectorAll('.hamburger-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            hhClose();
+            const action = btn.dataset.hhAction;
+            if (action === 'rescan') openScanner();
+            if (action === 'menu') location.href = '/';
+        });
+    });
+
+    hhFooter.querySelectorAll('.hamburger-footer-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            hhClose();
+            // Clear any cart & go to menu
+            try { sessionStorage.removeItem('foodhubbie_cart'); } catch (_) {}
+            location.href = '/';
+        });
+    });
+
+    hhBtns.forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); hhOpen(); }));
+    hhClose?.addEventListener('click', hhClose);
+    hhOverlay?.addEventListener('click', (e) => { if (e.target === hhOverlay) hhClose(); });
   </script>
 </body>
 </html>

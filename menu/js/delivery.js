@@ -1030,4 +1030,91 @@ window.addEventListener('fh:open-order', () => {
     renderPromotionsScreen();
 });
 
+// ---------------------------------------------------------------
+// SIDE HAMBURGER MENU (delivery webview)
+// ---------------------------------------------------------------
+const dhHamburgerOverlay = document.getElementById('hamburgerOverlay');
+const dhHamburgerDrawer = document.getElementById('hamburgerDrawer');
+const dhHamburgerList = document.getElementById('hamburgerList');
+const dhHamburgerFooter = document.getElementById('hamburgerFooter');
+const dhHamburgerBrand = document.getElementById('hamburgerBrand');
+
+const dhHamburgerBtns = document.querySelectorAll('.hamburger-btn');
+const dhHamburgerClose = document.getElementById('btnHamburgerClose');
+
+function dhOpenHamburger() {
+    const badge = document.getElementById('hamburgerCartBadge');
+    if (badge) badge.textContent = String(lineCount());
+    dhHamburgerOverlay.classList.add('open');
+    dhHamburgerDrawer.classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function dhCloseHamburger() {
+    dhHamburgerOverlay.classList.remove('open');
+    dhHamburgerDrawer.classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+async function dhBuildHamburgerMenu() {
+    const brandSnap = await get(outletRef('settings/Store/storeName')).catch(() => null);
+    if (brandSnap?.exists()) {
+        dhHamburgerBrand.textContent = brandSnap.val();
+    }
+
+    const items = [
+        { id: 'screenMenu', label: 'Menu', icon: '<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>' },
+        { id: 'screenCart', label: 'Cart', icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>', badge: true },
+        { id: 'screenPromotions', label: 'Promos', icon: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>' },
+    ];
+
+    dhHamburgerList.innerHTML = items.map(item => {
+        const badgeHtml = item.badge ? `<span class="hamburger-badge" id="hamburgerCartBadge">${lineCount()}</span>` : '';
+        return `
+            <button class="hamburger-item" data-hamburger-tab="${item.id}">
+                ${item.icon}
+                <span>${item.label}</span>
+                ${badgeHtml}
+            </button>`;
+    }).join('');
+
+    dhHamburgerList.querySelectorAll('.hamburger-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.hamburgerTab;
+            dhCloseHamburger();
+            haptic(10);
+            if (target === 'screenCart') { renderCartScreen(); ensureDeliveryFee(); }
+            if (target === 'screenPromotions') { renderPromotionsScreen(); }
+            UI.showScreen(target);
+        });
+    });
+
+    dhHamburgerFooter.innerHTML = footerItems.map(item => `
+        <div class="hamburger-footer-item" data-hamburger-action="${item.label.toLowerCase().replace(/\s+/g,'-')}">
+            ${item.icon}
+            <span>${item.label}</span>
+        </div>
+    `).join('');
+
+    dhHamburgerFooter.querySelectorAll('.hamburger-footer-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            dhCloseHamburger();
+            const action = btn.dataset.hamburgerAction;
+            if (action === 'help-contact') {
+                UI.showToast('Opening WhatsApp…', 'info');
+            } else if (action === 'sign-out') {
+                clearCart(getWebviewStorageKey(M.token));
+                UI.showScreen('screenMenu');
+                UI.showToast('Signed out', 'info');
+            }
+        });
+    });
+}
+
+dhHamburgerBtns.forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); dhOpenHamburger(); }));
+dhHamburgerClose?.addEventListener('click', dhCloseHamburger);
+dhHamburgerOverlay?.addEventListener('click', (e) => { if (e.target === dhHamburgerOverlay) dhCloseHamburger(); });
+
+dhBuildHamburgerMenu().catch(() => {});
+
 boot();
