@@ -305,7 +305,7 @@ export function renderCartList(lines, { onStep }) {
 
     list.innerHTML = entries.map(([id, l]) => `
         <div class="cart-item-row" data-line-id="${esc(id)}">
-            <img class="cart-item-img" src="${esc(l.img || '')}" alt="" onerror="this.style.visibility='hidden'">
+            <img class="cart-item-img" src="${esc(l.img || '')}" alt="${esc(l.name || 'Cart item')}" onerror="this.style.visibility='hidden'">
             <div class="cart-item-info">
                 <div class="cart-item-name">${esc(l.name)}</div>
                 <div class="cart-item-variant">${esc(l.size)}${(l.addons || []).length ? ' · ' + esc((l.addons || []).join(', ')) : ''}</div>
