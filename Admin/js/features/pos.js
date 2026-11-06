@@ -98,19 +98,20 @@ export function renderWalkinCategoryTabs() {
     const container = document.getElementById('walkinCategoryTabs');
     if (!container) return;
 
-    container.innerHTML = `
+    // "Combos" is treated as a pseudo-category on the POS:
+    // selecting it shows only combo tiles; selecting any dish category hides combos.
+    let html = `
         <div class="category-tab ${state.activeWalkinCategory === 'All' ? 'active' : ''}" role="button" data-action="filterWalkinByCategory" data-val="All">All</div>
+        <div class="category-tab ${state.activeWalkinCategory === 'Combos' ? 'active' : ''}" role="button" data-action="filterWalkinByCategory" data-val="Combos">Combos</div>
     `;
 
     state.categories.forEach(cat => {
-        const tab = document.createElement('div');
-        tab.className = `category-tab ${state.activeWalkinCategory === cat.name ? 'active' : ''}`;
-        tab.setAttribute('role', 'button');
-        tab.innerText = cat.name;
-        tab.dataset.action = "filterWalkinByCategory";
-        tab.dataset.val = cat.name;
-        container.appendChild(tab);
+        html += `
+            <div class="category-tab ${state.activeWalkinCategory === cat.name ? 'active' : ''}" role="button" data-action="filterWalkinByCategory" data-val="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</div>
+        `;
     });
+
+    container.innerHTML = html;
 }
 
 /**
@@ -129,14 +130,26 @@ export function filterWalkinByCategory(category, el) {
 
 /**
  * Applies search and category filters to the menu
+ * When "Combos" is the active category, no dishes are shown — combos are
+ * rendered separately by renderWalkinDishGrid. When a specific dish category
+ * is active, combos are hidden (they only show under "All" or "Combos").
  */
 export function applyWalkinFilters() {
     const search = document.getElementById("walkinDishSearch")?.value.toLowerCase() || "";
-    const filtered = state.allWalkinDishes.filter(d => {
-        const matchesSearch = d.name.toLowerCase().includes(search);
-        const matchesCat = state.activeWalkinCategory === "All" || d.category === state.activeWalkinCategory;
-        return matchesSearch && matchesCat;
-    });
+
+    // Combos are a pseudo-category: when active, show no dishes.
+    // When a specific dish category is active, combos are hidden by the
+    // caller (renderWalkinDishGrid skips comboTiles).
+    let filtered;
+    if (state.activeWalkinCategory === 'Combos') {
+        filtered = [];
+    } else {
+        filtered = state.allWalkinDishes.filter(d => {
+            const matchesSearch = d.name.toLowerCase().includes(search);
+            const matchesCat = state.activeWalkinCategory === "All" || d.category === state.activeWalkinCategory;
+            return matchesSearch && matchesCat;
+        });
+    }
 
     renderWalkinDishGrid(filtered);
 }
@@ -149,9 +162,19 @@ export function renderWalkinDishGrid(dishes) {
     const grid = document.getElementById("walkinDishGrid");
     if (!grid) return;
 
-    const comboTiles = _comboTilesHtml();
-    if (dishes.length === 0 && !comboTiles) {
-        grid.innerHTML = '<div class="empty-state">No items found matching filters.</div>';
+    // Combos are a pseudo-category: only show them under "All" or "Combos".
+    // Selecting any dish category hides combos; selecting "Combos" hides dishes.
+    const showCombos = state.activeWalkinCategory === 'All' || state.activeWalkinCategory === 'Combos';
+    const comboTiles = showCombos ? _comboTilesHtml() : '';
+
+    const hasDishes = dishes.length > 0;
+    const hasCombos = !!comboTiles;
+
+    if (!hasDishes && !hasCombos) {
+        const emptyMsg = state.activeWalkinCategory === 'Combos'
+            ? 'No combos available.'
+            : 'No items found matching filters.';
+        grid.innerHTML = `<div class="empty-state">${emptyMsg}</div>`;
         return;
     }
 
