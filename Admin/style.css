@@ -5221,50 +5221,44 @@ body {
 
 /* Pending - Warm inviting color */
 .status.Placed, .status.Confirmed {
-  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+  background: #FFF3E0;
   color: #E65100;
-  border: 1px solid rgba(255, 152, 0, 0.3);
-  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.2);
 }
 
 /* Preparing - Energetic orange (legacy alias, hidden on new orders) */
 .status.Preparing {
-  background: linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%);
+  background: #FFF8E1;
   color: #F57C00;
-  border: 1px solid rgba(245, 124, 0, 0.3);
-  box-shadow: 0 2px 8px rgba(245, 124, 0, 0.1);
+  border: 1px solid rgba(245, 124, 0, 0.2);
 }
 
 /* Ready - Cool blue for calm */
 .status.Ready, .status.Cooked {
-  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  background: #E3F2FD;
   color: #1565C0;
-  border: 1px solid rgba(21, 101, 192, 0.3);
-  box-shadow: 0 2px 8px rgba(21, 101, 192, 0.1);
+  border: 1px solid rgba(21, 101, 192, 0.2);
 }
 
 /* Out for Delivery - Dynamic purple */
 .status.OutforDelivery {
-  background: linear-gradient(135deg, #F3E5F5 0%, #E1BEE7 100%);
+  background: #F3E5F5;
   color: #6A1B9A;
-  border: 1px solid rgba(106, 27, 154, 0.3);
-  box-shadow: 0 2px 8px rgba(106, 27, 154, 0.1);
+  border: 1px solid rgba(106, 27, 154, 0.2);
 }
 
 /* Delivered - Success green */
 .status.Delivered {
-  background: linear-gradient(135deg, #E8F5E8 0%, #C8E6C9 100%);
+  background: #E8F5E8;
   color: #2E7D32;
-  border: 1px solid rgba(46, 125, 50, 0.3);
-  box-shadow: 0 2px 8px rgba(46, 125, 50, 0.1);
+  border: 1px solid rgba(46, 125, 50, 0.2);
 }
 
 /* Cancelled - Muted red */
 .status.Cancelled {
-  background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%);
+  background: #FFEBEE;
   color: #C62828;
-  border: 1px solid rgba(198, 40, 40, 0.3);
-  box-shadow: 0 2px 8px rgba(198, 40, 40, 0.1);
+  border: 1px solid rgba(198, 40, 40, 0.2);
 }
 
 /* CONNECTION STATUS INDICATOR */

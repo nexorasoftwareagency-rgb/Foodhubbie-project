@@ -1170,6 +1170,13 @@ export async function updateStatus(id, status) {
         showToast(`Order status updated to ${status}`, "success");
         logger.success('ORDERS', `Status updated: ${id} → ${status}`);
         closeOrderDrawer();
+
+        // Announce status change to screen readers via aria-live region
+        const announcer = document.getElementById('statusAnnouncer');
+        if (announcer) {
+            announcer.textContent = `Order ${escapeHtml(order.orderId || id)} status changed to ${status}`;
+            setTimeout(() => { announcer.textContent = ''; }, 1000);
+        }
     } catch (e) {
         revertOptimistic();
         logger.error('ORDERS', `Status update failed: ${e.message}`, e);
