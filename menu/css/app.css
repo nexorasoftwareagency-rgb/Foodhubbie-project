@@ -1282,7 +1282,9 @@ body.onb-open{ overflow:hidden; }
     width:40px; height:40px; border-radius:12px; background:var(--card);
     border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
     flex-shrink:0; color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,.04); }
-.hamburger-btn:active{ background:rgba(232,73,8,.08); transform:scale(.95); }
+.hamburger-btn:hover{ background:rgba(232,73,8,.08); color:var(--primary); }
+.hamburger-btn:active{ background:rgba(232,73,8,.12); transform:scale(.95); }
+.hamburger-btn:hover .hamburger-line{ background:var(--primary); }
 .hamburger-line{ width:20px; height:2px; background:var(--text); border-radius:2px; margin:3px 0; }
 .hamburger-line:nth-child(2){ width:14px; margin-left:auto; }
 
@@ -1304,7 +1306,11 @@ body.onb-open{ overflow:hidden; }
 
 .hamburger-header{
     padding:16px 16px 12px; border-bottom:1px solid var(--border);
-    display:flex; align-items:center; justify-content:space-between; min-height:56px; }
+    display:flex; align-items:center; justify-content:space-between; min-height:56px;
+    position:relative; }
+.hamburger-header::after{
+    content:''; position:absolute; left:0; right:0; bottom:0; height:2px;
+    background:linear-gradient(90deg, var(--primary), var(--primary-dark)); }
 .hamburger-brand{
     font-weight:800; font-size:18px; color:var(--text); letter-spacing:-0.02em;
     font-family:Georgia,"Times New Roman",serif; font-style:italic; flex:1; }
@@ -1312,7 +1318,8 @@ body.onb-open{ overflow:hidden; }
     width:36px; height:36px; border-radius:10px; background:var(--bg);
     display:flex; align-items:center; justify-content:center; flex-shrink:0;
     color:var(--text-sub); font-size:18px; line-height:1; }
-.hamburger-close:active{ background:rgba(232,73,8,.08); }
+.hamburger-close:hover{ background:rgba(232,73,8,.08); color:var(--primary); }
+.hamburger-close:active{ background:rgba(232,73,8,.12); }
 
 .hamburger-list{ flex:1; overflow-y:auto; padding:8px 0; }
 .hamburger-section{ padding:0 16px 8px; }
@@ -1332,6 +1339,7 @@ body.onb-open{ overflow:hidden; }
     display:flex; align-items:center; justify-content:center; padding:0 4px; }
 .hamburger-item:hover{ background:rgba(232,73,8,.04); color:var(--primary); }
 .hamburger-item:hover svg{ color:var(--primary); }
+.hamburger-item:focus-visible{ outline:2px solid var(--primary); outline-offset:2px; }
 .hamburger-item.active{
     background:rgba(232,73,8,.08); color:var(--primary);
     border-left:3px solid var(--primary); padding-left:13px; }
@@ -1348,7 +1356,9 @@ body.onb-open{ overflow:hidden; }
     border-radius:10px; margin:0 12px; cursor:pointer; touch-action:manipulation;
     transition:background .15s ease, color .15s ease; }
 .hamburger-footer-item svg{ width:18px; height:18px; color:var(--text-tertiary); flex-shrink:0; }
-.hamburger-footer-item:hover{ background:rgba(0,0,0,.03); color:var(--text); }
+.hamburger-footer-item:hover{ background:rgba(232,73,8,.04); color:var(--primary); }
+.hamburger-footer-item:hover svg{ color:var(--primary); }
+.hamburger-footer-item:focus-visible{ outline:2px solid var(--primary); outline-offset:2px; }
 .hamburger-footer-item:active{ transform:scale(.96); }
 
 /* ---------- Promo section helpers ---------- */
