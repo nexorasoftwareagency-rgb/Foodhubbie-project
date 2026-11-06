@@ -4,7 +4,7 @@
  * This is the only file with top-level event listener registration.
  */
 import { outletRef, get, onValue, push, set, OUTLET, isConnected, update, runTransaction, LINK_INCOMPLETE } from './firebase.js';
-import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled, assertWalletGate } from './session.js';
+import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, detachSessionListeners, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled, assertWalletGate } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getQRStorageKey } from './cart.js';
 import { placeOrder } from './order.js';
 import { validateCoupon } from './discount.js';
@@ -1396,8 +1396,11 @@ document.getElementById('discountCodeInput')?.addEventListener('keydown', (e) =>
     if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btnApplyDiscount')?.click(); }
 });
 
-window.addEventListener('beforeunload', () => { cleanupSession(); _cleanupOrderListeners(); });
-window.addEventListener('pagehide', () => { cleanupSession(); _cleanupOrderListeners(); });
+// Cleanup Firebase listeners on page unload — listeners only. A refresh or a
+// tab close is not the end of the meal: the cart and the group choice live in
+// sessionStorage and must be back when the page reloads.
+window.addEventListener('beforeunload', () => { detachSessionListeners(); _cleanupOrderListeners(); });
+window.addEventListener('pagehide', () => { detachSessionListeners(); _cleanupOrderListeners(); });
 window.addEventListener('popstate', UI.handlePopState);
 window.addEventListener('fh:open-order', (e) => openOrderFromPush(e.detail?.orderId));
 

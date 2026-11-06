@@ -537,8 +537,17 @@ export async function saveCheckoutContact(name, phone, guestCount, specialNote) 
     }
 }
 
-export function cleanupSession() {
+/**
+ * Release the session's live listener only. Used by page unload (refresh,
+ * navigation, iOS killing the tab) — that is NOT the end of the meal, so the
+ * customer's cart and their group choice must survive it.
+ */
+export function detachSessionListeners() {
     if (Session._sessionUnsub) { Session._sessionUnsub(); Session._sessionUnsub = null; }
+}
+
+export function cleanupSession() {
+    detachSessionListeners();
     if (Session.sessionId) {
         sessionStorage.removeItem(`_pizza_group_${Session.sessionId}`);
         // Clear the session-scoped cart when session ends
