@@ -308,20 +308,13 @@ async function bootDirect() {
     }
     onCartChanged();
 
-    // Brand, in order: settings/Store/storeName -> its legacy `name` ->
-    // the outlet's own name. Several live outlets have no storeName at all,
-    // so the app greeted customers with a bare "Welcome".
-    // Only settings/Store is public; outlet `name` is rule-gated, so read it
-    // best-effort. A rejected Promise.all here used to abort the whole brand
-    // lookup and leave "Welcome" even when settings/Store.name existed.
+    // Brand, in order: settings/Store/storeName -> its legacy `name`.
+    // Both are public; the outlet's own `name` is deliberately NOT read here
+    // because it is rule-gated for anonymous customers (it would always fail).
     try {
-        const [storeSnap, nameSnap] = await Promise.all([
-            get(outletRef('settings/Store')).catch(() => null),
-            get(outletRef('name')).catch(() => null)
-        ]);
+        const storeSnap = await get(outletRef('settings/Store')).catch(() => null);
         const store = (storeSnap && storeSnap.val()) || {};
-        const outletName = (nameSnap && nameSnap.val()) || '';
-        const brand = String(store.storeName || store.name || outletName || '').trim();
+        const brand = String(store.storeName || store.name || '').trim();
         if (brand) {
             UI.applyBrand(brand);
             const b = document.getElementById('signInBrand');
@@ -334,15 +327,18 @@ async function bootDirect() {
     // built on one outlet would otherwise survive a link to another. Keep
     // only lines this outlet actually sells (also drops deleted dishes).
     restoreCart();
+    let pruned = 0;
     if (M.dishes.length) {
         const known = new Set(M.dishes.map(d => d.id));
         Object.keys(Cart.lines).forEach(id => {
-            if (!known.has(Cart.lines[id].dishId)) setQty(id, 0);
+            if (!known.has(Cart.lines[id].dishId)) { setQty(id, 0); pruned++; }
         });
     }
     initCustomer({ mode: 'dine-in' });
     document.getElementById('loadingOverlay').style.display = 'none';
     _bootReady = true;
+    // Say it, don't silently shrink the basket the customer left behind.
+    if (pruned) UI.showToast(`${pruned} item${pruned === 1 ? '' : 's'} removed — not on this menu`, 'info');
 
     if (isSignedIn()) {
         const p = getProfile();

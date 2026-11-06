@@ -12,7 +12,7 @@
  * Runnable self-check: node shared/app-link.js
  */
 
-export const APP_HOST = 'https://foodhubbie-qrmenu.web.app';
+export const APP_HOST = 'https://menu.foodhubbie.in';
 
 /**
  * @param {string} bid business id
@@ -28,11 +28,11 @@ export function appLink(bid, oid) {
 
 if (typeof process !== 'undefined' && process.argv?.[1]?.includes('app-link')) {
     import('node:assert').then(({ default: assert }) => {
-        assert.strictEqual(appLink('roshani-pizza', 'pizza'), 'https://foodhubbie-qrmenu.web.app/?b=roshani-pizza&o=pizza');
-        assert.strictEqual(appLink('a b', 'c&d'), 'https://foodhubbie-qrmenu.web.app/?b=a%20b&o=c%26d', 'ids are URL-encoded');
+        assert.strictEqual(appLink('roshani-pizza', 'pizza'), 'https://menu.foodhubbie.in/?b=roshani-pizza&o=pizza');
+        assert.strictEqual(appLink('a b', 'c&d'), 'https://menu.foodhubbie.in/?b=a%20b&o=c%26d', 'ids are URL-encoded');
         assert.strictEqual(appLink('', 'pizza'), '', 'missing business id -> no link');
         assert.strictEqual(appLink('roshani-pizza', ''), '', 'missing outlet id -> no link');
-        assert.strictEqual(appLink('  roshani-pizza  ', '  pizza  '), 'https://foodhubbie-qrmenu.web.app/?b=roshani-pizza&o=pizza', 'ids trimmed');
+        assert.strictEqual(appLink('  roshani-pizza  ', '  pizza  '), 'https://menu.foodhubbie.in/?b=roshani-pizza&o=pizza', 'ids trimmed');
         assert.ok(!APP_HOST.endsWith('/'), 'host carries no trailing slash');
         console.log('app-link OK');
     }).catch(e => { console.error(e); process.exit(1); });

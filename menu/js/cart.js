@@ -14,6 +14,15 @@
 
 const DEFAULT_STORAGE_KEY = 'foodhubbie_cart';
 
+// The storage key this page restored its cart under. Every mutation used to
+// persist to DEFAULT_STORAGE_KEY no matter which scope was restored, so a
+// webview/QR cart vanished on refresh and clearCart(tokenKey) removed nothing.
+let _activeKey = DEFAULT_STORAGE_KEY;
+
+function _key(key) {
+    return key || _activeKey || DEFAULT_STORAGE_KEY;
+}
+
 /**
  * Get the storage key for the QR dine-in flow.
  * Scoped to the table sessionId so cart persists across refreshes
@@ -49,7 +58,8 @@ export const Cart = {
  * Falls back to default key if no key provided (backward compatibility).
  */
 export function restoreCart(key) {
-    const storageKey = key || DEFAULT_STORAGE_KEY;
+    _activeKey = _key(key);
+    const storageKey = _activeKey;
     try {
         const saved = sessionStorage.getItem(storageKey);
         if (saved) Cart.lines = JSON.parse(saved);
@@ -68,7 +78,7 @@ export function addLine(line, key) {
     const unitPrice = typeof line.unitPrice === 'number' ? line.unitPrice : 0;
     const qty = typeof line.qty === 'number' && line.qty > 0 ? line.qty : 1;
     Cart.lines[lineId] = { ...line, unitPrice, qty };
-    _persistCart(key || DEFAULT_STORAGE_KEY);
+    _persistCart(_key(key));
     window.dispatchEvent(new CustomEvent('cart:changed'));
     return lineId;
 }
@@ -80,7 +90,7 @@ export function setQty(lineId, qty, key) {
     if (!Cart.lines[lineId]) return;
     if (qty <= 0) { delete Cart.lines[lineId]; }
     else { Cart.lines[lineId].qty = qty; }
-    _persistCart(key || DEFAULT_STORAGE_KEY);
+    _persistCart(_key(key));
     window.dispatchEvent(new CustomEvent('cart:changed'));
 }
 
@@ -89,7 +99,7 @@ export function setQty(lineId, qty, key) {
  */
 export function clearCart(key) {
     Cart.lines = {};
-    sessionStorage.removeItem(key || DEFAULT_STORAGE_KEY);
+    sessionStorage.removeItem(_key(key));
     window.dispatchEvent(new CustomEvent('cart:changed'));
 }
 
