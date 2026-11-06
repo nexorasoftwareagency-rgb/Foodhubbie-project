@@ -367,7 +367,7 @@ function fmtDate(ts) {
         + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 }
 
-function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsRec, ordersSnap) {
+function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsSnap, ordersSnap) {
     const loy = loyRec || {};
     const pts = Number(loy.lifetimePoints || 0);
     const balance = Math.max(0, Number(loy.points) || 0);
@@ -378,7 +378,7 @@ function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsRec, ordersSn
     const orders = ordersSnap ? Object.entries(ordersSnap.val() || {})
         .map(([id, o]) => (o ? { id, ...o } : null)).filter(Boolean)
         .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)).slice(0, 5) : [];
-    const redeemed = rewardsRec ? Object.entries(rewardsRec.val() || {})
+    const redeemed = rewardsSnap ? Object.entries(rewardsSnap.val() || {})
         .map(([id, r]) => (r ? { id, ...r } : null)).filter(Boolean)
         .sort((a, b) => Number(b.redeemedAt || 0) - Number(a.redeemedAt || 0)) : [];
 
@@ -714,7 +714,7 @@ async function lookupCustomer() {
             appSnap && appSnap.exists() ? appSnap.val() : null,
             loyalSnap && loyalSnap.exists() ? loyalSnap.val() : null,
             rankSnap && rankSnap.exists() ? rankSnap.val() : null,
-            rewardsSnap && rewardsSnap.exists() ? rewardsSnap.val() : null,
+            rewardsSnap,
             ordersSnap);
     } catch (e) {
         console.error('[Loyalty] lookup failed:', e);
