@@ -546,12 +546,20 @@ export function detachSessionListeners() {
     if (Session._sessionUnsub) { Session._sessionUnsub(); Session._sessionUnsub = null; }
 }
 
+/**
+ * Re-arm the live session listener after a bfcache restore. pagehide detaches
+ * it, and a restored page is otherwise alive but deaf to bill/status changes.
+ */
+export function reattachSessionWatch() {
+    if (Session.sessionId && !Session._sessionUnsub) watchSession();
+}
+
 export function cleanupSession() {
     detachSessionListeners();
     if (Session.sessionId) {
         sessionStorage.removeItem(`_pizza_group_${Session.sessionId}`);
         // Clear the session-scoped cart when session ends
-        clearCart(getQRStorageKey());
+        clearCart(getQRStorageKey(Session.sessionId));
     }
     sessionStorage.removeItem('_pizza_draft');
     Session.sessionId = null;

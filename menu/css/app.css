@@ -445,7 +445,11 @@ img{max-width:100%; display:block;}
 .bill-generated-note{ font-size:13px; color:var(--text-sub); line-height:1.6; margin-bottom:12px; }
 
 /* ---------- Misc ---------- */
-.toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1a1a1a; color:#fff; padding:12px 20px; border-radius:12px; font-size:13px; font-weight:600; z-index:999; opacity:0; transition:opacity .25s ease; max-width:90%; text-align:center; pointer-events:none; }
+/* Sits above the bottom nav (60px) + sticky cart bar / Place Order button, and
+   above the onboarding sheet (z-index 1300) so validation messages are never
+   hidden. max-content + max-width keeps long messages readable instead of
+   shrink-wrapping to 50vw (the old left:50% + width:auto behaviour). */
+.toast{ position:fixed; bottom:calc(132px + var(--safe-bottom)); left:50%; transform:translateX(-50%); width:max-content; max-width:min(90vw, 440px); background:#1a1a1a; color:#fff; padding:12px 20px; border-radius:12px; font-size:13px; font-weight:600; z-index:1400; opacity:0; transition:opacity .25s ease; text-align:center; pointer-events:none; box-shadow:0 8px 24px rgba(0,0,0,.18); }
 .toast.show{opacity:1;}
 .empty-cart{text-align:center; padding:60px 20px; color:var(--text-sub);}
 .icon{width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;}

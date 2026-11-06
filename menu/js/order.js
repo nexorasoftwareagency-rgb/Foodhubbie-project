@@ -171,7 +171,7 @@ export async function placeOrder({ taxPercent = 5, taxEnabled = true, taxRates, 
     }
 
     // Clear cart immediately so the user can start a new order
-    clearCart(getQRStorageKey());
+    clearCart(getQRStorageKey(Session.sessionId));
 
     // Write order-level guest record (fire-and-forget; must not reject the caller)
     const cleanPhone = (customerPhone || '').replace(/[^\d]/g, '');

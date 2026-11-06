@@ -151,12 +151,15 @@ let _toastShowing = false;
 
 function _showNextToast() {
     if (_toastQueue.length === 0) { _toastShowing = false; return; }
+    // Resolve the surface BEFORE marking the queue busy. When #toast was
+    // missing, the old order (flag first, then bail) wedged _toastShowing
+    // forever and silently dropped every later message.
+    const t = document.getElementById('toast');
+    if (!t) { _toastShowing = false; return; }
     _toastShowing = true;
     const entry = _toastQueue.shift();
     const msg = typeof entry === 'string' ? entry : entry.msg;
     const type = typeof entry === 'string' ? 'info' : (entry.type || 'info');
-    const t = document.getElementById('toast');
-    if (!t) return;
     t.textContent = msg;
     t.classList.add('show');
     if (type === 'success' || type === 'error') _notifySound();
@@ -165,7 +168,9 @@ function _showNextToast() {
     clearTimeout(t.__hideTimer);
     t.__hideTimer = setTimeout(() => {
         t.classList.remove('show');
-        setTimeout(_showNextToast, 200);
+        // Clear the text once it is invisible so the last message does not
+        // linger in the accessibility tree.
+        setTimeout(() => { t.textContent = ''; _showNextToast(); }, 200);
     }, 2000);
 }
 

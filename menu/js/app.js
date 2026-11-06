@@ -4,8 +4,8 @@
  * This is the only file with top-level event listener registration.
  */
 import { outletRef, get, onValue, push, set, OUTLET, isConnected, update, runTransaction, LINK_INCOMPLETE } from './firebase.js';
-import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, detachSessionListeners, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled, assertWalletGate } from './session.js';
-import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getQRStorageKey } from './cart.js';
+import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, detachSessionListeners, reattachSessionWatch, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled, assertWalletGate } from './session.js';
+import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getQRStorageKey, setCartScope } from './cart.js';
 import { placeOrder } from './order.js';
 import { validateCoupon } from './discount.js';
 import * as UI from './ui.js';
@@ -237,7 +237,7 @@ async function boot() {
         // ensureSession() will find it and restore the user's group context.
         if (Session.table?.currentSession) {
             const sessResult = await ensureSession();
-            const qrKey = getQRStorageKey(); // sessionId now available after ensureSession()
+            const qrKey = getQRStorageKey(Session.sessionId); // session-scoped basket
             if (sessResult.isNewSession) {
                 clearCart(qrKey); // old expired session's cart has no place in the new one
             } else {
@@ -552,7 +552,7 @@ document.getElementById('btnStartOwnGroup')?.addEventListener('click', async () 
             return;
         }
         // New group = fresh cart for this group
-        clearCart(getQRStorageKey());
+        clearCart(getQRStorageKey(Session.sessionId));
         document.getElementById('loadingOverlay').style.display = '';
         await loadMenu();
         UI.showScreen('screenMenu');
@@ -1075,6 +1075,14 @@ document.getElementById('btnAddToOrder')?.addEventListener('click', async () => 
             UI.showToast('Could not start session. Please scan the QR code again.');
             return;
         }
+        // Bind the basket to this table session BEFORE the first line is written.
+        // The session is usually created right here (first add), so the scope has
+        // to move off the default key at this point, not only at boot.
+        if (!M.direct && Session.sessionId) {
+            const qrKey = getQRStorageKey(Session.sessionId);
+            if (sessResult.isNewSession) clearCart(qrKey);
+            setCartScope(qrKey);
+        }
         if (sessResult.groupChoiceNeeded) {
             // Save draft so it can be restored after group selection
             if (M.draftDish) {
@@ -1400,6 +1408,10 @@ document.getElementById('discountCodeInput')?.addEventListener('keydown', (e) =>
 // sessionStorage and must be back when the page reloads.
 window.addEventListener('beforeunload', () => { detachSessionListeners(); _cleanupOrderListeners(); });
 window.addEventListener('pagehide', () => { detachSessionListeners(); _cleanupOrderListeners(); });
+
+// Back/forward cache restore: the page is alive but boot() will not run again,
+// so re-arm the session listener that pagehide detached.
+window.addEventListener('pageshow', (e) => { if (e.persisted) reattachSessionWatch(); });
 window.addEventListener('popstate', UI.handlePopState);
 window.addEventListener('fh:open-order', (e) => openOrderFromPush(e.detail?.orderId));
 

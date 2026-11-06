@@ -25,12 +25,24 @@ function _key(key) {
 
 /**
  * Get the storage key for the QR dine-in flow.
- * Scoped to the table sessionId so cart persists across refreshes
- * for the same table session, but is isolated from other tables/sessions.
+ * Scoped to the table sessionId so the basket survives refreshes for the same
+ * table session but never leaks into another table's session.
+ *
+ * The sessionId is passed explicitly: this module cannot read session.js's
+ * `Session` (it is an ES-module export, not a browser global), and importing it
+ * here would create a session.js <-> cart.js cycle.
  */
-export function getQRStorageKey() {
-    const sessionId = (typeof Session !== 'undefined' && Session.sessionId) || '';
+export function getQRStorageKey(sessionId) {
     return sessionId ? `foodhubbie_cart_qr_${sessionId}` : DEFAULT_STORAGE_KEY;
+}
+
+/**
+ * Point future mutations at `key` WITHOUT touching the in-memory lines.
+ * Used when a QR session is created: the basket is empty at that moment and has
+ * to move from the default key to the session key before the first addLine().
+ */
+export function setCartScope(key) {
+    _activeKey = _key(key);
 }
 
 /**
