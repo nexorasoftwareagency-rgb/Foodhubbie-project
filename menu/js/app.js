@@ -1457,14 +1457,10 @@ function closeHamburger() {
 
 async function buildHamburgerMenu() {
     const isDirect = !!M.direct;
-    const brandSnap = await get(outletRef('settings/Store/storeName')).catch(() => null);
-    if (brandSnap?.exists()) {
-        hamburgerBrand.textContent = brandSnap.val();
-    }
-
     const activeTab = state.currentActiveTab || '';
 
-    // Sectioned menu structure
+    // Build menu HTML first — never depends on Firebase, so the drawer
+    // always has content even if the brand fetch fails.
     const sections = [
         {
             label: 'MENU',
@@ -1574,6 +1570,13 @@ async function buildHamburgerMenu() {
             }
         });
     });
+
+    // Brand name fetched independently — non-blocking, never prevents menu render.
+    get(outletRef('settings/Store/storeName')).then(snap => {
+        if (snap?.exists()) {
+            hamburgerBrand.textContent = snap.val();
+        }
+    }).catch(() => {});
 }
 
 // Wire open/close
