@@ -68,7 +68,7 @@ export const TAB_DEFS = [
     ['menu-browser', 'Menu Browser'], ['inventory', 'Inventory'], ['riders', 'Riders'],
     ['customers', 'Customers'], ['loyalty', 'Loyalty'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
     ['riderAnalytics', 'Rider Analytics'], ['feedback', 'Feedback'], ['liveTracker', 'Live Tracker'],
-    ['payments', 'Payments'], ['expenses', 'Expenses'], ['notifications', 'Notifications'],
+    ['payments', 'Payments'], ['expenses', 'Expenses'], ['notifications', 'Notifications'], ['app-notifications', 'App Notifications'],
     ['costs', 'Costs'], ['settings', 'Settings']
 ];
 const ALL_TABS = TAB_DEFS.map(t => t[0]);
@@ -78,7 +78,7 @@ const ALL_TABS = TAB_DEFS.map(t => t[0]);
 // Discounts is in: offers can be prepared before go-live and the tab has no side effects.
 // Chat is NOT in: it is the customer-conversation tab, and the WhatsApp connection is done by Supreme.
 // The database rules also refuse order/table-session writes while locked; this list is the friendly UI layer.
-export const SETUP_TABS = ['dashboard', 'menu', 'categories', 'combos', 'menu-browser', 'tables', 'discounts', 'inventory', 'settings', 'costs', 'notifications'];
+export const SETUP_TABS = ['dashboard', 'menu', 'categories', 'combos', 'menu-browser', 'tables', 'discounts', 'inventory', 'settings', 'costs', 'notifications', 'app-notifications'];
 const _allExcept = (skip) => ALL_TABS.filter(t => !skip.includes(t));
 
 // Built-in matrix — the default for every outlet until an admin saves a
@@ -243,6 +243,11 @@ export async function loadTabData(tabId) {
         case 'promotions': {
             const { loadPromotions } = await mod('promotions');
             loadPromotions();
+            break;
+        }
+        case 'app-notifications': {
+            const { loadAppNotifications } = await mod('app-notifications');
+            loadAppNotifications();
             break;
         }
         case 'discounts': {
@@ -423,6 +428,7 @@ export const switchTab = async (tabId, skipHistory = false) => {
         if (tabId !== 'inventory') cleanupTasks.push(mod('inventory').then(m => m.cleanupInventory?.()));
         if (tabId !== 'reports') cleanupTasks.push(mod('analytics').then(m => m.cleanupReports?.()));
         if (tabId !== 'promotions') cleanupTasks.push(mod('promotions').then(m => m.cleanupPromotions?.()));
+        if (tabId !== 'app-notifications') cleanupTasks.push(mod('app-notifications').then(m => m.cleanupAppNotifications?.()));
         if (tabId !== 'discounts') cleanupTasks.push(mod('discounts').then(m => m.cleanupDiscounts?.()));
         if (tabId !== 'discounts') cleanupTasks.push(mod('discountsReports').then(m => m.closeDiscountsReports?.()));
         if (tabId !== 'tables') cleanupTasks.push(mod('tables').then(m => m.cleanupTables?.()));

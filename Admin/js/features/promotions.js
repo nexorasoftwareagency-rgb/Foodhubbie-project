@@ -770,8 +770,6 @@ function _switchCampaignPanel(panel) {
     });
     document.getElementById('promoActivePane')?.classList.toggle('hidden', panel !== 'active');
     document.getElementById('promoHistoryPane')?.classList.toggle('hidden', panel !== 'history');
-    document.getElementById('promoNotificationsPane')?.classList.toggle('hidden', panel !== 'notifications');
-    if (panel === 'notifications') _loadPushSubscriptions();
 }
 
 /* ============ BOOT ============ */
@@ -990,99 +988,6 @@ async function _downloadPromoXlsx() {
     URL.revokeObjectURL(url);
 }
 
-/* ============ PUSH NOTIFICATIONS (App Notifications tab) ============ */
-
-async function _loadPushSubscriptions() {
-    const countEl = document.getElementById('pushSubCount');
-    const updatedEl = document.getElementById('pushSubUpdated');
-    const sendBtn = document.getElementById('btnSendPushNotif');
-    if (!countEl) return;
-
-    try {
-        const snap = await get(Outlet.ref('pushSubscriptions'));
-        const subs = snap.val() || {};
-        const count = Object.keys(subs).length;
-        countEl.textContent = count;
-        if (updatedEl) {
-            const latest = Object.values(subs)
-                .map(s => s.updatedAt || 0)
-                .reduce((a, b) => Math.max(a, b), 0);
-            updatedEl.textContent = latest ? formatDate(latest) : '—';
-        }
-        if (sendBtn) sendBtn.disabled = count === 0;
-    } catch (e) {
-        console.error('[Push] Failed to load subscriptions:', e);
-        countEl.textContent = 'Error';
-        if (sendBtn) sendBtn.disabled = true;
-    }
-}
-
-async function _sendPushNotification() {
-    const title = document.getElementById('pushNotifTitle')?.value?.trim();
-    const body = document.getElementById('pushNotifBody')?.value?.trim();
-    const testMode = document.getElementById('pushNotifTestMode')?.checked;
-    const sendBtn = document.getElementById('btnSendPushNotif');
-
-    if (!title || !body) {
-        showToast('Title and message are required', 'warning');
-        return;
-    }
-
-    const outlet = state.currentOutlet || 'pizza';
-    const businessId = window.currentBusinessId || 'roshani-pizza';
-
-    sendBtn.disabled = true;
-    sendBtn.innerHTML = '<i data-lucide="loader"></i> <span>Sending…</span>';
-    await loadLucide();
-    if (window.lucide) window.lucide.createIcons({ root: sendBtn.parentNode });
-
-    try {
-        const token = await _getAdminAuthToken();
-        if (!token) throw new Error('Not authenticated');
-
-        const url = `${await _notifyBase()}/tenant-api/notify`;
-        const resp = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ title, body, data: { testMode: testMode ? 'true' : 'false', type: 'promo' } })
-        });
-
-        const result = await resp.json();
-        if (!resp.ok) throw new Error(result.error || 'Send failed');
-
-        showToast(`Notification sent to ${result.sent} device${result.sent !== 1 ? 's' : ''}${result.failed ? ` (${result.failed} failed)` : ''}`, 'success');
-        document.getElementById('pushNotifTitle').value = '';
-        document.getElementById('pushNotifBody').value = '';
-        _loadPushSubscriptions();
-    } catch (e) {
-        console.error('[Push] Send failed:', e);
-        showToast(e.message || 'Failed to send notification', 'error');
-    } finally {
-        sendBtn.disabled = false;
-        sendBtn.innerHTML = '<i data-lucide="send"></i> <span>Send Notification</span>';
-        await loadLucide();
-        if (window.lucide) window.lucide.createIcons({ root: sendBtn.parentNode });
-    }
-}
-
-function _getAdminAuthToken() {
-    return auth.currentUser ? auth.currentUser.getIdToken() : Promise.resolve(null);
-}
-
-// ponytail: single consumer — cache on window; promote to shared config when a second caller appears
-async function _notifyBase() {
-    if (window.TUNNEL_URL) return window.TUNNEL_URL;
-    try {
-        const snap = await get(ref(db, 'config/tunnelUrl'));
-        const url = snap.val();
-        if (url) window.TUNNEL_URL = url;
-    } catch { /* fall through → hosting origin 404 with honest error */ }
-    return window.TUNNEL_URL || '';
-}
-
 function _wireActions() {
     document.querySelectorAll('[data-action="openPromotionsGuide"]').forEach(el => {
         el.onclick = () => {
@@ -1130,10 +1035,6 @@ function _wireActions() {
             console.error('Failed to load approved WhatsApp templates:', err);
         }
     }).catch(() => {});
-
-    // Push notification actions
-    document.getElementById('btnSendPushNotif')?.addEventListener('click', _sendPushNotification);
-    document.getElementById('btnRefreshPushSubs')?.addEventListener('click', _loadPushSubscriptions);
 
     document.getElementById('promoActivePane')?.addEventListener('click', (e) => {
         const stop = e.target.closest('[data-action="stopPromoCampaign"]');
