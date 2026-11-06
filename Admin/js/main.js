@@ -1,4 +1,4 @@
-import { previewImage, showToast, showConfirm, logAudit, pruneOldLogs, getISTDateString } from './utils.js';
+import { previewImage, showToast, showConfirm, logAudit, pruneOldLogs, getISTDateString, debounce } from './utils.js';
 import { escapeHtml } from '../../shared/dom/escape.js';
 import { state } from './state.js';
 import { auth, db, serverTimestamp, ref, push, set } from './firebase.js';
@@ -19,6 +19,14 @@ function useMod(name) {
     if (!_modCache[name]) _modCache[name] = import(`./features/${name}.js`);
     return _modCache[name];
 }
+
+// Debounced search handlers (200ms) — prevents filter fire on every keystroke
+const _debouncedFilterOrders = debounce(async (val) => {
+    (await useMod('orders')).filterOrders(val);
+}, 200);
+const _debouncedFilterMenu = debounce(async (val) => {
+    (await useMod('catalog')).filterMenu(val);
+}, 200);
 
 document.addEventListener('DOMContentLoaded', async () => {
     logger.info('SYSTEM', '🚀 DOM Content Loaded. Initializing Admin ERP...', { version: '5.2.0', time: new Date().toISOString() });
@@ -605,9 +613,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             previewImage(e.target, 'riderProfilePreview');
         });
 
-        document.getElementById('riderSearchInput')?.addEventListener('input', async (e) => {
+        document.getElementById('riderSearchInput')?.addEventListener('input', debounce(async (e) => {
             (await useMod('riders')).renderRiders(e.target.value);
-        });
+        }, 200));
 
         bindClickTo('btnUploadAadhar', 'aadharPhotoInput');
         document.getElementById('aadharPhotoInput')?.addEventListener('change', (e) => {
@@ -743,11 +751,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (el.id === 'walkinDishSearch') {
             (await useMod('pos')).applyWalkinFilters();
         } else if (el.id === 'orderSearch') {
-            (await useMod('orders')).filterOrders(val);
+            _debouncedFilterOrders(val);
         } else if (el.id === 'customerSearch') {
             (await useMod('customers')).filterCustomers(val);
         } else if (el.id === 'menuSearch') {
-            (await useMod('catalog')).filterMenu(val);
+            _debouncedFilterMenu(val);
         } else if (el.id === 'categorySearch') {
             (await useMod('catalog')).filterCategories(val);
         } else if (el.id === 'inventorySearch') {

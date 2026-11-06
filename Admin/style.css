@@ -5450,7 +5450,6 @@ body {
     background: #FFE4E6 !important;
     color: #E11D48 !important;
     border: 1px solid #FECDD3 !important;
-    animation: pulse-status-v4 2s ease 2 !important;
     box-shadow: none !important;
 }
 
@@ -5458,7 +5457,6 @@ body {
     background: #DCFCE7 !important;
     color: #16A34A !important;
     border: 1px solid #BBF7D0 !important;
-    animation: pulse-status-v4 2s ease 2 !important;
     box-shadow: none !important;
 }
 
@@ -5466,7 +5464,6 @@ body {
     background: #FEF3C7 !important;
     color: #D97706 !important;
     border: 1px solid #FDE68A !important;
-    animation: pulse-status-v4 2s ease 2 !important;
     box-shadow: none !important;
 }
 
@@ -5474,7 +5471,6 @@ body {
     background: #DBEAFE !important;
     color: #2563EB !important;
     border: 1px solid #BFDBFE !important;
-    animation: pulse-status-v4 2s ease 2 !important;
     box-shadow: none !important;
 }
 
@@ -5482,7 +5478,6 @@ body {
     background: #F3E8FF !important;
     color: #9333EA !important;
     border: 1px solid #E9D5FF !important;
-    animation: pulse-status-v4 2s ease 2 !important;
     box-shadow: none !important;
 }
 
@@ -5490,7 +5485,6 @@ body {
     background: #F3F4F6 !important;
     color: #4B5563 !important;
     border: 1px solid #E5E7EB !important;
-    animation: pulse-status-v4 2s ease 2 !important;
     box-shadow: none !important;
 }
 
@@ -5498,7 +5492,6 @@ body {
     background: #DCFCE7 !important;
     color: #16A34A !important;
     border: 1px solid #BBF7D0 !important;
-    animation: pulse-status-v4 2s ease 2 !important;
     box-shadow: none !important;
 }
 
@@ -5510,7 +5503,6 @@ body {
 
 @keyframes pulse-status-v4 {
     0% { transform: scale(1); }
-    50% { transform: scale(1.02); }
     100% { transform: scale(1); }
 }
 
@@ -5524,7 +5516,7 @@ body {
     position: relative !important;
     display: flex !important;
     flex-direction: column !important;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
     overflow: visible !important;
 }
 
@@ -5566,7 +5558,7 @@ body {
     font-weight: 800 !important;
     letter-spacing: 0.5px !important;
     color: white !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
     z-index: 10 !important;
     text-transform: uppercase !important;
 }

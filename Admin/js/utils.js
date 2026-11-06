@@ -574,3 +574,16 @@ export async function getEffectiveCeiling(staffUid) {
     const secSnap = await get(Outlet.ref('settings/Security'));
     return secSnap.val()?.discountCeilingPct || 0;
 }
+
+/**
+ * Debounce: returns a wrapper that delays invoking `fn` by `ms` milliseconds.
+ * Each call resets the timer, so `fn` only fires once the caller stops invoking.
+ * Use for search inputs, filter keystrokes, and resize handlers.
+ */
+export const debounce = (fn, ms = 200) => {
+    let timer;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), ms);
+    };
+};

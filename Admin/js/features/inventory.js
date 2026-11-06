@@ -517,7 +517,7 @@ export async function loadInventoryMenu() {
                     controlsHtml += `<div class="inventory-stock-row"><span class="stock-label text-muted">Not tracked</span><button class="btn-secondary btn-small track-dish-btn" data-dish-id="${dishId}" data-dish-name="${escapeHtml(dish.name)}">+ Track Stock</button></div>`;
                 }
             }
-            rows.push(`<div class="dish-card inventory-dish-card"><div class="dish-img-container"><img src="${dish.image || 'https://placehold.co/150'}" alt="${escapeHtml(dish.name)}" loading="lazy"></div><div class="dish-info"><h4>${escapeHtml(dish.name)}</h4><span class="dish-price-val">₹${dish.price || 0}</span>${controlsHtml}</div></div>`);
+            rows.push(`<div class="dish-card inventory-dish-card"><div class="dish-img-container"><img src="${dish.image || 'https://placehold.co/150'}" alt="${escapeHtml(dish.name)}" loading="lazy" width="127" height="127"></div><div class="dish-info"><h4>${escapeHtml(dish.name)}</h4><span class="dish-price-val">₹${dish.price || 0}</span>${controlsHtml}</div></div>`);
         });
 
         _menuAllRows = rows;

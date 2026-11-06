@@ -279,7 +279,7 @@ dishes.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
             card.className = 'dish-card premium-shadow-v4';
             card.innerHTML = `
                 <div class="dish-img-container">
-                    <img src="${d.image || 'https://placehold.co/150/orange/white?text=Dish'}" alt="${escapeHtml(d.name)}">
+                    <img src="${d.image || 'https://placehold.co/150/orange/white?text=Dish'}" alt="${escapeHtml(d.name)}" width="200" height="200" loading="lazy">
                     <div class="stock-badge ${d.stock ? 'available' : 'out'}">
                         ${d.stock ? '✅ Available' : '❌ Out of Stock'}
                     </div>
