@@ -106,6 +106,7 @@ function renderProfile(bid, oid, biz, outlet) {
         : null;
   const store = (outlet.settings && outlet.settings.Store) || {};
   const outletName = outlet.name || store.storeName || 'Unnamed outlet';
+  const appUrl = appLink(bid, oid);
   const bizName = biz.name || store.entityName || biz.businessName || store.storeName || 'Unnamed business';
   const contact = outlet.contactPhone || biz.contactPhone || store.whatsappNumber || '—';
   const creds = outlet.adminLogin || {};
@@ -171,6 +172,19 @@ function renderProfile(bid, oid, biz, outlet) {
         <div>Outlet ID: <span class="mono">${escapeHtml(oid)}</span></div>
         <div>Created: ${formatDate(biz.createdAt || outlet.createdAt)}</div>
       </div>
+    </div>
+
+    <div class="glass-card" style="font-size:13px;margin-bottom:16px">
+      <strong style="display:block;margin-bottom:10px"><svg data-lucide="smartphone" style="width:14px;height:14px;vertical-align:-2px"></svg> Customer app</strong>
+      <div style="color:var(--text-secondary);line-height:1.6;margin-bottom:8px">
+        The installable customer app for this outlet. Share it with the restaurant only — it opens their branded menu and installs as their own icon.
+      </div>
+      <div class="mono" style="word-break:break-all;margin-bottom:10px">${escapeHtml(appUrl)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" data-action="copy-credential" data-copy="${escapeHtml(appUrl)}">Copy link</button>
+        <button class="btn btn-ghost btn-sm" data-action="toggle-app-qr">Show QR</button>
+      </div>
+      <div id="sa-app-qr" style="margin-top:10px"></div>
     </div>
 
     ${renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSections, billingDraft)}
@@ -476,6 +490,25 @@ registerAction('copy-credential', async (btn) => {
   } catch (_) {
     showToast('Could not copy — select and copy manually.', 'error');
   }
+});
+
+registerAction('toggle-app-qr', (btn) => {
+  const box = document.getElementById('sa-app-qr');
+  if (!box) return;
+  if (box.dataset.shown === '1') {
+    box.innerHTML = '';
+    box.dataset.shown = '';
+    btn.textContent = 'Show QR';
+    return;
+  }
+  const text = appLink(currentBid, currentOid);
+  if (!text) return showToast('No app link for this outlet.', 'error');
+  // qrcodejs is already loaded globally by SupremeAdmin/index.html.
+  if (!window.QRCode) return showToast('QR library not loaded — copy the link instead.', 'error');
+  box.innerHTML = '';
+  new window.QRCode(box, { text, width: 180, height: 180, colorDark: '#1a1a1a', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
+  box.dataset.shown = '1';
+  btn.textContent = 'Hide QR';
 });
 
 registerAction('toggle-section', (btn) => {

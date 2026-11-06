@@ -56,6 +56,8 @@ reference/
 
 # Root screenshots
 *.png
+# ...but real app assets under menu/icons are shipped files
+!menu/icons/*.png
 
 # Stray root-level copies (actual code lives in Admin/, menu/, etc.)
 /catalog.js

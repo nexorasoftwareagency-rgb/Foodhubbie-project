@@ -300,7 +300,8 @@ async function bootDirect() {
 
     // App mode never registered a cart:changed listener — only the table boot
     // did — so adding an item never updated the bottom-nav badge or the
-    // floating cart bar.
+    // floating cart bar. It also never restored the persisted cart, so a
+    // refresh (or iOS killing the tab) silently emptied the basket.
     if (!M._cartListenerBound) {
         M._cartListenerBound = true;
         window.addEventListener('cart:changed', onCartChanged);
@@ -310,13 +311,17 @@ async function bootDirect() {
     // Brand, in order: settings/Store/storeName -> its legacy `name` ->
     // the outlet's own name. Several live outlets have no storeName at all,
     // so the app greeted customers with a bare "Welcome".
+    // Only settings/Store is public; outlet `name` is rule-gated, so read it
+    // best-effort. A rejected Promise.all here used to abort the whole brand
+    // lookup and leave "Welcome" even when settings/Store.name existed.
     try {
         const [storeSnap, nameSnap] = await Promise.all([
-            get(outletRef('settings/Store')),
-            get(outletRef('name'))
+            get(outletRef('settings/Store')).catch(() => null),
+            get(outletRef('name')).catch(() => null)
         ]);
-        const store = storeSnap.val() || {};
-        const brand = String(store.storeName || store.name || nameSnap.val() || '').trim();
+        const store = (storeSnap && storeSnap.val()) || {};
+        const outletName = (nameSnap && nameSnap.val()) || '';
+        const brand = String(store.storeName || store.name || outletName || '').trim();
         if (brand) {
             UI.applyBrand(brand);
             const b = document.getElementById('signInBrand');
@@ -325,6 +330,16 @@ async function bootDirect() {
     } catch (e) { console.warn('[Direct] brand fetch failed:', e?.message || e); }
 
     await loadMenu();
+    // Direct-mode carts sit under the origin-wide default key, so a basket
+    // built on one outlet would otherwise survive a link to another. Keep
+    // only lines this outlet actually sells (also drops deleted dishes).
+    restoreCart();
+    if (M.dishes.length) {
+        const known = new Set(M.dishes.map(d => d.id));
+        Object.keys(Cart.lines).forEach(id => {
+            if (!known.has(Cart.lines[id].dishId)) setQty(id, 0);
+        });
+    }
     initCustomer({ mode: 'dine-in' });
     document.getElementById('loadingOverlay').style.display = 'none';
     _bootReady = true;
