@@ -171,6 +171,13 @@ export async function loadTabData(tabId) {
             break;
         }
         case 'loyalty': {
+            const { state } = await import('./state.js');
+            if (!state.features?.loyalty) {
+                showToast('Loyalty feature is disabled. Enable it in Settings > Features.', 'info');
+                const prevTab = document.querySelector('.nav-btn.active')?.dataset.tab || 'dashboard';
+                document.querySelector(`[data-tab="${prevTab}"]`)?.click();
+                return;
+            }
             const { loadLoyalty } = await mod('loyalty');
             loadLoyalty();
             break;
@@ -564,8 +571,9 @@ window.addEventListener('resize', applyDataLabels);
 async function refreshNavVisibility() {
     const { state } = await import('./state.js');
     const expenseOn = state.features?.expense === true;
+    const loyaltyOn = state.features?.loyalty === true;
     TAB_DEFS.forEach(([tab]) => {
-        const show = canAccessTab(tab) && (tab !== 'expenses' || expenseOn);
+        const show = canAccessTab(tab) && (tab !== 'expenses' || expenseOn) && (tab !== 'loyalty' || loyaltyOn);
         const li = document.getElementById(`menu-${tab}`);
         if (li) li.style.display = show ? '' : 'none';
         document.querySelectorAll(`.nav-item[data-tab="${tab}"]`).forEach(b => b.style.display = show ? '' : 'none');

@@ -75,7 +75,7 @@ function tierColour(t) {
 
 function money(n) {
     const v = Number(n || 0);
-    return '?' + (v % 1 === 0 ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: 1 }));
+    return '₹' + (v % 1 === 0 ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: 1 }));
 }
 
 function ptsPer100(config) {
@@ -303,7 +303,7 @@ function renderConfigForm() {
                 </div>
                 <button type="button" data-action="loyalty-save-config" class="btn-primary">Save program settings</button>
             </div>
-            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum). Max tender 0 = no cap; e.g. 10 caps one bill's redemption at 10% of its own subtotal (Zomato-style), protecting margin on large orders. Expiry 0 = points never lapse; 180 days is the default. Redeeming a reward needs a code sent to the customer's WhatsApp.</div>
+            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. A bill below it cannot redeem points; the tender is capped at (bill − minimum). Max tender 0 = no cap; e.g. 10 caps one bill's redemption at 10% of its own subtotal (Zomato-style), protecting margin on large orders. Expiry 0 = points never lapse; 180 days is the default. Customers redeem rewards directly in the app — points are deducted as payment tender at checkout. No WhatsApp code needed.</div>
             <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;">
                 ${toggle('loyalty-earn-enabled', earnOn, 'Points earning', 'Turn off to pause all earning')}
                 ${toggle('loyalty-dinein-earn-enabled', dineInOn, 'Dine-in earning', 'Award points when a table bill is paid')}
@@ -652,17 +652,12 @@ async function adjustPoints(phone) {
     try {
         const result = await runTransaction(Outlet.ref(`customers/${phone}/loyalty`), (cur) => {
             const c = cur || null;
-            const curPoints = c && Number.isFinite(Number(c.points)) ? Number(c.points) : 0;
+            // No existing loyalty record — refuse to fabricate one. A manual
+            // adjustment can only touch a customer who has already earned points.
+            if (!c || !c.phone) return null;
+            const curPoints = Number.isFinite(Number(c.points)) ? Number(c.points) : 0;
             const newPoints = Math.max(0, curPoints + delta);
-            if (c && c.phone) {
-                return { ...c, points: newPoints, updatedAt: now, lastAdjustment: { delta, reason, by: uid, at: now } };
-            }
-            return {
-                phone, outlet: Outlet.current, business: bid,
-                points: newPoints, lifetimePoints: 0, totalSpent: 0, orderCount: 0,
-                tier: 'bronze', tierReachedAt: null, lastOrderAt: null, updatedAt: now,
-                lastAdjustment: { delta, reason, by: uid, at: now }
-            };
+            return { ...c, points: newPoints, updatedAt: now, lastAdjustment: { delta, reason, by: uid, at: now } };
         });
         if (!result.committed) throw new Error('transaction aborted — row changed underneath');
         const after = Number((result.snapshot && result.snapshot.val() && result.snapshot.val().points) || 0);
@@ -674,8 +669,14 @@ async function adjustPoints(phone) {
         logger.info('LOYALTY', 'Manual adjustment', { outlet: Outlet.current, delta, pointsAfter: after });
         await lookupCustomer();
     } catch (e) {
-        console.error('[Loyalty] adjustment failed:', e);
-        showToast('Adjustment failed. Try again.', 'error');
+        if (e && e.message && e.message.includes('transaction aborted — row changed underneath')) {
+            showToast('Adjustment failed — the loyalty record changed underneath. Try again.', 'error');
+        } else if (e && e.message && e.message.includes('aborted')) {
+            showToast(`This customer (${phone}) has no loyalty record yet — points can only be adjusted after they earn their first order.`, 'error');
+        } else {
+            console.error('[Loyalty] adjustment failed:', e);
+            showToast('Adjustment failed. Try again.', 'error');
+        }
         if (btn) btn.disabled = false;
     }
 }

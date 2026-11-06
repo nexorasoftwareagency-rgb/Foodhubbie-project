@@ -497,6 +497,7 @@ export function initAuth() {
                 const f = featSnap.val() || {};
                 state.features.discountApproval = f.discountApproval === true;
                 state.features.expense = f.expense === true;
+                state.features.loyalty = f.loyalty === true;
                 state.roles = rolesSnap.val() || null;
             } catch (e) {
                 console.warn('[Auth] Feature/role gates load failed:', e);

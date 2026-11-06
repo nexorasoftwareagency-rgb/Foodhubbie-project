@@ -194,10 +194,18 @@ function applyStaffManagementFeatureUI() {
     const st = document.getElementById('featureStaffManagementStatus');
     if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
 }
+
+// Loyalty feature UI
+function applyLoyaltyFeatureUI() {
+    const on = isChecked('featureLoyalty');
+    const st = document.getElementById('featureLoyaltyStatus');
+    if (st) st.textContent = on ? 'Currently: Active' : 'Currently: Inactive';
+}
 document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'featureDiscountApproval') applyFeatureUI();
     if (e.target && e.target.id === 'featureExpense') applyExpenseFeatureUI();
     if (e.target && e.target.id === 'featureStaffManagement') applyStaffManagementFeatureUI();
+    if (e.target && e.target.id === 'featureLoyalty') applyLoyaltyFeatureUI();
 });
 const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcons({ root }));
 
@@ -205,6 +213,10 @@ const refreshIcons = (root) => loadLucide().then(() => window.lucide?.createIcon
 
 export async function loadStoreSettings() {
     console.log("[Settings] Loading all store settings...");
+
+    // Wire the Customer App card here, not only on DOMContentLoaded: this
+    // module is imported lazily (main.js useMod), i.e. long after DOM ready.
+    initCustomerAppCard();
 
     // Show skeleton while data loads
     const feeSlabsTbody = document.getElementById('feeSlabsTable');
@@ -292,6 +304,11 @@ export async function loadStoreSettings() {
                 document.querySelector('.settings-subtab[data-subtab="general"]')?.click();
             }
         }
+
+        // 2a-4. Loyalty feature flag
+        state.features.loyalty = featSnap.val()?.loyalty === true;
+        setChecked('featureLoyalty', state.features.loyalty);
+        applyLoyaltyFeatureUI();
 
         // 2b. Dine-In Settings (tax, service charge, QR ordering base URL)
         const dineSnap = await get(Outlet.ref('dineinSettings'));
@@ -488,13 +505,16 @@ export async function saveStoreSettings() {
         const featureDiscountEnabled = isChecked('featureDiscountApproval');
         const featureExpenseEnabled = isChecked('featureExpense');
         const featureStaffManagementEnabled = isChecked('featureStaffManagement');
+        const featureLoyaltyEnabled = isChecked('featureLoyalty');
         const featureDiscountChanged = featureDiscountEnabled !== state.features.discountApproval;
         const featureExpenseChanged = featureExpenseEnabled !== state.features.expense;
         const featureStaffManagementChanged = featureStaffManagementEnabled !== state.features.staffManagement;
-        const featureChanged = featureDiscountChanged || featureExpenseChanged || featureStaffManagementChanged;
+        const featureLoyaltyChanged = featureLoyaltyEnabled !== state.features.loyalty;
+        const featureChanged = featureDiscountChanged || featureExpenseChanged || featureStaffManagementChanged || featureLoyaltyChanged;
         updates[tenantPath(Outlet.current, 'settings/features/discountApproval')] = featureDiscountEnabled;
         updates[tenantPath(Outlet.current, 'settings/features/expense')] = featureExpenseEnabled;
         updates[tenantPath(Outlet.current, 'settings/features/staffManagement')] = featureStaffManagementEnabled;
+        updates[tenantPath(Outlet.current, 'settings/features/loyalty')] = featureLoyaltyEnabled;
         const taxRates = _readTaxRates();
         updates[tenantPath(Outlet.current, 'dineinSettings')] = {
             qrBaseUrl: val('settingQrBaseUrl'),
@@ -526,6 +546,7 @@ export async function saveStoreSettings() {
             state.features.discountApproval = featureDiscountEnabled;
             state.features.expense = featureExpenseEnabled;
             state.features.staffManagement = featureStaffManagementEnabled;
+            state.features.loyalty = featureLoyaltyEnabled;
             await completeSiteRefresh('Settings saved. A hard refresh is required to activate this feature change. Refresh now?');
         }
 
