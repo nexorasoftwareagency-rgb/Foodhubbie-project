@@ -18,6 +18,7 @@ import { renderPromotionsGuide } from './promotions-guide.js';
 import { logger } from '../utils/logger.js';
 import { loadLucide } from '../ui.js';
 import { ensureXlsx } from '../xlsx.js';
+import { loadApprovedWaTemplates } from './promotions-templates.js';
 
 const PROMO_MAX_PER_CAMPAIGN = 300;
 const PHONE_HINTS = ['whatsapp', 'phone', 'mobile', 'number', 'cell', 'contact', 'tel', 'msisdn'];
@@ -1117,6 +1118,18 @@ function _wireActions() {
     });
     const kill = document.getElementById('btnPromoKillAll');
     if (kill) kill.onclick = _toggleKillSwitch;
+
+    // Load approved WhatsApp templates for the promo delivery-shell select.
+    // Meta is the source of truth — only status === 'approved' templates are
+    // offered on the Promotions tab; pending/rejected never appear here.
+    import('./promotions-templates.js').then(async (m) => {
+        try {
+            const { BUSINESS_ID, Outlet } = await import('../firebase.js');
+            await m.loadApprovedWaTemplates(BUSINESS_ID(), Outlet.current || 'pizza');
+        } catch (err) {
+            console.error('Failed to load approved WhatsApp templates:', err);
+        }
+    }).catch(() => {});
 
     // Push notification actions
     document.getElementById('btnSendPushNotif')?.addEventListener('click', _sendPushNotification);
