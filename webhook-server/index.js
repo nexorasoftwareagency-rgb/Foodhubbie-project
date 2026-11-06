@@ -48,6 +48,29 @@ app.use('/api', (req, res) => {
   req.pipe(proxyReq);
 });
 
+// Proxy /tenant-api/* → Bot Control API (port 4000). The Admin App
+// Notifications tab calls POST /tenant-api/notify from origin
+// https://app.foodhubbie.in. Same single-port proxy pattern as /api/*.
+// CORS preflight (OPTIONS) is handled by bot-control-api's CORS middleware
+// and passes through this proxy unchanged.
+app.use('/tenant-api', (req, res) => {
+  const proxyReq = http.request({
+    host: '127.0.0.1',
+    port: BOT_CONTROL_PORT,
+    path: req.originalUrl,
+    method: req.method,
+    headers: { ...req.headers, host: `127.0.0.1:${BOT_CONTROL_PORT}` },
+  }, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(res);
+  });
+  proxyReq.on('error', (err) => {
+    console.error('[PROXY] Bot Control API unreachable:', err.message);
+    if (!res.headersSent) res.status(502).json({ error: 'Bot Control API unreachable' });
+  });
+  req.pipe(proxyReq);
+});
+
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
