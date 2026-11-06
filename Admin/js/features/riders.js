@@ -278,7 +278,6 @@ export function showRiderModal() {
     document.getElementById('riderEmail').disabled = false;
     document.getElementById('riderPassHint').classList.add('hidden');
     document.getElementById('riderPassLabel').innerText = "Portal Password";
-    document.getElementById('riderPassHint').textContent = "Leave blank to generate a secure password automatically.";
 
     const fields = ['riderName', 'riderEmail', 'riderPhone', 'riderAltPhone', 'riderFatherName', 'riderAge', 'riderAadharNo', 'riderQual', 'riderAddress', 'riderPass'];
     fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
