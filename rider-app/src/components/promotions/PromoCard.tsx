@@ -1,8 +1,4 @@
 // === src/components/promotions/PromoCard.tsx ===
-import { Copy, CheckCircle } from "lucide-react";
-import { useCopyToClipboard } from "@/hooks/use-toast";
-import { formatOrderId } from "@/lib/utils";
-
 interface PromoCardProps {
   code: string;
   title: string;
@@ -24,10 +20,8 @@ export function PromoCard({
   onApply,
   onCopy,
 }: PromoCardProps) {
-  const { copyToClipboard } = useCopyToClipboard();
-
   const handleCopy = () => {
-    copyToClipboard(code);
+    navigator.clipboard.writeText(code);
     onCopy(code);
   };
 

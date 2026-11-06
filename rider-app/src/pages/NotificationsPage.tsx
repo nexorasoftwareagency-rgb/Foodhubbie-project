@@ -1,16 +1,12 @@
 // === src/pages/NotificationsPage.tsx ===
-import { useState, useEffect } from "react";
-import { Bell, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { Bell } from "lucide-react";
 import { NotificationItem } from "@/components/notifications/NotificationItem";
 import { ClearAllButton } from "@/components/notifications/ClearAllButton";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { useAuthContext } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
-import { cn } from "@/lib/utils";
 
 export function NotificationsPage() {
-  const { user } = useAuthContext();
-  const { notifications, loading, markRead, clearAll, unreadCount } = useNotifications();
+  const { notifications, loading, markRead, clearAll } = useNotifications();
   const [filter, setFilter] = useState<"all" | "order" | "promo">("all");
 
   const filteredNotifications = notifications.filter((n) => {
@@ -35,7 +31,7 @@ export function NotificationsPage() {
         </div>
         <p className="text-[12.5px] text-muted-foreground mt-0.5">
           Stay updated on your orders and promotions
-        </div>
+        </p>
       </div>
 
       {/* Filter chips */}
