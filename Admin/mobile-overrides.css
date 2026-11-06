@@ -2730,9 +2730,9 @@
     white-space: nowrap;
     user-select: none;
     border-bottom: 2px solid var(--mob-border);
-    background: transparent;
+    background: #fff;
 }
-.mob-data-table thead th:hover { background: transparent; }
+.mob-data-table thead th:hover { background: var(--mob-bg); }
 .mob-data-table thead th.mob-sort-asc::after { content: ' \25B2'; font-size: 9px; }
 .mob-data-table thead th.mob-sort-desc::after { content: ' \25BC'; font-size: 9px; }
 .mob-data-table tbody td {
@@ -2789,6 +2789,7 @@
     padding: 4px 10px;
     border-radius: 8px;
     color: #fff;
+    background: var(--mob-sub);
     white-space: nowrap;
 }
 .mob-badge-type-online { background: var(--mob-blue); }
@@ -2801,7 +2802,9 @@
 .mob-badge-status-confirmed { background: var(--mob-amber); }
 .mob-badge-status-ready { background: var(--mob-green); }
 .mob-badge-status-delivered { background: var(--mob-green); }
+.mob-badge-status-served { background: var(--mob-green); }
 .mob-badge-status-cancelled { background: var(--mob-red); }
+.mob-badge-status-refunded { background: var(--mob-red); }
 .mob-badge-status-pending { background: var(--mob-amber); }
 .mob-badge-rating-high { background: var(--mob-green); }
 .mob-badge-rating-mid { background: var(--mob-amber); }

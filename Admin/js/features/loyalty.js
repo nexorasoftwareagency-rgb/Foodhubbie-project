@@ -370,6 +370,7 @@ function fmtDate(ts) {
 function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsRec, ordersSnap) {
     const loy = loyRec || {};
     const pts = Number(loy.lifetimePoints || 0);
+    const balance = Math.max(0, Number(loy.points) || 0);
     const tier = loy.tier || tierForPoints(pts, _config);
     const disp = tierColour(tier);
     const nt = nextTier(pts, _config);
@@ -417,7 +418,11 @@ function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsRec, ordersSn
                 </div>
                 <div style="display:flex;flex-direction:column;gap:4px;">
                     <span class="mob-td-sub">Points</span>
-                    <span class="mob-td-strong" style="font-size:28px;font-variant-numeric:tabular-nums;">${pts}</span>
+                    <span class="mob-td-strong" style="font-size:28px;font-variant-numeric:tabular-nums;">${balance}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <span class="mob-td-sub">Lifetime points</span>
+                    <span class="mob-td-strong" style="font-variant-numeric:tabular-nums;">${pts}</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:4px;">
                     <span class="mob-td-sub">Lifetime spent</span>
@@ -727,10 +732,10 @@ function renderAll() {
         <div class="mob-section-head-row" style="align-items:flex-start;">
             <div>
                 <h2 class="mob-card-title" style="font-size:22px;">Loyalty</h2>
-                <p class="mob-td-sub">Points, tiers and rewards customers earn at ${escapeHtml(Outlet.current)}.</p>
+                <p class="mob-td-sub">Points, tiers and rewards customers earn at this kitchen.</p>
             </div>
         </div>
-        <div class="mob-card mob-table-card" style="margin:0;">
+        <div class="mob-card" style="margin:0;padding:0;">
             <div style="padding:16px;">
                 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">
                     <div style="display:flex;flex-direction:column;gap:2px;">
