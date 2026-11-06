@@ -30,6 +30,9 @@
     {
       "target": "admin",
       "public": "Admin/dist",
+      "domains": [
+        "admin.foodhubbie.in"
+      ],
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -192,6 +195,9 @@
     {
       "target": "rider",
       "public": "rider-app/dist",
+      "domains": [
+        "rider.foodhubbie.in"
+      ],
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -282,6 +288,9 @@
     {
       "target": "menu",
       "public": "menu",
+      "domains": [
+        "menu.foodhubbie.in"
+      ],
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -379,6 +388,9 @@
     {
       "target": "supreme",
       "public": "SupremeAdmin/dist",
+      "domains": [
+        "supreme.foodhubbie.in"
+      ],
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -457,11 +469,9 @@
     {
       "target": "website",
       "public": "website",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "!.well-known/**",
-        "**/node_modules/**"
+      "domains": [
+        "app.foodhubbie.in",
+        "foodhubbie.in"
       ],
       "cleanUrls": true,
       "redirects": [
