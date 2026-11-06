@@ -1,3 +1,4 @@
+import { auth, db, ref, get } from '../firebase.js';
 import { showToast } from '../ui-utils.js';
 import { escapeHtml } from '../utils.js';
 import { loadLucide } from '../ui.js';
