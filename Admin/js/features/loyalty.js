@@ -394,7 +394,7 @@ function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsSnap, ordersS
             <td class="mob-th-center">${fmtDate(o.createdAt)}</td>
             <td class="mob-th-right">${money(o.total || 0)}</td>
             <td class="mob-th-center"><span class="mob-badge mob-badge-status-${(o.status || 'placed').toLowerCase()}">${escapeHtml(o.status || 'Placed')}</span></td>
-        </tr>`).join('');
+        </tr>`);
 
     const redeemedRows = redeemed.map(r => `
         <tr>
@@ -402,7 +402,7 @@ function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsSnap, ordersS
             <td class="mob-th-center">${escapeHtml(r.code || '\u2014')}</td>
             <td class="mob-th-center">${fmtDate(r.redeemedAt)}</td>
             <td class="mob-th-center">${escapeHtml(r.status || 'active')}</td>
-        </tr>`).join('');
+        </tr>`);
 
     return `
     <div class="mob-card mob-table-card" style="margin:0;">
