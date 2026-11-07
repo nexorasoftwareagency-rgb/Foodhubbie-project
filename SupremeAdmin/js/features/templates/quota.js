@@ -2,6 +2,8 @@
  * Quota & Analytics templates
  */
 
+import { escapeHtml } from '/js/utils.js';
+
 export async function loadQuota(bid, oid) {
   const el = document.getElementById('quota-content');
   if (!el) return;
@@ -14,13 +16,32 @@ export async function loadQuota(bid, oid) {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(`${res.status}`);
-    const { quota } = await res.json();
-    const q = quota || {};
-    const used = q.used ?? 0;
-    const limit = q.limit ?? 1000;
+    const payload = await res.json();
+    // Server answers `{ quota: {...} }`; older builds answered flat
+    // `{ tier, used, limit }`. Accept both so a stale API cannot blank the card.
+    const q = payload.quota || payload || {};
+    const used = Number(q.used) || 0;
+
+    // A Graph failure is a soft state, not an error: an outlet can still hold a
+    // test/removed number id. Show the real local counter + why the cap is
+    // unknown instead of a fake 0/1000 gauge.
+    if (q.available === false || q.limit == null) {
+      el.innerHTML = `
+        <div style="padding:10px 12px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);margin-bottom:8px">
+          <div style="font-size:16px;font-weight:700;color:var(--text-primary,#111);line-height:1.2">${used}</div>
+          <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px">Messages sent · today (IST)</div>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.6">
+          Sending limit not available${q.reason ? ` — <span style="color:#b45309">${escapeHtml(String(q.reason))}</span>` : ''}.<br>
+          <a href="https://business.facebook.com/wa/manage/" target="_blank" rel="noopener" style="color:var(--accent)">View in Meta Business Suite</a>
+        </div>`;
+      return;
+    }
+
+    const limit = Number(q.limit);
     const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
     const color = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : 'var(--accent,#25D366)';
-    document.getElementById('quota-content').innerHTML = `
+    el.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
         <div style="flex:1;min-width:100px;padding:8px 12px;background:rgba(var(--accent-rgb,37,211,102),.06);border-radius:8px;text-align:center">
           <div style="font-size:20px;font-weight:700;color:var(--accent,#25D366);line-height:1.2">${used}/${limit}</div>
@@ -35,7 +56,7 @@ export async function loadQuota(bid, oid) {
         <div style="width:${pct}%;height:100%;background:${color};transition:width .3s"></div>
       </div>
       <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.6">
-        Quota resets at midnight UTC · <a href="https://business.facebook.com/wa/manage/" target="_blank" rel="noopener" style="color:var(--accent)">View in Meta Business Suite</a>
+        ${q.tier ? `${escapeHtml(String(q.tier))} · ` : ''}Quota resets at midnight UTC · <a href="https://business.facebook.com/wa/manage/" target="_blank" rel="noopener" style="color:var(--accent)">View in Meta Business Suite</a>
       </div>`;
   } catch (err) {
     console.error('loadQuota failed', err);

@@ -1118,35 +1118,80 @@ app.post('/api/whatsapp/exchange', requireSuperOnly, async (req, res) => {
 // Real numbers require a Meta system-user token; without one this
 // answers 501 so the dashboard shows an honest "not wired up" message
 // instead of a fake gauge.
+//
+// Response shape is `{ quota: { tier, used, limit, available, reason? } }`
+// (top-level copies kept for older clients). `used` is always real — it is
+// the bot's own per-IST-day send counter at outlet.whatsapp/usage/{date}.
+//
+// A Graph failure is NOT a server error: an outlet may still hold a test or
+// removed phone-number id, the system-user token may not be attached to that
+// WABA, or Meta may be down. Those answer 200 with `available:false` + the
+// reason, so the dashboard renders "quota unavailable" instead of a console
+// error (this used to 500 and log `quota lookup failed` on every profile open).
+// Results are cached for 60 s — the profile page loads this on every render and
+// the tier only changes on Meta's side.
+const _quotaCache = new Map(); // `${bid}/${oid}` -> { at, body }
+const QUOTA_CACHE_MS = 60 * 1000;
+
 app.get('/api/whatsapp/quota/:bid/:oid', async (req, res) => {
   if (!process.env.META_SYSTEM_USER_TOKEN) {
     return res.status(501).json({ error: 'META_SYSTEM_USER_TOKEN not configured' });
   }
   const { bid, oid } = req.params;
+  const cacheKey = `${bid}/${oid}`;
+  const cached = _quotaCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < QUOTA_CACHE_MS) return res.json(cached.body);
+
   try {
     const snap = await admin.database().ref(`businesses/${bid}/outlets/${oid}/whatsapp`).get();
     const wa = snap.val();
     if (!wa?.phoneNumberId) return res.status(404).json({ error: 'No WhatsApp phone number linked yet' });
 
-    // messaging_limit_tier tells you the CAP, not current usage — Meta
-    // doesn't expose a running "messages sent today" count on this
-    // field. The bot writes an atomic per-IST-day send counter into
-    // outlet.whatsapp/usage/{date} on every successful meta-transport send
-    // (bot/index.js), so `used` is real, not a placeholder.
-    const graphRes = await fetch(`https://graph.facebook.com/v20.0/${wa.phoneNumberId}?fields=messaging_limit_tier`, {
-      headers: { Authorization: `Bearer ${process.env.META_SYSTEM_USER_TOKEN}` },
-    });
-    if (!graphRes.ok) throw new Error(`Graph API responded ${graphRes.status}`);
-    const data = await graphRes.json();
-    const tierLimits = { TIER_1K: 1000, TIER_10K: 10000, TIER_100K: 100000, TIER_UNLIMITED: 1000000 };
-    const limit = tierLimits[data.messaging_limit_tier] || 1000;
-
     // Same IST day the bot keys by (UTC+5:30, date split at midnight IST).
     const day = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
     const usageSnap = await admin.database().ref(`businesses/${bid}/outlets/${oid}/whatsapp/usage/${day}`).get();
-    const used = usageSnap.val() || 0;
+    const rawUsage = usageSnap.val();
+    // The bot writes a plain number (atomic increment). Older/legacy rows can be
+    // an object of category counters — fall back to its `total` so the gauge
+    // never renders "[object Object]".
+    const used = typeof rawUsage === 'number'
+      ? rawUsage
+      : (rawUsage && typeof rawUsage === 'object' ? Number(rawUsage.total) || 0 : 0);
 
-    res.json({ tier: data.messaging_limit_tier || 'TIER_1K', used, limit });
+    // messaging_limit_tier tells you the CAP, not current usage — Meta
+    // doesn't expose a running "messages sent today" count on this field.
+    const tierLimits = { TIER_250: 250, TIER_1K: 1000, TIER_10K: 10000, TIER_100K: 100000, TIER_UNLIMITED: 1000000 };
+    let tier = null;
+    let limit = null;
+    let reason = null;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      const graphRes = await fetch(
+        `https://graph.facebook.com/v20.0/${encodeURIComponent(wa.phoneNumberId)}?fields=messaging_limit_tier`,
+        { headers: { Authorization: `Bearer ${process.env.META_SYSTEM_USER_TOKEN}` }, signal: ctrl.signal },
+      );
+      clearTimeout(timer);
+      if (graphRes.ok) {
+        const data = await graphRes.json();
+        tier = data.messaging_limit_tier || null;
+        limit = tier != null ? tierLimits[tier] ?? null : null;
+        if (!tier) reason = 'Meta returned no messaging_limit_tier for this number';
+        else if (limit == null) reason = `Unmapped messaging_limit_tier "${tier}"`;
+      } else {
+        const body = await graphRes.text().catch(() => '');
+        reason = `Graph API ${graphRes.status}${body ? ` — ${String(body).slice(0, 160)}` : ''}`;
+      }
+    } catch (err) {
+      reason = err.name === 'AbortError' ? 'Graph API timed out' : `Graph API unreachable — ${err.message}`;
+    }
+
+    const available = tier != null;
+    const quota = { tier, used, limit, available, ...(reason ? { reason } : {}) };
+    const body = { quota, ...quota }; // top-level copies for pre-`quota` clients
+    if (!available) console.warn(`[quota] ${bid}/${oid}: unavailable — ${reason}`);
+    _quotaCache.set(cacheKey, { at: Date.now(), body });
+    res.json(body);
   } catch (err) {
     console.error('quota lookup failed', err);
     res.status(500).json({ error: 'Could not fetch WhatsApp quota' });

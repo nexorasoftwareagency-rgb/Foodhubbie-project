@@ -945,6 +945,24 @@ async function addInAppNotification(uid, title, body, type = 'info', icon = 'bel
 // 3. CORE BOT LOGIC (SOCKET WRAPPER)
 // =============================
 
+// Tokens that can never deliver again: the browser dropped the subscription,
+// the token was minted for another sender id, or it was minted with a different
+// VAPID key than the one the project now uses. Retrying them wastes a slot in
+// every multicast and keeps the whole batch reporting failures, so they are
+// pruned wherever they are found. `messaging/mismatched-credential` is what a
+// token minted for a different Firebase sender returns; `third-party-auth-error`
+// is the webpush "Permission denied by the third party webpush service" case.
+const DEAD_PUSH_CODES = new Set([
+    'messaging/registration-token-not-registered',
+    'messaging/invalid-registration-token',
+    'messaging/invalid-argument',
+    'messaging/mismatched-credential',
+    'messaging/third-party-auth-error',
+]);
+function isDeadPushCode(code) {
+    return DEAD_PUSH_CODES.has(code || '');
+}
+
 async function sendFCMToAdmins(orderId, order) {
     try {
         const outlet = order.outlet || resolveOutletId() || 'outlet';
@@ -992,18 +1010,13 @@ async function sendFCMToAdmins(orderId, order) {
             // nothing (stale token vs bad credentials vs quota vs something
             // else). Also auto-clean genuinely dead tokens so they stop
             // being retried forever and silently eating the whole batch.
-            const deadCodes = new Set([
-                'messaging/registration-token-not-registered',
-                'messaging/invalid-argument',
-                'messaging/invalid-registration-token'
-            ]);
             await Promise.all(results.responses.map(async (r, i) => {
                 if (r.success) return;
                 const token = unique[i];
                 const code = r.error?.code || 'unknown';
                 const uidForToken = seen.get(token);
                 console.warn(`[FCM] Admin token failed (uid=${uidForToken}): ${code} — ${r.error?.message || 'no message'}`);
-                if (deadCodes.has(code) && uidForToken) {
+                if (isDeadPushCode(code) && uidForToken) {
                     try {
                         await db.ref(`admins/${uidForToken}/fcmToken`).remove();
                         await db.ref(`admins/${uidForToken}/fcmTokenInvalidAt`).set(Date.now());
@@ -1040,6 +1053,13 @@ async function sendFCMToRider(riderId, title, body, data = {}, outlet = 'pizza')
         });
     } catch (e) {
         console.error(`[FCM] sendFCMToRider error (rider ${riderId}):`, e.message);
+        // A token minted for another sender/VAPID key never recovers — clear it
+        // so the rider app re-registers on next open instead of failing forever.
+        if (isDeadPushCode(e.code)) {
+            await db.ref(resolvePath(`riders/${riderId}/fcmToken`, outlet)).remove().catch(() => {});
+            await db.ref(resolvePath(`riders/${riderId}/fcmTokenInvalidAt`, outlet)).set(Date.now()).catch(() => {});
+            console.warn(`[FCM] Removed dead rider token for ${riderId} (${e.code}) — re-registers on next app open.`);
+        }
     }
 }
 
@@ -1580,8 +1600,7 @@ async function notifyCustomerApp(orderId, order, status) {
 
         await Promise.all(response.responses.map(async (r, i) => {
             if (r.success) return;
-            const code = r.error?.code || '';
-            if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token') {
+            if (isDeadPushCode(r.error?.code)) {
                 await db.ref(resolvePath(`pushSubscriptions/${entries[i][0]}`, outlet)).remove().catch(() => {});
             }
         }));
@@ -1632,8 +1651,7 @@ async function notifyTierUp(phone, newTier, oldTier, outlet, bid) {
         // Same dead-token hygiene as order pushes.
         await Promise.all(response.responses.map(async (r, i) => {
             if (r.success) return;
-            const code = r.error?.code || '';
-            if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token') {
+            if (isDeadPushCode(r.error?.code)) {
                 await db.ref(resolvePath(`pushSubscriptions/${entries[i][0]}`, outlet)).remove().catch(() => {});
             }
         }));

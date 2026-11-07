@@ -161,7 +161,9 @@ test.describe('Supreme Admin restaurant profile sections', () => {
       await expect(page.locator('.kpi-value').filter({ hasText: /WhatsApp Web/ })).toBeVisible({ timeout: 10000 });
 
       // --- Section 2: Bot usage chart ---
-      await expect(page.locator('text=Sent Today')).toBeVisible({ timeout: 10000 });
+      // exact: the quota card also carries "Messages sent · today (IST)", so a
+      // loose `text=Sent Today` substring match hits two nodes (strict-mode).
+      await expect(page.getByText('Sent Today', { exact: true })).toBeVisible({ timeout: 10000 });
 
       // --- Section 3: Business & store details view ---
       await expect(page.locator('text=Business & store details')).toBeVisible({ timeout: 10000 });
