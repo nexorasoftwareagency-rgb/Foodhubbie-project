@@ -106,6 +106,40 @@ app.post('/webhook', express.json({
     }
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0]?.value;
+
+    // WhatsApp template status updates arrive at WABA level. Map WABA → outlet
+    // via wabaIndex (written by waLinkSuccess on number link) and persist the
+    // status so the dashboard can show approval/rejection per template.
+    if (change?.message_template_status_update) {
+      const wabaId = entry.id;
+      const updates = Array.isArray(change.message_template_status_update)
+        ? change.message_template_status_update
+        : [change.message_template_status_update];
+      try {
+        const wabaSnap = await admin.database().ref(`wabaIndex/${wabaId}`).get();
+        const routing = wabaSnap.val();
+        if (routing) {
+          for (const u of updates) {
+            await admin.database()
+              .ref(`businesses/${routing.businessId}/outlets/${routing.outletId}/whatsapp/templates/${u.name}`)
+              .set({
+                status: u.status,
+                category: u.category || null,
+                language: u.language || null,
+                updatedAt: u.updated_at || Date.now(),
+                templateId: u.id || null,
+              });
+          }
+          console.log(`[TEMPLATE-STATUS] ${updates.length} template(s) persisted for WABA ${wabaId}`);
+        } else {
+          console.warn(`[TEMPLATE-STATUS] No outlet mapping for WABA ${wabaId}`);
+        }
+      } catch (err) {
+        console.error('[TEMPLATE-STATUS] Persist failed:', err.message);
+      }
+      return;
+    }
+
     if (change?.statuses) {
       console.log('[STATUS]', JSON.stringify(change.statuses));
       return;

@@ -896,6 +896,9 @@ async function waLinkSuccess(bid, oid, { phoneNumberId, wabaId, displayPhoneNumb
     connectedAt: admin.database.ServerValue.TIMESTAMP,
   });
   await admin.database().ref(`phoneNumberIndex/${phoneNumberId}`).set({ businessId: bid, outletId: oid });
+  if (wabaId) {
+    await admin.database().ref(`wabaIndex/${wabaId}`).set({ businessId: bid, outletId: oid });
+  }
   await admin.database().ref(`${base}/bot`).update({ transport: 'meta', phoneNumberId });
   try {
     await waGraph.subscribeApps(wabaId);
