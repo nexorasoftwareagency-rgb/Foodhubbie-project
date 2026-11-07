@@ -22,8 +22,6 @@
  * Self-check: node bot-control-api/meta-cost-publisher.js
  */
 
-const { computeWallet } = require('../shared/cost-math.js');
-
 const DEMO_BID = 'foodhubbie-demo';
 const START_PAISE = Number(process.env.META_CREDIT_LINE_START_PAISE) || 100000; // ₹1,000
 const INTERVAL_MS = Math.max(60, Number(process.env.META_COST_PUBLISH_INTERVAL_SEC) || 300) * 1000;

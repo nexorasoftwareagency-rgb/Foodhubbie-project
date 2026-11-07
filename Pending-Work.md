@@ -819,9 +819,25 @@ These are **real, actionable items** in THIS repo based on the audits.
   - `bot-control-api/server.js`: imports and starts `startMetaCostPublisher({ admin })` alongside `startWalletWatcher` and `startOrchestrator`.
   - `shared/meta-cost-math.js`: `classifySend`, `estimateCostPaise`, `canSend`, `DEFAULT_RATE_table` already existed — self-check passes.
 - **Files touched:** `bot/transport.js`, `bot-control-api/meta-cost-publisher.js` (new), `bot-control-api/server.js`
-- **Not yet deployed:** needs `firebase deploy --only database` (rules already deployed) + EC2 scp of `bot/transport.js`, `bot-control-api/{meta-cost-publisher.js,server.js}` + pm2 restart id 2 (bot-control-api). No SupremeAdmin change needed (frontend unaffected).
+- **Deployed:** `firebase deploy --only database` ✅; `server.js` + `meta-cost-publisher.js` → EC2 pm2 id 2 restarted (online) ✅; `bot/transport.js` → EC2 bot workers pm2 id 6 restarted (meta transport, online) ✅; pizza bot id 35 on Baileys untouched ✅; `firebase deploy --only hosting:supreme` ✅ (stamped 8d2c9c9.20261107T144704Z)
 - **Blocked:** Real tenant onboarding blocked on Meta App Review / Tech Provider access / app Live; display-name test pending Meta console
-- **Next:** (1) Deploy Phase 3 to EC2; (2) Meta console: verify `META_CONFIG_ID=1089451087291012` is v4/system-user; (3) run real-number display-name test under Foodhubbie's WABA; (4) Phase 4: migrate live pizza from Baileys to meta transport once its WABA/display-name is approved
+- **Next:** (1) Meta console: verify `META_CONFIG_ID=1089451087291012` is v4/system-user (dashboard-only); (2) run real-number display-name test under Foodhubbie's WABA (e.g. "Roshani Pizza"); (3) Phase 4: migrate live pizza from Baileys to meta transport once its WABA/display-name is approved; (4) Phase 5: Solution Partner / Tech Provider / App Review tracks (long lead — start now)
+
+
+## Phase 4 — Pizza Migration Prep (ready to execute once Meta console steps clear)
+
+**What needs to happen when pizza moves from Baileys → meta:**
+
+| Step | Who | What |
+|------|-----|------|
+| Meta approves display name for pizza number | You (Meta console) | Test number real-name under Foodhubbie WABA |
+| Add real number to WABA | You (Meta console) | WhatsApp Manager → Add phone number → SMS/voice OTP → register |
+| Create `whatsapp` node on pizza outlet | Code | `businesses/roshani-pizza/outlets/pizza/whatsapp` = `{ phoneNumberId, wabaId, status: 'active', ... }` via `/api/whatsapp/numbers/.../register` |
+| Set `bot.transport = 'meta'` | Code | orchestrator `desiredState()` picks up `status:'active'` and starts meta worker |
+| Verify pizza bot online | Code | `bot.transport` = `meta`, `botStatus` = online, sends via system-user token |
+| Decommission Baileys session | Code | Remove `session_data_pizza` dir, stop Baileys worker |
+
+**Files already ready for this:** `waLinkSuccess()` handles steps 3-4 automatically when the number is registered. No new code needed — just execute through the existing Path B wizard or direct Graph API calls.
 
 ## Item Progress Workflow Example
 
