@@ -1600,6 +1600,7 @@ function renderLoyaltyStrip() {
             <div class="progress-bar"><div class="progress-fill" style="width:${next.pct}%"></div></div>
             <span class="progress-needed">${next.reached ? 'You reached the top tier!' : next.points + ' points to next tier'}</span>
         </div>
+        ${_loyaltyConfig ? `<div class="loyalty-earn"><span style="font-size:11px;color:var(--text-tertiary);">Earn 1 point per ₹${(_loyaltyConfig.earnRatePaisePerPoint/100).toFixed(0)} spent</span></div>` : ''}
         <div class="loyalty-stats">
             ${hasIdentity ? `<span>₹${stats.totalSpent} spent</span>` : ''}
             <span>${stats.orders} orders</span>
