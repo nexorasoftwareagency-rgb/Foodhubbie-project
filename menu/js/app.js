@@ -281,7 +281,14 @@ async function boot() {
     } finally {
         clearTimeout(_bootWatchdog);
         if (_bootReady) _afterBoot();
+        _appReady();
     }
+}
+
+// Make #app visible once boot completes — prevents FOUC on refresh
+function _appReady() {
+    const app = document.getElementById('app');
+    if (app) app.style.visibility = 'visible';
 }
 
 // ---------------------------------------------------------------
@@ -1675,7 +1682,9 @@ document.getElementById('btnShareApp')?.addEventListener('click', () => {
 // Build menu on boot
 boot().then(() => {
     buildHamburgerMenu().catch(() => {});
+    _appReady();
 }).catch(err => {
     console.error('[Boot]', err);
     if (!_bootReady) _showConnectionIssue();
+    _appReady();
 });
