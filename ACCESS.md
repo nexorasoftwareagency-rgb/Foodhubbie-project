@@ -161,6 +161,17 @@ AWS_SECRET_ACCESS_KEY: <see Credentials/ folder or AWS Console>
 | META_CONFIG_ID | `1624840945941910` |
 | Verify Token | `<see .env>` |
 
+### Message Rates — India, effective 1 Oct 2026
+| Category | Rate (per delivered message) |
+|----------|------------------------------|
+| Utility (order/status templates) | **₹0.115** |
+| Authentication (OTP) | **₹0.115** |
+| Service (in-window replies, after the first 1,000/month per phone number) | **₹0.115** |
+| Marketing (promos) | **₹0.8631** |
+| Inbound customer message | **₹0** |
+
+Meta's INR list prices **already include 18% GST** — never add another 18%. The 1,000 free service messages reset monthly per business phone number and do not roll over. Source of truth: `docs/BILLING-MODEL.md` §4; code: `shared/meta-cost-math.js`.
+
 ### WABA Templates
 | Template | Status | Type |
 |----------|--------|------|

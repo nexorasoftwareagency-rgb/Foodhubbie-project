@@ -53,7 +53,7 @@
   <a class="p4" href="possibility-4-meta-billed.html">
     <div class="pn">Possibility 4 · from Oct 1</div>
     <div class="pt">Official Meta API — billed</div>
-    <div class="pd">The production default: ₹0.115/msg on every message (no free tier counted — calculate all); promos ₹0.86/msg. Meta is ~88% of the bill at scale.</div>
+    <div class="pd">The production default: ₹0.115/msg on every message (no free tier counted — calculate all); promos ₹0.8631/msg. Meta is ~88% of the bill at scale.</div>
     <div class="pp">₹5,969 – ₹3,44,672/mo · ₹1.12–2.19 /order</div>
   </a>
 </div>
@@ -89,7 +89,7 @@
     <tr><td>Auth · Functions · Analytics</td><td>our usage: within free</td><td class="num"><b>₹0</b></td></tr>
   </tbody>
 </table>
-<p class="small">Free allowances are <b>project-wide shared pools</b> → 1 restaurant = ₹0/mo; first bill (≈₹49) appears at ~4 busy restaurants. Meta India rate card: service/utility/auth <b>₹0.115</b> · marketing <b>₹0.86</b> · inbound ₹0.</p>
+<p class="small">Free allowances are <b>project-wide shared pools</b> → 1 restaurant = ₹0/mo; first bill (≈₹49) appears at ~4 busy restaurants. Meta India rate card: service/utility/auth <b>₹0.115</b> · marketing <b>₹0.8631</b> · inbound ₹0.</p>
 
 <!-- ============ MODEL ============ -->
 <h2 id="model"><span class="n">·</span>Model — measured facts & labeled assumptions</h2>
@@ -109,7 +109,7 @@
 <ul>
   <li>scans/day = 1.5 × orders (P3-8 calibration)</li>
   <li>bot msgs = 4 × orders/day · promos = 0.1 × orders/day (<code>--mktg=</code>)</li>
-  <li>No free service allowance in the model — every message billed ₹0.115; promos at <b>₹0.86/msg</b> × 0.1 promo msgs per order/day (the "0.1" is frequency, not rupees)</li>
+  <li>No free service allowance in the model — every message billed ₹0.115; promos at <b>₹0.8631/msg</b> × 0.1 promo msgs per order/day (the "0.1" is frequency, not rupees)</li>
   <li>₹88/$ · server: 10 rest→t3.small ₹1,338 · 50→t3.large ₹5,342 · 100→t3.xlarge ₹10,692</li>
   <li>Image mode: <code>--fixed</code> = images in Firebase Storage</li>
 </ul>

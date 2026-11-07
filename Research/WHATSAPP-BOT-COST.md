@@ -27,7 +27,7 @@ Menu scans / Admin / Rider Firebase traffic is the same in both scenarios (rider
 | Service (replies in 24-hr window) | **₹0.115 / delivered msg** | Free until Oct 1 2026; first 1,000 service msgs/mo per business phone number (≈ per outlet WABA) free, then ₹0.115 |
 | Marketing (promos/campaigns) | **₹0.8631 / delivered msg** | Never free; billed at exact Meta India rate |
 
-⚠️ **Oct 1, 2026 (4 days): Meta starts billing service messages + in-window utility** — the free-ride era ends. Rates converge at utility ₹0.115 for service; marketing stays ₹0.86. (Sources: dragapp rate card eff. Jul 1 2026, whautomate, saysimple, go4whatsup.)
+⚠️ **Oct 1, 2026 (4 days): Meta starts billing service messages + in-window utility** — the free-ride era ends. Rates converge at utility ₹0.115 for service; marketing stays ₹0.8631. (Sources: dragapp rate card eff. Jul 1 2026, whautomate, saysimple, go4whatsup.)
 
 ### 2a. VERIFIED: "customer messaged first → free within 24-hr window" (Sep 27, 2026)
 
@@ -36,7 +36,7 @@ Claim: *Meta does not charge when the customer messages first and the bot replie
 | Period | Verdict | What's free | What's billed |
 |---|---|---|---|
 | **Now → Sep 30, 2026** | ✅ **TRUE** — replies cost ₹0 | All service replies in-window (free since Nov 1 2024) **and** utility templates sent in-window (free since Jul 1 2025), unlimited, per 24-hr window opened by the customer | Marketing templates; utility templates outside the window; inbound customer messages are always free anyway |
-| **From Oct 1, 2026** | ⚠️ **CHANGES** — replies become billed | First **1,000 service msgs/mo per business phone number** (≈ per outlet WABA, resets monthly); inbound customer msgs always free; **CTWA/ad entry points keep a free 72-hr window** (any message type) | Service replies after the 1,000 free → **₹0.115/msg (India, utility-equivalent)**; in-window utility templates also become billable again; auth always billed; marketing ₹0.86 |
+| **From Oct 1, 2026** | ⚠️ **CHANGES** — replies become billed | First **1,000 service msgs/mo per business phone number** (≈ per outlet WABA, resets monthly); inbound customer msgs always free; **CTWA/ad entry points keep a free 72-hr window** (any message type) | Service replies after the 1,000 free → **₹0.115/msg (India, utility-equivalent)**; in-window utility templates also become billable again; auth always billed; marketing ₹0.8631 |
 
 - So the claim is **true for 4 more days**, then holds only up to the free quota (1,000/number/mo ≈ 33 msgs/day/outlet — covers the customer-first bot at low order volumes; over quota = ₹0.115).
 - Proactive/biz-first templates (bot messages first, outside any window) were **never** free — always utility ₹0.115.

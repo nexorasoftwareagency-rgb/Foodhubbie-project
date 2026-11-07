@@ -2160,8 +2160,8 @@ firebase deploy --only hosting:supremeadmin
 | Item | Cost |
 |---|---|
 | AWS EC2 t3.small | ~$21/mo, covered by $120 credit for ~5-6 months |
-| Meta Cloud API — service window replies | ₹0 forever |
-| Meta Cloud API — marketing messages | ₹0.86/msg + 18% GST (avoid) |
+| Meta Cloud API — service window replies | ₹0 for first 1,000/month per number, then ₹0.115/msg (GST included) |
+| Meta Cloud API — marketing messages | ₹0.8631/msg (GST included; avoid) |
 | Cloudflare account + Quick Tunnel | ₹0 |
 | Firebase Hosting (both dashboards) | ₹0 at this scale |
 | Firebase RTDB (Spark) | ₹0 until ~30 restaurants (connection limit) |
@@ -2184,7 +2184,7 @@ Total infrastructure cost stays flat from 2 to ~40 restaurants — WhatsApp is f
 | Trigger | Action | Added cost |
 |---|---|---|
 | AWS credit exhausted | Migrate to Contabo (do proactively) | Saves money |
-| Want promo blasts | Budget ₹0.86/msg × GST | Optional |
+| Want promo blasts | Budget ₹0.8631/msg (GST included) | Optional |
 | ~30 restaurants | Firebase Blaze upgrade | ₹0 if under quotas |
 | ~40 restaurants | Contabo VPS S → VPS M | +₹300/mo |
 | Want permanent branded URL | Cloudflare Registrar domain | ~₹800-3,000/yr |

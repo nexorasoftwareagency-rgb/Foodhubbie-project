@@ -8,7 +8,7 @@
  * values long-term — load from a config / rate table so Meta rate changes propagate.
  */
 
-// India list rates (INR / delivered msg, +18% GST baked into delivered cost below)
+// India list rates (INR per delivered msg; GST is included in Meta's list price)
 // Source: Meta IN rate card verified 2026-11-01 (BILLING-MODEL.md §4).
 // These are the DEFAULT start values; always prefer passing rateTable in.
 // Meta India INR rate card, effective 1 October 2026 (verified against
