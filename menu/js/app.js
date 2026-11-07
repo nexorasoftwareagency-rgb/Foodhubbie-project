@@ -1601,6 +1601,49 @@ document.getElementById('btnGoToRestaurantLink')?.addEventListener('click', () =
     } catch { UI.showToast('Invalid link format', 'warning'); }
 });
 
+// Customer App features page — Download PWA button
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('btnDownloadPwa')?.classList.remove('hidden');
+});
+
+document.getElementById('btnDownloadPwa')?.addEventListener('click', async () => {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            UI.showToast('FoodHubbie installed!', 'success');
+        } else {
+            UI.showToast('Install dismissed', 'info');
+        }
+        deferredPrompt = null;
+    } else {
+        // Already installed or prompt not available — show manual instructions
+        UI.showToast('Use browser "Add to Home Screen" to install FoodHubbie', 'info');
+    }
+});
+
+// Customer App features page — Share App Link button
+document.getElementById('btnShareApp')?.addEventListener('click', () => {
+    const url = window.location.origin + window.location.pathname;
+    if (navigator.share) {
+        navigator.share({
+            title: 'FoodHubbie Customer App',
+            text: 'Order from any restaurant on FoodHubbie — QR dining, delivery, loyalty points, and more.',
+            url: url
+        }).catch(() => {});
+    } else {
+        // Fallback: copy to clipboard
+        navigator.clipboard.writeText(url).then(() => {
+            UI.showToast('App link copied to clipboard', 'success');
+        }).catch(() => {
+            UI.showToast('Could not copy link', 'warning');
+        });
+    }
+});
+
 // Build menu on boot
 boot().then(() => {
     buildHamburgerMenu().catch(() => {});
