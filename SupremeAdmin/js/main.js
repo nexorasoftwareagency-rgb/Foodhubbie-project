@@ -21,9 +21,6 @@
 import { isReadOnly } from '/js/data-store.js';
 import { showToast } from '/js/utils.js';
 
-// Deploy watcher: shows the "Update app" popup when this site's version.json changes.
-import '/shared/app-update.js';
-
 const moduleCache = new Map();
 
 async function mod(path) {

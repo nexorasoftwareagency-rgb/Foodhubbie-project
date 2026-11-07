@@ -129,7 +129,7 @@ function build(label) {
             <div>
                 <div class="fh-eyebrow">Update available</div>
                 <h2 id="fh-update-title">A new version of ${label} is ready.</h2>
-                <p id="fh-update-body">Reload to get the latest fixes and features. You stay signed in.</p>
+                <p id="fh-update-body">Reload to get the latest fixes and features.</p>
             </div>
         </div>
         <div class="fh-actions">

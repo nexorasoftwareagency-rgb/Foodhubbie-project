@@ -18,6 +18,10 @@
 import { setRole } from '/js/data-store.js';
 import { refreshIcons } from '/js/utils.js';
 
+// Deploy watcher: this is Supreme's boot entry (main.js is imported only after
+// sign-in), so the Update app popup must be armed here, not there.
+import '/shared/app-update.js';
+
 const authScreen = document.getElementById('auth-screen');
 const appShell = document.getElementById('app-shell');
 
