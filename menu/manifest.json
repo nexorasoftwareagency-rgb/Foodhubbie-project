@@ -1,6 +1,6 @@
 {
-  "name": "Order",
-  "short_name": "Menu",
+  "name": "FoodHubbie",
+  "short_name": "FoodHubbie",
   "id": "/index.html",
   "description": "Order food online",
   "start_url": "./index.html",

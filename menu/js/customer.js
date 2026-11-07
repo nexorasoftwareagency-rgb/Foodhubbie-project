@@ -14,7 +14,7 @@ import { outletRef, get, set, push, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID
 import * as UI from './ui.js';
 import { esc } from './ui.js';
 import {
-    isIOS, isStandalone, canShowNativeInstallPrompt, promptInstall,
+    isIOS, isStandalone, isInstalled, canShowNativeInstallPrompt, promptInstall,
     getStoredPhone, savePhone, subscribeToNotifications,
     updateSubscriptionMeta, unsubscribeFromNotifications,
     getNotificationPermission, onForegroundMessage
@@ -799,7 +799,7 @@ function renderPwaCards() {
     iosCard?.classList.add('hidden');
     notifyCard?.classList.add('hidden');
 
-    if (!isIOS() && !isStandalone() && canShowNativeInstallPrompt() && installCard && installBtn) {
+    if (!isIOS() && !isInstalled() && canShowNativeInstallPrompt() && installCard && installBtn) {
         installCard.classList.remove('hidden');
         installBtn.onclick = async () => {
             const outcome = await promptInstall();
@@ -862,6 +862,13 @@ function renderPwaCards() {
     }
 }
 
+// Installing from any surface (Android prompt, features page) must drop the
+// install entry points here too - display-mode only flips on the next launch.
+window.addEventListener('appinstalled', () => {
+    renderPwaCards();
+    if (document.getElementById('screenPromotions')?.classList.contains('active')) renderAccount();
+});
+
 function renderAccount() {
     renderTabPanels();
     const card = document.getElementById('accountProfileCard');
@@ -871,7 +878,7 @@ function renderAccount() {
     const phone = _profile?.phone || '';
     const permission = getNotificationPermission();
     const initial = (name || 'G').charAt(0).toUpperCase();
-    const installAvailable = !isStandalone() && (isIOS() || canShowNativeInstallPrompt());
+    const installAvailable = !isInstalled() && (isIOS() || canShowNativeInstallPrompt());
 
     card.innerHTML = `
         <div class="account-card">

@@ -74,6 +74,16 @@ export function isStandalone() {
         || window.navigator.standalone === true;
 }
 
+// display-mode only flips once the installed app is launched, so a tab that just
+// finished installing needs the event to know it is done.
+let installedThisSession = false;
+window.addEventListener('appinstalled', () => { installedThisSession = true; });
+
+/** True once this device has the app: launched installed, or installed from this tab. */
+export function isInstalled() {
+    return installedThisSession || isStandalone();
+}
+
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;

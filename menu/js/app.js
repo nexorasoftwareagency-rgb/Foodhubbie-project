@@ -14,6 +14,7 @@ import { esc } from './ui.js';
 import { comboPriceTotal, bakeComboUnitPrices, isComboActive } from '../../shared/combo-math.js';
 import { initAppCheckout, openCheckout, cancelAppOrder } from './app-checkout.js';
 import { ensureDeviceAccess, renderOrdersTab, renderLoyaltyTab, openAccountTab, signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
+import { promptInstall, isInstalled, isIOS } from './pwa-install.js';
 
 // ---------------------------------------------------------------
 // Module state for menu browsing
@@ -1601,29 +1602,53 @@ document.getElementById('btnGoToRestaurantLink')?.addEventListener('click', () =
     } catch { UI.showToast('Invalid link format', 'warning'); }
 });
 
-// Customer App features page — Download PWA button
-let deferredPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    document.getElementById('btnDownloadPwa')?.classList.remove('hidden');
+// Customer App features page — Download PWA button.
+// The install prompt itself lives in pwa-install.js (one capture of the
+// single-use beforeinstallprompt event for the whole app); this screen only
+// renders the current install state.
+const btnDownloadPwa = document.getElementById('btnDownloadPwa');
+const downloadAppTitle = document.getElementById('downloadAppTitle');
+const downloadAppSub = document.getElementById('downloadAppSub');
+const downloadAppNote = document.getElementById('downloadAppNote');
+
+function syncInstallState() {
+    const installed = isInstalled();
+    btnDownloadPwa?.classList.toggle('hidden', installed);
+    if (downloadAppTitle) {
+        downloadAppTitle.textContent = installed
+            ? 'FoodHubbie is installed'
+            : 'Download the FoodHubbie Customer App';
+    }
+    if (downloadAppSub) {
+        downloadAppSub.textContent = installed
+            ? 'Open FoodHubbie from your home screen. This page is only for installing on another device.'
+            : 'Install FoodHubbie as a Progressive Web App (PWA) — works offline, loads instantly, and feels like a native app. No app store needed.';
+    }
+    if (downloadAppNote) {
+        downloadAppNote.textContent = installed
+            ? 'Installed on this device.'
+            : 'Works on Android & iPhone. Adds to your home screen like any other app.';
+    }
+}
+
+btnDownloadPwa?.addEventListener('click', async () => {
+    if (isInstalled()) return;
+    const outcome = await promptInstall(); // 'accepted' | 'dismissed' | 'unavailable'
+    if (outcome === 'dismissed') UI.showToast('Install dismissed', 'info');
+    if (outcome === 'unavailable') {
+        UI.showToast(isIOS()
+            ? 'Tap Share, then "Add to Home Screen" to install FoodHubbie.'
+            : 'Open your browser menu and choose "Install app" or "Add to Home Screen".', 'info');
+    }
+    // 'accepted' is only the dialog answer — the success toast waits for appinstalled.
 });
 
-document.getElementById('btnDownloadPwa')?.addEventListener('click', async () => {
-    if (deferredPrompt) {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-            UI.showToast('FoodHubbie installed!', 'success');
-        } else {
-            UI.showToast('Install dismissed', 'info');
-        }
-        deferredPrompt = null;
-    } else {
-        // Already installed or prompt not available — show manual instructions
-        UI.showToast('Use browser "Add to Home Screen" to install FoodHubbie', 'info');
-    }
+window.addEventListener('appinstalled', () => {
+    syncInstallState();
+    UI.showToast('FoodHubbie installed!', 'success');
 });
+
+syncInstallState();
 
 // Customer App features page — Share App Link button
 document.getElementById('btnShareApp')?.addEventListener('click', () => {
