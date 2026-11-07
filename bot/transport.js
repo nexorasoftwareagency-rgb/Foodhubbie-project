@@ -10,6 +10,7 @@ const { formatJid } = require('./utils');
 const waSend = require('./whatsapp-send');
 const { db, getData, resolvePath } = require('./firebase');
 const { resolveBusinessIdFor } = require('./helpers/outlet-resolution');
+const { canSend } = require('../shared/meta-cost-math');
 
 async function getTransportMode(outlet) {
   const remote = await getData('bot/transport', outlet).catch(() => null);
@@ -57,6 +58,10 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       const to = toPlainPhone(jid);
       if (!to) throw new Error(`Invalid JID: ${jid}`);
       const text = content.text ?? content.caption ?? '';
+      // Cost guard: stop before sending if caps/wallet block this send.
+      if (await _metaCostGuard(to)) {
+        return { key: { id: 'blocked' }, blocked: true };
+      }
       if (content.image && typeof content.image === 'string' && content.image.startsWith('http')) {
         return waSend.sendWhatsAppImage(phoneNumberId, accessToken, to, content.image, text);
       }
@@ -73,6 +78,9 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
     async sendButton(jid, opts) {
       const to = toPlainPhone(jid);
       if (!to) throw new Error(`Invalid JID: ${jid}`);
+      if (await _metaCostGuard(to)) {
+        return { key: { id: 'blocked' }, blocked: true };
+      }
       try {
         return await waSend.sendWhatsAppUrlButton(phoneNumberId, accessToken, to, opts);
       } catch (e) {
@@ -94,6 +102,12 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       let components = opts.components;
       if ((!components || !components.length) && opts.body) {
         components = [{ type: 'BODY', parameters: [{ type: 'text', text: String(opts.body) }] }];
+      }
+      // Cost guard: block before sendTemplate / sendMessage. The result carries
+      // `blocked: true` so a caller can tell it was dropped (never a silent skip).
+      const category = (opts.templateCategory || 'utility');
+      if (await _metaCostGuard(to, category)) {
+        return { key: { id: 'blocked' }, blocked: true };
       }
       return waSend.sendWhatsAppTemplate(phoneNumberId, accessToken, to, {
         name: opts.name,
@@ -154,6 +168,52 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       started = false;
     }
   };
+
+  // --- Meta cost guard (S1 shared credit liability) ---
+  // Armed ONLY when the billing node carries a numeric `balancePaise` snapshot.
+  // `walletBilling/{bid}/{oid}` is a payments/charges ledger, not a stored
+  // balance, so a missing snapshot must mean "not armed" — reading it as 0
+  // would block every send. The emitter that writes balancePaise/metaUsage
+  // lands with the S1 shared-credit work.
+  // ponytail: one read per outbound message on the meta transport; upgrade to
+  // a cached balance when the writer exists.
+  async function _metaCostGuard(to, category = 'utility') {
+    try {
+      const businessId = resolveBusinessIdFor(outlet);
+      const path = `walletBilling/${businessId}/${outlet}`;
+      const billing = (await db.ref(path).once('value')).val() || {};
+      const balancePaise = Number(billing.balancePaise);
+      if (!Number.isFinite(balancePaise)) return false;
+      const metaUsage = billing.metaUsage || {};
+      const messageCaps = billing.messageCaps || { monthlyPaise: 500000 }; // default ₹5,000/mo
+      const thresholdPaise = Number(billing.metaSpendThresholdPaise) || 10000;
+      const blocked = !canSend({
+        metaUsage,
+        messageCaps,
+        metaSpendThresholdPaise: thresholdPaise,
+        currentWalletBalancePaise: balancePaise,
+        category
+      });
+      if (blocked) {
+        console.warn(`[META-COST-GUARD] Blocked ${category} to ${to} — balance ${balancePaise}p < ${thresholdPaise}p or cap hit`);
+        // Log for admin visibility (never exposed to the customer).
+        await db.ref(`${path}/blocked`).push({
+          to,
+          category,
+          walletBalancePaise: balancePaise,
+          thresholdPaise,
+          metaUsage,
+          at: new Date().toISOString()
+        }).catch(() => {});
+      }
+      return blocked;
+    } catch (e) {
+      // Fails open: never block on cost-guard error
+      console.warn('[META-COST-GUARD] Error (fails open):', e.message);
+      return false;
+    }
+  }
+
   return sock;
 }
 
