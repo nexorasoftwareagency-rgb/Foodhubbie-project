@@ -1252,9 +1252,9 @@ async function loadCustomerData() {
 const TIER_ORDER = ['bronze', 'silver', 'gold'];
 
 const TIER_DISPLAY = {
-    bronze: { label: 'Bronze', color: '#8a6d3b', bg: 'rgba(138,109,59,.12)' },
-    silver: { label: 'Silver', color: '#a8a8a8', bg: 'rgba(168,168,168,.12)' },
-    gold:   { label: 'Gold',   color: '#c5a005', bg: 'rgba(197,160,5,.12)' }
+    bronze: { label: 'Bronze', color: '#8a6d3b', bg: 'rgba(138,109,59,.12)', icon: '🥉' },
+    silver: { label: 'Silver', color: '#a8a8a8', bg: 'rgba(168,168,168,.12)', icon: '🥈' },
+    gold:   { label: 'Gold',   color: '#c5a005', bg: 'rgba(197,160,5,.12)', icon: '🥇' }
 };
 
 export async function loadLoyaltyConfig() {
@@ -1643,7 +1643,7 @@ function renderLoyaltyStrip() {
     <div class="loyalty-strip">
         <div class="loyalty-tier">
             <span class="tier-badge" style="color:${disp.color};border-color:${disp.color}">
-                ${disp.label}
+                ${disp.icon} ${disp.label}
             </span>
             <span class="tier-points">${stats.points} points</span>
         </div>
