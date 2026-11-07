@@ -1679,7 +1679,11 @@ function renderRankings() {
 function renderRewards() {
     const rewards = (_loyaltyConfig && _loyaltyConfig.rewards) || [];
     const pts = loyaltyPoints();
-    if (!rewards.length) return '';
+    if (!rewards.length) return `
+    <div class="account-section">
+        <div class="account-section-head">Rewards</div>
+        <div class="account-empty">No rewards available yet. Check back soon!</div>
+    </div>`;
     const cards = rewards.map(r => {
         const affordable = pts >= r.cost;
         return `
