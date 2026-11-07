@@ -1530,6 +1530,13 @@ function bindAccountRatings() {
             if (!reward) return;
             const pts = loyaltyPoints();
             if (pts < reward.cost) { UI.showToast('Not enough points.', 'error'); return; }
+
+            const confirmed = await showConfirm(
+                `Spend ${reward.cost} points for "${esc(reward.label)}"?`,
+                'Redeem reward'
+            );
+            if (!confirmed) return;
+
             rewardBtn.disabled = true;
             rewardBtn.textContent = 'Redeeming…';
             try {
