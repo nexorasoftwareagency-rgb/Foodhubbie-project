@@ -131,12 +131,20 @@ async function requireTenantAdmin(req, res, next) {
     if (!row.outlet) {
       return res.status(403).json({ error: 'Admin not linked to any outlet' });
     }
-    // Legacy staff rows lack businessId — resolve by locating the outlet
-    // ponytail: scan all businesses for legacy rows; drop once staff rows all carry businessId
+    // Legacy staff rows (and super admins) lack businessId — resolve the
+    // business from the canonical outlet→business map instead of scanning
+    // every business, which can pick the wrong business when an outlet name
+    // exists under multiple businesses (e.g. e2e test tenants).
+    // ponytail: outletIndex lookup first, scan as legacy fallback.
     let businessId = row.businessId;
     if (!businessId) {
-      const bizs = (await admin.database().ref('businesses').get()).val() || {};
-      businessId = Object.keys(bizs).find(bid => bizs[bid]?.outlets?.[row.outlet]);
+      const outletIndexSnap = await admin.database().ref(`outletIndex/${row.outlet}`).get();
+      const idx = outletIndexSnap.val();
+      businessId = (idx && idx.bid) || null;
+      if (!businessId) {
+        const bizs = (await admin.database().ref('businesses').get()).val() || {};
+        businessId = Object.keys(bizs).find(bid => bizs[bid]?.outlets?.[row.outlet]);
+      }
     }
     if (!businessId) {
       return res.status(403).json({ error: 'Admin not linked to any outlet' });
