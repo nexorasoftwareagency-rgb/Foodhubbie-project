@@ -60,7 +60,9 @@ export function isConnected() {
 //   ?o=outletId&b=businessId
 // OUTLET = `o` query param or first path segment
 // BUSINESS_ID = `b` query param (required for new outlets)
-// Legacy outlets fall back to legacy map for backward compat.
+// NO default outlet — bare links must not silently point to any
+// specific restaurant. Multi-business SaaS: every restaurant is
+// identified by its own ?b= (business) + ?o= (outlet) pair.
 // ---------------------------------------------------------------
 const _qs = new URLSearchParams(window.location.search);
 const _queryOutlet = _qs.get('o');
@@ -70,22 +72,14 @@ const pathParts = window.location.pathname.split('/').filter(Boolean);
 // /index.html directly must NOT make OUTLET == "index.html" (that poisons
 // every RTDB path, e.g. businesses/.../outlets/index.html/...).
 const pathOutlet = pathParts[0] && !pathParts[0].includes('.') && pathParts[0] !== 'index.html' ? pathParts[0] : undefined;
-export const OUTLET = _queryOutlet || pathOutlet || 'pizza';
-// Legacy map for backward compatibility with existing QR codes (no ?b= param)
-// New outlets MUST pass `?b=businessId` in the URL
-// SYNC WARNING: an identical copy of this map lives in
-// bot/helpers/outlet-resolution.js (Node CommonJS, can't share an ESM import
-// with this browser file). If you add an outlet here, add it there too —
-// see docs/FOODHUBBIE-AUDIT-REPORT.md §4.2.
-const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
-// NO silent fallback to a real restaurant: a link that names neither a known
-// business nor a legacy outlet used to resolve to 'roshani-pizza', so
-// ?o=e2e-outlet-… (no ?b=) quietly showed a DIFFERENT restaurant's data.
-export const BUSINESS_ID = _queryBusiness || BUSINESS_BY_OUTLET[OUTLET] || '';
-// True when the URL cannot identify one restaurant+outlet pair: ?b= without
-// ?o=, or an outlet that isn't in the legacy map and has no ?b=. app.js shows
-// an "incomplete link" screen instead of booting against a guessed tenant.
-export const LINK_INCOMPLETE = _queryBusiness ? !_queryOutlet : !BUSINESS_BY_OUTLET[OUTLET];
+export const OUTLET = _queryOutlet || pathOutlet || '';
+export const BUSINESS_ID = _queryBusiness || '';
+// True when the URL cannot identify one restaurant+outlet pair.
+// A bare link (no ?b= and no ?o=) is incomplete and shows the
+// Customer App features page instead of defaulting to any outlet.
+// ?t= table token links bypass this: initSession() resolves the outlet
+// from the token itself.
+export const LINK_INCOMPLETE = (!_queryBusiness || !_queryOutlet) && !_qs.get('t');
 
 export function outletRef(path) {
     return ref(db, `businesses/${BUSINESS_ID}/outlets/${OUTLET}/${path}`);

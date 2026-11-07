@@ -79,16 +79,15 @@ function _showInvalidToken() {
 }
 
 // The URL cannot identify a restaurant (?o= without ?b= on a non-legacy
-// outlet, or ?b= without ?o=). Reuses #screenInvalid with honest copy — the
-// alternative was booting against a guessed tenant.
+// outlet, or ?b= without ?o=). Shows the Customer App features page —
+// multi-business SaaS: no default outlet, every restaurant identified by
+// its own ?b= (business) + ?o= (outlet) pair.
+// ?t= table token links bypass this: initSession() resolves the outlet
+// from the token itself.
 function _showIncompleteLink() {
-    const title = document.getElementById('invalidTitle');
-    const body = document.getElementById('invalidBody');
-    const retry = document.getElementById('invalidRetry');
-    if (title) title.textContent = 'Link incomplete';
-    if (body) body.textContent = 'This link is missing the restaurant details, so the right menu cannot be loaded. Please scan the restaurant\'s QR code or open their app link again.';
-    if (retry) retry.classList.add('hidden');
-    _showInvalidToken();
+    document.getElementById('loadingOverlay').style.display = 'none';
+    document.getElementById('offlineBanner').classList.remove('visible');
+    UI.showScreen('screenCustomerApp');
 }
 
 // Real timeout / thrown error / a later step hanging — an actual
@@ -1583,6 +1582,24 @@ async function buildHamburgerMenu() {
 hamburgerBtns.forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openHamburger(); }));
 hamburgerClose?.addEventListener('click', closeHamburger);
 hamburgerOverlay?.addEventListener('click', (e) => { if (e.target === hamburgerOverlay) closeHamburger(); });
+
+// Customer App features page — "Go" button for restaurant link input
+document.getElementById('btnGoToRestaurantLink')?.addEventListener('click', () => {
+    const input = document.getElementById('customerAppLinkInput');
+    const val = (input?.value || '').trim();
+    if (!val) { UI.showToast('Please enter a restaurant link', 'warning'); return; }
+    // Parse ?b= and ?o= from a full URL or query string
+    try {
+        const url = val.startsWith('http') ? new URL(val) : new URL('https://x?' + val);
+        const b = url.searchParams.get('b');
+        const o = url.searchParams.get('o');
+        if (b && o) {
+            window.location.href = `/?b=${encodeURIComponent(b)}&o=${encodeURIComponent(o)}`;
+        } else {
+            UI.showToast('Link needs both ?b= (business) and ?o= (outlet)', 'warning');
+        }
+    } catch { UI.showToast('Invalid link format', 'warning'); }
+});
 
 // Build menu on boot
 boot().then(() => {
