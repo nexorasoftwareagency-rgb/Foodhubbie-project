@@ -13,6 +13,10 @@ const { getBillingDefaults } = require(path.join(__dirname, '..', 'shared', 'bil
 
 const BILLING_DEFAULTS = getBillingDefaults();
 const EXPECTED_RATES = BILLING_DEFAULTS.rates;
+// Caps come from the CJS twin while the wizard writes the ESM one — this is what
+// keeps shared/billing-defaults.{js,cjs} in lockstep (bot/transport.js reads them).
+const EXPECTED_CAPS = BILLING_DEFAULTS.messageCaps;
+const EXPECTED_THRESHOLD = BILLING_DEFAULTS.metaSpendThresholdPaise;
 
 // CI: bot/node_modules is not installed and bot/service-account.json is
 // gitignored — the test self-skips there, runs fully in local/dev checkouts.
@@ -124,6 +128,10 @@ test.describe('wizard billing regression', () => {
       expect(billing.setup).toMatchObject({ amount: 0, status: 'none' });
       expect(billing.tokens && billing.tokens.balance).toBe(15);
       expect(billing.tokenPacks && billing.tokenPacks.welcome && billing.tokenPacks.welcome.qty).toBe(15);
+      // Meta liability guard: the wizard writes defaults from the ESM file, so a
+      // field added there only — or only here — fails right here.
+      expect(billing.messageCaps).toEqual(EXPECTED_CAPS);
+      expect(billing.metaSpendThresholdPaise).toBe(EXPECTED_THRESHOLD);
       expect(outlets[oid].settings && outlets[oid].settings.features && outlets[oid].settings.features.discountApproval).toBe(false);
       console.log(`[wizard-billing] ${bid}/${oid} billing OK — setup=${billing.setup.status} tokens=${billing.tokens.balance}`);
     } finally {

@@ -16,5 +16,9 @@ export function getBillingDefaults() {
     setup: { amount: 0, status: 'none', date: new Date().toISOString() },
     tokens: { balance: 15, updatedAt: firebase.database.ServerValue.TIMESTAMP },
     tokenPacks: { welcome: { qty: 15, priceRs: 0, note: 'Free welcome pack', grantedAt: firebase.database.ServerValue.TIMESTAMP, grantedBy: 'system' } },
+    // Per-tenant Meta message caps (S1 liability guard). Values from METHOD-WHATSAPP-SELF-SERVICE-AND-ORDER-COST.md §5.
+    // monthlyPaise = ₹5,000/mo default cap on Meta spend. Adjustable per outlet.
+    messageCaps: { monthlyPaise: 500000, dailyPaise: 50000, maxMessages: 10000 },
+    metaSpendThresholdPaise: 10000, // ₹100 - bot stops if balance < this
   };
 }

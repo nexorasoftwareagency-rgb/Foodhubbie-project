@@ -34,6 +34,10 @@ const DEFAULT_BILLING = {
   setup: { amount: 0, status: 'none', date: new Date(now).toISOString() },
   tokens: { balance: FREE_TOKENS, updatedAt: now },
   tokenPacks: { welcome: { qty: FREE_TOKENS, priceRs: 0, note: 'Free welcome pack', grantedAt: now, grantedBy: 'system' } },
+  // Per-tenant Meta message caps (S1 liability guard). Values from METHOD-WHATSAPP-SELF-SERVICE-AND-ORDER-COST.md §5.
+  // monthlyPaise = ₹5,000/mo default cap on Meta spend. Adjustable per outlet.
+  messageCaps: { monthlyPaise: 500000, dailyPaise: 50000, maxMessages: 10000 },
+  metaSpendThresholdPaise: 10000, // ₹100 - bot stops if balance < this
 };
 
 async function main() {

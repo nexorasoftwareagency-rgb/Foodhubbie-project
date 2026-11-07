@@ -15,6 +15,10 @@ function getBillingDefaults() {
     setup: { amount: 0, status: 'none', date: now },
     tokens: { balance: 15, updatedAt: now },
     tokenPacks: { welcome: { qty: 15, priceRs: 0, note: 'Free welcome pack', grantedAt: now, grantedBy: 'system' } },
+    // Per-tenant Meta message caps (S1 liability guard) — must match
+    // shared/billing-defaults.js; bot/transport.js reads these before a send.
+    messageCaps: { monthlyPaise: 500000, dailyPaise: 50000, maxMessages: 10000 },
+    metaSpendThresholdPaise: 10000, // ₹100 - bot stops if balance < this
   };
 }
 
@@ -26,6 +30,9 @@ function getBillingDefaultsForClient() {
     setup: { amount: 0, status: 'none', date: new Date().toISOString() },
     tokens: { balance: 15, updatedAt: firebase.database.ServerValue.TIMESTAMP },
     tokenPacks: { welcome: { qty: 15, priceRs: 0, note: 'Free welcome pack', grantedAt: firebase.database.ServerValue.TIMESTAMP, grantedBy: 'system' } },
+    // Kept identical to the ESM getBillingDefaults() above.
+    messageCaps: { monthlyPaise: 500000, dailyPaise: 50000, maxMessages: 10000 },
+    metaSpendThresholdPaise: 10000, // ₹100 - bot stops if balance < this
   };
 }
 
