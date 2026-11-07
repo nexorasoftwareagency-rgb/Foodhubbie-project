@@ -150,6 +150,10 @@ self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('identitytoolkit.googleapis.com')) return;
   if (event.request.url.includes('securetoken.googleapis.com')) return;
 
+  // Deploy watcher: /version.json must never be served from the cache — a
+  // stale version hides the "Update app" prompt for a whole deploy.
+  if (new URL(event.request.url).pathname.endsWith('/version.json')) return;
+
   // Cache-First for immutable CDN assets (faster load, works offline)
   // gstatic firebasejs is versioned in the URL (10.7.1), so caching is safe and
   // saves re-downloading the ~240KB modular SDK on every load.

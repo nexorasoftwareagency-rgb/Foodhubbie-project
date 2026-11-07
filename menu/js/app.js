@@ -16,6 +16,9 @@ import { initAppCheckout, openCheckout, cancelAppOrder } from './app-checkout.js
 import { ensureDeviceAccess, renderOrdersTab, renderLoyaltyTab, openAccountTab, signInWithPhone, isSignedIn, initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab } from './customer.js';
 import { promptInstall, isInstalled, isIOS } from './pwa-install.js';
 
+// Deploy watcher: shows the "Update app" popup when this site's version.json changes.
+import '../../shared/app-update.js';
+
 // ---------------------------------------------------------------
 // Module state for menu browsing
 // ---------------------------------------------------------------

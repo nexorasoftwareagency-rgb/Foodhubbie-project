@@ -63,3 +63,7 @@
     a.addEventListener('click', closeAll);
   });
 })();
+
+/* Deploy watcher: shows the "Update app" popup when this site's version.json
+   changes. Loaded as a module because the watcher is shared with the apps. */
+import('./app-update.js').catch(function () {});

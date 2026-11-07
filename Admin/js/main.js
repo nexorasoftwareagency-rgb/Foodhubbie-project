@@ -13,6 +13,7 @@ import { logger } from './utils/logger.js';
 // Side-effect imports
 import './firebase.js';
 import './branding.js';
+import '../../shared/app-update.js';
 
 const _modCache = {};
 function useMod(name) {

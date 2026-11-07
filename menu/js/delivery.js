@@ -19,6 +19,9 @@ import { placeDeliveryOrder } from './delivery-order.js';
 import { calculateDistance, getFeeFromSlabs } from './geo.js';
 import { initCustomer, maybeStartOnboarding, renderCustomerPromotions, rememberIdentity, getProfile, openNotificationsTab, validateRewardCode, redeemValuePaisePerPoint, minSpendAfterRedemptionRs, maxRedeemPercentOfOrder } from './customer.js';
 
+// Deploy watcher: shows the "Update app" popup when this site's version.json changes.
+import '../../shared/app-update.js';
+
 const M = {
     categories: [], dishes: [], combos: [],
     activeCategory: 'all',

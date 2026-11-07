@@ -3,8 +3,8 @@
 // shell so riders always get the latest code, cache-first-with-fallback for
 // static assets so the app still opens instantly during dead zones.
 
-const CACHE_NAME = "foodhubbie-rider-v1.0.2";
-const PRECACHE_ASSETS = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/favicon.svg"];
+const CACHE_NAME = "foodhubbie-rider-v1.0.3";
+const PRECACHE_ASSETS = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/favicon.svg", "/app-update.js"];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -28,6 +28,10 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Deploy watcher: /version.json is cache-first for .json below, which would
+  // freeze the version and hide the "Update app" prompt. Always go to network.
+  if (url.pathname.endsWith("/version.json")) return;
 
   const isNavigation = request.mode === "navigate";
   const isAppShellAsset = /\.(js|css|html)$/.test(url.pathname) || url.pathname === "/";

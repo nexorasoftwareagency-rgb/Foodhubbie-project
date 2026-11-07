@@ -30,6 +30,7 @@
     {
       "target": "admin",
       "public": "Admin/dist",
+      "predeploy": ["node tools/stamp-version.cjs admin"],
       "domains": [
         "admin.foodhubbie.in"
       ],
@@ -195,6 +196,7 @@
     {
       "target": "rider",
       "public": "rider-app/dist",
+      "predeploy": ["node tools/stamp-version.cjs rider"],
       "domains": [
         "rider.foodhubbie.in"
       ],
@@ -288,6 +290,7 @@
     {
       "target": "menu",
       "public": "menu",
+      "predeploy": ["node tools/stamp-version.cjs menu"],
       "domains": [
         "menu.foodhubbie.in"
       ],
@@ -388,6 +391,7 @@
     {
       "target": "supreme",
       "public": "SupremeAdmin/dist",
+      "predeploy": ["node tools/stamp-version.cjs supreme"],
       "domains": [
         "supreme.foodhubbie.in"
       ],
@@ -469,6 +473,7 @@
     {
       "target": "website",
       "public": "website",
+      "predeploy": ["node tools/stamp-version.cjs website"],
       "domains": [
         "app.foodhubbie.in",
         "foodhubbie.in"

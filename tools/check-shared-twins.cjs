@@ -1,10 +1,11 @@
-// Byte-identity guard for the shared/ ↔ menu/shared/ twins.
+// Byte-identity guard for the shared/ copies served by the raw hosts.
 //
-// menu/ is served raw (no esbuild) and menu hosting cannot reach repo-root
-// /shared (the SPA rewrite 40s it — see menu/shared/format-order-id.js), so
-// each shared module ships a byte-identical twin under menu/shared/. This
-// guard fails the moment any pair drifts — drift here misprices customer
-// orders or breaks the menu module graph.
+// Admin and Supreme are built (esbuild copies repo-root shared/ into dist), but
+// menu/, website/ and rider-app/public/ are served as-is and cannot reach the
+// repo-root /shared directory, so each shared module ships a byte-identical
+// twin there. This guard fails the moment any pair drifts — drift here
+// misprices customer orders, breaks the menu module graph, or leaves a site
+// with an update watcher that no longer matches the others.
 //
 // menu/shared/config/ is menu-only (vapid keys), not a twin — excluded.
 //
@@ -13,17 +14,19 @@
 const fs = require('fs');
 
 const PAIRS = [
-    'combo-math.js',
-    'discount-rules.js',
-    'format-order-id.js',
-    'money-math.js',
-    'loyalty-math.js',
+    ['shared/combo-math.js', 'menu/shared/combo-math.js'],
+    ['shared/discount-rules.js', 'menu/shared/discount-rules.js'],
+    ['shared/format-order-id.js', 'menu/shared/format-order-id.js'],
+    ['shared/money-math.js', 'menu/shared/money-math.js'],
+    ['shared/loyalty-math.js', 'menu/shared/loyalty-math.js'],
+    // Every site shows the same update prompt, each served from its own origin.
+    ['shared/app-update.js', 'menu/shared/app-update.js'],
+    ['shared/app-update.js', 'website/shared/app-update.js'],
+    ['shared/app-update.js', 'rider-app/public/app-update.js'],
 ];
 
 let failed = false;
-for (const name of PAIRS) {
-    const canon = `shared/${name}`;
-    const twin = `menu/shared/${name}`;
+for (const [canon, twin] of PAIRS) {
     if (!fs.existsSync(canon) || !fs.existsSync(twin)) {
         console.error(`FAIL: missing twin — expected both ${canon} and ${twin} to exist`);
         failed = true;

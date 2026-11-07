@@ -1,4 +1,4 @@
-const CACHE_NAME = 'menu-shell-v48';
+const CACHE_NAME = 'menu-shell-v49';
 const ASSETS = [
   './index.html',
   './delivery.html',
@@ -16,6 +16,7 @@ const ASSETS = [
   './js/customer.js',
   './js/app-checkout.js',
   './js/pwa-install.js',
+  './shared/app-update.js',
   './shared/combo-math.js',
   './shared/format-order-id.js',
   './shared/discount-rules.js',
@@ -49,6 +50,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('firebaseio.com')) return;
   if (event.request.url.includes('identitytoolkit.googleapis.com')) return;
   if (event.request.url.includes('securetoken.googleapis.com')) return;
+  if (new URL(event.request.url).pathname.endsWith('/version.json')) return; // deploy watcher: never cache
 
   event.respondWith(
     // ponytail: network-first — cache is only the offline fallback, never the
