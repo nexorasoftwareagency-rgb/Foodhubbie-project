@@ -29,16 +29,18 @@
         button, input, textarea { font-family: inherit; }
         img { max-width: 100%; display: block; }
 
-        /* Hide #app entirely until JS/CSS ready — loading overlay stays visible.
-           Runtime-toggled elements MUST NOT use display/visibility !important
-           here: JS hides the overlay with style.display and reveals screens,
-           nav, toasts and drawers by toggling classes. A stylesheet !important
-           beats both, which left every customer stuck on the spinner
-           (live outage 2026-11-07). */
-        #app { visibility: hidden; }
+        /* Pre-boot gate — the ONLY rule that hides the page before the app is
+           ready. _appReady() in js/app.js adds .app-ready to <html>, which
+           releases it. Never put `display:none !important` on runtime-toggled
+           elements (.screen/.active, .toast/.show, .bottom-nav,
+           .hamburger-*.open): a stylesheet !important beats the class toggles
+           the app uses, which leaves the loading overlay permanently on top. */
+        html:not(.app-ready) #app { visibility: hidden; }
         .screen { display: none; }
 
-        /* Loading overlay — covers everything immediately on refresh */
+        /* Loading overlay — covers everything immediately on refresh.
+           visibility:visible escapes the hidden #app so the spinner shows
+           during boot; display is plain so JS can hide it afterwards. */
         #loadingOverlay {
             position: fixed; inset: 0; z-index: 99999;
             background: rgba(255,255,255,.98);
@@ -54,7 +56,7 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
         /* .bottom-nav, .toast, .hamburger-drawer and .hamburger-overlay are
-           inside #app (or already opacity:0), so the #app gate hides them
+           inside #app (or already opacity:0), so the gate above hides them
            pre-boot. They must NOT get display:none !important here — the app
            reveals them by toggling .hidden/.show/.open at runtime. */
     </style>
@@ -222,10 +224,10 @@
         </div>
 
         <!-- Sort filter chips (drive the hidden #menuSortSelect) -->
-        <div class="menu-filter-row" id="menuSortRow" role="group" aria-label="Sort dishes">
-            <button class="menu-filter-chip active" data-sort="popularity" type="button">⚡ Popularity</button>
-            <button class="menu-filter-chip" data-sort="price-asc" type="button">₹ Low to High</button>
-            <button class="menu-filter-chip" data-sort="price-desc" type="button">₹ High to Low</button>
+        <div class="menu-filter-row" id="menuSortRow" role="tablist" aria-label="Sort dishes">
+            <button class="menu-filter-chip active" data-sort="popularity" type="button" role="tab" aria-selected="true" aria-controls="dishListContainer" id="tab-sort-popularity" tabindex="0">⚡ Popularity</button>
+            <button class="menu-filter-chip" data-sort="price-asc" type="button" role="tab" aria-selected="false" aria-controls="dishListContainer" id="tab-sort-price-asc" tabindex="-1">₹ Low to High</button>
+            <button class="menu-filter-chip" data-sort="price-desc" type="button" role="tab" aria-selected="false" aria-controls="dishListContainer" id="tab-sort-price-desc" tabindex="-1">₹ High to Low</button>
         </div>
 
         <div class="category-pills" id="categoryPillsRow"></div>
@@ -764,10 +766,11 @@
                 <button type="button" class="promo-filter-chip" data-filter="promo" role="tab" aria-selected="false" aria-controls="notificationInboxList" id="tab-notif-promo" tabindex="-1">Offers</button>
             </div>
             <div id="notificationInboxList" class="notif-inbox" role="tabpanel" aria-labelledby="tab-notif-all">
-            <div id="notificationEmpty" class="notif-empty" role="status" aria-live="polite">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 16px; display:block; opacity:0.4;"><rect x="3" y="3" width="7" height="7"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M21 3v4a2 2 0 0 0-2 2H5a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2z"/></svg>
-                <div class="promo-empty-title">No notifications yet</div>
-                <div class="promo-empty-sub">Order updates and special offers will appear here.</div>
+                <div id="notificationEmpty" class="notif-empty" role="status" aria-live="polite">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 16px; display:block; opacity:0.4;"><rect x="3" y="3" width="7" height="7"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M21 3v4a2 2 0 0 0-2 2H5a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2z"/></svg>
+                    <div class="promo-empty-title">No notifications yet</div>
+                    <div class="promo-empty-sub">Order updates and special offers will appear here.</div>
+                </div>
             </div>
         </div>
 

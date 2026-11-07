@@ -42,7 +42,7 @@ export const STATUS_SEQUENCES = {
     'Pickup': ["Placed", "Confirmed", "Ready", "Served"],
     'Default': ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Delivered"]
 };
-const LIVE_STATUSES = ["Placed", "Confirmed", "Ready", "Pending", "New", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Dispatched"];
+const LIVE_STATUSES = ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Dispatched"];
 
 // Order callback storage for safe detachment
 let _ordersUnsub = null;
@@ -794,35 +794,7 @@ export async function renderOrders(snap) {
 
     const liveBadge = document.getElementById('badge-live');
     if (liveBadge) {
-        liveBadge.innerText = liveCount;
-        if (liveCount > 0) {
-            liveBadge.classList.remove('hidden');
-        } else {
-            liveBadge.classList.add('hidden');
-        }
-    }
-
-    function updateLiveBadge() {
-        const liveBadge = document.getElementById('badge-live');
-        // Count orders with KDS-visible statuses: Placed, Confirmed, Ready
-        // (Served with unpaid also counts - same as renderOrders logic)
-        let count = 0;
-        state.ordersMap.forEach(o => {
-            if (!o) return;
-            const status = (o.status || '').trim();
-            if (status === 'Placed' || status === 'Confirmed' || status === 'Ready' ||
-                (status === 'Served' && o.paymentStatus !== 'Paid' && !o.paidAt)) {
-                count++;
-            }
-        });
-        if (liveBadge) {
-            liveBadge.innerText = count;
-            if (count > 0) {
-                liveBadge.classList.remove('hidden');
-            } else {
-                liveBadge.classList.add('hidden');
-            }
-        }
+        updateLiveBadge();
     }
 
     // Refresh icons only for the active container to reduce lag
@@ -833,6 +805,38 @@ export async function renderOrders(snap) {
             root: containers[activeTab]
         });
     }
+}
+
+/**
+ * Update the live badge (#badge-live / #badge-live-mobile) from the full
+ * orders map, refreshed on every realtime child_added / child_changed so the
+ * badge never drifts from the KDS-visible orders. Hoisted to module scope so
+ * onChildAdded / onChildChanged can call it without a ReferenceError.
+ */
+function updateLiveBadge() {
+    const liveBadge = document.getElementById('badge-live');
+    const liveBadgeMobile = document.getElementById('badge-live-mobile');
+    if (!liveBadge && !liveBadgeMobile) return;
+    // Count orders with KDS-visible statuses: Placed, Confirmed, Ready
+    // (Served with unpaid also counts - same as renderOrders logic)
+    let count = 0;
+    state.ordersMap.forEach(o => {
+        if (!o) return;
+        const status = (o.status || '').trim();
+        if (status === 'Placed' || status === 'Confirmed' || status === 'Ready' ||
+            (status === 'Served' && o.paymentStatus !== 'Paid' && !o.paidAt)) {
+            count++;
+        }
+    });
+    [liveBadge, liveBadgeMobile].forEach(el => {
+        if (!el) return;
+        el.innerText = count;
+        if (count > 0) {
+            el.classList.remove('hidden');
+        } else {
+            el.classList.add('hidden');
+        }
+    });
 }
 
 /**

@@ -12,7 +12,7 @@
  */
 import { outletRef, get, set, push, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
 import * as UI from './ui.js';
-import { esc } from './ui.js';
+import { esc, buildInstagramUrl, buildWhatsappUrl } from './ui.js';
 import {
     isIOS, isStandalone, isInstalled, canShowNativeInstallPrompt, promptInstall,
     getStoredPhone, savePhone, subscribeToNotifications,
@@ -1777,7 +1777,7 @@ function renderPromoCards(store) {
     const links = [
         { key: 'google', title: 'Rate us on Google', sub: 'Leave a review — it helps a lot!', url: s.googleReviewLink, cls: 'promo-link-google',
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5L18 21l-6-4.4L6 21l2.2-7.1L2 9.4h7.6z"/></svg>' },
-        { key: 'instagram', title: 'Follow on Instagram', sub: 'See our latest dishes & offers', url: buildWhatsappUrl('', ''), cls: 'promo-link-instagram',
+        { key: 'instagram', title: 'Follow on Instagram', sub: 'See our latest dishes & offers', url: buildInstagramUrl(s.instagram), cls: 'promo-link-instagram',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>' },
         { key: 'facebook', title: 'Like us on Facebook', sub: 'Stay updated with news & events', url: s.facebook, cls: 'promo-link-facebook',
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2h-3a5 5 0 0 0-5 5v3H6v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>' },

@@ -166,12 +166,13 @@ function _showNextToast() {
     if (type === 'error') haptic([30, 40, 30]);
     else if (type === 'success') haptic([10, 30, 10]);
     clearTimeout(t.__hideTimer);
+    const duration = type === 'error' ? 5000 : 2000; // Errors stay longer
     t.__hideTimer = setTimeout(() => {
         t.classList.remove('show');
         // Clear the text once it is invisible so the last message does not
         // linger in the accessibility tree.
         setTimeout(() => { t.textContent = ''; _showNextToast(); }, 200);
-    }, 2000);
+    }, duration);
 }
 
 export function showToast(msg, type) {
@@ -226,8 +227,31 @@ export function renderCategoryPills(categories, activeId, onSelect, hasCombos = 
     if (!row) return;
     const pills = [{ id: 'all', name: 'All' }, ...categories, ...(hasCombos ? [{ id: '__combos', name: 'Combos' }] : [])];
     row.innerHTML = pills.map(c => `
-        <button class="category-pill ${activeId === c.id ? 'active' : ''}" data-cat="${esc(c.id)}">${esc(c.name)}</button>`).join('');
-    row.querySelectorAll('.category-pill').forEach(btn => btn.addEventListener('click', () => onSelect(btn.dataset.cat)));
+        <button class="category-pill ${activeId === c.id ? 'active' : ''}" data-cat="${esc(c.id)}" role="tab" aria-selected="${activeId === c.id ? 'true' : 'false'}" aria-controls="dishListContainer" id="tab-cat-${esc(c.id)}" tabindex="${activeId === c.id ? '0' : '-1'}">${esc(c.name)}</button>`).join('');
+    row.setAttribute('role', 'tablist');
+    row.setAttribute('aria-label', 'Menu categories');
+    
+    row.querySelectorAll('.category-pill').forEach(btn => {
+        btn.addEventListener('click', () => onSelect(btn.dataset.cat));
+        btn.addEventListener('keydown', (e) => {
+            if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                e.preventDefault();
+                const tabs = row.querySelectorAll('.category-pill[role="tab"]');
+                const currentIndex = Array.from(tabs).indexOf(btn);
+                let nextIndex = currentIndex;
+                switch (e.key) {
+                    case 'ArrowRight': nextIndex = (currentIndex + 1) % tabs.length; break;
+                    case 'ArrowLeft': nextIndex = (currentIndex - 1 + tabs.length) % tabs.length; break;
+                    case 'Home': nextIndex = 0; break;
+                    case 'End': nextIndex = tabs.length - 1; break;
+                }
+                if (nextIndex !== currentIndex) {
+                    tabs[nextIndex].focus();
+                    tabs[nextIndex].click();
+                }
+            }
+        });
+    });
 }
 
 export function renderDishList(dishes, { searchTerm, activeCategoryName }, onOpenDish) {
@@ -239,24 +263,36 @@ export function renderDishList(dishes, { searchTerm, activeCategoryName }, onOpe
 
     if (dishes.length === 0) {
         list.textContent = '';
-        list.insertAdjacentHTML('beforeend', `<div class="empty-cart">${searchTerm ? `No dishes found for "${searchTerm}"` : 'No dishes in this category'}</div>`);
+        list.insertAdjacentHTML('beforeend', `<div class="empty-cart" role="status" aria-live="polite">${searchTerm ? `No dishes found for "${searchTerm}"` : 'No dishes in this category'}</div>`);
         return;
     }
     list.textContent = '';
-    list.insertAdjacentHTML('beforeend', dishes.map(d => `
-        <div class="dish-card" data-dish-id="${esc(d.id)}">
+    list.insertAdjacentHTML('beforeend', dishes.map(d => {
+        const vegLabel = d.veg === false ? 'Non-Veg' : 'Veg';
+        const ariaLabel = `${esc(d.name)} ${d.category ? `(${esc(d.category)})` : ''} - ${fmtMoney(d.price)} - ${vegLabel}`;
+        return `
+        <button class="dish-card" data-dish-id="${esc(d.id)}" aria-label="${ariaLabel}" tabindex="0">
             <div class="dish-visual">
                 <img src="${esc(d.image || '')}" alt="${esc(d.name)}" loading="lazy" onerror="this.style.visibility='hidden'">
                 <div class="dish-overlay"><span class="price-chip">${fmtMoney(d.price)}</span></div>
-                <span class="${d.veg === false ? 'combo-nonveg' : 'combo-veg'}" aria-label="${d.veg === false ? 'Non-Veg' : 'Veg'}"></span>
+                <span class="${d.veg === false ? 'combo-nonveg' : 'combo-veg'}" aria-label="${vegLabel}"></span>
             </div>
             <div class="dish-content">
                 <div class="dish-card-name">${esc(d.name)}</div>
                 <div class="dish-card-category">${esc(d.category || '')}</div>
             </div>
-        </div>`).join(''));
+        </button>`;
+    }).join(''));
 
-    list.querySelectorAll('.dish-card').forEach(card => card.addEventListener('click', () => onOpenDish(card.dataset.dishId)));
+    list.querySelectorAll('.dish-card').forEach(card => {
+        card.addEventListener('click', () => onOpenDish(card.dataset.dishId));
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpenDish(card.dataset.dishId);
+            }
+        });
+    });
 }
 
 export function renderSizeOptions(sizes, selectedLabel, onSelect) {
@@ -265,11 +301,37 @@ export function renderSizeOptions(sizes, selectedLabel, onSelect) {
     const sizeSection = document.getElementById('sizeSection');
     if (sizeSection) sizeSection.style.display = sizes.length > 1 ? '' : 'none';
     wrap.innerHTML = sizes.map((s, i) => `
-        <button class="size-opt ${s.label === selectedLabel ? 'selected' : ''}" data-size-idx="${i}">
+        <button class="size-opt ${s.label === selectedLabel ? 'selected' : ''}" data-size-idx="${i}" role="button" aria-pressed="${s.label === selectedLabel ? 'true' : 'false'}" tabindex="${s.label === selectedLabel ? '0' : '-1'}">
             <div class="size-opt-label">${esc(s.label)}</div>
             <div class="size-opt-price">${fmtMoney(s.price)}</div>
         </button>`).join('');
-    wrap.querySelectorAll('.size-opt').forEach(btn => btn.addEventListener('click', () => onSelect(Number(btn.dataset.sizeIdx))));
+    wrap.querySelectorAll('.size-opt').forEach(btn => {
+        btn.addEventListener('click', () => onSelect(Number(btn.dataset.sizeIdx)));
+        btn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect(Number(btn.dataset.sizeIdx));
+            }
+        });
+    });
+    // Keyboard navigation for size options
+    const sizeOpts = wrap.querySelectorAll('.size-opt');
+    sizeOpts.forEach((btn, i) => {
+        btn.addEventListener('keydown', (e) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+            e.preventDefault();
+            let nextIndex = i;
+            switch (e.key) {
+                case 'ArrowRight': nextIndex = (i + 1) % sizeOpts.length; break;
+                case 'ArrowLeft': nextIndex = (i - 1 + sizeOpts.length) % sizeOpts.length; break;
+                case 'Home': nextIndex = 0; break;
+                case 'End': nextIndex = sizeOpts.length - 1; break;
+            }
+            if (nextIndex !== i) {
+                sizeOpts[nextIndex].focus();
+            }
+        });
+    });
 }
 
 export function renderAddonRows(addons, selectedIdxs, onToggle) {
@@ -279,12 +341,38 @@ export function renderAddonRows(addons, selectedIdxs, onToggle) {
     if (addonSection) addonSection.style.display = addons.length ? '' : 'none';
     wrap.innerHTML = addons.map((a, i) => {
         const checked = selectedIdxs.includes(i);
-        return `<div class="addon-row" data-addon-idx="${i}">
-            <div class="addon-label"><span class="addon-checkbox ${checked ? 'checked' : ''}">${checked ? '✓' : ''}</span><span>${esc(a.name)}</span></div>
+        return `<button class="addon-row" data-addon-idx="${i}" role="checkbox" aria-checked="${checked}" tabindex="${checked ? '0' : '-1'}">
+            <div class="addon-label"><span class="addon-checkbox ${checked ? 'checked' : ''}" aria-hidden="true">${checked ? '✓' : ''}</span><span>${esc(a.name)}</span></div>
             <span class="addon-price">+${fmtMoney(a.price)}</span>
-        </div>`;
+        </button>`;
     }).join('');
-    wrap.querySelectorAll('.addon-row').forEach(row => row.addEventListener('click', () => onToggle(Number(row.dataset.addonIdx))));
+    wrap.querySelectorAll('.addon-row').forEach(btn => {
+        btn.addEventListener('click', () => onToggle(Number(btn.dataset.addonIdx)));
+        btn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onToggle(Number(btn.dataset.addonIdx));
+            }
+        });
+    });
+    // Keyboard navigation for addon rows
+    const addonBtns = wrap.querySelectorAll('.addon-row');
+    addonBtns.forEach((btn, i) => {
+        btn.addEventListener('keydown', (e) => {
+            if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+            e.preventDefault();
+            let nextIndex = i;
+            switch (e.key) {
+                case 'ArrowDown': nextIndex = (i + 1) % addonBtns.length; break;
+                case 'ArrowUp': nextIndex = (i - 1 + addonBtns.length) % addonBtns.length; break;
+                case 'Home': nextIndex = 0; break;
+                case 'End': nextIndex = addonBtns.length - 1; break;
+            }
+            if (nextIndex !== i) {
+                addonBtns[nextIndex].focus();
+            }
+        });
+    });
 }
 
 export function renderCartList(lines, { onStep }) {
@@ -310,13 +398,25 @@ export function renderCartList(lines, { onStep }) {
                 <div class="cart-item-name">${esc(l.name)}</div>
                 <div class="cart-item-variant">${esc(l.size)}${(l.addons || []).length ? ' · ' + esc((l.addons || []).join(', ')) : ''}</div>
             </div>
-            <div class="qty-stepper"><button class="qty-btn" data-step="-1">−</button><span class="qty-val">${l.qty}</span><button class="qty-btn" data-step="1">+</button></div>
+            <div class="qty-stepper" role="group" aria-label="Quantity for ${esc(l.name)}">
+                <button class="qty-btn" data-step="-1" aria-label="Decrease quantity" aria-controls="qty-${id}">−</button>
+                <span class="qty-val" id="qty-${id}" aria-live="polite">${l.qty}</span>
+                <button class="qty-btn" data-step="1" aria-label="Increase quantity" aria-controls="qty-${id}">+</button>
+            </div>
             <span class="cart-item-price">${fmtMoney(l.unitPrice * l.qty)}</span>
         </div>`).join('');
 
     list.querySelectorAll('.cart-item-row').forEach(row => {
         const id = row.dataset.lineId;
-        row.querySelectorAll('.qty-btn').forEach(btn => btn.addEventListener('click', () => onStep(id, Number(btn.dataset.step))));
+        row.querySelectorAll('.qty-btn').forEach(btn => {
+            btn.addEventListener('click', () => onStep(id, Number(btn.dataset.step)));
+            btn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onStep(id, Number(btn.dataset.step));
+                }
+            });
+        });
     });
 }
 
@@ -708,12 +808,12 @@ export function renderHistoryList(orderIds, ordersMap) {
     list.innerHTML = rows;
 }
 
-function buildInstagramUrl(handle) {
+export function buildInstagramUrl(handle) {
     if (!handle) return null;
     if (/^https?:\/\//i.test(handle)) return handle;
     return `https://instagram.com/${handle.replace(/^@/, '').trim()}`;
 }
-function buildWhatsappUrl(number, storeName) {
+export function buildWhatsappUrl(number, storeName) {
     if (!number) return null;
     const clean = String(number).replace(/[^\d]/g, '');
     if (!clean) return null;

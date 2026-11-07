@@ -1386,3 +1386,24 @@ body.onb-open{ overflow:hidden; }
 .promo-empty-sub{
     font-size:12px; color:var(--text-sub); margin-bottom:8px;
 }
+
+/* ---------- Skeleton Loaders ---------- */
+.skeleton-loader {
+    background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: var(--radius-sm);
+}
+.skeleton-loader.dish-card {
+    height: 220px;
+    width: 100%;
+}
+.skeleton-loader.combo-card {
+    height: 280px;
+    width: 160px;
+    flex-shrink: 0;
+}
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}

@@ -285,8 +285,12 @@ async function boot() {
     }
 }
 
-// Make #app visible once boot completes — prevents FOUC on refresh
+// Make #app visible once boot completes — prevents FOUC on refresh.
+// .app-ready releases the inline pre-boot gate in index.html; without it the
+// loading overlay can never be hidden (a stylesheet !important beats
+// style.display).
 function _appReady() {
+    document.documentElement.classList.add('app-ready');
     const app = document.getElementById('app');
     if (app) app.style.visibility = 'visible';
 }
@@ -660,6 +664,15 @@ function onCartChanged() {
 // MENU
 // ---------------------------------------------------------------
 async function loadMenu() {
+    const dishList = document.getElementById('dishListContainer');
+    if (dishList) {
+        dishList.innerHTML = '<div class="skeleton-loader"></div>'.repeat(6);
+    }
+    const comboGrid = document.getElementById('comboOffersGrid');
+    if (comboGrid) {
+        comboGrid.innerHTML = '<div class="skeleton-loader"></div>'.repeat(3);
+    }
+    
     const [catSnap, dishSnap, comboSnap] = await Promise.all([
         get(outletRef('categories')), get(outletRef('dishes')), get(outletRef('combos'))
     ]);
@@ -698,7 +711,10 @@ function renderMenuScreen(searchTerm) {
     const dishList = document.getElementById('dishListContainer');
     const dishTitle = document.getElementById('menuSectionTitle');
     if (combosOnly) {
-        if (dishList) dishList.classList.add('hidden');
+        if (dishList) {
+            dishList.classList.add('hidden');
+            dishList.innerHTML = '<div class="empty-cart" role="status" aria-live="polite">Select "All" or "Combos" category to see combo offers.</div>';
+        }
         if (dishTitle) dishTitle.classList.add('hidden');
         return;
     }
@@ -757,13 +773,13 @@ function _renderComboOffers() {
         const comboDishIds = new Set(d.entries.map(e => e.dish.id));
         const crossSell = M.dishes.filter(d => !comboDishIds.has(d.id) && d.price && d.price <= 150).slice(0, 2);
         return `
-        <div class="combo-card" data-combo-id="${c.id}">
+        <div class="combo-card" data-combo-id="${c.id}" tabindex="0" role="button" aria-label="${esc(c.name)} - ${d.disc} - ${UI.fmtMoney(d.comboPrice)}">
             <div class="combo-card-img">
                 <div class="combo-img-frame">${c.image && /^(https?:|data:image\/)/.test(c.image) ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
                 <div class="combo-img-scrim"></div>
                 <span class="combo-img-off">${d.disc}</span>
                 <span class="${_comboVegMark(c)}" aria-label="${_comboVegMark(c) === 'combo-veg' ? 'Veg' : 'Non-Veg'}"></span>
-                <button class="combo-fab" data-action="addCombo" data-id="${c.id}">ADD</button>
+                <button class="combo-fab" data-action="addCombo" data-id="${c.id}" aria-label="Add ${esc(c.name)} to cart">ADD</button>
             </div>
             <div class="combo-card-body">
                 <div class="combo-card-title">${esc(c.name)}</div>
@@ -789,7 +805,6 @@ function _renderComboOffers() {
             if (grid.scrollLeft >= grid.scrollWidth - grid.clientWidth - 4) grid.scrollTo({ left: 0, behavior: 'smooth' });
             else grid.scrollBy({ left: step, behavior: 'smooth' });
         }, 2000);
-        grid._cbListener = true;
         grid._cbListener = true;
         grid.addEventListener('click', e => {
         const fab = e.target.closest('.combo-fab');
@@ -821,6 +836,46 @@ function _renderComboOffers() {
             crossSell
         }, () => _addComboToCart(combo.id));
         });
+
+    // Keyboard navigation for combo cards
+    grid.addEventListener('keydown', (e) => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter', ' '].includes(e.key)) return;
+        const cards = grid.querySelectorAll('.combo-card[tabindex="0"]');
+        if (cards.length === 0) return;
+        const currentIndex = Array.from(cards).indexOf(document.activeElement);
+        if (currentIndex === -1) return;
+
+        // Enter/Space activate the focused card, like a real button.
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            cards[currentIndex].click();
+            return;
+        }
+
+        // For horizontal scrolling grid, only left/right/Home/End make sense
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        
+        e.preventDefault();
+        let nextIndex = currentIndex;
+        switch (e.key) {
+            case 'ArrowRight':
+                nextIndex = Math.min(currentIndex + 1, cards.length - 1);
+                break;
+            case 'ArrowLeft':
+                nextIndex = Math.max(currentIndex - 1, 0);
+                break;
+            case 'Home':
+                nextIndex = 0;
+                break;
+            case 'End':
+                nextIndex = cards.length - 1;
+                break;
+        }
+        if (nextIndex !== currentIndex) {
+            cards[nextIndex].focus();
+            cards[nextIndex].scrollIntoView({ behavior: 'smooth', inline: 'center' });
+        }
+    });
     }
 }
 
@@ -937,7 +992,7 @@ document.getElementById('dishSearchInput')?.addEventListener('input', (e) => {
 });
 document.getElementById('menuSortSelect')?.addEventListener('change', (e) => {
     M.sortKey = e.target.value;
-    document.querySelectorAll('.menu-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.sort === M.sortKey));
+    updateSortChips(M.sortKey);
     renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
 });
 document.getElementById('menuSortRow')?.addEventListener('click', (e) => {
@@ -948,6 +1003,34 @@ document.getElementById('menuSortRow')?.addEventListener('click', (e) => {
     sel.value = chip.dataset.sort;
     sel.dispatchEvent(new Event('change'));
 });
+document.getElementById('menuSortRow')?.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    const chips = document.querySelectorAll('#menuSortRow .menu-filter-chip[role="tab"]');
+    if (chips.length === 0) return;
+    const currentIndex = Array.from(chips).indexOf(document.activeElement);
+    if (currentIndex === -1) return;
+    let nextIndex = currentIndex;
+    switch (e.key) {
+        case 'ArrowRight': nextIndex = (currentIndex + 1) % chips.length; break;
+        case 'ArrowLeft': nextIndex = (currentIndex - 1 + chips.length) % chips.length; break;
+        case 'Home': nextIndex = 0; break;
+        case 'End': nextIndex = chips.length - 1; break;
+    }
+    if (nextIndex !== currentIndex) {
+        chips[nextIndex].focus();
+        chips[nextIndex].click();
+    }
+});
+
+function updateSortChips(activeSort) {
+    document.querySelectorAll('#menuSortRow .menu-filter-chip[role="tab"]').forEach(chip => {
+        const active = chip.dataset.sort === activeSort;
+        chip.classList.toggle('active', active);
+        chip.setAttribute('aria-selected', active);
+        chip.setAttribute('tabindex', active ? '0' : '-1');
+    });
+}
 
 // --- Recent searches ---
 function _getRecentSearches() {
@@ -999,6 +1082,28 @@ if (_origSearchInput) {
         if (val) _saveRecentSearch(val);
     });
 }
+
+// Pull-to-refresh on menu screen
+let _ptrStartY = 0;
+let _ptrActive = false;
+const _ptrThreshold = 80;
+document.addEventListener('touchstart', (e) => {
+    if (window.scrollY === 0 && document.getElementById('screenMenu')?.classList.contains('active')) {
+        _ptrStartY = e.touches[0].clientY;
+        _ptrActive = true;
+    }
+}, { passive: true });
+document.addEventListener('touchmove', (e) => {
+    if (!_ptrActive) return;
+    const deltaY = e.touches[0].clientY - _ptrStartY;
+    if (deltaY > _ptrThreshold) {
+        e.preventDefault();
+        _ptrActive = false;
+        loadMenu();
+    }
+}, { passive: false });
+document.addEventListener('touchend', () => { _ptrActive = false; });
+document.addEventListener('touchcancel', () => { _ptrActive = false; });
 
 // ---------------------------------------------------------------
 // CUSTOMIZATION
@@ -1456,12 +1561,16 @@ function openHamburger() {
     if (badge) badge.textContent = String(lineCount());
     hamburgerOverlay.classList.add('open');
     hamburgerDrawer.classList.add('open');
+    hamburgerDrawer.removeAttribute('aria-hidden');
+    hamburgerOverlay.removeAttribute('aria-hidden');
     document.body.style.overflow = 'hidden';
 }
 
 function closeHamburger() {
     hamburgerOverlay.classList.remove('open');
     hamburgerDrawer.classList.remove('open');
+    hamburgerDrawer.setAttribute('aria-hidden', 'true');
+    hamburgerOverlay.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
 }
 
