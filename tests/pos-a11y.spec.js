@@ -11,8 +11,8 @@ test.describe('POS (Walk-in) — Accessibility', () => {
   test('POS tab passes axe-core accessibility scan', async ({ page }) => {
     await login(page);
 
-    // Navigate to POS tab
-    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]');
+    // Navigate to POS tab - use first visible (desktop sidebar or mobile drawer)
+    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]').first();
     if (!(await posNav.isVisible())) {
       await page.locator('#mobileHamburger:visible').click();
       await page.waitForTimeout(500);
@@ -46,7 +46,7 @@ test.describe('POS (Walk-in) — Accessibility', () => {
   test('Category tabs have correct ARIA attributes', async ({ page }) => {
     await login(page);
 
-    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]');
+    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]').first();
     if (!(await posNav.isVisible())) {
       await page.locator('#mobileHamburger:visible').click();
       await page.waitForTimeout(500);
@@ -88,7 +88,7 @@ test.describe('POS (Walk-in) — Accessibility', () => {
   test('Dish grid has correct ARIA attributes', async ({ page }) => {
     await login(page);
 
-    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]');
+    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]').first();
     if (!(await posNav.isVisible())) {
       await page.locator('#mobileHamburger:visible').click();
       await page.waitForTimeout(500);
@@ -129,7 +129,7 @@ test.describe('POS (Walk-in) — Accessibility', () => {
   test('Cart quantity controls have correct ARIA attributes', async ({ page }) => {
     await login(page);
 
-    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]');
+    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]').first();
     if (!(await posNav.isVisible())) {
       await page.locator('#mobileHamburger:visible').click();
       await page.waitForTimeout(500);
@@ -176,7 +176,7 @@ test.describe('POS (Walk-in) — Accessibility', () => {
   test('Keyboard navigation works on dish grid', async ({ page }) => {
     await login(page);
 
-    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]');
+    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]').first();
     if (!(await posNav.isVisible())) {
       await page.locator('#mobileHamburger:visible').click();
       await page.waitForTimeout(500);
@@ -207,7 +207,7 @@ test.describe('POS (Walk-in) — Accessibility', () => {
   test('Keyboard navigation works on category tabs', async ({ page }) => {
     await login(page);
 
-    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]');
+    const posNav = page.locator('[data-action="switchTab"][data-tab="walkin"]').first();
     if (!(await posNav.isVisible())) {
       await page.locator('#mobileHamburger:visible').click();
       await page.waitForTimeout(500);

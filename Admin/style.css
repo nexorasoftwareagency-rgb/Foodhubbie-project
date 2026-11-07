@@ -3378,7 +3378,7 @@ tr.premium-row-v4:focus-visible {
 .category-tab.active {
     background: linear-gradient(135deg, #FF8A3D, var(--primary));
     border-color: var(--primary);
-    color: white;
+    color: #000;  /* Pure black for WCAG AA contrast (4.5:1+) */
     box-shadow: 0 4px 14px rgba(var(--primary-rgb), 0.32);
 }
 
@@ -6830,8 +6830,8 @@ body.pos-selection-mode .walkin-picker {
 .version-badge {
     font-size: 10px;
     font-weight: 700;
-    color: var(--primary);
-    background: rgba(255, 107, 0, 0.1);
+    color: #000;  /* Pure black for WCAG AA contrast (4.5:1+) */
+    background: rgba(255, 107, 0, 0.3);
     padding: 2px 6px;
     border-radius: 4px;
     display: inline-block;
@@ -6875,7 +6875,7 @@ body.pos-selection-mode .walkin-picker {
 }
 .nav-list li.active .nav-btn {
     background: var(--sidebar-accent, rgba(232,73,8,0.08));
-    color: var(--primary, #E84908);
+    color: #000;  /* Pure black for WCAG AA contrast (4.5:1+) on light orange */
     font-weight: 600;
 }
 .nav-list li.active .nav-btn i {
@@ -8745,7 +8745,7 @@ body.pos-selection-mode .walkin-picker {
 
 /* Old POS design utility classes */
 .search-input-w200 { width: 200px; max-width: 100%; }
-.btn-text-danger { background: none; border: none; color: var(--danger, #ef4444); cursor: pointer; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px; transition: background 0.2s; }
+.btn-text-danger { background: none; border: none; color: #c00; cursor: pointer; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px; transition: background 0.2s; }
 .btn-text-danger:hover { background: rgba(239, 68, 68, 0.08); }
 .menu-loading-placeholder { color: var(--text-muted, #94a3b8); text-align: center; padding: 32px 16px; font-size: 14px; }
 
@@ -10920,7 +10920,7 @@ body.pos-selection-mode .walkin-picker {
 
 /* Operator identity chip — topbar role + name (desktop) and mobile header line */
 .user-role-chip { background: var(--bg-subtle, #f1f5f9); border: 1px solid var(--border-light, #e2e8f0); border-radius: 20px; padding: 3px 10px; font-size: 12px; color: var(--text-muted, #64748b); white-space: nowrap; }
-.user-role-chip b { color: var(--primary, #E84908); font-weight: 700; }
+.user-role-chip b { color: #000; font-weight: 700; }
 .mobile-role-chip { display: block; font-size: 10px; font-weight: 600; color: var(--text-muted, #64748b); text-align: center; }
 
 /* ================================================================

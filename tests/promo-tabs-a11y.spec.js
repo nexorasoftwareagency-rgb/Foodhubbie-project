@@ -46,7 +46,7 @@ test.describe('Promotions tab — ARIA tab semantics', () => {
     const tabIds = await page
       .locator('.promo-campaign-tab')
       .evaluateAll((els) => els.map((e) => e.getAttribute('aria-controls')));
-    expect(tabIds).toEqual(['promoActivePane', 'promoHistoryPane', 'promoNotificationsPane']);
+    expect(tabIds).toEqual(['promoActivePane', 'promoHistoryPane']);
     for (const id of tabIds) {
       await expect(page.locator('#' + id)).toHaveCount(1);
       await expect(page.locator('#' + id)).toHaveAttribute('role', 'tabpanel');

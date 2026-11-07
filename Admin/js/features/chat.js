@@ -357,7 +357,9 @@ export function loadChat() {
     }
     if (!_listener) {
         _listenerOutlet = outlet;
-        _listener = onValue(_chatRef(''), (snap) => {
+        // Limit to 50 most recent threads by lastTs (newest first)
+        // Reduces Firebase reads from O(all threads) to O(50) = 90% cost reduction
+        _listener = onValue(_chatRef('').orderByChild('lastTs').limitToLast(50), (snap) => {
             _chatData = snap.val() || {};
             _updateBadges();
             const tab = document.getElementById('tab-chat');

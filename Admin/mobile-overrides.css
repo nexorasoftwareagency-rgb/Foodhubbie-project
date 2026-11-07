@@ -1149,7 +1149,7 @@
     .category-tab.active {
         background: var(--primary) !important;
         border-color: var(--primary) !important;
-        color: #fff !important;
+        color: #000 !important;  /* Pure black for WCAG AA contrast (4.5:1+) on orange */
         box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.3) !important;
         transform: translateY(-1px) !important;
     }

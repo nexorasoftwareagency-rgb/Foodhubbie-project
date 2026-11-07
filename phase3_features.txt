@@ -1,0 +1,540 @@
+// ============================================================================
+// PHASE 3: Advanced WhatsApp Web Features
+// ============================================================================
+
+// Message Reactions
+let _reactionsOpen = false;
+
+function _addReaction(msgId, emoji) {
+    const t = _chatData[_selectedCustomerId];
+    const msg = t?.messages?.[msgId];
+    if (!msg) return;
+
+    if (!msg.reactions) msg.reactions = {};
+    if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+    
+    const currentUser = 'admin'; // In real app, use actual user ID
+    if (!msg.reactions[emoji].includes(currentUser)) {
+        msg.reactions[emoji].push(currentUser);
+    }
+    
+    _renderThreadView();
+    showToast('Reaction added', 'success');
+}
+
+function _removeReaction(msgId, emoji) {
+    const t = _chatData[_selectedCustomerId];
+    const msg = t?.messages?.[msgId];
+    if (!msg?.reactions?.[emoji]) return;
+
+    const currentUser = 'admin';
+    const index = msg.reactions[emoji].indexOf(currentUser);
+    if (index > -1) {
+        msg.reactions[emoji].splice(index, 1);
+        if (msg.reactions[emoji].length === 0) {
+            delete msg.reactions[emoji];
+        }
+    }
+    
+    _renderThreadView();
+}
+
+function _toggleReactionPicker(msgId, msgElement) {
+    const existing = document.getElementById('chatReactionPicker');
+    if (existing) {
+        existing.remove();
+        _reactionsOpen = false;
+        return;
+    }
+
+    const msg = _chatData[_selectedCustomerId]?.messages?.[msgId];
+    const existingReactions = msg?.reactions || {};
+    
+    const emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥', '💯', '👎'];
+    
+    const picker = document.createElement('div');
+    picker.id = 'chatReactionPicker';
+    picker.className = 'chat-reaction-picker';
+    picker.setAttribute('role', 'menu');
+    picker.setAttribute('aria-label', 'Reactions');
+    
+    const emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥', '💯', '👎'];
+    
+    picker.innerHTML = `
+        <div class="chat-reaction-picker-emojis">
+            ${emojis.map(e => `
+                <button type="button" class="chat-reaction-btn ${existingReactions[e]?.includes('admin') ? 'active' : ''}" 
+                        data-emoji="${e}" aria-label="${e} reaction" aria-pressed="${existingReactions[e]?.includes('admin') ? 'true' : 'false'}">
+                    ${e}
+                    ${existingReactions[e] ? `<span class="chat-reaction-count">${existingReactions[e].length}</span>` : ''}
+                </button>
+            `).join('')}
+        </div>
+        <button type="button" class="chat-reaction-add" aria-label="Add reaction">
+            <i data-lucide="plus"></i>
+        </button>
+    `;
+    
+    // Position near message
+    const rect = msgElement.getBoundingClientRect();
+    picker.style.position = 'fixed';
+    picker.style.top = `${rect.top - 50}px`;
+    picker.style.left = `${rect.left}px`;
+    picker.style.zIndex = '10000';
+    
+    document.body.appendChild(picker);
+    _reactionsOpen = true;
+    
+    // Wire buttons
+    picker.querySelectorAll('.chat-reaction-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const emoji = btn.dataset.emoji;
+            const msgId = _contextMenuTarget?.msgId;
+            if (msgId) {
+                const t = _chatData[_selectedCustomerId];
+                const msg = t?.messages?.[msgId];
+                if (msg?.reactions?.[emoji]?.includes('admin')) {
+                    _removeReaction(msgId, emoji);
+                } else {
+                    _addReaction(msgId, emoji);
+                }
+            }
+            document.getElementById('chatReactionPicker')?.remove();
+        });
+    });
+    
+    picker.querySelector('.chat-reaction-add')?.addEventListener('click', () => {
+        // Could open full emoji picker for more reactions
+        showToast('Open full emoji picker for more reactions', 'info');
+    });
+    
+    // Close on click outside
+    setTimeout(() => {
+        document.addEventListener('click', function closeReactions(e) {
+            if (!e.target.closest('#chatReactionPicker')) {
+                const picker = document.getElementById('chatReactionPicker');
+                if (picker) picker.remove();
+                _reactionsOpen = false;
+                document.removeEventListener('click', arguments.callee);
+            }
+        });
+    }, 0);
+}
+
+// Pinned Messages
+let _pinnedMessage = null;
+
+function _pinMessage(msgId) {
+    const t = _chatData[_selectedCustomerId];
+    const msg = t?.messages?.[msgId];
+    if (!msg) return;
+
+    _pinnedMessage = { msgId, ...msg };
+    
+    // Store in localStorage per chat
+    const pinned = JSON.parse(localStorage.getItem(`chatPinned_${_selectedCustomerId}`) || 'null');
+    localStorage.setItem(`chatPinned_${_selectedCustomerId}`, JSON.stringify({ msgId, ...msg }));
+    
+    _renderThreadView();
+    showToast('Message pinned', 'success');
+}
+
+function _unpinMessage() {
+    _pinnedMessage = null;
+    localStorage.removeItem(`chatPinned_${_selectedCustomerId}`);
+    _renderThreadView();
+    showToast('Message unpinned', 'success');
+}
+
+function _loadPinnedMessage() {
+    if (!_selectedCustomerId) return;
+    const pinned = JSON.parse(localStorage.getItem(`chatPinned_${_selectedCustomerId}`) || 'null');
+    if (pinned) _pinnedMessage = pinned;
+}
+
+// Disappearing Messages
+let _disappearingTimer = null;
+let _disappearingDuration = 0; // 0 = off, 86400000 = 24h, 604800000 = 7d, 2592000000 = 90d
+
+function _setDisappearingMessages(duration) {
+    _disappearingDuration = duration;
+    localStorage.setItem(`chatDisappearing_${_selectedCustomerId}`, String(duration));
+    
+    if (duration > 0) {
+        const days = duration === 86400000 ? '24 hours' : 
+                     duration === 604800000 ? '7 days' : '90 days';
+        showToast(`Disappearing messages set to ${days}`, 'success');
+    } else {
+        showToast('Disappearing messages turned off', 'success');
+    }
+    
+    _renderThreadView(); // Re-render to show/hide timer badge
+}
+
+function _loadDisappearingSettings() {
+    if (!_selectedCustomerId) return;
+    const saved = localStorage.getItem(`chatDisappearing_${_selectedCustomerId}`);
+    if (saved) _disappearingDuration = parseInt(saved, 10);
+}
+
+// Contact Info Panel (Inline Sidebar)
+let _contactInfoSidebarOpen = false;
+
+function _toggleContactInfoSidebar() {
+    const sidebar = document.getElementById('chatContactInfoPanel');
+    if (!sidebar) return;
+
+    if (sidebar.classList.contains('hidden')) {
+        _openContactInfoSidebar();
+    } else {
+        _closeContactInfoSidebar();
+    }
+}
+
+function _openContactInfoSidebar() {
+    const sidebar = document.getElementById('chatContactInfoPanel');
+    if (!sidebar) return;
+
+    if (!_selectedCustomerId || !_chatData[_selectedCustomerId]) return;
+
+    const t = _chatData[_selectedCustomerId];
+    const meta = t.meta || {};
+    const name = _displayName(_selectedCustomerId, meta);
+
+    // Update sidebar content
+    const avatarEl = document.getElementById('chatInfoAvatar');
+    if (avatarEl) {
+        avatarEl.style.setProperty('--hue', _avatarHue(_selectedCustomerId));
+        avatarEl.textContent = _initials(meta.name, meta.phone);
+    }
+    const nameEl = document.getElementById('chatInfoName');
+    if (nameEl) nameEl.textContent = name;
+    const phoneEl = document.getElementById('chatInfoPhone');
+    if (phoneEl) phoneEl.textContent = '+' + (meta.phone || _selectedCustomerId).replace(/[^0-9]/g, '');
+    const statusEl = document.getElementById('chatInfoStatus');
+    if (statusEl) statusEl.textContent = meta.lastSeen ? `Last seen ${_timeLabel(meta.lastSeen)}` : 'Online';
+
+    _loadContactInfoPanels(_selectedCustomerId);
+    _initContactInfoTabs();
+
+    sidebar.classList.remove('hidden');
+    document.getElementById('chatApp')?.classList.add('contact-info-open');
+    _contactInfoSidebarOpen = true;
+}
+
+function _closeContactInfoSidebar() {
+    const sidebar = document.getElementById('chatContactInfoPanel');
+    if (sidebar) sidebar.classList.add('hidden');
+    document.getElementById('chatApp')?.classList.remove('contact-info-open');
+    _contactInfoSidebarOpen = false;
+}
+
+function _toggleContactInfoSidebar() {
+    const sidebar = document.getElementById('chatContactInfoPanel');
+    if (!sidebar) return;
+
+    if (sidebar.classList.contains('hidden')) {
+        _openContactInfoSidebar();
+    } else {
+        _closeContactInfoSidebar();
+    }
+}
+
+// Wallpaper Modal - Full Implementation
+let _currentWallpaper = 'default';
+
+function _openWallpaperModal() {
+    const modal = document.getElementById('chatWallpaperModal');
+    if (!modal) return;
+
+    // Load current wallpaper
+    const saved = localStorage.getItem(`chatWallpaper_${_selectedCustomerId}`);
+    if (saved) _currentWallpaper = saved;
+
+    // Update UI to show current selection
+    modal.querySelectorAll('.chat-wallpaper-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.wallpaper === _currentWallpaper);
+    });
+
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    modal.setAttribute('aria-modal', 'true');
+}
+
+function _closeWallpaperModal() {
+    const modal = document.getElementById('chatWallpaperModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        modal.setAttribute('aria-modal', 'false');
+    }
+}
+
+function _selectWallpaper(option) {
+    const wallpaper = option.dataset.wallpaper;
+    _currentWallpaper = wallpaper;
+    
+    modal.querySelectorAll('.chat-wallpaper-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.wallpaper === wallpaper);
+    });
+    
+    // Apply preview
+    const chatBody = document.getElementById('chatMessageList');
+    if (chatBody) {
+        chatBody.classList.remove('wallpaper-default', 'wallpaper-solid1', 'wallpaper-solid2', 'wallpaper-solid3', 'wallpaper-pattern1');
+        if (wallpaper !== 'default') {
+            chatBody.classList.add(`wallpaper-${wallpaper}`);
+        }
+    }
+}
+
+function _confirmWallpaper() {
+    if (!_selectedCustomerId) return;
+    
+    localStorage.setItem(`chatWallpaper_${_selectedCustomerId}`, _currentWallpaper);
+    
+    // Apply to current chat
+    const chatBody = document.getElementById('chatMessageList');
+    if (chatBody) {
+        chatBody.classList.remove('wallpaper-default', 'wallpaper-solid1', 'wallpaper-solid2', 'wallpaper-solid3', 'wallpaper-pattern1');
+        if (_currentWallpaper !== 'default') {
+            chatBody.classList.add(`wallpaper-${_currentWallpaper}`);
+        }
+    }
+    
+    // Save to database (in real app)
+    showToast('Wallpaper updated', 'success');
+    
+    const modal = document.getElementById('chatWallpaperModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        modal.setAttribute('aria-modal', 'false');
+    }
+}
+
+// New Group Modal
+function _openNewGroupModal() {
+    const modal = document.getElementById('chatNewGroupModal');
+    if (!modal) return;
+
+    // Reset form
+    const nameInput = document.getElementById('newGroupName');
+    if (nameInput) nameInput.value = '';
+    
+    const avatar = document.getElementById('newGroupAvatar');
+    if (avatar) {
+        avatar.textContent = '📷';
+        avatar.style.background = 'var(--bg-secondary)';
+    }
+
+    const list = document.querySelector('.chat-new-chat-list');
+    if (list) list.innerHTML = '';
+
+    _renderGroupMemberList();
+
+    const modal = document.getElementById('chatNewGroupModal');
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    modal.setAttribute('aria-modal', 'true');
+
+    setTimeout(() => {
+        const nameInput = document.getElementById('newGroupName');
+        if (nameInput) nameInput.focus();
+    }, 100);
+}
+
+function _closeNewGroupModal() {
+    const modal = document.getElementById('chatNewGroupModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        modal.setAttribute('aria-modal', 'false');
+    }
+}
+
+function _renderGroupMemberList() {
+    const list = document.querySelector('.chat-new-chat-list');
+    if (!list) return;
+
+    const threads = Object.entries(_chatData)
+        .map(([id, t]) => ({ id, meta: t.meta || {} }))
+        .sort((a, b) => (b.meta.lastTs || 0) - (a.meta.lastTs || 0));
+
+    list.innerHTML = threads.map(t => {
+        const name = _displayName(t.id, t.meta);
+        const hue = _avatarHue(t.id);
+        return `<div class="chat-new-chat-item" data-chat-id="${escapeHtml(t.id)}" role="option" tabindex="0">
+            <span class="chat-new-chat-checkbox"><i data-lucide="check"></i></span>
+            <span class="chat-new-chat-avatar" style="--hue:${hue}">${escapeHtml(_initials(t.meta.name, t.meta.phone))}</span>
+            <div class="chat-new-chat-meta">
+                <strong>${escapeHtml(name)}</strong>
+                <span>${escapeHtml(t.meta.phone || '')}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    // Wire checkboxes
+    list.querySelectorAll('.chat-new-chat-item').forEach(item => {
+        item.addEventListener('click', () => {
+            item.classList.toggle('selected');
+            _updateCreateGroupButton();
+        });
+        item.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                item.classList.toggle('selected');
+                _updateCreateGroupButton();
+            }
+        });
+    });
+    
+    if (window.lucide) lucide.createIcons();
+}
+
+function _updateCreateGroupButton() {
+    const selected = document.querySelectorAll('.chat-new-chat-item.selected').length;
+    const btn = document.getElementById('createGroupBtn');
+    if (btn) {
+        btn.disabled = selected === 0;
+        btn.textContent = selected > 0 ? `Create (${selected})` : 'Create';
+    }
+}
+
+function _createGroup() {
+    const nameInput = document.getElementById('newGroupName');
+    const name = nameInput?.value?.trim();
+    
+    if (!name) {
+        showToast('Please enter a group name', 'error');
+        return;
+    }
+
+    const selected = Array.from(document.querySelectorAll('.chat-new-chat-item.selected'))
+        .map(el => el.dataset.chatId);
+
+    if (selected.length === 0) {
+        showToast('Please select at least one participant', 'error');
+        return;
+    }
+
+    // In a real app, this would create the group in the database
+    showToast(`Group "${name}" created with ${selected.length} participants`, 'success');
+    _closeNewGroupModal();
+}
+
+// ============================================================================
+// PHASE 3 INITIALIZATION
+// ============================================================================
+
+function _initPhase3Features() {
+    // Load settings
+    _loadPinnedMessage();
+    _loadDisappearingSettings();
+    
+    // Add pinned message banner if exists
+    if (_pinnedMessage) {
+        _renderPinnedMessageBanner();
+    }
+    
+    // Apply disappearing messages settings
+    if (_disappearingDuration > 0) {
+        _applyDisappearingMessages();
+    }
+    
+    // Load wallpaper
+    _loadWallpaper();
+    
+    // Initialize contact info sidebar if on desktop
+    if (window.innerWidth > 768) {
+        // Sidebar stays hidden by default, opens on click
+    }
+}
+
+// Render pinned message banner
+function _renderPinnedMessageBanner() {
+    if (!_pinnedMessage) return;
+    
+    let banner = document.getElementById('chatPinnedBanner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'chatPinnedBanner';
+        banner.className = 'chat-pinned-banner';
+        const messageList = document.getElementById('chatMessageList');
+        if (messageList && messageList.parentElement) {
+            messageList.parentElement.insertBefore(banner, messageList);
+        }
+    }
+    
+    const body = _pinnedMessage.type === 'location' ? '📍 Location shared' : (_pinnedMessage.text || '<media>');
+    banner.innerHTML = `
+        <div class="chat-pinned-content">
+            <i data-lucide="pushpin" class="icon-14"></i>
+            <span class="chat-pinned-label">Pinned message</span>
+            <span class="chat-pinned-preview">${escapeHtml(_pinnedMessage.text || 'Media')}</span>
+        </div>
+        <button class="chat-pinned-unpin" aria-label="Unpin message"><i data-lucide="x"></i></button>
+    `;
+    
+    banner.querySelector('.chat-pinned-unpin')?.addEventListener('click', _unpinMessage);
+    if (window.lucide) lucide.createIcons({ nodes: [banner] });
+}
+
+// Apply disappearing messages auto-delete
+function _applyDisappearingMessages() {
+    if (!_selectedCustomerId || !_disappearingDuration) return;
+    
+    const t = _chatData[_selectedCustomerId];
+    if (!t?.messages) return;
+    
+    const now = Date.now();
+    const cutoff = now - _disappearingDuration;
+    
+    Object.entries(t.messages).forEach(([msgId, msg]) => {
+        if (msg.ts < cutoff && msg.from === 'bot') {
+            // In a real app, this would delete from server
+            // For now, just mark as expired
+            msg.expired = true;
+        }
+    });
+}
+
+// Load wallpaper
+function _loadWallpaper() {
+    if (!_selectedCustomerId) return;
+    
+    const saved = localStorage.getItem(`chatWallpaper_${_selectedCustomerId}`);
+    if (saved) {
+        const chatBody = document.getElementById('chatMessageList');
+        if (chatBody) {
+            chatBody.classList.remove('wallpaper-default', 'wallpaper-solid1', 'wallpaper-solid2', 'wallpaper-solid3', 'wallpaper-pattern1');
+            if (saved !== 'default') {
+                chatBody.classList.add(`wallpaper-${saved}`);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// PHASE 3 INITIALIZATION
+// ============================================================================
+
+function _initPhase3Features() {
+    // Load settings
+    _loadPinnedMessage();
+    _loadDisappearingSettings();
+    _loadWallpaper();
+    
+    // Add pinned message banner if exists
+    if (_pinnedMessage) {
+        _renderPinnedMessageBanner();
+    }
+    
+    // Apply disappearing messages settings
+    if (_disappearingDuration > 0) {
+        _applyDisappearingMessages();
+    }
+    
+    // Load wallpaper
+    _loadWallpaper();
+}

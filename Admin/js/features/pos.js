@@ -231,14 +231,15 @@ export function renderWalkinDishGrid(dishes) {
         const isOos = d.stock === false;
         const oosClass = isOos ? ' oos-wrap is-out-of-stock' : '';
         const oosOverlay = isOos ? '<div class="oos-overlay" aria-hidden="true">Currently Unavailable</div>' : '';
-        const ariaLabel = `${d.name} ${d.category ? `(${d.category})` : ''} - ₹${price}${isOos ? ' - Currently unavailable' : ''}`;
+        // Native text content (dish-name + dish-category) will be the accessible name.
+        // For out-of-stock, add visually-hidden status text.
+        const oosStatus = isOos ? '<span class="visually-hidden"> - Currently unavailable</span>' : '';
         return `
             <div class="pos-dish-btn-v4${oosClass}" 
                  role="button" 
                  tabindex="${isOos ? '-1' : '0'}"
                  data-action="openPOSSelectionModal" 
                  data-id="${d.id}"
-                 aria-label="${escapeHtml(ariaLabel)}"
                  ${isOos ? ' aria-disabled="true" data-out-of-stock="true"' : ''}>
                 <div class="dish-visual">
                     <img src="${escapeHtml(d.image || 'assets/images/placeholder-dish.png')}" alt="${escapeHtml(d.name)}" loading="lazy">
@@ -250,6 +251,7 @@ export function renderWalkinDishGrid(dishes) {
                 <div class="dish-content">
                     <div class="dish-name">${escapeHtml(d.name)}</div>
                     <div class="dish-category">${escapeHtml(d.category || '')}</div>
+                    ${oosStatus}
                 </div>
             </div>
         `;
@@ -1543,7 +1545,7 @@ function _comboTilesHtml() {
                 <div style="display:flex;align-items:center;gap:8px;margin-top:3px;">
                     <span style="font-size:11px;color:var(--text-muted);text-decoration:line-through;">₹${originalTotal}</span>
                     <span style="font-size:15px;font-weight:800;color:var(--accent);">₹${comboPrice}</span>
-                    <span style="font-size:10px;font-weight:700;background:#fff0e6;color:#e65100;border-radius:6px;padding:2px 6px;">${disc}</span>
+                    <span style="font-size:10px;font-weight:700;background:#fff0e6;color:#b45309;border-radius:6px;padding:2px 6px;">${disc}</span>
                 </div>
             </div>
             <div style="flex-shrink:0;font-size:11px;font-weight:700;color:var(--accent);">+ ADD</div>
