@@ -922,6 +922,35 @@ img{max-width:100%; display:block;}
     border-radius: 8px;
 }
 
+/* PWA card base layout */
+.pwa-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    margin: 8px 16px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, transform 0.1s ease;
+}
+.pwa-card.hidden { display: none; }
+.pwa-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+.pwa-card-body { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.pwa-card-btn {
+    flex-shrink: 0;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 800;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.12s ease;
+}
+.pwa-card-btn:active { transform: scale(0.96); }
+.pwa-card-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Combo Offers — mobile-first, Zomato/Swiggy-grade */
 .combo-offers-section{margin:14px 0 4px;}
 .combo-offers-section.hidden{display:none;}

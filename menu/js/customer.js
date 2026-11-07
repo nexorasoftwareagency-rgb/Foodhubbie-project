@@ -1760,6 +1760,7 @@ export async function renderCustomerPromotions(store, mode = 'dine-in') {
     _mode = mode;
     bindPromoTabs();
     renderPromoCards(store);
+    renderPwaCards();
     renderAccount();
     loadInbox();
     const queryTab = promoTabFromQuery();

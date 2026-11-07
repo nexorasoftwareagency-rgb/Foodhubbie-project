@@ -756,6 +756,39 @@
             <div class="promo-divider"></div>
             <div class="promo-section-label">Connect with us</div>
             <div id="promotionsLinksContainer" class="promotions-links"></div>
+
+            <!-- PWA cards: install + notifications (toggled by renderPwaCards()) -->
+            <div id="pwaInstallCard" class="pwa-card pwa-install-card hidden">
+                <div class="pwa-card-body">
+                    <span class="pwa-card-icon">📱</span>
+                    <div class="pwa-card-info">
+                        <div class="pwa-card-title">Install this app</div>
+                        <div class="pwa-card-sub">Faster ordering and order notifications on your Home Screen.</div>
+                    </div>
+                </div>
+                <button class="pwa-card-btn btn-pwa-install" id="btnPwaInstall">Install</button>
+            </div>
+
+            <div id="pwaIosCard" class="pwa-card pwa-ios-card hidden">
+                <div class="pwa-card-body">
+                    <span class="pwa-card-icon">🍎</span>
+                    <div class="pwa-card-info">
+                        <div class="pwa-card-title">Add to Home Screen (iPhone)</div>
+                        <div class="pwa-card-sub">Tap Share, then Add to Home Screen. Installed apps can receive order notifications.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="pwaNotifyCard" class="pwa-card pwa-notify-card hidden">
+                <div class="pwa-card-body">
+                    <span class="pwa-card-icon">🔔</span>
+                    <div class="pwa-card-info">
+                        <div class="pwa-card-title">Stay in the loop</div>
+                        <div class="pwa-card-sub">Receive order status alerts and offers from this kitchen.</div>
+                    </div>
+                </div>
+                <button class="pwa-card-btn btn-pwa-notify" id="btnPwaNotify">Enable notifications</button>
+            </div>
         </div>
 
         <!-- Notifications pane -->
