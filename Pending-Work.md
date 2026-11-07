@@ -326,6 +326,19 @@ This rule applies to:
 
 ---
 
+### ✅ App Notifications: 2 subscribers shown but 0 sent (2026-11-07)
+- **Files:** `bot-control-api/server.js`
+- **Stage:** `done`
+- **Trigger:** admin opened App Notifications tab, saw "2 subscribers", but sending reported "sent to 0 Subscribers".
+- **Root cause:** `requireTenantAdmin()` resolved the admin's business by scanning ALL businesses for one with a matching outlet name. Super admin `roshanipizza@gmail.com` has no `businessId`, only `outlet: 'pizza'`; the scan found `e2e-biz-1792987605261` first (lexicographically before `roshani-pizza`), so `/tenant-api/notify` read pushSubscriptions from `businesses/e2e-biz-.../outlets/pizza/` (0 subscribers) while the dashboard read from `businesses/roshani-pizza/outlets/pizza/` (2 subscribers). Both tokens were valid FCM tokens (dry-run VALID) — pure wrong-business read.
+- **Fix:** look up `outletIndex/${outlet}` (canonical outlet→business map) first, fall back to the full-business scan for legacy rows. Commit `f24bdfa` on `main` (pushed as part of `8d2c9c9`).
+- **Deploy:** backed up EC2 `bot-control-api/server.js` as `server.js.bak-20261107-202701`, scp'd the fix, restarted pm2 id 2 (bot-control-api) plainly. Server logs show clean startup ("Bot Control API listening on :4000").
+- **Verified:** `node --check` passes; RTDB `outletIndex/pizza.bid = roshani-pizza` with 2 subscribers; `e2e-biz-.../outlets/pizza/pushSubscriptions` is null (0 subs).
+- **Honest limit:** other uncommitted changes in the working tree (Admin/chat.js, orders.js, pos.js, mobile-overrides.css, style.css, menu/js/app.js|ui.js|css/app.css, two a11y specs, database.rules.json) were not touched or deployed here — only `bot-control-api/server.js`.
+- **Done:** deployed live; ledger `[20261107-app-notif-tenant]`.
+
+---
+
 ### ✅ Restaurant-Scoped Rider Notification Isolation
 - **Requirement:** Riders of Restaurant 1 must **never** see/pop/pop-up any notification (Order available on Rider App, WhatsApp message) from Restaurant 2, and vice versa. Complete isolation.
 - **Stage:** `done`

@@ -401,3 +401,11 @@ LEDGER CLOSE - 20261107-customer-app-loading (customer-app menu/QR loading stuck
 - LIVE proof: reproduced stuck state before fix (overlay `flex`, 0 dishes, `direct=false`, Firebase `connected=false`); after deploy all 3 URLs (`/?b=&o=`, `/pizza/`, e2e outlet) show `screenSignIn` with overlay `none`, no errors/failed requests.
 - Honest limit: another session carries uncommitted a11y work in `menu/js/app.js`, `menu/js/ui.js`, `menu/css/app.css` — untouched and undeployed here. Only `menu/index.html` + `menu/sw.js` changed.
 - Repo: `dc006d8` pushed to `origin/main` (included in `9ddb247`). Confidence: HIGH (live repro before + live boot after).
+
+LEDGER CLOSE - 20261107-app-notif-tenant (app notifications: 2 subscribers shown but 0 sent, TIER 2, DONE/high)
+- Trigger: admin opened App Notifications tab, saw "2 subscribers", but sending reported "sent to 0 Subscribers".
+- Root cause: `requireTenantAdmin()` in `bot-control-api/server.js` resolved the admin's business by scanning ALL businesses for one with a matching outlet name. Super admin `roshanipizza@gmail.com` has no `businessId` on their record, only `outlet: 'pizza'`. The scan found `e2e-biz-1792987605261` first (lexicographically before `roshani-pizza`), so `/tenant-api/notify` read pushSubscriptions from `businesses/e2e-biz-.../outlets/pizza/` (0 subscribers) while the Admin dashboard read from `businesses/roshani-pizza/outlets/pizza/` (2 subscribers). Both tokens were valid (dry-run VALID) — the mismatch was purely a wrong-business read.
+- Fix `f24bdfa`: look up `outletIndex/${outlet}` (the canonical outlet→business map) first, fall back to the full-business scan only as legacy fallback. The super admin now resolves to `roshani-pizza` (2 subscribers) instead of `e2e-biz-...` (0 subscribers).
+- Deploy: backed up EC2 `bot-control-api/server.js` as `server.js.bak-20261107-202701`, scp'd the fix, restarted pm2 id 2 (bot-control-api) plainly. Server logs show clean startup ("Bot Control API listening on :4000").
+- Verified: `node --check` passes; RTDB outletIndex/pizza.bid = roshani-pizza with 2 subscriber records; e2e-biz-.../outlets/pizza/pushSubscriptions = null (0 subs).
+- Repo: `f24bdfa` pushed to `origin/main`. Confidence: HIGH (root cause confirmed via live RTDB inspection; fix logic verified; server restarted cleanly).
