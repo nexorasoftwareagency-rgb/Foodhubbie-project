@@ -43,6 +43,24 @@ function getFcmRegistration() {
     if (!fcmRegistration) {
         fcmRegistration = navigator.serviceWorker
             .register(FCM_SW_URL, { scope: FCM_SW_SCOPE })
+            .then(async (reg) => {
+                // getToken() cannot subscribe through a worker that is still
+                // installing: on a fresh browser the FIRST "Enable
+                // notifications" tap failed with "Something went wrong enabling
+                // notifications" and only a reload (worker now active) made it
+                // work. Wait for activation here instead.
+                const pending = reg.active || reg.installing || reg.waiting;
+                if (pending && pending.state !== 'activated') {
+                    await new Promise((resolve) => {
+                        const done = () => {
+                            if (pending.state === 'activated' || pending.state === 'redundant') resolve();
+                        };
+                        pending.addEventListener('statechange', done);
+                        done();
+                    });
+                }
+                return reg;
+            })
             .catch((e) => {
                 console.warn('[PWA] FCM SW registration failed:', e?.message || e);
                 return null;

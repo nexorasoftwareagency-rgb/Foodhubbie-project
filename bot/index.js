@@ -1014,6 +1014,11 @@ async function sendFCMToAdmins(orderId, order) {
                 }
             }));
         }
+        // A token that just succeeded is alive again: clear any stale failure
+        // stamp so the record stops looking permanently broken (it was written
+        // on failure but nothing ever cleared it).
+        const recovered = unique.filter((token, i) => results.responses[i]?.success && admins[seen.get(token)]?.fcmTokenInvalidAt);
+        await Promise.all(recovered.map((token) => db.ref(`admins/${seen.get(token)}/fcmTokenInvalidAt`).remove().catch(() => {})));
     } catch (e) {
         console.error('[FCM] sendFCMToAdmins error:', e.message);
     }
@@ -1567,7 +1572,10 @@ async function notifyCustomerApp(orderId, order, status) {
             tokens: entries.map(([, sub]) => sub.token),
             data: { title, body: copy.body, type: 'order', orderId: String(order.orderId || orderId), status: statusLower, url, outlet, business: bid },
             android: { priority: 'high' },
-            webpush: { fcmOptions: { link: url } }
+            // Admin and rider pushes already ask for immediate delivery; without
+            // this a customer's "order ready" can be batched/deferred by the
+            // browser until it feels like waking up.
+            webpush: { headers: { Urgency: 'high' }, fcmOptions: { link: url } }
         });
 
         await Promise.all(response.responses.map(async (r, i) => {
@@ -1619,7 +1627,7 @@ async function notifyTierUp(phone, newTier, oldTier, outlet, bid) {
             tokens: entries.map(([, sub]) => sub.token),
             data: { title, body, type: 'loyalty', tier: newTier, url, outlet, business: bid },
             android: { priority: 'high' },
-            webpush: { fcmOptions: { link: url } }
+            webpush: { headers: { Urgency: 'high' }, fcmOptions: { link: url } }
         });
         // Same dead-token hygiene as order pushes.
         await Promise.all(response.responses.map(async (r, i) => {

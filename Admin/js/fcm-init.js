@@ -1,9 +1,17 @@
-import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
+import { getMessaging, getToken, onMessage, deleteToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
 import { app, auth, db, ref, set, onAuthStateChanged } from './firebase.js';
 import { showToast } from '../../shared/dom/modal.js';
+import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
 
 let messaging = null;
 let fcmInitDone = false;
+
+// Chrome 153+ rejects tokens minted without this key: getToken() still returns
+// one, but every send answers `messaging/registration-token-not-registered`
+// (A/B verified 2026-11-07 — same browser, same page, only the key differs).
+// Every admin subscription made before this shipped is such a token, so the
+// first run after the upgrade drops the stale endpoint once per browser.
+const VAPID_RESET_KEY = 'fh:fcmVapidReset';
 
 // Promise that resolves when auth state is ready (user or null)
 let _authReadyPromise = null;
@@ -78,24 +86,28 @@ let _swReg = null;
 async function subscribeAndStore(userId) {
   const m = getMessagingInstance();
   if (!m || !userId) return false;
-  if ('serviceWorker' in navigator) {
-    const reg = _swReg || await navigator.serviceWorker.ready;
-    _swReg = reg;
-    // Try getToken — works if subscription already exists
-    try {
-      const token = await getToken(m, { serviceWorkerRegistration: reg });
-      if (token) { await storeToken(userId, token); return true; }
-    } catch (e) {
-      // store error details for debug
-      console.warn('[FCM] getToken error:', e?.code, e?.message, e);
+  if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY === 'PASTE_VAPID_PUBLIC_KEY_HERE') {
+    console.warn('[FCM] VAPID_PUBLIC_KEY is missing — push cannot work until it is set (shared/config/vapid.js).');
+    return false;
+  }
+  try {
+    const reg = 'serviceWorker' in navigator
+      ? (_swReg || await navigator.serviceWorker.ready)
+      : null;
+    if (reg) _swReg = reg;
+    if (!localStorage.getItem(VAPID_RESET_KEY)) {
+      try { await deleteToken(m); } catch (e) { /* no subscription yet */ }
     }
-  } else {
-    try {
-      const token = await getToken(m);
-      if (token) { await storeToken(userId, token); return true; }
-    } catch (e) {
-      console.warn('[FCM] getToken error (no SW):', e?.code, e?.message, e);
+    const token = reg
+      ? await getToken(m, { vapidKey: VAPID_PUBLIC_KEY, serviceWorkerRegistration: reg })
+      : await getToken(m, { vapidKey: VAPID_PUBLIC_KEY });
+    if (token) {
+      localStorage.setItem(VAPID_RESET_KEY, 'done');
+      await storeToken(userId, token);
+      return true;
     }
+  } catch (e) {
+    console.warn('[FCM] getToken error:', e?.code, e?.message, e);
   }
   return false;
 }

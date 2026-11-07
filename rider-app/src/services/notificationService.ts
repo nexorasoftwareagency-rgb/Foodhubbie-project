@@ -23,6 +23,22 @@ function getFcmRegistration(): Promise<ServiceWorkerRegistration | null> {
   if (!_fcmRegistration) {
     _fcmRegistration = navigator.serviceWorker
       .register(FCM_SW_URL, { scope: FCM_SW_SCOPE })
+      .then(async (reg) => {
+        // getToken() fails while the worker is still installing, so the first
+        // login on a fresh browser used to store no token at all and the rider
+        // silently got no order alerts until the next reload.
+        const pending = reg.active || reg.installing || reg.waiting;
+        if (pending && pending.state !== "activated") {
+          await new Promise<void>((resolve) => {
+            const done = () => {
+              if (pending.state === "activated" || pending.state === "redundant") resolve();
+            };
+            pending.addEventListener("statechange", done);
+            done();
+          });
+        }
+        return reg;
+      })
       .catch(() => null);
   }
   return _fcmRegistration;
