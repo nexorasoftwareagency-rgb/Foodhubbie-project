@@ -13,6 +13,44 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preload" href="css/app.css" as="style" onload="this.rel='stylesheet'">
 <noscript><link rel="stylesheet" href="css/app.css"></noscript>
+
+    <!-- ============ CRITICAL INLINE CSS (render-blocking, prevents FOUC on refresh) ============ -->
+    <style>
+        /* Reset — prevents raw HTML flash on hard refresh before external CSS loads */
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc; color: #0f172a;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+        button, input, textarea { font-family: inherit; }
+        img { max-width: 100%; display: block; }
+
+        /* Hide all screens until JS/CSS ready — but NOT #loadingOverlay (it's not a .screen) */
+        .screen { display: none !important; }
+
+        /* Loading overlay — covers everything immediately on refresh */
+        #loadingOverlay {
+            position: fixed; inset: 0; z-index: 9999;
+            background: rgba(255,255,255,.95);
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column; gap: 12px;
+        }
+        .spinner {
+            width: 36px; height: 36px;
+            border: 3px solid #e2e8f0; border-top-color: #e84908;
+            border-radius: 50%; animation: spin .7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Hidden until JS */
+        .bottom-nav { display: none !important; }
+        .toast { display: none !important; }
+        .hamburger-drawer { display: none !important; }
+        .hamburger-overlay { display: none !important; }
+    </style>
 </head>
 <body>
 
