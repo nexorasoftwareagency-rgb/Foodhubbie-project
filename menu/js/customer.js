@@ -949,6 +949,30 @@ window.addEventListener('appinstalled', () => {
     if (document.getElementById('screenPromotions')?.classList.contains('active')) renderAccount();
 });
 
+let _confirmOverlay = null;
+export function showConfirm(message, title = 'Confirm') {
+    return new Promise((resolve) => {
+        if (_confirmOverlay) _confirmOverlay.remove();
+        const overlay = document.createElement('div');
+        overlay.className = 'fh-confirm-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.6);backdrop-filter:blur(4px);';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--card,#fff);color:var(--text,#0f172a);border:1px solid var(--border,#e2e8f0);border-radius:14px;padding:20px;min-width:280px;max-width:90vw;box-shadow:0 20px 40px rgba(15,23,42,.2);';
+        overlay.appendChild(box);
+        box.innerHTML = `<h3 style="margin:0 0 8px;font-size:15px;font-weight:800;">${esc(title)}</h3><p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:var(--text-sub,#64748b);">${esc(message)}</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="fh-confirm-cancel" style="padding:8px 16px;border-radius:10px;border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text,#0f172a);font-weight:700;cursor:pointer;">Cancel</button><button class="fh-confirm-ok" style="padding:8px 16px;border-radius:10px;border:none;background:var(--primary,#E84908);color:#fff;font-weight:700;cursor:pointer;">Forget everything</button></div>`;
+        document.body.appendChild(overlay);
+        _confirmOverlay = overlay;
+        const cleanup = (val) => {
+            overlay.style.transition = 'opacity .2s ease';
+            overlay.style.opacity = '0';
+            setTimeout(() => { overlay.remove(); _confirmOverlay = null; resolve(val); }, 200);
+        };
+        box.querySelector('.fh-confirm-ok').onclick = () => cleanup(true);
+        box.querySelector('.fh-confirm-cancel').onclick = () => cleanup(false);
+        overlay.onclick = (e) => { if (e.target === overlay) cleanup(false); };
+    });
+}
+
 function renderAccount() {
     renderTabPanels();
     const card = document.getElementById('accountProfileCard');
@@ -999,10 +1023,26 @@ function renderAccount() {
     bindAccountRatings();
     bindAccessCard();
 
-    document.getElementById('btnAcctSave')?.addEventListener('click', () => {
+    document.getElementById('btnAcctSave')?.addEventListener('click', async () => {
+        const newName = document.getElementById('acctName')?.value || '';
+        const newPhone = document.getElementById('acctPhone')?.value || '';
+        const currentPhone = _profile?.phone || '';
+
+        // Phone change warning: moving to a different number re-assigns points/orders.
+        if (newPhone && newPhone.replace(/\D/g, '') !== currentPhone) {
+            const confirmed = await showConfirm(
+                'Changing your phone number will move your order history, loyalty points, ' +
+                'and rank to the new number on this device. Any orders already placed ' +
+                'under your old number will stay at that number on the restaurant side. ' +
+                'Make sure you can receive messages on the new number before continuing.',
+                'Change phone number?'
+            );
+            if (!confirmed) return;
+        }
+
         const saved = saveIdentity(
-            document.getElementById('acctName')?.value || '',
-            document.getElementById('acctPhone')?.value || '',
+            newName,
+            newPhone,
             { source: 'account' }
         );
         if (!saved.ok) return UI.showToast(saved.error, 'error');
@@ -1049,7 +1089,15 @@ function renderAccount() {
     });
 
     document.getElementById('btnAcctClear')?.addEventListener('click', async () => {
-        if (!window.confirm('Forget your name, number, and notification settings on this device?')) return;
+        const confirmed = await showConfirm(
+            'This will permanently delete from this device: your name and phone number, ' +
+            'your notification settings, your order history, your loyalty points and rank, ' +
+            'and the link between this phone and your number. Orders placed at restaurants ' +
+            'will remain in their records, but you will no longer see them here. ' +
+            'This cannot be undone.',
+            'Forget me on this device'
+        );
+        if (!confirmed) return;
         await unsubscribeFromNotifications();
         try {
             localStorage.removeItem(PROFILE_KEY);
