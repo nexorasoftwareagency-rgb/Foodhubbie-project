@@ -1039,14 +1039,24 @@ function renderAccount() {
             if (!confirmed) return;
         }
 
+        const saveBtn = document.getElementById('btnAcctSave');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+
         const saved = saveIdentity(
             newName,
             newPhone,
             { source: 'account' }
         );
-        if (!saved.ok) return UI.showToast(saved.error, 'error');
+        if (!saved.ok) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save details';
+            return UI.showToast(saved.error, 'error');
+        }
         UI.updateGreeting(saved.profile.name);
         UI.showToast('Details saved.', 'success');
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save details';
         renderAccount();
     });
 
@@ -1056,25 +1066,28 @@ function renderAccount() {
     });
 
     document.getElementById('acctUpdates')?.addEventListener('change', async (e) => {
-        if (!e.target.checked) {
+        const cb = e.target;
+        if (!cb.checked) {
             setPrefs({ orderUpdates: false });
             return;
         }
         if (!hasIdentity()) {
-            e.target.checked = false;
+            cb.checked = false;
             return UI.showToast('Save your mobile number first.', 'error');
         }
+        cb.disabled = true;
         const result = await subscribeToNotifications({
             name: _profile.name,
             phone: _profile.phone,
             prefs: { ..._prefs, orderUpdates: true },
             appMode: _mode
         });
+        cb.disabled = false;
         if (result.ok) {
             setPrefs({ orderUpdates: true });
             UI.showToast('Order updates enabled.', 'success');
         } else {
-            e.target.checked = false;
+            cb.checked = false;
             UI.showToast(result.error || 'Could not enable notifications.', 'error');
         }
         renderAccount();
@@ -1083,7 +1096,12 @@ function renderAccount() {
 
     document.getElementById('btnAcctInstall')?.addEventListener('click', async () => {
         if (isIOS()) return UI.showToast('Tap Share, then Add to Home Screen.', 'success');
+        const btn = document.getElementById('btnAcctInstall');
+        btn.disabled = true;
+        btn.textContent = 'Installing…';
         const outcome = await promptInstall();
+        btn.disabled = false;
+        btn.textContent = isIOS() ? 'How to install this app' : 'Install this app';
         if (outcome === 'accepted') UI.showToast('App installed.', 'success');
     });
 
@@ -1097,6 +1115,9 @@ function renderAccount() {
             'Forget me on this device'
         );
         if (!confirmed) return;
+        const clearBtn = document.getElementById('btnAcctClear');
+        clearBtn.disabled = true;
+        clearBtn.textContent = 'Forgetting…';
         await unsubscribeFromNotifications();
         try {
             localStorage.removeItem(PROFILE_KEY);
