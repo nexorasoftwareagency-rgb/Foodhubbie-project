@@ -1177,6 +1177,7 @@ body.onb-open{ overflow:hidden; }
     outline:none; transition:border-color .15s ease, box-shadow .15s ease;
 }
 .onb-input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px rgba(232,73,8,.12); }
+.acct-input-error{ display:block; font-size:11px; color:var(--error); margin-top:4px; min-height:13px; }
 .onb-phone{ display:flex; align-items:center; gap:8px; }
 .onb-phone span{
     min-height:48px; display:flex; align-items:center; padding:0 12px;

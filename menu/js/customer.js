@@ -995,11 +995,13 @@ function renderAccount() {
         <div class="account-form">
             <label class="onb-label" for="acctName">Name</label>
             <input class="onb-input" id="acctName" type="text" autocomplete="name" maxlength="60" placeholder="e.g. Rohan" value="${esc(name)}">
+            <span class="acct-input-error" id="acctNameError"></span>
             <label class="onb-label" for="acctPhone">Mobile number</label>
             <div class="onb-phone">
                 <span>+91</span>
                 <input class="onb-input" id="acctPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="98765 43210" value="${esc(phone)}">
             </div>
+            <span class="acct-input-error" id="acctPhoneError"></span>
             <button type="button" class="account-save" id="btnAcctSave">Save details</button>
         </div>
         <div class="account-card account-prefs">
@@ -1043,6 +1045,12 @@ function renderAccount() {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Saving…';
 
+        // Clear previous inline errors
+        const nameErrEl = document.getElementById('acctNameError');
+        const phoneErrEl = document.getElementById('acctPhoneError');
+        if (nameErrEl) nameErrEl.textContent = '';
+        if (phoneErrEl) phoneErrEl.textContent = '';
+
         const saved = saveIdentity(
             newName,
             newPhone,
@@ -1051,13 +1059,36 @@ function renderAccount() {
         if (!saved.ok) {
             saveBtn.disabled = false;
             saveBtn.textContent = 'Save details';
-            return UI.showToast(saved.error, 'error');
+            // Show inline error under the relevant field
+            const err = saved.error || '';
+            const nameEl = document.getElementById('acctName');
+            const phoneEl = document.getElementById('acctPhone');
+            if (err.toLowerCase().includes('phone') || err.toLowerCase().includes('number')) {
+                if (phoneErrEl) phoneErrEl.textContent = err;
+                phoneEl?.focus();
+            } else {
+                if (nameErrEl) nameErrEl.textContent = err;
+                nameEl?.focus();
+            }
+            return;
         }
         UI.updateGreeting(saved.profile.name);
         UI.showToast('Details saved.', 'success');
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save details';
         renderAccount();
+    });
+
+    // Clear inline errors when user types
+    const nameInput = document.getElementById('acctName');
+    const phoneInput = document.getElementById('acctPhone');
+    nameInput?.addEventListener('input', () => {
+        const el = document.getElementById('acctNameError');
+        if (el) el.textContent = '';
+    });
+    phoneInput?.addEventListener('input', () => {
+        const el = document.getElementById('acctPhoneError');
+        if (el) el.textContent = '';
     });
 
     document.getElementById('acctOffers')?.addEventListener('change', (e) => {
