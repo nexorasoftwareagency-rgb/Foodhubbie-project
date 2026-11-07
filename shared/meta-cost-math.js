@@ -100,7 +100,7 @@ export function canSend({ metaUsage = {}, messageCaps = {}, metaSpendThresholdPa
   if (dailyCap !== Infinity && dailyCost >= dailyCap) return false;
   if (maxMsg !== Infinity && msgCount >= maxMsg) return false;
 
-  // Marketing always throttled first per §3 (promos have near-zero margin; India Meta rate is ₹0.86/msg)
+  // Marketing always throttled first per §3 (promos have thin margin; India Meta rate is ₹0.8631/msg)
   if (category === 'marketing') {
     // Extra guard: block marketing unless explicitly enabled per-tenant (opt-in).
     // Caller must check opts.allowMarketing; this is a second-layer guard.
