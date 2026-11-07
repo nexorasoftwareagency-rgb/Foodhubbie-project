@@ -771,6 +771,16 @@ These are **real, actionable items** in THIS repo based on the audits.
 
 ---
 
+
+---
+## 🔲 Multi-bot Tenancy — Per-Restaurant WhatsApp Numbers, All Billed to Foodhubbie's Meta Account
+
+- **Stage:** `reviewing`
+- **Decision (this session):** **Path B — all restaurant numbers on Foodhubbie's own WABA**, billed to Foodhubbie's Meta account. Confirmed: no "spam ban" risk on the official Cloud API (server-to-server Graph sends, no Baileys/QR session). Residual risk is **WABA-level restriction** (one restriction hits every tenant), **one card/credit line feeding all tenants** (one failure fails everyone), and **display-name review per number** under Foodhubbie's verified business identity. Quality/messaging limits are **per-number** (~80 msg/s default), not per WABA — one noisy tenant does not throttle another. **Open check:** Meta must approve third-party display names ("Roshani Pizza", etc.) under Foodhubbie's WABA — run this test on one real number before any live tenant.
+- **Hygiene done (this session):** Stale Meta test-number artifact deleted from RTDB — `businesses/roshani-pizza/outlets/pizza/whatsapp` (`+1 555-661-9086`, `status:'active'`, `wabaId: 2589174454849821`) removed along with `phoneNumberIndex/1211796118690392`. Pizza worker untouched: `bot.transport` stays `baileys`, so orchestrator `desiredState()` returns null and never reprovisions it onto Meta.
+- **Files touched:** RTDB `businesses/roshani-pizza/outlets/pizza/whatsapp` (deleted via RTDB REST, no source change); script at `C:\Users\2nile\AppData\Local\Temp\opencode\clear-stale-pizza-whatsapp.cjs` (one-off, not committed)
+- **Blocked:** Real tenant onboarding blocked on Meta App Review / Tech Provider access / app Live; Solution Partner vs S2 (platform card) decision open
+- **Next:** (1) Verify `META_CONFIG_ID=1089451087291012` is v4/system-user in Meta console (no Graph API can confirm a config ID — dashboard-only); (2) run a real-number display-name test under Foodhubbie's WABA; (3) if approved, Phase 1 token plumbing — remove global `WA_PERMANENT_TOKEN` dependency, add root `waAuth/{bid}/{oid}` (super/supreme-only), per-worker `WA_ACCESS_TOKEN` injection + rotation watcher in `bot-control-api/orchestrator.js`, `WA_ACCESS_TOKEN` first in `bot/index.js`; (4) then per-tenant Embedded Signup v4 + starter templates + `message_template_status_update` persistence; (5) Meta cost ledger at `bot/transport.js` so `_metaCostGuard` can arm
 ## Item Progress Workflow Example
 
 To mark a new item:
