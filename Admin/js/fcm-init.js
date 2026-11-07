@@ -83,7 +83,22 @@ if ('serviceWorker' in navigator) {
 }
 
 let _swReg = null;
-async function subscribeAndStore(userId) {
+let _subscribeInFlight = null;
+// Two callers can ask for a token at once on a cold load: setupAdminFCM after
+// auth, and the controllerchange handler when the app shell takes over. Both
+// then run the one-time legacy reset, so the second deleteToken() kills the
+// subscription the first getToken() just created and the first token is
+// stored already dead (live-proven 2026-11-07: first token ->
+// messaging/registration-token-not-registered, second -> VALID; an order
+// alert in that window made the bot delete the admin's token).
+// One in-flight promise = one reset + one getToken per page.
+function subscribeAndStore(userId) {
+  if (_subscribeInFlight) return _subscribeInFlight;
+  _subscribeInFlight = _subscribeAndStore(userId).finally(() => { _subscribeInFlight = null; });
+  return _subscribeInFlight;
+}
+
+async function _subscribeAndStore(userId) {
   const m = getMessagingInstance();
   if (!m || !userId) return false;
   if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY === 'PASTE_VAPID_PUBLIC_KEY_HERE') {
