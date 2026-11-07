@@ -58,13 +58,13 @@ Every WhatsApp order sends status notifications (templates). Each has a Meta rat
 
 **Actual cost per message (INR, Oct 1 2026 rate card — pulled monthly, never hardcoded):**
 
-| Category | List rate (IND / message) | Notes |
+| Category | India list rate (per delivered message) | Notes |
 |---|---|---|
-| Utility | **₹0.115 / delivered msg** (Meta IN list price already includes GST) | Per-delivery billing; charged inside open 24h window since 2026-10-01; 1,000 service msgs/mo free, then ₹0.115 applies |
-| Marketing | **₹0.8631** | Promo is ₹1 — below cost, near-zero/negative margin |
-| Authentication | **₹0.115** (after 1,000 free msgs/mo per number) | OTP messages (only if AUTHENTICATION category resubmitted) |
+| Utility | **₹0.115** (Meta IN list price already includes GST) | Per-delivery billing; charged even inside an open 24h window since 2026-10-01; templates get **no free tier** |
+| Marketing | **₹0.8631** | Promo is ₹1 — below cost, thin/negative margin |
+| Authentication | **₹0.115** | OTP messages (only if AUTHENTICATION category resubmitted) |
 
-**Service messages (non-template, bot replies):** Free for first **1,000/month per number**, then charged at service rate **₹0.115** |
+**Service messages (non-template, bot replies):** Free for the first **1,000/month per business phone number**, then charged at the service rate **₹0.115**.
 
 ---
 
@@ -76,10 +76,10 @@ messages = {
   greeting_image: 1,     // non-template service (free if <1,000/mo)
   order_placed: 1,       // utility template
   order_ready_v3: 1,     // utility template
-  rider_assigned: 1,     // utility template (OUTSIDE 24h — always billed)
+  rider_assigned: 1,     // utility template (always billed, no free tier)
   out_for_delivery: 1,   // OTP — currently plain text (Meta rejects OTP template); stays text until AUTHENTICATION resubmitted
   delivered: 1,          // utility template
-  feedback/thanks: 1     // service (free if within window)
+  feedback/thanks: 1     // service (free for first 1,000/mo, then ₹0.115)
 };
 
 messageCostPaise = sum(messages[cat] * metaRatePaise[cat]);   // Meta's INR published list price already includes GST — no × 1.18
@@ -89,7 +89,7 @@ walletDebitPaise = messageCostPaise + (promo ? 1 * promoCount : 0);
 netMarginPaise = orderRevenuePaise - walletDebitPaise;
 ```
 
-**Break-even (INR):** The published Meta India rates already include GST in their list price, so no mark-up is applied. Dine-in: ~4–5 utility templates per order × ₹0.115 = **~₹0.575**. Worst case with rider-change message adds another ₹0.115 = ~₹0.69. At ₹300 order, 3% revenue = ₹9 — wide positive. At ₹100 order, 3% revenue = ₹3 — still positive. Only very small orders (< ₹35, 5 messages) approach break-even negative. Marketing rate ₹0.8631 is higher than all-order costs, so promo margin remains near zero on a small order (as expected).
+**Break-even (INR):** The published Meta India rates already include GST in their list price, so no mark-up is applied. Dine-in: ~4–5 utility templates per order × ₹0.115 = **~₹0.575**. Worst case with rider-change message adds another ₹0.115 = ~₹0.69. At ₹300 order, 3% revenue = ₹9 — wide positive. At ₹100 order, 3% revenue = ₹3 — still positive. Only orders below ~₹20–25 (5–6 messages) approach break-even. Marketing rate ₹0.8631 is higher than all-order costs, so promo margin remains near zero on a small order (as expected).
 
 **Cancelled / refunded orders:** Bot messages already sent still count (Meta delivers them; no refund mechanism). Deduct from wallet regardless of order status — only cancelled orders excluded from **revenue** billing (`_effectiveTotal`), not from message cost.
 

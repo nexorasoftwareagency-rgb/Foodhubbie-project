@@ -160,7 +160,7 @@ Per Meta IN rate card (verified 2026-11-01 by user / Meta docs):
 | Marketing (promo / greeting-marketing) | **₹0.8631 / delivered msg** | Highest rate; `proactive_promo` and all `promo_hinglish_*` shells billed at this exact amount |
 | Authentication (OTP) | **₹0.115 / delivered msg** | Only if resubmitted via template; currently plain text by design |
 
-Per WhatsApp bot order (~4–5 utility templates: place + ready + rider-optional + delivered; OTP text messages are free inside the 24h window after the 1,000/month cap): **~₹0.575 / order** (dine-in); worst case with a rider-change message adds another ₹0.115 = ~₹0.69. At ₹300 order (3% = ₹9 revenue) = wide positive; at ₹100 order (3% = ₹3) = still positive. Only very small orders (< ₹35 / 5 messages) approach break-even negative.
+Per WhatsApp bot order (~4–5 utility templates: place + ready + rider-optional + delivered; OTP text messages are free inside the 24h window after the 1,000/month cap): **~₹0.575 / order** (dine-in); worst case with a rider-change message adds another ₹0.115 = ~₹0.69. At ₹300 order (3% = ₹9 revenue) = wide positive; at ₹100 order (3% = ₹3) = still positive. Only orders below ~₹20–25 (5–6 messages) approach break-even.
 
 The published Meta India rates already include 18% GST in their list price, so no extra mark-up is applied. Pure formula in `shared/meta-cost-math.js`:
 ```
