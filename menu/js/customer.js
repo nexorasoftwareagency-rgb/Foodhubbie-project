@@ -1017,7 +1017,6 @@ function renderAccount() {
         <button type="button" class="account-clear" id="btnAcctClear">Forget me on this device</button>
         <p class="account-note">Your number is used for order updates and offers only. It is never shown publicly.</p>
         ${accessCardHtml()}
-        ${renderCustomerStatsAndHistory()}
     `;
 
     bindAccountRatings();
