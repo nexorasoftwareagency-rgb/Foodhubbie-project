@@ -1042,62 +1042,58 @@ app.post('/api/whatsapp/numbers/:bid/:oid/:phoneNumberId/deregister', requireSup
 
 // WhatsApp Embedded Signup code exchange (Path A) — kept server-side because
 // it needs the Meta app secret, which must never reach the browser.
-// Flow: oauth code → user access token → debug_token → business → WABA →
-// first phone number → save records (same write as Path B register).
+// v4 flow: the Embedded Signup postMessage supplies { code, wabaId,
+// phoneNumberId } directly — the server exchanges the code for a user token,
+// asserts it is non-expiring (expires_at: 0), then writes every record
+// server-side via waLinkSuccess. The client must never write the `whatsapp`
+// node — it is a super/supreme-only boundary on Path B.
 app.post('/api/whatsapp/exchange', requireSuperOnly, async (req, res) => {
-  const { bid, oid, code } = req.body || {};
+  const { bid, oid, code, wabaId, phoneNumberId } = req.body || {};
   if (!bid || !oid || !code) return res.status(400).json({ error: 'bid, oid, and code are required' });
+  if (!wabaId || !phoneNumberId) {
+    return res.status(400).json({ error: 'v4 exchange requires wabaId and phoneNumberId from the signup postMessage' });
+  }
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
   if (!appId || !appSecret) return res.status(501).json({ error: 'META_APP_ID / META_APP_SECRET not configured' });
 
   try {
+    // Exchange the authorization code for a user access token (server-only).
     const tokenRes = await fetch(
       `https://graph.facebook.com/v20.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${encodeURIComponent(code)}`
     );
     if (!tokenRes.ok) throw new Error(`oauth exchange failed — Graph API ${tokenRes.status}`);
-    const { access_token: userToken } = await tokenRes.json();
+    const { access_token: userToken, expires_at } = await tokenRes.json();
     if (!userToken) throw new Error('oauth exchange returned no access token');
 
-    const debugRes = await fetch(
-      `https://graph.facebook.com/v20.0/debug_token?input_token=${encodeURIComponent(userToken)}&access_token=${appId}|${appSecret}`
-    );
-    if (!debugRes.ok) throw new Error(`debug_token failed — Graph API ${debugRes.status}`);
-    const { data: debug } = await debugRes.json();
-    const businessId = debug?.granular_scopes?.find((s) => s.scope === 'whatsapp_business_management')?.target_id
-      || debug?.business_id;
+    // v4 tokens must be non-expiring (expires_at === 0). A short-lived user
+    // token cannot be used as the long-lived sender token for bot workers.
+    if (expires_at !== 0 && expires_at !== '0') {
+      throw new Error(`Token expires at ${expires_at} — v4 Embedded Signup must return a non-expiring token (expires_at: 0)`);
+    }
 
-    let wabaId = null;
-    let phone = null;
-    if (businessId) {
-      const bizRes = await fetch(
-        `https://graph.facebook.com/v20.0/${businessId}/owned_whatsapp_business_accounts?fields=id,name`,
+    // Fetch the number's display name from Graph so the record is complete.
+    let displayPhoneNumber = null;
+    let verifiedName = null;
+    try {
+      const numRes = await fetch(
+        `https://graph.facebook.com/v20.0/${phoneNumberId}?fields=display_phone_number,verified_name`,
         { headers: { Authorization: `Bearer ${userToken}` } }
       );
-      if (bizRes.ok) {
-        const biz = await bizRes.json();
-        const waba = biz?.data?.[0];
-        wabaId = waba?.id;
-        if (wabaId) {
-          const numRes = await fetch(
-            `https://graph.facebook.com/v20.0/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name`,
-            { headers: { Authorization: `Bearer ${userToken}` } }
-          );
-          if (numRes.ok) {
-            const nums = await numRes.json();
-            phone = nums?.data?.[0] || null;
-          }
-        }
+      if (numRes.ok) {
+        const num = await numRes.json();
+        displayPhoneNumber = num.display_phone_number || null;
+        verifiedName = num.verified_name || null;
       }
+    } catch (_) {
+      // Non-fatal — the number may not be readable with a user token yet.
     }
-    if (!wabaId || !phone) {
-      throw new Error('No WABA / phone number found for this Meta account');
-    }
+
     const result = await waLinkSuccess(bid, oid, {
-      phoneNumberId: phone.id,
+      phoneNumberId,
       wabaId,
-      displayPhoneNumber: phone.display_phone_number,
-      verifiedName: phone.verified_name,
+      displayPhoneNumber,
+      verifiedName,
     });
     res.json(result);
   } catch (err) {

@@ -65,11 +65,9 @@ async function handleFbResponse(response, bid, oid, onComplete) {
     if (!res.ok) throw new Error(`Exchange failed with ${res.status}`);
     const { phoneNumberId, wabaId } = await res.json();
 
-    await firebase.database().ref(`businesses/${bid}/outlets/${oid}/whatsapp`).set({
-      phoneNumberId, wabaId, status: 'active',
-      connectedAt: firebase.database.ServerValue.TIMESTAMP,
-    });
-
+    // The exchange endpoint writes `whatsapp` + `phoneNumberIndex` server-side
+    // (waLinkSuccess). The client must never write this node — it's a
+    // super/supreme-only secret boundary on Path B.
     showToast('WhatsApp connected. The bot worker should come online within ~5s.', 'success');
     if (onComplete) onComplete();
   } catch (err) {
