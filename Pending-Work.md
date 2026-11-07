@@ -775,7 +775,7 @@ These are **real, actionable items** in THIS repo based on the audits.
 ---
 ## 🔲 Multi-bot Tenancy — Per-Restaurant WhatsApp Numbers, All Billed to Foodhubbie's Meta Account
 
-- **Stage:** `verifying`
+- **Stage:** `ok`
 - **Decision:** **Path B — all restaurant numbers on Foodhubbie's own WABA**, billed to Foodhubbie's Meta account. No "spam ban" risk on the official Cloud API (server-to-server Graph sends, no Baileys/QR session). Residual risk: WABA-level restriction (one restriction hits every tenant), one card/credit line feeding all tenants, display-name review per number under Foodhubbie's verified business identity. Quality/messaging limits are per-number (~80 msg/s default), not per WABA. **Open check:** Meta must approve third-party display names ("Roshani Pizza", etc.) under Foodhubbie's WABA — test on one real number before any live tenant.
 - **Hygiene done:** Stale Meta test-number artifact deleted from RTDB — `businesses/roshani-pizza/outlets/pizza/whatsapp` (`+1 555-661-9086`, `status:'active'`, `wabaId: 2589174454849821`) removed along with `phoneNumberIndex/1211796118690392`. Pizza worker untouched: `bot.transport` stays `baileys`, orchestrator `desiredState()` returns null.
 - **Phase 1 done (this session):**
@@ -784,7 +784,7 @@ These are **real, actionable items** in THIS repo based on the audits.
   - `bot-control-api/server.js`: rewrote `/api/whatsapp/exchange` for v4 — accepts `{code, wabaId, phoneNumberId}` directly from the signup postMessage, asserts `expires_at: 0` (non-expiring token), fetches display name from Graph, writes all records server-side. Removed the pre-v4 guesswork (debug_token → business → first WABA → first number).
   - No per-tenant token plumbing needed on Path B — one `META_SYSTEM_USER_TOKEN` reaches every number on Foodhubbie's WABA; `whatsapp-graph.js`, `orchestrator.js`, and `bot/index.js` already use it globally.
 - **Files touched:** `database.rules.json`, `SupremeAdmin/js/features/whatsapp-linking.js`, `bot-control-api/server.js`
-- **Not yet deployed:** rules → Firebase RTDB; `server.js` → EC2 pm2 id 2; SupremeAdmin → Firebase Hosting
+- **Deployed:** `firebase deploy --only database` ✅; `server.js` → EC2 pm2 id 2 restarted (online, 17s uptime) ✅; `firebase deploy --only hosting:supreme` ✅ (stamped f7cba1e.20261107T134636Z)
 - **Blocked:** Real tenant onboarding blocked on Meta App Review / Tech Provider access / app Live; display-name test pending Meta console
 - **Next:** (1) `firebase deploy --only database` + deploy `server.js` to EC2 + restart pm2 2 + `firebase deploy --only hosting:supreme`; (2) verify `META_CONFIG_ID=1089451087291012` is v4/system-user in Meta console (dashboard-only); (3) run real-number display-name test under Foodhubbie's WABA; (4) Phase 2: Embedded Signup v4 `WA_EMBEDDED_SIGNUP` postMessage handling, per-number starter templates, `message_template_status_update` persistence; (5) Phase 3: Meta cost ledger at `bot/transport.js` so `_metaCostGuard` can arm
 
