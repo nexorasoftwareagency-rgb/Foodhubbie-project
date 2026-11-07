@@ -1235,6 +1235,14 @@ body.onb-open{ overflow:hidden; }
 .loyalty-stats{ display:flex; gap:14px; font-size:11.5px; color:var(--text-sub); }
 .rank-badge{ font-size:14px; font-weight:800; color:var(--primary); margin-bottom:4px; display:block; }
 .rank-sub{ font-size:11px; color:var(--text-sub); }
+.rank-achievement{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    background:var(--card); border:2px solid var(--primary);
+    border-radius:16px; padding:16px; margin:0 16px 10px;
+    text-align:center;
+}
+.rank-achievement .rank-badge{ font-size:20px; color:var(--primary); }
+.rank-achievement .rank-sub{ font-size:12px; color:var(--text-sub); font-weight:600; }
 
 /* ---------- Rewards ---------- */
 .rewards-grid{ display:flex; flex-direction:column; gap:8px; margin:0 16px 10px; }

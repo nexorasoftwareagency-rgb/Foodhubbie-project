@@ -1670,8 +1670,8 @@ function nextTierName(current) {
 function renderRankings() {
     if (!hasIdentity() || _customerRank === null) return '';
     return `
-    <div class="account-empty" style="text-align:center;">
-        <span class="rank-badge">Your rank: #${_customerRank}</span>
+    <div class="rank-achievement">
+        <span class="rank-badge">🏆 Rank #${_customerRank}</span>
         <p class="rank-sub">among regular customers at this kitchen</p>
     </div>`;
 }
