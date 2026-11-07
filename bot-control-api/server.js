@@ -26,6 +26,7 @@ const { pm2, connectOnce } = require('./pm2-client');
 const { startStatusWatcher } = require('./status-watcher');
 const { startWalletWatcher, publishWalletGate } = require('./wallet-watch');
 const { startOrchestrator } = require('./orchestrator');
+const { startMetaCostPublisher } = require('./meta-cost-publisher');
 const sharp = require('sharp');
 const { getBillingDefaults } = require('../shared/billing-defaults.cjs');
 const { prunePushInbox } = require('../shared/push-inbox.cjs');
@@ -1487,6 +1488,10 @@ startStatusWatcher({ admin, processName, statusOf }).catch((err) => {
 
 startWalletWatcher({ admin }).catch((err) => {
   console.error('Wallet gate watcher failed to start — the D4 gate will stay stale until this is fixed', err);
+});
+
+startMetaCostPublisher({ admin }).catch((err) => {
+  console.error('Meta cost publisher failed to start — the _metaCostGuard will stay disarmed until this is fixed', err);
 });
 
 startOrchestrator({ admin, processName, nextHealthPort }).catch((err) => {

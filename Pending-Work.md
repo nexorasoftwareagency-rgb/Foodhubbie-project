@@ -812,6 +812,17 @@ These are **real, actionable items** in THIS repo based on the audits.
 - **Blocked:** Real tenant onboarding blocked on Meta App Review / Tech Provider access / app Live; display-name test pending Meta console
 - **Next:** (1) Meta console: verify `META_CONFIG_ID=1089451087291012` is v4/system-user; (2) run real-number display-name test under Foodhubbie's WABA; (3) Phase 3: Meta cost ledger at `bot/transport.js` so `_metaCostGuard` can arm
 
+
+- **Phase 3 done (this session):**
+  - `bot/transport.js`: `recordMetaCost(to, category)` writes `walletBilling/{bid}/{oid}/metaUsage/{YYYY-MM}` on every successful meta-transport send (text, image, CTA button, template). Classifies marketing vs utility by template name; `DEFAULT_RATE_TABLE` from `shared/meta-cost-math.js` (utility ₹0.115, marketing ₹0.86, authentication ₹0.115, service ₹0.115). Fails open — never blocks a send on recording failure.
+  - `bot-control-api/meta-cost-publisher.js` (NEW): every 5 min walks `outletIndex`, computes `balancePaise` = `META_CREDIT_LINE_START_PAISE` − accumulated meta cost for the month, writes it to `walletBilling/{bid}/{oid}/balancePaise`. This is what arms `_metaCostGuard` (it only blocks when balancePaise is a finite number).
+  - `bot-control-api/server.js`: imports and starts `startMetaCostPublisher({ admin })` alongside `startWalletWatcher` and `startOrchestrator`.
+  - `shared/meta-cost-math.js`: `classifySend`, `estimateCostPaise`, `canSend`, `DEFAULT_RATE_table` already existed — self-check passes.
+- **Files touched:** `bot/transport.js`, `bot-control-api/meta-cost-publisher.js` (new), `bot-control-api/server.js`
+- **Not yet deployed:** needs `firebase deploy --only database` (rules already deployed) + EC2 scp of `bot/transport.js`, `bot-control-api/{meta-cost-publisher.js,server.js}` + pm2 restart id 2 (bot-control-api). No SupremeAdmin change needed (frontend unaffected).
+- **Blocked:** Real tenant onboarding blocked on Meta App Review / Tech Provider access / app Live; display-name test pending Meta console
+- **Next:** (1) Deploy Phase 3 to EC2; (2) Meta console: verify `META_CONFIG_ID=1089451087291012` is v4/system-user; (3) run real-number display-name test under Foodhubbie's WABA; (4) Phase 4: migrate live pizza from Baileys to meta transport once its WABA/display-name is approved
+
 ## Item Progress Workflow Example
 
 To mark a new item:

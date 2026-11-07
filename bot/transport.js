@@ -10,7 +10,7 @@ const { formatJid } = require('./utils');
 const waSend = require('./whatsapp-send');
 const { db, getData, resolvePath } = require('./firebase');
 const { resolveBusinessIdFor } = require('./helpers/outlet-resolution');
-const { canSend } = require('../shared/meta-cost-math');
+const { canSend, DEFAULT_RATE_TABLE } = require('../shared/meta-cost-math');
 // Template names whose approved body lives on the WABA in MARKETING category —
 // classified as MARKETING for cost math when no caller supplies templateCategory.
 // Add new marketing shells here once approved; existing callers need no change.
@@ -46,6 +46,41 @@ function toPlainPhone(jid) {
   return String(jid).split('@')[0];
 }
 
+// --- Meta cost emitter (S1 shared credit liability) ---
+// Records the actual Meta cost of every successful meta-transport send into
+// walletBilling/{bid}/{oid}/metaUsage/{YYYY-MM}. The _metaCostGuard (below)
+// reads this node for balancePaise/metaUsage and arms only when a balance
+// snapshot exists. A balance publisher in bot-control-api writes balancePaise
+// (starting credit minus accumulated cost) so the guard can block sends when
+// caps/thresholds are hit. Never blocks the send itself — fire-and-forget.
+async function recordMetaCost(to, category) {
+  try {
+    const businessId = resolveBusinessIdFor(outlet);
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(Date.now() + istOffset);
+    const monthKey = istDate.toISOString().split('T')[0].slice(0, 7); // YYYY-MM
+    const dayKey = istDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    const costPaise = Math.round(Number(DEFAULT_RATE_TABLE[category] || DEFAULT_RATE_TABLE.utility || 0));
+    const path = `walletBilling/${businessId}/${outlet}/metaUsage/${monthKey}`;
+    await db.ref(path).transaction((curr) => {
+      const c = curr || { billableMessages: {}, totalCostPaise: 0, dailyCostPaise: {} };
+      c.billableMessages = c.billableMessages || {};
+      const cat = String(category).toLowerCase();
+      c.billableMessages[cat] = (c.billableMessages[cat] || 0) + 1;
+      c.totalCostPaise = (c.totalCostPaise || 0) + costPaise;
+      c.dailyCostPaise = c.dailyCostPaise || {};
+      c.dailyCostPaise[dayKey] = (c.dailyCostPaise[dayKey] || 0) + costPaise;
+      c.lastSentAt = now.toISOString();
+      c.updatedAt = now.toISOString();
+      return c;
+    }).catch(() => {});
+  } catch (e) {
+    // Fails open — cost recording is informational, never blocks a send.
+    console.warn('[META-COST] record failed:', e.message);
+  }
+}
+
 /**
  * Meta Cloud API transport. Returns an object shaped like a Baileys `sock` so
  * the rest of bot/index.js works unchanged: sendMessage, ev.on, readMessages,
@@ -73,16 +108,23 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
         return { key: { id: 'blocked' }, blocked: true };
       }
       if (content.image && typeof content.image === 'string' && content.image.startsWith('http')) {
-        return waSend.sendWhatsAppImage(phoneNumberId, accessToken, to, content.image, text);
+        const result = await waSend.sendWhatsAppImage(phoneNumberId, accessToken, to, content.image, text);
+        recordMetaCost(to, 'utility').catch(() => {});
+        return result;
       }
       if (content.image && content.image.url) {
-        return waSend.sendWhatsAppImage(phoneNumberId, accessToken, to, content.image.url, text);
+        const result = await waSend.sendWhatsAppImage(phoneNumberId, accessToken, to, content.image.url, text);
+        recordMetaCost(to, 'utility').catch(() => {});
+        return result;
       }
       if (content.image) {
         // Raw buffer/base64 cannot be sent via Meta API (needs hosted URL) — fall back to text
         console.warn(`[META-TRANSPORT] Image skipped (not a URL) for ${jid}; sending text fallback`);
       }
-      return waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, text);
+      const result = waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, text);
+      // Record cost after a successful send — never delays the send itself.
+      recordMetaCost(to, 'utility').catch(() => {});
+      return result;
     },
     // Interactive URL button (replaces plain links in chat). Falls back to plain text if Meta rejects.
     async sendButton(jid, opts) {
@@ -92,10 +134,14 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
         return { key: { id: 'blocked' }, blocked: true };
       }
       try {
-        return await waSend.sendWhatsAppUrlButton(phoneNumberId, accessToken, to, opts);
+        const result = await waSend.sendWhatsAppUrlButton(phoneNumberId, accessToken, to, opts);
+        recordMetaCost(to, 'utility').catch(() => {});
+        return result;
       } catch (e) {
         console.warn(`[META-TRANSPORT] Button send failed for ${jid}: ${e.message}; sending text fallback`);
-        return waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, `${opts.body}\n------------------------\n${opts.url}`);
+        const result = await waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, `${opts.body}\n------------------------\n${opts.url}`);
+        recordMetaCost(to, 'utility').catch(() => {});
+        return result;
       }
     },
     // Approved-template send (the only kind of biz-initiated message Meta
@@ -125,11 +171,13 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       if (await _metaCostGuard(to, category)) {
         return { key: { id: 'blocked' }, blocked: true };
       }
-      return waSend.sendWhatsAppTemplate(phoneNumberId, accessToken, to, {
+      const result = await waSend.sendWhatsAppTemplate(phoneNumberId, accessToken, to, {
         name: opts.name,
         language: opts.language || 'en',
         components
       });
+      recordMetaCost(to, category).catch(() => {});
+      return result;
     },
     async readMessages() { /* no-op: Meta API has no read receipts */ },
     async sendPresenceUpdate() { /* no-op: Meta API has no typing indicator */ },
