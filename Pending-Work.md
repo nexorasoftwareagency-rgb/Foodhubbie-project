@@ -313,6 +313,19 @@ This rule applies to:
 
 ---
 
+### ✅ Customer-app menu/QR loading stuck (2026-11-07)
+- **Files:** `menu/index.html`, `menu/sw.js`
+- **Stage:** `done`
+- **Trigger:** owner report — every customer app (bare link `/?b=&o=`), legacy QR (`/pizza/`) and direct-mode load hung on "Loading menu…" spinner forever.
+- **Root cause:** commit `55f5958` put `display:flex !important` on `#loadingOverlay` and `display:none !important` on `.screen`, `.bottom-nav`, `.toast`, `.hamburger-*` in `menu/index.html` critical inline CSS. JS's `style.display='none'` could never hide the spinner (stylesheet `!important` beats inline style), and `_appReady()` could never reveal any screen — permanent stuck state.
+- **Fix:** dropped `!important` from all runtime-toggled elements in `menu/index.html`; kept the `#app { visibility: hidden }` pre-boot gate (released by `.app-ready` in `_appReady()`); menu SW cache → `menu-shell-v51`. Commit `dc006d8` on `main` (pushed as part of `0a0d635`).
+- **Deploy:** `firebase deploy --only hosting:menu` from clean worktree at `dc006d8`. Live on `menu.foodhubbie.in` and `foodhubbie-qrmenu.web.app` (SW `menu-shell-v51`; overlay rule now `display:flex` without `!important`).
+- **Verified:** `node --check` not applicable (HTML/SW only). Reproduced stuck state before fix (overlay `flex`, 0 dishes, `direct=false`, Firebase `connected=false`); after deploy all 3 URLs boot to `screenSignIn` with overlay `none`, 0 console errors, no failed requests.
+- **Honest limit:** another session carries uncommitted a11y work in `menu/js/app.js`, `menu/js/ui.js`, `menu/css/app.css` — untouched and undeployed here. Only `menu/index.html` + `menu/sw.js` changed.
+- **Done:** deployed live; ledger `[20261107-customer-app-loading]`.
+
+---
+
 ### ✅ Restaurant-Scoped Rider Notification Isolation
 - **Requirement:** Riders of Restaurant 1 must **never** see/pop/pop-up any notification (Order available on Rider App, WhatsApp message) from Restaurant 2, and vice versa. Complete isolation.
 - **Stage:** `done`
