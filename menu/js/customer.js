@@ -1086,9 +1086,16 @@ function renderAccount() {
         const el = document.getElementById('acctNameError');
         if (el) el.textContent = '';
     });
-    phoneInput?.addEventListener('input', () => {
+    phoneInput?.addEventListener('input', (e) => {
         const el = document.getElementById('acctPhoneError');
         if (el) el.textContent = '';
+        // Auto-format as XXXXX XXXXX
+        const raw = e.target.value.replace(/\D/g, '');
+        if (raw.length > 5) {
+            e.target.value = raw.slice(0, 5) + ' ' + raw.slice(5, 10);
+        } else {
+            e.target.value = raw;
+        }
     });
 
     document.getElementById('acctOffers')?.addEventListener('change', (e) => {
