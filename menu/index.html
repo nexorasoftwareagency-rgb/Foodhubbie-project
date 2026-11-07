@@ -29,17 +29,22 @@
         button, input, textarea { font-family: inherit; }
         img { max-width: 100%; display: block; }
 
-        /* Hide #app entirely until JS/CSS ready — loading overlay stays visible */
+        /* Hide #app entirely until JS/CSS ready — loading overlay stays visible.
+           Runtime-toggled elements MUST NOT use display/visibility !important
+           here: JS hides the overlay with style.display and reveals screens,
+           nav, toasts and drawers by toggling classes. A stylesheet !important
+           beats both, which left every customer stuck on the spinner
+           (live outage 2026-11-07). */
         #app { visibility: hidden; }
-        .screen { display: none !important; }
+        .screen { display: none; }
 
         /* Loading overlay — covers everything immediately on refresh */
         #loadingOverlay {
             position: fixed; inset: 0; z-index: 99999;
             background: rgba(255,255,255,.98);
-            display: flex !important; align-items: center; justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             flex-direction: column; gap: 12px;
-            visibility: visible !important;
+            visibility: visible;
         }
         .spinner {
             width: 36px; height: 36px;
@@ -48,11 +53,10 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* Hidden until JS */
-        .bottom-nav { display: none !important; }
-        .toast { display: none !important; }
-        .hamburger-drawer { display: none !important; }
-        .hamburger-overlay { display: none !important; }
+        /* .bottom-nav, .toast, .hamburger-drawer and .hamburger-overlay are
+           inside #app (or already opacity:0), so the #app gate hides them
+           pre-boot. They must NOT get display:none !important here — the app
+           reveals them by toggling .hidden/.show/.open at runtime. */
     </style>
 </head>
 <body>
