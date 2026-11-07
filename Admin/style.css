@@ -6204,6 +6204,8 @@ body {
     touch-action: manipulation;
     content-visibility: auto;
     contain-intrinsic-size: 0 170px;
+    min-height: 180px;
+    min-width: 140px;
 }
 
 .pos-dish-btn-v4:hover {
@@ -6316,9 +6318,11 @@ body {
 }
 
 .qty-control-v4 .qty-btn {
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 10px;
     border: none;
     background: white;
     color: var(--dark);
@@ -6327,6 +6331,7 @@ body {
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s;
+    touch-action: manipulation;
 }
 
 .qty-control-v4 .qty-btn svg {

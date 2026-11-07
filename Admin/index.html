@@ -4581,7 +4581,7 @@
 
                             </div>
 
-                            <div id="walkinDishGrid" class="walkin-dish-grid">
+                            <div id="walkinDishGrid" class="walkin-dish-grid" role="tabpanel" aria-labelledby="tab-walkin-All">
 
                                 <p class="menu-loading-placeholder">Loading menu...</p>
 
@@ -7089,7 +7089,7 @@
 
 
 
-    <div id="posSelectionModal" class="modal pos-side-panel" role="dialog" aria-modal="true" aria-label="POS Selection">
+    <div id="posSelectionModal" class="modal pos-side-panel" role="dialog" aria-modal="true" aria-labelledby="posModalDishName" aria-describedby="posModalDishCategory">
 
         <div class="modal-content glass-card selection-panel-v4">
 
@@ -7161,13 +7161,13 @@
 
                     </label>
 
-                    <div class="flex-row flex-center flex-gap-20 mt-10">
+                    <div class="flex-row flex-center flex-gap-20 mt-10" role="group" aria-label="Quantity selection">
 
-                        <button id="btnPosQtyDec" data-action="adjustPOSModalQty" data-val="-1" class="qty-btn-large" title="Decrease quantity">&#8722;</button>
+                        <button id="btnPosQtyDec" data-action="adjustPOSModalQty" data-val="-1" class="qty-btn-large" aria-label="Decrease quantity">&#8722;</button>
 
-                        <span id="posModalQty" class="qty-val-large">1</span>
+                        <span id="posModalQty" class="qty-val-large" aria-live="polite">1</span>
 
-                        <button id="btnPosQtyInc" data-action="adjustPOSModalQty" data-val="1" class="qty-btn-large" title="Increase quantity">+</button>
+                        <button id="btnPosQtyInc" data-action="adjustPOSModalQty" data-val="1" class="qty-btn-large" aria-label="Increase quantity">+</button>
 
                     </div>
 

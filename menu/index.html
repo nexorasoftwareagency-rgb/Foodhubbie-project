@@ -29,15 +29,17 @@
         button, input, textarea { font-family: inherit; }
         img { max-width: 100%; display: block; }
 
-        /* Hide all screens until JS/CSS ready — but NOT #loadingOverlay (it's not a .screen) */
+        /* Hide #app entirely until JS/CSS ready — loading overlay stays visible */
+        #app { visibility: hidden; }
         .screen { display: none !important; }
 
         /* Loading overlay — covers everything immediately on refresh */
         #loadingOverlay {
-            position: fixed; inset: 0; z-index: 9999;
-            background: rgba(255,255,255,.95);
-            display: flex; align-items: center; justify-content: center;
+            position: fixed; inset: 0; z-index: 99999;
+            background: rgba(255,255,255,.98);
+            display: flex !important; align-items: center; justify-content: center;
             flex-direction: column; gap: 12px;
+            visibility: visible !important;
         }
         .spinner {
             width: 36px; height: 36px;
@@ -728,13 +730,13 @@
         </div>
 
         <div class="promo-tabs" role="tablist" aria-label="Promotions sections">
-            <button type="button" class="promo-tab active" data-promo-tab="offers" role="tab" aria-selected="true">Promos</button>
-            <button type="button" class="promo-tab" data-promo-tab="notifications" role="tab" aria-selected="false">Notifications<span id="promoTabDot" class="promo-tab-dot hidden" aria-label="Unread updates"></span></button>
-            <button type="button" class="promo-tab" data-promo-tab="account" role="tab" aria-selected="false">Account</button>
+            <button type="button" class="promo-tab active" data-promo-tab="offers" role="tab" aria-selected="true" aria-controls="promoPanePromos" id="tab-promo-offers" tabindex="0">Promos</button>
+            <button type="button" class="promo-tab" data-promo-tab="notifications" role="tab" aria-selected="false" aria-controls="promoPaneNotifications" id="tab-promo-notifications" tabindex="-1">Notifications<span id="promoTabDot" class="promo-tab-dot hidden" aria-label="Unread updates"></span></button>
+            <button type="button" class="promo-tab" data-promo-tab="account" role="tab" aria-selected="false" aria-controls="promoPaneAccount" id="tab-promo-account" tabindex="-1">Account</button>
         </div>
 
         <!-- Promos pane: active offer codes + connect links -->
-        <div id="promoPanePromos" class="promo-pane" role="tabpanel">
+        <div id="promoPanePromos" class="promo-pane" role="tabpanel" aria-labelledby="tab-promo-offers">
             <div class="promo-input-wrap">
                 <input type="text" id="promoCodeInput" placeholder="Enter promo code" class="promo-input">
                 <button type="button" class="btn-apply-promo" id="btnApplyPromoCode">Apply</button>
@@ -751,14 +753,14 @@
         </div>
 
         <!-- Notifications pane -->
-        <div id="promoPaneNotifications" class="promo-pane hidden" role="tabpanel">
-            <div class="promo-filter">
-                <button type="button" class="promo-filter-chip active" data-filter="all">All</button>
-                <button type="button" class="promo-filter-chip" data-filter="order">Orders</button>
-                <button type="button" class="promo-filter-chip" data-filter="promo">Offers</button>
+        <div id="promoPaneNotifications" class="promo-pane hidden" role="tabpanel" aria-labelledby="tab-promo-notifications">
+            <div class="promo-filter" role="tablist" aria-label="Notification filters">
+                <button type="button" class="promo-filter-chip active" data-filter="all" role="tab" aria-selected="true" aria-controls="notificationInboxList" id="tab-notif-all" tabindex="0">All</button>
+                <button type="button" class="promo-filter-chip" data-filter="order" role="tab" aria-selected="false" aria-controls="notificationInboxList" id="tab-notif-order" tabindex="-1">Orders</button>
+                <button type="button" class="promo-filter-chip" data-filter="promo" role="tab" aria-selected="false" aria-controls="notificationInboxList" id="tab-notif-promo" tabindex="-1">Offers</button>
             </div>
-            <div id="notificationInboxList" class="notif-inbox"></div>
-            <div id="notificationEmpty" class="notif-empty">
+            <div id="notificationInboxList" class="notif-inbox" role="tabpanel" aria-labelledby="tab-notif-all">
+            <div id="notificationEmpty" class="notif-empty" role="status" aria-live="polite">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 16px; display:block; opacity:0.4;"><rect x="3" y="3" width="7" height="7"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M21 3v4a2 2 0 0 0-2 2H5a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2z"/></svg>
                 <div class="promo-empty-title">No notifications yet</div>
                 <div class="promo-empty-sub">Order updates and special offers will appear here.</div>
@@ -766,7 +768,7 @@
         </div>
 
         <!-- Account pane -->
-        <div id="promoPaneAccount" class="promo-pane hidden" role="tabpanel">
+        <div id="promoPaneAccount" class="promo-pane hidden" role="tabpanel" aria-labelledby="tab-promo-account">
             <div id="accountProfileCard" class="account-wrap"></div>
         </div>
     </div>

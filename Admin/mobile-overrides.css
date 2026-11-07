@@ -754,7 +754,7 @@
         flex-direction: column !important;
         gap: 0 !important;
         min-height: 0 !important;
-        padding-bottom: 80px !important; /* Space for bottom nav */
+        padding-bottom: calc(80px + var(--safe-bottom, 0px)) !important; /* Space for bottom nav + safe area */
     }
 
     #tab-walkin .walkin-picker {
@@ -844,47 +844,57 @@
     /* Dish Grid - Optimized for Mobile */
     #tab-walkin .walkin-dish-grid {
         display: grid !important;
-        grid-template-columns: repeat(auto-fill, minmax(95px, 1fr)) !important;
-        gap: 10px !important;
-        padding: 5px !important;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
+        gap: 12px !important;
+        padding: 12px !important;
         max-height: none !important;
         overflow: visible !important;
     }
 
-    #tab-walkin .pos-dish-btn {
-        padding: 8px 4px !important;
-        border-radius: 12px !important;
+    #tab-walkin .pos-dish-btn-v4 {
+        padding: 12px !important;
+        border-radius: 16px !important;
         background: #fff !important;
         box-shadow: 0 4px 12px rgba(255, 77, 0, 0.1) !important;
         border: 1px solid rgba(0, 0, 0, 0.08) !important;
-        min-height: 90px !important;
+        min-height: 120px !important;
+        min-width: 120px !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
         justify-content: center !important;
+        touch-action: manipulation !important;
     }
 
-    #tab-walkin .pos-dish-btn .pos-dish-icon {
-        width: 40px !important;
-        height: 40px !important;
-        margin-bottom: 4px !important;
+    #tab-walkin .pos-dish-btn-v4 .dish-visual {
+        width: 60px !important;
+        height: 60px !important;
+        margin-bottom: 8px !important;
     }
 
-    #tab-walkin .pos-dish-btn .pos-dish-name {
-        font-size: 10px !important;
-        line-height: 1.1 !important;
+    #tab-walkin .pos-dish-btn-v4 .pos-dish-name {
+        font-size: 12px !important;
+        line-height: 1.2 !important;
         text-align: center !important;
         display: -webkit-box !important;
         -webkit-line-clamp: 2 !important;
         line-clamp: 2 !important;
         -webkit-box-orient: vertical !important;
-        margin: 2px 0 !important;
+        margin: 4px 0 !important;
+        min-height: 2.4em !important;
     }
 
-    .pos-dish-btn .pos-dish-price {
-        font-size: 10px !important;
+    .pos-dish-btn-v4 .pos-dish-price {
+        font-size: 12px !important;
         font-weight: 700 !important;
         color: var(--primary) !important;
+    }
+
+    /* Focus styles for keyboard accessibility */
+    #tab-walkin .pos-dish-btn-v4:focus-visible {
+        outline: 3px solid var(--primary) !important;
+        outline-offset: 2px !important;
+        box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.3) !important;
     }
 
 
@@ -1011,8 +1021,20 @@
     }
 
     .walkin-cart-item .qty-btn {
-        width: 28px;
-        height: 28px;
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .walkin-cart-item .remove-btn {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 8px 12px;
+        font-size: 13px;
     }
 
     /* Totals */
@@ -1036,8 +1058,10 @@
 
     .walkin-pay-btn {
         flex: none !important;
-        padding: 14px 10px !important;
-        font-size: 13px !important;
+        padding: 16px 10px !important;
+        font-size: 14px !important;
+        min-height: 48px !important;
+        min-width: 80px !important;
     }
 
     /* Discount presets */
@@ -1065,10 +1089,12 @@
 
     /* Checkout button */
     .btn-checkout {
-        padding: 14px !important;
+        padding: 18px !important;
         font-size: 16px !important;
         font-weight: 700;
         border-radius: 14px !important;
+        min-height: 52px !important;
+        min-width: 200px !important;
     }
 
     /* --- Mobile Category Tabs - Filter Pills (Sticky) --- */
@@ -1096,11 +1122,11 @@
     }
 
     .category-tab {
-        padding: 4px 10px !important;
+        padding: 10px 16px !important;
         background: #f1f5f9 !important;
         border: 1px solid #e2e8f0 !important;
         border-radius: 20px !important;
-        font-size: 11px !important;
+        font-size: 13px !important;
         font-weight: 700 !important;
         color: #475569 !important;
         white-space: nowrap !important;
@@ -1109,6 +1135,15 @@
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        min-height: 40px !important;
+        min-width: 72px !important;
+        touch-action: manipulation !important;
+    }
+
+    .category-tab:focus-visible {
+        outline: 2px solid var(--primary) !important;
+        outline-offset: 2px !important;
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.3) !important;
     }
 
     .category-tab.active {

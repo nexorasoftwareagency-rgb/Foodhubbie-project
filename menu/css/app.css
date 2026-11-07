@@ -610,13 +610,23 @@ img{max-width:100%; display:block;}
     overflow-x:auto; scrollbar-width:none;
 }
 .promo-filter-chip{
-    flex-shrink:0; padding:8px 16px; border-radius:20px;
+    flex-shrink:0; padding:10px 16px; border-radius:20px;
     border:1px solid var(--border); background:var(--card);
     font-size:12px; font-weight:600; color:var(--text-sub);
     cursor:pointer; touch-action:manipulation;
     white-space:nowrap;
+    min-height: 40px;
+    min-width: 60px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .promo-filter-chip:hover{ background:var(--bg); border-color:var(--primary); color:var(--primary); }
+.promo-filter-chip:focus-visible{
+    outline:2px solid var(--primary);
+    outline-offset:2px;
+    box-shadow:0 0 0 3px rgba(var(--primary-rgb), 0.3);
+}
 .promo-filter-chip.active{
     background:var(--primary); border-color:var(--primary); color:#fff;
 }
@@ -632,6 +642,7 @@ img{max-width:100%; display:block;}
     border-radius:14px; background:var(--card); text-align:left;
     color:var(--text); transition:transform .12s ease, border-color .15s ease;
     cursor:pointer;
+    min-height: 52px;
 }
 .notif-card:active{ transform:scale(.985); }
 .notif-card.notif-order{ border-color:rgba(232,73,8,.28); }

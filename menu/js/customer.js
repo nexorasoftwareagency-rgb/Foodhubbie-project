@@ -34,6 +34,8 @@ let _inbox = [];
 let _activeTab = 'offers';
 let _tabsBound = false;
 let _inboxBound = false;
+let _filterChipsBound = false;
+let _activeFilter = 'all';
 let _foregroundUnsub = null;
 let _onboardingBound = false;
 let _steps = [];
@@ -659,6 +661,7 @@ function setPromoTab(tab) {
         const active = btn.dataset.promoTab === _activeTab;
         btn.classList.toggle('active', active);
         btn.setAttribute('aria-selected', String(active));
+        btn.setAttribute('tabindex', active ? '0' : '-1');
     });
     document.querySelectorAll('.promo-pane').forEach(pane => pane.classList.add('hidden'));
     document.getElementById(`promoPane${_activeTab[0].toUpperCase()}${_activeTab.slice(1)}`)?.classList.remove('hidden');
@@ -713,11 +716,19 @@ function formatWhen(ts) {
 
 function renderInboxes() {
     const notifList = document.getElementById('notificationInboxList');
-    if (notifList) {
-        notifList.innerHTML = _inbox.length
-            ? _inbox.map(itemHtml).join('')
-            : `<div class="notif-empty">No notifications yet. Order something delicious and we'll keep you posted.</div>`;
+    if (!notifList) return;
+
+    let filtered = _inbox;
+    if (_activeFilter === 'order') {
+        filtered = _inbox.filter(item => item.type === 'order');
+    } else if (_activeFilter === 'promo') {
+        filtered = _inbox.filter(item => item.type === 'promo' || item.type === 'offer');
     }
+
+    notifList.innerHTML = filtered.length
+        ? filtered.map(itemHtml).join('')
+        : `<div class="notif-empty" role="status" aria-live="polite">No ${_activeFilter === 'all' ? 'notifications' : _activeFilter === 'order' ? 'order updates' : 'offers'} yet.</div>`;
+
     bindInboxClicks();
     updateUnreadDot();
 }
@@ -763,6 +774,75 @@ function bindInboxClicks() {
             }
         });
     });
+
+    // Bind filter chips
+    bindFilterChips();
+}
+
+function bindFilterChips() {
+    if (_filterChipsBound) return;
+    _filterChipsBound = true;
+    const filterContainer = document.querySelector('.promo-filter[role="tablist"]');
+    if (!filterContainer) return;
+
+    filterContainer.addEventListener('click', (e) => {
+        const chip = e.target.closest('.promo-filter-chip[role="tab"]');
+        if (chip) setFilterChip(chip.dataset.filter, chip);
+    });
+
+    // Keyboard navigation for filter chips
+    filterContainer.addEventListener('keydown', (e) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+
+        const chips = filterContainer.querySelectorAll('.promo-filter-chip[role="tab"]');
+        if (chips.length === 0) return;
+
+        const currentIndex = Array.from(chips).indexOf(document.activeElement);
+        if (currentIndex === -1) return;
+
+        let nextIndex = currentIndex;
+        switch (e.key) {
+            case 'ArrowRight':
+                nextIndex = (currentIndex + 1) % chips.length;
+                break;
+            case 'ArrowLeft':
+                nextIndex = (currentIndex - 1 + chips.length) % chips.length;
+                break;
+            case 'Home':
+                nextIndex = 0;
+                break;
+            case 'End':
+                nextIndex = chips.length - 1;
+                break;
+        }
+
+        if (nextIndex !== currentIndex) {
+            chips[nextIndex].focus();
+            chips[nextIndex].click();
+        }
+    });
+}
+
+function setFilterChip(filter, chip) {
+    _activeFilter = filter;
+    const filterContainer = document.querySelector('.promo-filter[role="tablist"]');
+    if (!filterContainer) return;
+
+    filterContainer.querySelectorAll('.promo-filter-chip[role="tab"]').forEach(c => {
+        const active = c.dataset.filter === _activeFilter;
+        c.classList.toggle('active', active);
+        c.setAttribute('aria-selected', String(active));
+        c.setAttribute('tabindex', active ? '0' : '-1');
+    });
+
+    // Update the inbox tabpanel's aria-labelledby
+    const inboxList = document.getElementById('notificationInboxList');
+    if (inboxList) {
+        inboxList.setAttribute('aria-labelledby', chip.id);
+    }
+
+    renderInboxes();
 }
 
 async function loadInbox() {

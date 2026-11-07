@@ -156,15 +156,15 @@ Per Meta IN rate card (verified 2026-11-01 by user / Meta docs):
 
 | Message category | India list rate | +18% GST delivered | Notes |
 |---|---|---|---|
-| **Utility (status templates)** | â‚¹0.115 / msg | **â‚¹0.1357 / delivered msg** | Per-delivery billing only; charged inside open 24h window since 2026-10-01; 1,000 service msgs/mo free then service rate applies |
-| Marketing (promo / greeting-marketing) | ~â‚¹2.00 / msg | ~â‚¹2.36 / msg | Old `greeting_welcome` was this â€” kept unwired; new greeting is UTILITY (Â§1 METHOD doc) |
-| Authentication (OTP) | ~â‚¹1.50 / msg | ~â‚¹1.77 / msg | Only if resubmitted; currently plain text (rejected as UTILITY) |
+| **Utility (status templates)** | **₹0.115 / delivered msg** | No extra GST — Meta's list price already includes 18% | Per-delivery billing; charged inside open 24h window since 2026-10-01; 1,000 service msgs/mo free, then ₹0.115 |
+| Marketing (promo / greeting-marketing) | **₹0.8631 / delivered msg** | Highest rate; `proactive_promo` and all `promo_hinglish_*` shells billed at this exact amount |
+| Authentication (OTP) | **₹0.115 / delivered msg** | Only if resubmitted via template; currently plain text by design |
 
-Per WhatsApp bot order (~6 utility templates: place + ready + rider + delivered + cancel flow + greeting link): **~â‚¹0.81 / order** (not rough â‚¹4.80). At â‚¹300 order (3% = â‚¹9) = wide positive; at â‚¹100 (3% = â‚¹3) = still positive. Only very small orders (< â‚¹40 / 6 messages) go negative.
+Per WhatsApp bot order (~4–5 utility templates: place + ready + rider-optional + delivered; OTP text messages are free inside the 24h window after the 1,000/month cap): **~₹0.575 / order** (dine-in); worst case with a rider-change message adds another ₹0.115 = ~₹0.69. At ₹300 order (3% = ₹9 revenue) = wide positive; at ₹100 order (3% = ₹3) = still positive. Only very small orders (< ₹35 / 5 messages) approach break-even negative.
 
-Formula (pure, `shared/meta-cost-math.js`):
+The published Meta India rates already include 18% GST in their list price, so no extra mark-up is applied. Pure formula in `shared/meta-cost-math.js`:
 ```
-messageCostPaise = sum(messages[cat] * indiaRate[cat]) * 1.18;   // +18% GST on Meta IN invoice
+messageCostPaise = sum(messages[cat] * metaRatePaise[cat]);   // no × 1.18 — Meta's INR list prices already include GST
 ```
 
 **Greeting / Welcome â†’ NOT marketing.** Per user 2026-11-01: greeting uses `Button` URL ("Order Now") linking to `menu/index.html?outlet={{1}}&source=wa`; submitted as new `greeting_order_link` UTILITY template with zero promo language (see `whatsapp-templates.md` Â§1; `METHOD...` Â§2). Old `greeting_welcome` (MARKETING) stays unwired.

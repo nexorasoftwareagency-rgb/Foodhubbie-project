@@ -1,6 +1,6 @@
 # WhatsApp Agent: Bot Cost vs Without-Bot Cost (Blaze pay-as-you-go)
 
-**Date:** 2026-09-27 · **Status:** RESEARCH COMPLETE · **Basis:** measured DB counters + EC2 PM2 inventory + Meta India rate card (Sep 2026)
+**Date:** 2026-09-27 · **Status:** RESEARCH COMPLETE · **Basis:** measured DB counters + EC2 PM2 inventory + Meta India rate card (Oct 2026)
 
 > Research only — no codebase changes. Re-run: `node Research\scripts\cost-calc.js` (bot matrix prints at the end) · `--fixed` = images externalized · `--mktg=N` = promo msgs/day/order.
 
@@ -20,18 +20,18 @@ Menu scans / Admin / Rider Firebase traffic is the same in both scenarios (rider
 
 ## 2. Meta WhatsApp India rate card (Sep 2026) — what changes in 4 days
 
-| Type | India rate | Notes |
+| Type | Meta India rate (Oct 1 2026) | Notes |
 |---|---|---|
-| Utility (order confirmations, status) | **₹0.115/msg** | in-window free **until Oct 1 2026** |
-| Authentication (OTP) | ₹0.115/msg | same rate as utility |
-| Service (replies in 24-hr window) | ₹0.115/msg | **free until Oct 1 2026**; first 1,000/mo/WABA free (≈ per outlet number) |
-| Marketing (promos/campaigns) | **₹0.86/msg** | never free |
+| Utility (order confirmations, status) | **₹0.115 / delivered msg** | Per-delivery billing; charged inside open 24h window since 2026-10-01; 1,000 service msgs/mo free then service rate applies |
+| Authentication (OTP) | **₹0.115 / delivered msg** | Same rate as utility; only billed if resubmitted via template |
+| Service (replies in 24-hr window) | **₹0.115 / delivered msg** | Free until Oct 1 2026; first 1,000 service msgs/mo per business phone number (≈ per outlet WABA) free, then ₹0.115 |
+| Marketing (promos/campaigns) | **₹0.8631 / delivered msg** | Never free; billed at exact Meta India rate |
 
 ⚠️ **Oct 1, 2026 (4 days): Meta starts billing service messages + in-window utility** — the free-ride era ends. Rates converge at utility ₹0.115 for service; marketing stays ₹0.86. (Sources: dragapp rate card eff. Jul 1 2026, whautomate, saysimple, go4whatsup.)
 
 ### 2a. VERIFIED: "customer messaged first → free within 24-hr window" (Sep 27, 2026)
 
-Claim: *Meta does not charge when the customer messages first and the bot replies inside the 24-hour window.*
+Claim: *Meta does not charge when the customer messages first and the bot replies inside the 24-hour window (free until Oct 1 2026, then ₹0.115/msg after free quota).*
 
 | Period | Verdict | What's free | What's billed |
 |---|---|---|---|
@@ -50,7 +50,7 @@ Claim: *Meta does not charge when the customer messages first and the bot replie
 ## 3. Cost model assumptions (labeled)
 
 - **Msgs/outlet/day = 4 × orders/day** (lifecycle + chat replies) — calibrated on measured 132 sends/8 days vs test-outlet order volume.
-- **Marketing = 0.1 × orders/day** (`--mktg=` to change; each +100 promo msgs/day/outlet = +$29/mo at 1 outlet's scale, ×30 days × ₹0.86).
+- **Marketing = 0.1 × orders/day** (`--mktg=` to change; each +100 promo msgs/day/outlet = +₹29/mo at 1 outlet's scale, ×30 days × ₹0.8631).
 - Free service tier: first 1,000 msgs/mo **per outlet WABA** deducted before billing.
 - ₹88/$ · server tiers as §6 · bot Firebase +0.5 GB/mo/outlet (estimate — re-measure after 2 months of real usage).
 
@@ -77,7 +77,7 @@ Claim: *Meta does not charge when the customer messages first and the bot replie
 ### Where the bot money goes (100 orders × 100 rest, worst cell)
 
 ```
-Meta API   $1,731/mo  (70%)  ← the bot's real cost
+Meta API   ₹1,731/mo  (70%)  ← the bot's real cost
 Firebase     $625/mo  (25%)
 EC2 server   $122/mo  ( 5%)
                       $2,477 total  vs $575 without bot
@@ -114,7 +114,7 @@ EC2 server   $122/mo  ( 5%)
 | Is Firebase affected by the bot? | Marginally (+0.5 GB/outlet ≈ +$5/10 rest); menu/admin/rider traffic is identical with or without |
 | Cheapest way to run the bot? | **Baileys (QR) mode = ₹0 Meta fees** → with-bot total ≈ Firebase+server only (e.g. 100×100: $746 vs $2,477) — unofficial, ban risk, fine for pilots |
 | Cheapest compliant way? | Meta Cloud API + keep replies inside the 24-hr window + service volume ≤1,000/mo/outlet + marketing only when campaigns run (`--mktg=0` → Meta ≈ $0.115-basis utility only) |
-| 10-rest pilot, 10 orders/day | without bot **$16/mo** · with bot (Meta) **$42/mo** · with bot (Baileys) **~$36/mo** |
+| 10-rest pilot, 10 orders/day | without bot **₹16/mo** · with bot (Meta) **₹42/mo** · with bot (Baileys) **~₹36/mo** |
 
 **One sentence:** switching the WhatsApp agent OFF cuts the bill **61% at small scale and 77% at 100 busy restaurants** ($2,477 → $575/mo), and when it's ON the Meta message fees — not Firebase, not the server — are the bill.
 

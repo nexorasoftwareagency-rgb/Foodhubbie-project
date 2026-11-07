@@ -11,6 +11,16 @@ const waSend = require('./whatsapp-send');
 const { db, getData, resolvePath } = require('./firebase');
 const { resolveBusinessIdFor } = require('./helpers/outlet-resolution');
 const { canSend } = require('../shared/meta-cost-math');
+// Template names whose approved body lives on the WABA in MARKETING category —
+// classified as MARKETING for cost math when no caller supplies templateCategory.
+// Add new marketing shells here once approved; existing callers need no change.
+const MARKETING_TEMPLATE_NAMES = new Set([
+  'proactive_promo',
+  'promo_hinglish_discount',
+  'promo_hinglish_festive',
+  'promo_hinglish_offer',
+  'promo_hinglish_winback',
+]);
 
 async function getTransportMode(outlet) {
   const remote = await getData('bot/transport', outlet).catch(() => null);
@@ -105,7 +115,13 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       }
       // Cost guard: block before sendTemplate / sendMessage. The result carries
       // `blocked: true` so a caller can tell it was dropped (never a silent skip).
-      const category = (opts.templateCategory || 'utility');
+      // Marketing templates (by name) classify as MARKETING so paid promo sends
+      // bill on the plan rate instead of being misclassified as UTILITY. Callers
+      // may still pass opts.templateCategory for template names added after this
+      // list is built, otherwise the allowlist is the only arbiter.
+      const category =
+        (opts.templateCategory ||
+          MARKETING_TEMPLATE_NAMES.has(String(opts.name)) ? 'MARKETING' : 'utility');
       if (await _metaCostGuard(to, category)) {
         return { key: { id: 'blocked' }, blocked: true };
       }

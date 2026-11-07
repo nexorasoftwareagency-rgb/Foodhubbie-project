@@ -79,6 +79,8 @@ export function initRealtimeListeners() {
             addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet, snap.key);
             state.unacknowledgedOrders.add(snap.key);
             syncAppBadge();
+            // Update live badge count to match KDS-visible orders
+            updateLiveBadge();
             startContinuousSound();
             setTimeout(() => { highlightOrder(snap.key); }, 1000);
         }
@@ -95,6 +97,8 @@ export function initRealtimeListeners() {
                 addNotification(`New Order #${formatOrderId(order.orderId || snap.key)}`, `Order for ₹${order.total} is placed.`, 'new', state.currentOutlet, snap.key);
                 state.unacknowledgedOrders.add(snap.key);
                 syncAppBadge();
+                // Update live badge count to match KDS-visible orders
+                updateLiveBadge();
                 startContinuousSound();
                 setTimeout(() => { highlightOrder(snap.key); }, 1000);
             }
@@ -546,7 +550,7 @@ export async function renderOrders(snap) {
         o.normalizedItems = items;
 
         const status = (o.status || "Unknown").trim();
-        const isLive = _liveStatusList.some(s => s.toLowerCase() === status.toLowerCase()) ||
+        const isLive = ['Placed', 'Confirmed', 'Ready'].includes(status) ||
             (status === 'Served' && o.paymentStatus !== 'Paid' && !o.paidAt);
         
         if (isLive) liveCount++;
@@ -795,6 +799,29 @@ export async function renderOrders(snap) {
             liveBadge.classList.remove('hidden');
         } else {
             liveBadge.classList.add('hidden');
+        }
+    }
+
+    function updateLiveBadge() {
+        const liveBadge = document.getElementById('badge-live');
+        // Count orders with KDS-visible statuses: Placed, Confirmed, Ready
+        // (Served with unpaid also counts - same as renderOrders logic)
+        let count = 0;
+        state.ordersMap.forEach(o => {
+            if (!o) return;
+            const status = (o.status || '').trim();
+            if (status === 'Placed' || status === 'Confirmed' || status === 'Ready' ||
+                (status === 'Served' && o.paymentStatus !== 'Paid' && !o.paidAt)) {
+                count++;
+            }
+        });
+        if (liveBadge) {
+            liveBadge.innerText = count;
+            if (count > 0) {
+                liveBadge.classList.remove('hidden');
+            } else {
+                liveBadge.classList.add('hidden');
+            }
         }
     }
 

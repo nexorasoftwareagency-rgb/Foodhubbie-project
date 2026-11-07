@@ -251,17 +251,17 @@
             <div class="promo-sub">Offers, order updates, and your account.</div>
         </div>
         <div class="promo-tabs" role="tablist" aria-label="Promotions sections">
-            <button type="button" class="promo-tab active" data-promo-tab="offers" role="tab" aria-selected="true">Offers</button>
-            <button type="button" class="promo-tab" data-promo-tab="notifications" role="tab" aria-selected="false">Notifications<span id="promoTabDot" class="promo-tab-dot hidden" aria-label="Unread updates"></span></button>
-            <button type="button" class="promo-tab" data-promo-tab="account" role="tab" aria-selected="false">Account</button>
+            <button type="button" class="promo-tab active" data-promo-tab="offers" role="tab" aria-selected="true" aria-controls="promoPaneOffers" id="tab-promo-offers" tabindex="0">Offers</button>
+            <button type="button" class="promo-tab" data-promo-tab="notifications" role="tab" aria-selected="false" aria-controls="promoPaneNotifications" id="tab-promo-notifications" tabindex="-1">Notifications<span id="promoTabDot" class="promo-tab-dot hidden" aria-label="Unread updates"></span></button>
+            <button type="button" class="promo-tab" data-promo-tab="account" role="tab" aria-selected="false" aria-controls="promoPaneAccount" id="tab-promo-account" tabindex="-1">Account</button>
         </div>
 
-        <div id="promoPaneOffers" class="promo-pane" role="tabpanel">
+        <div id="promoPaneOffers" class="promo-pane" role="tabpanel" aria-labelledby="tab-promo-offers">
             <div id="offersInboxList" class="notif-inbox hidden"></div>
             <div id="promotionsLinksContainer" class="promotions-links"></div>
         </div>
 
-        <div id="promoPaneNotifications" class="promo-pane hidden" role="tabpanel">
+        <div id="promoPaneNotifications" class="promo-pane hidden" role="tabpanel" aria-labelledby="tab-promo-notifications">
             <div id="pwaInstallCard" class="pwa-install-card hidden">
                 <div class="pwa-card-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -294,10 +294,10 @@
                 <button type="button" class="btn-pwa-notify" id="btnPwaNotify">Enable</button>
             </div>
 
-            <div id="notificationInboxList" class="notif-inbox"></div>
+            <div id="notificationInboxList" class="notif-inbox" role="tabpanel" aria-labelledby="tab-promo-notifications"></div>
         </div>
 
-        <div id="promoPaneAccount" class="promo-pane hidden" role="tabpanel">
+        <div id="promoPaneAccount" class="promo-pane hidden" role="tabpanel" aria-labelledby="tab-promo-account">
             <div id="accountProfileCard" class="account-wrap"></div>
         </div>
     </div>

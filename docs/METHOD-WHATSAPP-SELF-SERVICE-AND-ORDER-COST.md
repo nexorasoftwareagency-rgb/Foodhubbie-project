@@ -60,11 +60,11 @@ Every WhatsApp order sends status notifications (templates). Each has a Meta rat
 
 | Category | List rate (IND / message) | Notes |
 |---|---|---|
-| Utility | ~₹0.115 / msg (Meta IN rate card Oct 2026, +18% GST = ₹0.1357 delivered) | **Per-delivery billing only** (undelivered = free); charged inside 24h window since 2026-10-01; 1,000 service msgs/mo free then charged at service rate (lower than utility) |
-| Marketing | ~₹2.00 – ₹2.50 | Promo is ₹1 — below cost, near-zero/negative margin |
-| Authentication | ~₹1.50 – ₹1.90 | OTP messages (only if AUTHENTICATION category resubmitted) |
+| Utility | **₹0.115 / delivered msg** (Meta IN list price already includes GST) | Per-delivery billing; charged inside open 24h window since 2026-10-01; 1,000 service msgs/mo free, then ₹0.115 applies |
+| Marketing | **₹0.8631** | Promo is ₹1 — below cost, near-zero/negative margin |
+| Authentication | **₹0.115** (after 1,000 free msgs/mo per number) | OTP messages (only if AUTHENTICATION category resubmitted) |
 
-**Service messages (non-template, bot replies):** Free for first **1,000/month per phone number**, then charged at service rate (~₹0.50–₹0.80).
+**Service messages (non-template, bot replies):** Free for first **1,000/month per number**, then charged at service rate **₹0.115** |
 
 ---
 
@@ -82,14 +82,14 @@ messages = {
   feedback/thanks: 1     // service (free if within window)
 };
 
-messageCostPaise = sum(messages[cat] * indiaRate[cat]) * 1.18;   // +18% GST (Meta IN); ~₹0.1357/utility msg delivered
+messageCostPaise = sum(messages[cat] * metaRatePaise[cat]);   // Meta's INR published list price already includes GST — no × 1.18
 orderRevenuePaise = order.totalPaise * 0.03;                   // 3% WhatsApp bot order
 
 walletDebitPaise = messageCostPaise + (promo ? 1 * promoCount : 0);
 netMarginPaise = orderRevenuePaise - walletDebitPaise;
 ```
 
-**Break-even (INR, corrected 2026-11-01 with user's Meta IN rate):** At ₹0.115/utility msg + 18% GST = ₹0.1357 delivered. 6 utility templates/order ≈ ₹0.81/order message cost. At ₹300 order, 3% = ₹9 — very positive. At ₹100 order, 3% = ₹3 — positive (previous rough estimate was wrong; actual Meta rate is much lower than initial guess). Only very small orders (< ₹40, 6 messages) go negative — the 3% plan has wide headroom.
+**Break-even (INR):** The published Meta India rates already include GST in their list price, so no mark-up is applied. Dine-in: ~4–5 utility templates per order × ₹0.115 = **~₹0.575**. Worst case with rider-change message adds another ₹0.115 = ~₹0.69. At ₹300 order, 3% revenue = ₹9 — wide positive. At ₹100 order, 3% revenue = ₹3 — still positive. Only very small orders (< ₹35, 5 messages) approach break-even negative. Marketing rate ₹0.8631 is higher than all-order costs, so promo margin remains near zero on a small order (as expected).
 
 **Cancelled / refunded orders:** Bot messages already sent still count (Meta delivers them; no refund mechanism). Deduct from wallet regardless of order status — only cancelled orders excluded from **revenue** billing (`_effectiveTotal`), not from message cost.
 

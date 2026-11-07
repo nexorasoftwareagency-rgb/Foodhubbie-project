@@ -38,7 +38,7 @@ const MSG_PER_ORDER = 8;       // bot handles DELIVERY orders only (dine-in = QR
 const MKTG_PER_ORDER = 0.1;    // promo broadcasts (adjust with --mktg=)
 const INR = 88;                // ₹/USD
 const RATE_UTILITY = 0.115;    // ₹/msg India: utility + service (post 2026-10-01)
-const RATE_MARKETING = 0.86;   // ₹/msg India marketing, never free
+const RATE_MARKETING = 0.8631;   // ₹/msg India marketing, never free
 const FREE_SERVICE = 0;        // free 1,000/number/mo allowance REMOVED from model (decision): bill every message, worst case
 
 const ORDERS_TIERS = [10, 50, 100];

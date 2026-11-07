@@ -231,11 +231,11 @@ Why this is NOT Marketing (defense if Meta reviews):
 - Contains: greeting, welcome, store identity — all transactional / relationship.
 - Contains zero: discount codes, limited-time words, "offer", "sale", "win", "free", urgency, promotional imagery.
 - Contains only: food emoji (🍕), decorative line (════════), and welcome phrase.
-- Per docs/BILLING-MODEL.md: service/utility message, charged at ₹0.1357 delivered + 18% GST.
+- Per docs/BILLING-MODEL.md: service/utility message, charged at **₹0.115** delivered (no extra GST — Meta's list price already includes 18%) |
 - The {{2}} variable lets the admin customize the welcome phrase per restaurant without changing category.
 - If Meta rejects as marketing, fix is remove decorative lines (not the language) — text itself is non-promotional by design.
 
-Cost: ₹0.1357 / delivered greeting (utility). Per session, not per message. Inside 24h window: if customer initiates, reply is service (free first 1,000/mo); if bot initiates greeting outside window = utility (charged). With ES v4, greeting is sent inside the session window (customer just started chat), so it falls under service/free tier when possible — but template stays UTILITY-classified regardless.
+Cost: **₹0.115** delivered greeting (utility). Per session, not per message. Inside 24h window: if customer initiates, reply is service (free first 1,000/mo); if bot initiates greeting outside window = utility (charged). With ES v4, greeting is sent inside the session window (customer just started chat), so it falls under service/free tier when possible — but template stays UTILITY-classified regardless.
 
 Integration (Foodhubbie): bot/index.js sends greeting via sendOrderFlow(..., withMenu=false) — uses image + welcome text currently (plainWelcome removed per 2026-10-18). When greeting_welcome_utility approved, swap to sendTemplate using header (image URL = store.greetingImage) + body variables {{1}} (storeName), {{2}} (welcomePhrase) — one UTILITY message combining image + welcome. Optional greeting_order_link (button) stays separate.
 

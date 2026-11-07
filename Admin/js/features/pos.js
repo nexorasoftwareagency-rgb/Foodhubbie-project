@@ -19,6 +19,23 @@ let _connUnsub = null;
 let _dineinSettings = {};
 
 /**
+ * D4 wallet gate validation for POS
+ * Reads the public walletGate flag from the outlet
+ */
+async function assertWalletGate() {
+    const { Outlet, get } = await import('../firebase.js');
+    const snap = await get(Outlet.ref('walletGate'));
+    const gate = snap.exists() ? String(snap.val()) : null;
+    if (gate === 'closed') {
+        const err = new Error('WALLET_CLOSED');
+        err.userMessage = 'Ordering is temporarily unavailable. Please try again later.';
+        err.code = 'WALLET_CLOSED';
+        throw err;
+    }
+    return gate; // 'low' or null/undefined = open
+}
+
+/**
  * Loads the menu for the Walk-in POS view
  */
 export async function loadWalkinMenu() {
@@ -101,17 +118,42 @@ export function renderWalkinCategoryTabs() {
     // "Combos" is treated as a pseudo-category on the POS:
     // selecting it shows only combo tiles; selecting any dish category hides combos.
     let html = `
-        <div class="category-tab ${state.activeWalkinCategory === 'All' ? 'active' : ''}" role="button" data-action="filterWalkinByCategory" data-val="All">All</div>
-        <div class="category-tab ${state.activeWalkinCategory === 'Combos' ? 'active' : ''}" role="button" data-action="filterWalkinByCategory" data-val="Combos">Combos</div>
+        <div class="category-tab ${state.activeWalkinCategory === 'All' ? 'active' : ''}" 
+             role="tab" 
+             aria-selected="${state.activeWalkinCategory === 'All' ? 'true' : 'false'}"
+             tabindex="${state.activeWalkinCategory === 'All' ? '0' : '-1'}"
+             data-action="filterWalkinByCategory" 
+             data-val="All" 
+             aria-controls="walkinDishGrid"
+             id="tab-walkin-All">All</div>
+        <div class="category-tab ${state.activeWalkinCategory === 'Combos' ? 'active' : ''}" 
+             role="tab" 
+             aria-selected="${state.activeWalkinCategory === 'Combos' ? 'true' : 'false'}"
+             tabindex="${state.activeWalkinCategory === 'Combos' ? '0' : '-1'}"
+             data-action="filterWalkinByCategory" 
+             data-val="Combos" 
+             aria-controls="walkinDishGrid"
+             id="tab-walkin-Combos">Combos</div>
     `;
 
     state.categories.forEach(cat => {
+        const isActive = state.activeWalkinCategory === cat.name;
+        const tabId = `tab-walkin-${cat.name.replace(/\s+/g, '-')}`;
         html += `
-            <div class="category-tab ${state.activeWalkinCategory === cat.name ? 'active' : ''}" role="button" data-action="filterWalkinByCategory" data-val="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</div>
+            <div class="category-tab ${isActive ? 'active' : ''}" 
+                 role="tab" 
+                 aria-selected="${isActive ? 'true' : 'false'}"
+                 tabindex="${isActive ? '0' : '-1'}"
+                 data-action="filterWalkinByCategory" 
+                 data-val="${escapeHtml(cat.name)}" 
+                 aria-controls="walkinDishGrid"
+                 id="${tabId}">${escapeHtml(cat.name)}</div>
         `;
     });
 
     container.innerHTML = html;
+    container.setAttribute('role', 'tablist');
+    container.setAttribute('aria-label', 'POS Menu Categories');
 }
 
 /**
@@ -122,8 +164,14 @@ export function renderWalkinCategoryTabs() {
 export function filterWalkinByCategory(category, el) {
     state.activeWalkinCategory = category;
     if (el) {
-        document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.category-tab').forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+            t.setAttribute('tabindex', '-1');
+        });
         el.classList.add('active');
+        el.setAttribute('aria-selected', 'true');
+        el.setAttribute('tabindex', '0');
     }
     applyWalkinFilters();
 }
@@ -182,12 +230,19 @@ export function renderWalkinDishGrid(dishes) {
         const price = d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0);
         const isOos = d.stock === false;
         const oosClass = isOos ? ' oos-wrap is-out-of-stock' : '';
-        const oosOverlay = isOos ? '<div class="oos-overlay">Currently Unavailable</div>' : '';
+        const oosOverlay = isOos ? '<div class="oos-overlay" aria-hidden="true">Currently Unavailable</div>' : '';
+        const ariaLabel = `${d.name} ${d.category ? `(${d.category})` : ''} - ₹${price}${isOos ? ' - Currently unavailable' : ''}`;
         return `
-            <div class="pos-dish-btn-v4${oosClass}" role="button" data-action="openPOSSelectionModal" data-id="${d.id}"${isOos ? ' data-out-of-stock="true"' : ''}>
+            <div class="pos-dish-btn-v4${oosClass}" 
+                 role="button" 
+                 tabindex="${isOos ? '-1' : '0'}"
+                 data-action="openPOSSelectionModal" 
+                 data-id="${d.id}"
+                 aria-label="${escapeHtml(ariaLabel)}"
+                 ${isOos ? ' aria-disabled="true" data-out-of-stock="true"' : ''}>
                 <div class="dish-visual">
                     <img src="${escapeHtml(d.image || 'assets/images/placeholder-dish.png')}" alt="${escapeHtml(d.name)}" loading="lazy">
-                    <div class="dish-overlay">
+                    <div class="dish-overlay" aria-hidden="true">
                         <span class="price-chip">₹${price}</span>
                     </div>
                     ${oosOverlay}
@@ -247,6 +302,9 @@ export async function openPOSSelectionModal(dishId) {
 
         const card = document.createElement('div');
         card.className = `size-card ${isDefault ? 'active' : ''}`;
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-pressed', isDefault ? 'true' : 'false');
         card.setAttribute('data-action', 'selectPOSSize');
         card.setAttribute('data-name', name);
         card.setAttribute('data-price', price);
@@ -267,12 +325,15 @@ export async function openPOSSelectionModal(dishId) {
         Object.entries(cat.addons).forEach(([name, price]) => {
             const item = document.createElement('div');
             item.className = 'addon-check-item';
+            item.setAttribute('role', 'checkbox');
+            item.setAttribute('aria-checked', 'false');
+            item.setAttribute('tabindex', '0');
             item.setAttribute('data-action', 'togglePOSAddon');
             item.setAttribute('data-name', name);
             item.setAttribute('data-price', price);
             item.innerHTML = `
                 <div class="flex-row flex-center flex-gap-10">
-                    <div class="custom-checkbox"></div>
+                    <div class="custom-checkbox" aria-hidden="true"></div>
                     <span class="addon-name">${escapeHtml(name)}</span>
                 </div>
                 <span class="addon-price">+₹${Number(price).toLocaleString()}</span>
@@ -327,8 +388,12 @@ export function hidePOSSelectionModal() {
 
 export function selectPOSSize(name, price, el) {
     logger.info('POS', `Selecting Size: ${name} (Price: ₹${price})`);
-    document.querySelectorAll('.size-card').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.size-card').forEach(c => {
+        c.classList.remove('active');
+        c.setAttribute('aria-pressed', 'false');
+    });
     el.classList.add('active');
+    el.setAttribute('aria-pressed', 'true');
     state.currentPOSModalSize = { name, price };
     updatePOSModalTotal();
 }
@@ -338,10 +403,12 @@ export function togglePOSAddon(name, price, el) {
     if (!isSelected) {
         state.currentPOSModalAddons[name] = Number(price);
         el.classList.add('active');
+        el.setAttribute('aria-checked', 'true');
         el.querySelector('.custom-checkbox').classList.add('checked');
     } else {
         delete state.currentPOSModalAddons[name];
         el.classList.remove('active');
+        el.setAttribute('aria-checked', 'false');
         el.querySelector('.custom-checkbox').classList.remove('checked');
     }
     updatePOSModalTotal();
@@ -491,7 +558,7 @@ export async function renderWalkinCart() {
     const items = Object.entries(state.walkinCart);
     if (items.length === 0) {
         list.innerHTML = `
-            <div class="empty-cart">
+            <div class="empty-cart" role="status" aria-live="polite">
                 <div class="empty-cart-title">Your cart is empty</div>
                 <div class="empty-cart-subtitle">Browse dishes to add items</div>
             </div>
@@ -521,12 +588,12 @@ export async function renderWalkinCart() {
                         <div class="fs-12 color-primary font-700 mt-4">₹${item.price.toLocaleString()} <span class="text-muted font-normal">per item</span></div>
                     </div>
                     <div class="identity-info-v4 text-right ml-10">
-                        <div class="qty-control-v4 mb-4">
-                            <button class="qty-btn" data-action="walkinQtyChange" data-id="${key}" data-val="-1">
+                        <div class="qty-control-v4 mb-4" role="group" aria-label="Quantity for ${escapeHtml(item.name)}">
+                            <button class="qty-btn" data-action="walkinQtyChange" data-id="${key}" data-val="-1" aria-label="Decrease quantity" aria-controls="qty-${key}">
                                 <i data-lucide="minus"></i>
                             </button>
-                            <span class="qty-val">${item.qty}</span>
-                            <button class="qty-btn" data-action="walkinQtyChange" data-id="${key}" data-val="1">
+                            <span class="qty-val" id="qty-${key}" aria-live="polite">${item.qty}</span>
+                            <button class="qty-btn" data-action="walkinQtyChange" data-id="${key}" data-val="1" aria-label="Increase quantity" aria-controls="qty-${key}">
                                 <i data-lucide="plus"></i>
                             </button>
                         </div>
@@ -534,10 +601,10 @@ export async function renderWalkinCart() {
                     </div>
                 </div>
                 <div class="flex-row mt-8 border-t-ghost pt-8">
-                   <button class="btn-remove-v4 flex-center flex-gap-6 fs-11" data-action="walkinRemoveItem" data-id="${key}">
+                   <button class="btn-remove-v4 flex-center flex-gap-6 fs-11" data-action="walkinRemoveItem" data-id="${key}" aria-label="Remove ${escapeHtml(item.name)} from cart">
                        <i data-lucide="trash-2" style="width:12px;"></i> Remove
                    </button>
-                   ${item.comboId ? '' : `<button class="btn-remove-v4 flex-center flex-gap-6 fs-11 ml-8" data-action="openCartAddonPicker" data-id="${key}" title="Edit add-ons for this item">
+                   ${item.comboId ? '' : `<button class="btn-remove-v4 flex-center flex-gap-6 fs-11 ml-8" data-action="openCartAddonPicker" data-id="${key}" aria-label="Edit add-ons for ${escapeHtml(item.name)}">
                        <i data-lucide="settings-2" style="width:12px;"></i> Edit
                    </button>`}
                 </div>
@@ -1017,6 +1084,18 @@ export function selectWalkinPayment(method, el) {
  */
 
 export async function submitWalkinSale() {
+    // Wallet gate validation (D4): prevent orders when wallet is closed
+    try {
+        await assertWalletGate();
+    } catch (e) {
+        if (e.code === 'WALLET_CLOSED') {
+            logger.warn('POS', 'Submit blocked: wallet closed');
+            ui.showToast("Ordering is temporarily unavailable. Please try again later.", "error");
+            return;
+        }
+        throw e;
+    }
+
     const items = Object.values(state.walkinCart);
     if (items.length === 0) {
         logger.warn('POS', 'Submit blocked: cart is empty');
@@ -1530,6 +1609,7 @@ export function addComboToWalkinCart(comboId) {
  *   Esc    → close selection modal / offers panel
  *   c      → clear cart (if cart non-empty)
  *   ?      → show shortcut hints (toast)
+ *   Arrows → navigate dish grid (when focused on a dish tile)
  *
  * Ignored while typing, with any modifier held (Ctrl+C must stay copy),
  * while the selection modal / offers panel is open, and on key repeat.
@@ -1574,6 +1654,74 @@ export function _initPosKeyboardShortcuts() {
         // not submit the sale from behind the modal.
         if (e.key === 'Enter' && (tag === 'BUTTON' || tag === 'A' || el?.getAttribute?.('role') === 'button')) return;
 
+        // Arrow key navigation for POS category tabs (Left/Right)
+        const tabButtons = document.querySelectorAll('.category-tab[role="tab"][tabindex="0"]');
+        if (tabButtons.length > 0 && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && tabButtons.length > 1) {
+            const currentIndex = Array.from(tabButtons).indexOf(document.activeElement);
+            if (currentIndex >= 0) {
+                e.preventDefault();
+                let nextIndex = currentIndex;
+                switch (e.key) {
+                    case 'ArrowRight':
+                        nextIndex = (currentIndex + 1) % tabButtons.length;
+                        break;
+                    case 'ArrowLeft':
+                        nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+                        break;
+                    case 'Home':
+                        nextIndex = 0;
+                        break;
+                    case 'End':
+                        nextIndex = tabButtons.length - 1;
+                        break;
+                }
+                if (nextIndex !== currentIndex) {
+                    tabButtons[nextIndex].focus();
+                    tabButtons[nextIndex].click(); // Activate the tab
+                }
+                return;
+            }
+        }
+
+        // Arrow key navigation for POS dish grid
+        const dishButtons = document.querySelectorAll('#walkinDishGrid .pos-dish-btn-v4[tabindex="0"]');
+        if (dishButtons.length > 0 && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
+            e.preventDefault();
+            const currentIndex = Array.from(dishButtons).indexOf(document.activeElement);
+            let nextIndex = currentIndex;
+
+            // Calculate grid columns (approximate based on container width)
+            const grid = document.getElementById('walkinDishGrid');
+            const columns = grid ? Math.max(1, Math.floor(grid.offsetWidth / 140)) : 4;
+
+            switch (e.key) {
+                case 'ArrowRight':
+                    nextIndex = Math.min(currentIndex + 1, dishButtons.length - 1);
+                    break;
+                case 'ArrowLeft':
+                    nextIndex = Math.max(currentIndex - 1, 0);
+                    break;
+                case 'ArrowDown':
+                    nextIndex = Math.min(currentIndex + columns, dishButtons.length - 1);
+                    break;
+                case 'ArrowUp':
+                    nextIndex = Math.max(currentIndex - columns, 0);
+                    break;
+                case 'Home':
+                    nextIndex = 0;
+                    break;
+                case 'End':
+                    nextIndex = dishButtons.length - 1;
+                    break;
+            }
+
+            if (nextIndex !== currentIndex && nextIndex >= 0 && nextIndex < dishButtons.length) {
+                dishButtons[nextIndex].focus();
+                dishButtons[nextIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            return;
+        }
+
         switch (e.key.toLowerCase()) {
             case 'enter':
                 e.preventDefault();
@@ -1594,7 +1742,7 @@ export function _initPosKeyboardShortcuts() {
                 break;
             case '?':
                 e.preventDefault();
-                ui.showToast('POS shortcuts: Enter = submit sale · Esc = close · c = clear cart · ? = help', 'info');
+                ui.showToast('POS shortcuts: Enter = submit sale · Esc = close · c = clear cart · ? = help · Arrows = navigate dishes', 'info');
                 break;
         }
     });

@@ -23,7 +23,9 @@
     "playwright": "^1.61.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.63.0",
+    "axe-core": "^4.14.0",
     "esbuild": "^0.28.1",
     "purgecss": "^8.0.0"
   },

@@ -11,11 +11,16 @@
 // India list rates (INR / delivered msg, +18% GST baked into delivered cost below)
 // Source: Meta IN rate card verified 2026-11-01 (BILLING-MODEL.md §4).
 // These are the DEFAULT start values; always prefer passing rateTable in.
+// Meta India INR rate card, effective 1 October 2026 (verified against
+// developers.facebook.com/docs/whatsapp/pricing; the previous values here were
+// stale GST-baked estimates — ₹0.1357 was an old 18% mark-up of ₹0.115).
+// Rates are per delivered message; GST is already included in Meta's published
+// INR list prices, so no extra +18% is added anywhere in this module.
 export const DEFAULT_RATE_TABLE = {
-  utility:     13.57, // ₹0.115 + 18% GST = ₹0.1357 / delivered = 13.57 paisa
-  marketing:   236.00, // ~₹2.00 + 18% GST = ₹2.36 / delivered = 236 paise (approx)
-  authentication: 177.00, // ~₹1.50 + 18% GST = ₹1.77 / delivered = 177 paise (approx)
-  service:     13.57, // service rate equals utility after 1,000/mo free tier; keep same for estimates
+  utility:     115,  // ₹0.115 / delivered (incl. 18% GST baked in by Meta)
+  marketing:    86,  // ₹0.86 (paise; exact ₹0.8631 from Meta INR rate card, Math.round truncates)
+  authentication: 115, // ₹0.115 / delivered (incl. 18% GST baked in by Meta)
+  service:     115, // ₹0.115 after 1,000 free msgs/mo/number; free otherwise
 };
 
 // Per WABA / phone number: free service messages reset monthly, do NOT roll over.
@@ -95,7 +100,7 @@ export function canSend({ metaUsage = {}, messageCaps = {}, metaSpendThresholdPa
   if (dailyCap !== Infinity && dailyCost >= dailyCap) return false;
   if (maxMsg !== Infinity && msgCount >= maxMsg) return false;
 
-  // Marketing always throttled first per §3 (promos have near-zero margin with INDIA rate ~₹2.36)
+  // Marketing always throttled first per §3 (promos have near-zero margin; India Meta rate is ₹0.86/msg)
   if (category === 'marketing') {
     // Extra guard: block marketing unless explicitly enabled per-tenant (opt-in).
     // Caller must check opts.allowMarketing; this is a second-layer guard.
