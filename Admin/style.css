@@ -5875,6 +5875,123 @@ body {
 .notification-item-v4.delivered { border-left: 4px solid var(--success) !important; }
 .notification-item-v4.info { border-left: 4px solid var(--info) !important; }
 
+/* Notification Card — Admin dashboard + mobile sheet */
+.notification-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+.notification-card.notif-unread {
+    background: rgba(255, 255, 255, 0.95);
+    border-left-color: var(--primary);
+}
+.notification-card.notif-read {
+    opacity: 0.85;
+}
+.notification-card:hover {
+    background: #fff;
+    transform: translateX(3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.notification-card:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+.notification-card .notif-card-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(232, 73, 8, 0.1);
+}
+.notification-card.new .notif-card-icon { background: rgba(56, 103, 214, 0.12); }
+.notification-card.delivered .notif-card-icon { background: rgba(16, 185, 129, 0.12); }
+.notification-card.info .notif-card-icon { background: rgba(99, 102, 241, 0.12); }
+.notification-card.promo .notif-card-icon { background: rgba(168, 85, 247, 0.12); }
+.notification-card.cancelled .notif-card-icon { background: rgba(239, 68, 68, 0.12); }
+.notification-card.refunded .notif-card-icon { background: rgba(59, 130, 246, 0.12); }
+.notification-card .notif-card-icon-emoji {
+    font-size: 18px;
+}
+.notification-card .notif-card-body {
+    flex: 1;
+    min-width: 0;
+}
+.notification-card .notif-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.notification-card .notif-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+}
+.notification-card.new .notif-card-title { color: var(--primary); }
+.notification-card.delivered .notif-card-title { color: var(--success); }
+.notification-card .notif-card-time {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.notification-card .notif-card-text {
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-muted);
+    margin: 0;
+}
+.notification-card .notif-card-dot {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+.notification-card.notif-read .notif-card-dot { display: none; }
+
+/* Empty state for notifications dashboard */
+.notif-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-muted);
+}
+.notif-empty-state .notif-empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+.notif-empty-state h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 6px;
+}
+.notif-empty-state p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0;
+}
+
 .notification-item-v4:hover {
     background: white;
     transform: translateX(4px);

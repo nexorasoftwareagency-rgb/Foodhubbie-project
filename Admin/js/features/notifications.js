@@ -107,7 +107,13 @@ export function updateNotificationUI() {
         if (sideBadge) sideBadge.classList.add('hidden');
     }
 
-    const emptyHtml = '<div class="empty-notif" style="padding:40px; text-align:center; color:#94a3b8; font-size:14px;">No new notifications</div>';
+    const emptyHtml = `
+        <div class="notif-empty-state">
+            <div class="notif-empty-icon">🔔</div>
+            <h3>No notifications</h3>
+            <p>All caught up — no new alerts.</p>
+        </div>
+    `;
 
     if (list) {
         list.innerHTML = state.notifications.length === 0 ? emptyHtml : state.notifications.slice(0, 10).map(n => renderNotifItem(n)).join('');
@@ -187,24 +193,60 @@ window.addEventListener('popstate', (e) => {
     }
 });
 
+const NOTIF_ICONS = {
+    new_order: '🛒',
+    delivered: '✅',
+    served: '🍽️',
+    ready: '📦',
+    info: 'ℹ️',
+    promo: '🎁',
+    cancelled: '❌',
+    refunded: '💰',
+};
+
+function notifIcon(type) {
+    return NOTIF_ICONS[type] || NOTIF_ICONS.info;
+}
+
+function notifColorClass(type) {
+    const map = {
+        new_order: 'new',
+        delivered: 'delivered',
+        served: 'delivered',
+        ready: 'ready',
+        info: 'info',
+        promo: 'promo',
+        cancelled: 'cancelled',
+        refunded: 'refunded',
+    };
+    return map[type] || 'info';
+}
+
 function renderNotifItem(n, isFull = false) {
-    const outletIcon = '🏪';
-    const typeClass = n.type || 'info';
+    const type = n.type || 'info';
+    const colorClass = notifColorClass(type);
+    const icon = notifIcon(type);
+    const readClass = n.read ? 'notif-read' : 'notif-unread';
     
     return `
-        <div class="notification-item-v4 ${typeClass} ${isFull ? 'notif-item-full' : ''} p-15 mb-10 br-16">
-            <div class="identity-chip-v4 mb-8">
-                <div class="kpi-icon-box glass sm" style="width:28px; height:28px; font-size:12px;">
-                    <span>${outletIcon}</span>
-                </div>
-                <div class="identity-info-v4">
-                    <span class="name font-700 fs-14">${escapeHtml(n.title)}</span>
-                    <span class="sub fs-11">${escapeHtml(n.time)}</span>
-                </div>
+        <div class="notification-item-v4 ${colorClass} ${isFull ? 'notif-item-full' : ''} ${readClass} notification-card"
+             data-notif-id="${escapeHtml(String(n.id || ''))}"
+             data-notif-type="${escapeHtml(type)}"
+             tabindex="0"
+             role="button"
+             aria-label="${escapeHtml(n.title)}. ${escapeHtml(n.sub || '')}"
+             aria-checked="${n.read ? 'true' : 'false'}">
+            <div class="notif-card-icon ${colorClass}">
+                <span class="notif-card-icon-emoji">${icon}</span>
             </div>
-            <div class="notif-sub-v4 fs-13 color-text-muted pl-35">
-                ${escapeHtml(n.sub)}
+            <div class="notif-card-body">
+                <div class="notif-card-header flex justify-between items-baseline mb-6">
+                    <h4 class="notif-card-title ${colorClass}">${escapeHtml(n.title)}</h4>
+                    <span class="notif-card-time">${escapeHtml(n.time || '')}</span>
+                </div>
+                <div class="notif-card-text">${escapeHtml(n.sub || '')}</div>
             </div>
+            ${!n.read ? `<div class="notif-card-dot"></div>` : ''}
         </div>
     `;
 }
@@ -276,3 +318,24 @@ export function highlightOrder(orderId) {
         }
     }, 120);
 }
+
+/**
+ * Bind click delegation for Admin notification cards.
+ * Clicking a card marks it as read and refreshes the badge/sheet.
+ */
+function bindNotificationCardClicks() {
+    document.body.addEventListener('click', (e) => {
+        const card = e.target.closest('.notification-card');
+        if (!card) return;
+        const notifId = card.getAttribute('data-notif-id');
+        if (!notifId) return;
+        const notif = state.notifications.find(n => String(n.id) === notifId);
+        if (notif && !notif.read) {
+            notif.read = true;
+            updateNotificationUI();
+        }
+    });
+}
+
+// Initialise click delegation once at module load.
+bindNotificationCardClicks();
