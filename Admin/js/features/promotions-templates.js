@@ -370,6 +370,23 @@ async function _getAdminAuthToken() {
   return auth.currentUser ? auth.currentUser.getIdToken() : Promise.resolve(null);
 }
 
+// Friendly labels for the platform's own approved shells, so the composer reads
+// "Flash Sale — Order Now button" instead of "promo_cta_flash (MARKETING)".
+// Templates not listed here still render as "<name> (<category>)".
+const WA_TEMPLATE_LABELS = {
+  proactive_promo: 'Special Offer — English',
+  promo_hinglish_offer: 'Khaas Offer — Hinglish',
+  promo_hinglish_discount: 'Sirf Aapke Liye — Hinglish',
+  promo_hinglish_festive: 'Tyohaar Special — Hinglish',
+  promo_hinglish_winback: 'Miss You — Hinglish',
+  promo_cta_flash: '⚡ Flash Sale — Order Now button',
+  promo_cta_cart: '🛒 Abandoned Cart — Order Now button',
+  promo_cta_winback: '💚 Win-back — Order Now button',
+  promo_cta_birthday: '🎂 Birthday — Order Now button',
+  promo_cta_weekend: '🎉 Weekend Special — Order Now button',
+  promo_cta_newitem: '🆕 New Item — Order Now button',
+};
+
 /** Load approved WhatsApp templates from Meta WABA, populate the promoWaTemplate select. */
 export async function loadApprovedWaTemplates(bid, oid) {
   const select = document.getElementById('promoWaTemplate');
@@ -423,7 +440,7 @@ export async function loadApprovedWaTemplates(bid, oid) {
     approved.forEach((t) => {
       const opt = document.createElement('option');
       opt.value = t.name;
-      opt.textContent = `${t.name} (${t.category})`; // Show category for clarity
+      opt.textContent = WA_TEMPLATE_LABELS[t.name] || `${t.name} (${t.category})`;
       select.appendChild(opt);
     });
     // Select the current value if still present in approved list

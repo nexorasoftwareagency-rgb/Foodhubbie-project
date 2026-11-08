@@ -1,0 +1,45 @@
+{
+  "waba": "2589174454849821",
+  "bid": "roshani-pizza",
+  "oid": "pizza",
+  "orderUrl": "https://menu.foodhubbie.in/?b=roshani-pizza&o=pizza",
+  "appliedAt": "2026-11-08T13:07:48.372Z",
+  "results": [
+    {
+      "name": "promo_cta_flash",
+      "action": "create",
+      "status": "PENDING",
+      "id": "2273845836798233"
+    },
+    {
+      "name": "promo_cta_cart",
+      "action": "create",
+      "status": "PENDING",
+      "id": "1068514262861641"
+    },
+    {
+      "name": "promo_cta_winback",
+      "action": "create",
+      "status": "PENDING",
+      "id": "1650508653198204"
+    },
+    {
+      "name": "promo_cta_birthday",
+      "action": "create",
+      "status": "PENDING",
+      "id": "4554298738157779"
+    },
+    {
+      "name": "promo_cta_weekend",
+      "action": "create",
+      "status": "PENDING",
+      "id": "4603297203290916"
+    },
+    {
+      "name": "promo_cta_newitem",
+      "action": "create",
+      "status": "PENDING",
+      "id": "1431748892005553"
+    }
+  ]
+}

@@ -34,6 +34,13 @@ let _killSwitchCache = { value: false, ts: 0 };
 let _promoEnabledCache = { value: true, ts: 0 };
 let _dailyLimitCache = { value: PROMO_WARMUP_DAILY_LIMITS[0], ts: 0 };
 
+// These approved shells carry "Reply STOP to unsubscribe." as a template FOOTER,
+// so appending it to the body text too would print it twice.
+const TEMPLATES_WITH_STOP_FOOTER = new Set([
+    'promo_cta_flash', 'promo_cta_cart', 'promo_cta_winback',
+    'promo_cta_birthday', 'promo_cta_weekend', 'promo_cta_newitem',
+]);
+
 async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet, waTemplateName) {
     // BAN-RISK: promotional sends are official-API (meta) only — Baileys bulk
     // promos are the top account-ban trigger. Hard block (throw → counted failed).
@@ -49,7 +56,7 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, ou
         return;
     }
     let finalText = text;
-    if (sendStopMsg && !/stop/i.test(finalText)) finalText += '\n------------------------\n_Reply STOP to unsubscribe._';
+    if (sendStopMsg && !TEMPLATES_WITH_STOP_FOOTER.has(waTemplateName) && !/stop/i.test(finalText)) finalText += '\n------------------------\n_Reply STOP to unsubscribe._';
     try {
         // Meta transport: promotional sends are biz-initiated — plain text is
         // dropped with 131047 outside the 24h window. Try an approved template

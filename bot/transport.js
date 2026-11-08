@@ -20,6 +20,15 @@ const MARKETING_TEMPLATE_NAMES = new Set([
   'promo_hinglish_festive',
   'promo_hinglish_offer',
   'promo_hinglish_winback',
+  // CTA-button shells submitted 2026-11-08 — same single-{{1}} body shape as the
+  // Hinglish shells, plus a static URL button and an Unsubscribe quick reply.
+  // Buttons are template-level, so they render with no send-time change.
+  'promo_cta_flash',
+  'promo_cta_cart',
+  'promo_cta_winback',
+  'promo_cta_birthday',
+  'promo_cta_weekend',
+  'promo_cta_newitem',
 ]);
 
 async function getTransportMode(outlet) {
