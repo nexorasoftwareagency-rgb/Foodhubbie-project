@@ -32,6 +32,13 @@ jobs:
       - name: FCM dead-token prune guard (token-scoped codes only)
         run: node tests/fcm-dead-token-codes.check.cjs
 
+      - name: Server branch invariant (server is an ancestor of main)
+        run: |
+          git fetch --no-tags origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/server:refs/remotes/origin/server
+          node tools/check-server-branch.cjs
+
       - name: Install bot dependencies
         working-directory: bot
         run: npm ci

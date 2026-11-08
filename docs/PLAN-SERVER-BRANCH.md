@@ -1,6 +1,6 @@
 # PLAN — Server Branch (`server`)
 
-**Status:** Phases 0–2 done · **Blocked on:** §9.1 (Phase 3 restart window)
+**Status:** all phases done 2026-11-08 · **Live:** EC2 tracks `origin/server` (`5ba10ad`), sparse-checkout on, deploy script + guard shipped
 **Replaces:** the standing rule *"EC2 `/var/www/foodhubbie` is a pinned dirty worktree — never `git pull` there"* (AGENTS.md → Key Decisions).
 
 ### Progress
@@ -10,9 +10,9 @@
 | 0 — `.gitignore` hardening | **done** `c8b5165` | no pattern shadows a tracked file |
 | 1 — create + push `server` | **done** `c8b5165` | `merge-base --is-ancestor server main` → 0 |
 | 2 — EC2 snapshot | **done** 2026-11-08 04:12 | `/home/ubuntu/backups/foodhubbie-worktree-20261108-041224.tgz` — 26 MB, 1218 entries, 313 session dirs, `service-account.json` present |
-| 3 — checkout `server` on EC2 | **pending** | needs the §9.1 window |
-| 4 — sparse-checkout | pending | after Phase 3 is green |
-| 5 — `tools/server-deploy.sh` | pending | after Phase 4 |
+| 3 — checkout `server` on EC2 | **done** 2026-11-08 04:38 | `HEAD server 5ba10ad`, `git diff --quiet` clean, 4 processes online, `status-all` 401, pizza `[TENANT] outlet=pizza business=roshani-pizza` / `transport=baileys` / `Online`, fresh `pair.connectedAt`, heartbeat 15 s |
+| 4 — sparse-checkout | **done** 2026-11-08 | cone `bot bot-control-api webhook-server shared tools assets`; root files kept; tree 1.3 GB → see deploy log |
+| 5 — `tools/server-deploy.sh` + guard | **done** 2026-11-08 | script run twice (2nd = `already up to date`); `tools/check-server-branch.cjs` wired to `npm run test:server-branch` + CI |
 
 ---
 
