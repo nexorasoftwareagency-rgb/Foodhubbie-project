@@ -1,4 +1,5 @@
 import { navigate, registerAction } from '/js/main.js';
+import { statStrip, chips, keepFocus } from '/js/table-tools.js';
 import { subscribe, flattenOutlets, isReadOnly } from '/js/data-store.js';
 import { exportCsv, exportXlsx, refreshIcons, isStale, escapeHtml, formatUptime, statusPillHtml, transportBadgeHtml, formatMemory, formatAge, transportLabel, showToast, showConfirm, renderUptimeSparkline } from '/js/utils.js';
 
@@ -6,6 +7,10 @@ const mainEl = document.getElementById('app-main');
 let allRows = [];
 let currentFilteredRows = [];
 let selected = new Set();
+let chip = 'all';          // 'all' | 'down' | 'degraded' | 'online'
+let sortBy = 'problems';   // 'problems' | 'name' | 'uptime' | 'updated'
+const RANK = { errored: 0, offline: 1, degraded: 2, unknown: 3, online: 4 };
+const isDown = (b) => b.botStatus === 'offline' || b.botStatus === 'errored';
 
 export function render() {
   mainEl.innerHTML = `
@@ -18,20 +23,27 @@ export function render() {
         <button class="btn btn-ghost" data-action="export-fleet-csv">
           <svg data-lucide="download"></svg> Export CSV
         </button>
-        <div class="glass-card" style="padding:8px 12px;display:flex;gap:14px;font-size:12.5px" id="fleet-summary">
-          <span class="skeleton" style="width:80px;height:14px;display:inline-block"></span>
-        </div>
       </div>
     </div>
 
-    <div class="glass-card" style="margin-bottom:16px;padding:12px 16px;display:flex;gap:10px;align-items:center">
-      <select class="text-input" id="fleet-filter" style="max-width:180px">
-        <option value="all">All statuses</option>
-        <option value="online">Online</option>
-        <option value="degraded">Degraded</option>
-        <option value="offline">Offline / errored</option>
+    <div id="fleet-summary"><div class="skeleton" style="height:58px;margin-bottom:12px"></div></div>
+
+    <div class="toolbar">
+      <div class="search-input-wrap">
+        <svg data-lucide="search"></svg>
+        <input type="text" id="fleet-search" placeholder="Search restaurant or outlet…" aria-label="Search agents" />
+      </div>
+      <div id="fleet-chips"></div>
+      <span class="grow"></span>
+      ${isReadOnly() ? '' : '<label class="chip" style="cursor:pointer"><input type="checkbox" id="fleet-select-all" style="margin:0"> Select all shown</label>'}
+      <select class="text-input" id="fleet-sort" aria-label="Sort agents">
+        <option value="problems">Problems first</option>
+        <option value="name">Name A–Z</option>
+        <option value="uptime">Longest uptime</option>
+        <option value="updated">Recently updated</option>
       </select>
     </div>
+    <div class="result-count" id="fleet-count" aria-live="polite"></div>
 
     <div class="bulk-actions-bar" id="bulk-bar" style="display:none">
       <span class="bulk-count" id="bulk-count">0 selected</span>
@@ -48,7 +60,14 @@ export function render() {
   refreshIcons(mainEl);
 
   selected = new Set();
-  document.getElementById('fleet-filter').addEventListener('change', renderFromCache);
+  document.getElementById('fleet-search').addEventListener('input', renderFromCache);
+  document.getElementById('fleet-sort').value = sortBy;
+  document.getElementById('fleet-sort').addEventListener('change', (e) => { sortBy = e.target.value; renderFromCache(); });
+  document.getElementById('fleet-select-all')?.addEventListener('change', (e) => {
+    currentFilteredRows.forEach((b) => { const k = `${b.bid}/${b.oid}`; if (e.target.checked) selected.add(k); else selected.delete(k); });
+    renderFromCache();
+  });
+  registerAction('fl-chip', (btn) => { chip = btn.dataset.chip; renderFromCache(); keepFocus(`[data-action="fl-chip"][data-chip="${chip}"]`); });
   registerAction('export-fleet-csv', () => exportFleetCsv());
   registerAction('go-onboard', () => navigate('restaurants/onboard'));
   registerAction('bulk-clear', () => { selected.clear(); renderFromCache(); });
@@ -70,31 +89,48 @@ export function render() {
 }
 
 function renderFromCache() {
-  const filter = document.getElementById('fleet-filter')?.value || 'all';
-  const filtered = allRows.filter((b) => {
-    if (filter === 'all') return true;
-    if (filter === 'offline') return b.botStatus === 'offline' || b.botStatus === 'errored';
-    return b.botStatus === filter;
+  const q = (document.getElementById('fleet-search')?.value || '').trim().toLowerCase();
+  const base = q ? allRows.filter((b) => b.outletName.toLowerCase().includes(q) || b.businessName.toLowerCase().includes(q)) : allRows;
+  const test = { all: () => true, down: isDown, degraded: (b) => b.botStatus === 'degraded', online: (b) => b.botStatus === 'online', nodata: (b) => !isDown(b) && b.botStatus !== 'online' && b.botStatus !== 'degraded' }[chip] || (() => true);
+  const filtered = base.filter(test).slice().sort((a, b) => {
+    if (sortBy === 'name') return a.outletName.localeCompare(b.outletName);
+    if (sortBy === 'uptime') return (b.uptime || 0) - (a.uptime || 0);
+    if (sortBy === 'updated') return (b.updatedAt || 0) - (a.updatedAt || 0);
+    return (RANK[a.botStatus] ?? 3) - (RANK[b.botStatus] ?? 3) || a.outletName.localeCompare(b.outletName);
   });
 
-  renderSummary(allRows);
+  renderSummary(allRows, base);
   currentFilteredRows = filtered;
+  const cnt = document.getElementById('fleet-count');
+  if (cnt) cnt.textContent = `Showing ${filtered.length} of ${allRows.length}`;
+  const all = document.getElementById('fleet-select-all');
+  if (all) all.checked = filtered.length > 0 && filtered.every((b) => selected.has(`${b.bid}/${b.oid}`));
   renderGrid(filtered);
   renderBulkBar();
 }
 
-function renderSummary(fleet) {
-  const counts = { online: 0, degraded: 0, offline: 0 };
-  fleet.forEach((b) => {
-    if (b.botStatus === 'online') counts.online++;
-    else if (b.botStatus === 'degraded') counts.degraded++;
-    else counts.offline++;
+function renderSummary(fleet, base) {
+  const n = (rows, f) => rows.filter(f).length;
+  const online = n(fleet, (b) => b.botStatus === 'online');
+  const degraded = n(fleet, (b) => b.botStatus === 'degraded');
+  const down = n(fleet, isDown);
+  const nodata = n(fleet, (b) => !isDown(b) && b.botStatus !== 'online' && b.botStatus !== 'degraded');
+  document.getElementById('fleet-summary').innerHTML = statStrip([
+    { label: 'Online', value: online, sub: `of ${fleet.length}`, tone: 'good', action: 'fl-chip', data: { chip: 'online' }, active: chip === 'online' },
+    { label: 'Degraded', value: degraded, tone: degraded ? 'warn' : '', action: 'fl-chip', data: { chip: 'degraded' }, active: chip === 'degraded' },
+    { label: 'Down', value: down, tone: down ? 'bad' : 'good', action: 'fl-chip', data: { chip: 'down' }, active: chip === 'down' },
+    { label: 'No status yet', value: nodata, sub: 'not set up / no data', action: 'fl-chip', data: { chip: 'nodata' }, active: chip === 'nodata' },
+  ], 'fleet-stats');
+  document.getElementById('fleet-chips').innerHTML = chips({
+    action: 'fl-chip', active: chip, label: 'Status',
+    items: [
+      { id: 'all', label: 'All', count: base.length },
+      { id: 'down', label: 'Down', count: n(base, isDown), tone: 'bad' },
+      { id: 'degraded', label: 'Degraded', count: n(base, (b) => b.botStatus === 'degraded') },
+      { id: 'online', label: 'Online', count: n(base, (b) => b.botStatus === 'online') },
+      { id: 'nodata', label: 'No status', count: n(base, (b) => !isDown(b) && b.botStatus !== 'online' && b.botStatus !== 'degraded') },
+    ],
   });
-  document.getElementById('fleet-summary').innerHTML = `
-    <span><strong style="color:var(--status-online)">${counts.online}</strong> online</span>
-    <span><strong style="color:var(--status-degraded)">${counts.degraded}</strong> degraded</span>
-    <span><strong style="color:var(--status-offline)">${counts.offline}</strong> down</span>
-  `;
 }
 
 function renderGrid(fleet) {
@@ -105,7 +141,7 @@ function renderGrid(fleet) {
         <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
           <span>No WhatsApp agents yet — add a restaurant to create its first bot.</span>
           ${isReadOnly() ? '' : `<button class="btn btn-primary" data-action="go-onboard"><svg data-lucide="plus"></svg> Add a restaurant</button>`}
-        </div>` : 'No bot agents match this filter.'}</div>`;
+        </div>` : 'No agents match these filters. Clear the search or pick “All”.'}</div>`;
     refreshIcons(grid);
     return;
   }

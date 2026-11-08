@@ -44,6 +44,9 @@ jobs:
       - name: Notification caps guard (frequency + quiet hours)
         run: node tests/notify-caps.check.cjs
 
+      - name: Supreme dense UI guard (lists, tabs, phone layout, view-only)
+        run: node tests/supreme-ui.browser.mjs
+
       - name: Server branch invariant (server is an ancestor of main)
         run: |
           git fetch --no-tags origin \

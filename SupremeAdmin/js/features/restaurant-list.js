@@ -1,18 +1,42 @@
 import { navigate, registerAction } from '/js/main.js';
 import { subscribe, flattenOutlets, isReadOnly } from '/js/data-store.js';
-import { exportXlsx, refreshIcons, debounce, isStale, escapeHtml, transportBadgeHtml, formatDate, formatAge, statusPillHtml, showConfirm } from '/js/utils.js';
+import { exportXlsx, refreshIcons, debounce, isStale, escapeHtml, formatDate, formatAge, statusPillHtml, showConfirm, showToast } from '/js/utils.js';
+import { sortRows, nextSort, sortHeader, statStrip, chips, keepFocus } from '/js/table-tools.js';
 
 const mainEl = document.getElementById('app-main');
 let allRows = [];
 let currentFilteredRows = [];
 let activeTab = 'active'; // 'active' | 'disabled'
+let chip = 'all';         // 'all' | 'attention' | 'notconn' | 'setup'
+let sort = { key: 'name', dir: 'asc' };
+
+const STATUS_RANK = { errored: 0, offline: 1, degraded: 2, unknown: 3, online: 4 };
+const SORT_COLS = {
+  name: (r) => r.outletName,
+  business: (r) => r.businessName,
+  plan: (r) => r.plan,
+  contact: (r) => (r.contact === '—' ? null : r.contact),
+  whatsapp: (r) => (waConnected(r) ? 1 : 0),
+  status: (r) => STATUS_RANK[r.botStatus] ?? 3,
+};
+
+const waConnected = (r) => r.whatsappStatus === 'active' || (r.transport === 'baileys' && r.botStatus === 'online');
+const needsAttention = (r) => r.botStatus === 'offline' || r.botStatus === 'errored';
+const isSettingUp = (r) => r.botStatus === 'unknown' && r.provisioned;
+const CHIP_TEST = {
+  all: () => true,
+  conn: waConnected,
+  attention: needsAttention,
+  notconn: (r) => !waConnected(r),
+  setup: isSettingUp,
+};
 
 export function render() {
   mainEl.innerHTML = `
     <div class="panel-header">
       <div>
-        <h1>Restaurant Management</h1>
-        <div class="panel-sub">Every restaurant and outlet across the platform <span class="live-badge"><span class="pulse-dot"></span>Live</span></div>
+        <h1>Restaurants</h1>
+        <div class="panel-sub">Every restaurant and outlet on the platform <span class="live-badge"><span class="pulse-dot"></span>Live</span></div>
       </div>
       <div class="panel-header-actions">
         <button class="btn btn-ghost" data-action="export-restaurants-xlsx">
@@ -26,37 +50,30 @@ export function render() {
       </div>
     </div>
 
-    <div class="table-kpi-grid" id="restaurant-kpis">
-      ${Array.from({ length: 3 }).map(() => '<div class="skeleton" style="height:78px"></div>').join('')}
-    </div>
+    <div id="restaurant-kpis"><div class="skeleton" style="height:58px;margin-bottom:12px"></div></div>
 
-    <div class="filters-row">
-      <div class="profile-tabs" role="tablist" aria-label="Restaurant status">
-        <button class="profile-tab ${activeTab === 'active' ? 'active' : ''}" data-action="list-tab" data-tab="active" role="tab" aria-selected="${activeTab === 'active'}"><svg data-lucide="check-circle"></svg> Active</button>
-        <button class="profile-tab ${activeTab === 'disabled' ? 'active' : ''}" data-action="list-tab" data-tab="disabled" role="tab" aria-selected="${activeTab === 'disabled'}"><svg data-lucide="pause-circle"></svg> Disabled</button>
+    <div class="toolbar">
+      <div class="profile-tabs" role="tablist" aria-label="Restaurant status" style="margin:0">
+        <button class="profile-tab ${activeTab === 'active' ? 'active' : ''}" data-action="list-tab" data-tab="active" role="tab" aria-selected="${activeTab === 'active'}">Active <span class="chip-count" id="tab-count-active"></span></button>
+        <button class="profile-tab ${activeTab === 'disabled' ? 'active' : ''}" data-action="list-tab" data-tab="disabled" role="tab" aria-selected="${activeTab === 'disabled'}">Disabled <span class="chip-count" id="tab-count-disabled"></span></button>
       </div>
       <div class="search-input-wrap">
         <svg data-lucide="search"></svg>
-        <input type="text" id="restaurant-search" placeholder="Search by restaurant or outlet name…" />
+        <input type="text" id="restaurant-search" placeholder="Search restaurant or outlet…" aria-label="Search restaurants" />
       </div>
-      <select class="text-input" id="plan-filter">
+      <select class="text-input" id="plan-filter" aria-label="Plan">
         <option value="all">All plans</option>
         <option value="starter">Starter</option>
         <option value="growth">Growth</option>
         <option value="enterprise">Enterprise</option>
       </select>
-      <select class="text-input" id="whatsapp-filter">
-        <option value="all">Any WhatsApp status</option>
-        <option value="active">Connected</option>
-        <option value="not-active">Not connected</option>
-      </select>
+      <div id="restaurant-chips"></div>
     </div>
+    <div class="result-count" id="restaurant-count" aria-live="polite"></div>
 
-    <div class="glass-card" style="padding:0;overflow:hidden">
+    <div class="glass-card table-card">
       <table class="data-table" id="restaurant-table">
-        <thead>
-          <tr><th scope="col">Outlet</th><th scope="col">Business</th><th scope="col">Plan</th><th scope="col">Contact</th><th scope="col">WhatsApp</th><th scope="col">Bot status</th><th scope="col"></th></tr>
-        </thead>
+        <thead id="restaurant-thead"></thead>
         <tbody id="restaurant-tbody">
           <tr><td colspan="7"><div class="skeleton" style="height:20px"></div></td></tr>
         </tbody>
@@ -69,18 +86,25 @@ export function render() {
   registerAction('export-restaurants-xlsx', () => exportRestaurantsXlsx());
   registerAction('list-tab', (btn) => {
     activeTab = btn.dataset.tab === 'disabled' ? 'disabled' : 'active';
-    allRows = flattenOutlets({ includeDisabled: activeTab === 'disabled' });
+    chip = 'all';
     applyFilters();
+  });
+  registerAction('rl-chip', (btn) => { chip = btn.dataset.chip; applyFilters(); keepFocus(`[data-action="rl-chip"][data-chip="${chip}"]`); });
+  registerAction('rl-sort', (btn) => {
+    const key = btn.dataset.key;
+    sort = nextSort(sort, key, btn.dataset.numeric === '1');
+    applyFilters();
+    keepFocus(`[data-action="rl-sort"][data-key="${key}"]`);
   });
 
   document.getElementById('restaurant-search').addEventListener('input', debounce(applyFilters, 120));
   document.getElementById('plan-filter').addEventListener('change', applyFilters);
-  document.getElementById('whatsapp-filter').addEventListener('change', applyFilters);
 
   // Single live listener, shared across the whole app (see data-store.js) —
   // this page just re-renders whenever it fires. No polling, no one-time get().
-  const unsubscribe = subscribe((raw) => {
-    allRows = flattenOutlets({ includeDisabled: activeTab === 'disabled' });
+  // Both tabs load together so the Active / Disabled counts are always real.
+  const unsubscribe = subscribe(() => {
+    allRows = flattenOutlets({ includeDisabled: true });
     applyFilters();
   });
 
@@ -94,65 +118,81 @@ export function render() {
 function applyFilters() {
   const q = (document.getElementById('restaurant-search')?.value || '').trim().toLowerCase();
   const plan = document.getElementById('plan-filter')?.value || 'all';
-  const wa = document.getElementById('whatsapp-filter')?.value || 'all';
 
-  let rows = allRows;
-  if (activeTab === 'disabled') rows = rows.filter((r) => r.disabled === true);
-  if (q) rows = rows.filter((r) => r.outletName.toLowerCase().includes(q) || r.businessName.toLowerCase().includes(q));
-  if (plan !== 'all') rows = rows.filter((r) => r.plan === plan);
-  if (wa === 'active') rows = rows.filter((r) => r.whatsappStatus === 'active');
-  if (wa === 'not-active') rows = rows.filter((r) => r.whatsappStatus !== 'active');
+  // Tab first: Active and Disabled are different lists, not a filter chip.
+  const tabRows = allRows.filter((r) => (activeTab === 'disabled' ? r.disabled === true : !r.disabled));
+  let base = tabRows;
+  if (q) base = base.filter((r) => r.outletName.toLowerCase().includes(q) || r.businessName.toLowerCase().includes(q));
+  if (plan !== 'all') base = base.filter((r) => r.plan === plan);
 
-  renderKpis(allRows);
-  currentFilteredRows = rows;
-  renderRows(rows);
+  renderSummary(allRows, base, tabRows);
+  currentFilteredRows = sortRows(base.filter(CHIP_TEST[chip] || CHIP_TEST.all), sort, SORT_COLS);
+  const cnt = document.getElementById('restaurant-count');
+  if (cnt) cnt.textContent = `Showing ${currentFilteredRows.length} of ${tabRows.length}`;
+  renderRows(currentFilteredRows);
 }
 
-function renderKpis(rows) {
-  const total = rows.length;
-  const connected = rows.filter((r) => r.whatsappStatus === 'active').length;
-  const needsAttention = rows.filter((r) => r.botStatus === 'offline' || r.botStatus === 'errored').length;
+function renderSummary(rows, base, tabRows) {
+  const total = tabRows.length;
+  const isActive = activeTab === 'active';
+  const connected = tabRows.filter(waConnected).length;
+  const attention = tabRows.filter(needsAttention).length;
+  const setup = tabRows.filter(isSettingUp).length;
 
-  document.getElementById('restaurant-kpis').innerHTML = `
-    <div class="glass-card kpi-tile">
-      <div class="kpi-label"><svg data-lucide="store" style="width:13px;height:13px"></svg> Total outlets</div>
-      <div class="kpi-value">${total}</div>
-    </div>
-    <div class="glass-card kpi-tile">
-      <div class="kpi-label"><svg data-lucide="message-circle" style="width:13px;height:13px"></svg> WhatsApp connected</div>
-      <div class="kpi-value">${connected} <small>/ ${total}</small></div>
-    </div>
-    <div class="glass-card kpi-tile ${needsAttention ? 'accent-offline' : ''}">
-      <div class="kpi-label"><svg data-lucide="alert-triangle" style="width:13px;height:13px"></svg> Needs attention</div>
-      <div class="kpi-value">${needsAttention}</div>
-    </div>
-  `;
-  refreshIcons(document.getElementById('restaurant-kpis'));
+  document.getElementById('restaurant-kpis').innerHTML = isActive ? statStrip([
+    { label: 'Total outlets', value: total, action: 'rl-chip', data: { chip: 'all' }, active: chip === 'all' },
+    { label: 'WhatsApp connected', value: connected, sub: `of ${total}`, action: 'rl-chip', data: { chip: 'conn' }, tone: connected === total && total ? 'good' : '', active: chip === 'conn' },
+    { label: 'Needs attention', value: attention, tone: attention ? 'bad' : 'good', action: 'rl-chip', data: { chip: 'attention' }, active: chip === 'attention' },
+    { label: 'Setting up', value: setup, action: 'rl-chip', data: { chip: 'setup' }, active: chip === 'setup' },
+  ], 'restaurant-stats') : '';
+
+  const chipBox = document.getElementById('restaurant-chips');
+  if (chipBox) chipBox.innerHTML = isActive ? chips({
+    action: 'rl-chip', active: chip, label: 'Quick filter',
+    items: [
+      { id: 'all', label: 'All', count: base.length },
+      { id: 'attention', label: 'Needs attention', count: base.filter(needsAttention).length, tone: 'bad' },
+      { id: 'notconn', label: 'Not connected', count: base.filter(CHIP_TEST.notconn).length },
+      { id: 'setup', label: 'Setting up', count: base.filter(isSettingUp).length },
+    ],
+  }) : '';
+
+  const ca = document.getElementById('tab-count-active'), cd = document.getElementById('tab-count-disabled');
+  if (ca) ca.textContent = rows.filter((r) => !r.disabled).length;
+  if (cd) cd.textContent = rows.filter((r) => r.disabled).length;
+  document.getElementById('restaurant-thead').innerHTML = `<tr>
+    ${sortHeader({ action: 'rl-sort', key: 'name', label: 'Outlet', sort })}
+    ${sortHeader({ action: 'rl-sort', key: 'business', label: 'Business', sort, cls: 'col-sec' })}
+    ${sortHeader({ action: 'rl-sort', key: 'plan', label: 'Plan', sort, cls: 'col-sec' })}
+    ${sortHeader({ action: 'rl-sort', key: 'contact', label: 'Contact', sort, cls: 'col-sec' })}
+    ${sortHeader({ action: 'rl-sort', key: 'whatsapp', label: 'WhatsApp', sort })}
+    ${sortHeader({ action: 'rl-sort', key: 'status', label: isActive ? 'Bot status' : 'Bot', sort })}
+    <th scope="col" class="col-chev"></th></tr>`;
 }
 
 function renderRows(rows) {
   const tbody = document.getElementById('restaurant-tbody');
   if (!rows.length) {
-    const platformEmpty = allRows.length === 0;
+    const platformEmpty = allRows.every((r) => r.disabled);
     tbody.innerHTML = `<tr><td colspan="7"><div class="table-empty">${platformEmpty ? `
         <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
           <span>No restaurants yet — add your first one to get started.</span>
           ${isReadOnly() ? '' : `<button class="btn btn-primary" data-action="go-onboard"><svg data-lucide="plus"></svg> Add your first restaurant</button>`}
-        </div>` : activeTab === 'disabled' ? 'No disabled restaurants.' : 'No restaurants match your filters.'}</div></td></tr>`;
+        </div>` : activeTab === 'disabled' ? 'No disabled restaurants.' : 'No restaurants match these filters. Clear the search or pick “All”.'}</div></td></tr>`;
     refreshIcons(tbody);
     return;
   }
   if (activeTab === 'disabled') {
     tbody.innerHTML = rows.map((r) => `
     <tr class="row-disabled" data-action="open-profile" data-bid="${escapeHtml(r.bid)}" data-oid="${escapeHtml(r.oid)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(r.outletName)} profile">
-      <td><strong>${escapeHtml(r.outletName)}</strong></td>
-      <td>${escapeHtml(r.businessName)}</td>
-      <td style="text-transform:capitalize">${escapeHtml(r.plan)}</td>
-      <td>${escapeHtml(r.contact)}</td>
+      <td><span class="cell-strong">${escapeHtml(r.outletName)}</span><span class="sub">${escapeHtml(r.businessName)}</span></td>
+      <td class="col-sec">${escapeHtml(r.businessName)}</td>
+      <td class="col-sec" style="text-transform:capitalize">${escapeHtml(r.plan)}</td>
+      <td class="col-sec">${escapeHtml(r.contact)}</td>
       <td><span class="status-pill offline"><span class="static-dot"></span>Disabled</span><div class="cell-meta">since ${formatDate(r.disabledAt)}</div></td>
       <td><span class="status-pill offline"><span class="static-dot"></span>Stopped</span></td>
       <td style="text-align:right">
-        <button class="btn btn-ghost btn-sm" data-action="reactivate-outlet" data-bid="${escapeHtml(r.bid)}" data-oid="${escapeHtml(r.oid)}" data-name="${escapeHtml(r.outletName)}" ${isReadOnly() ? 'disabled' : ''} title="${isReadOnly() ? 'View-only account' : 'Reactivate this restaurant'}">
+        <button class="btn btn-ghost btn-sm" data-action="reactivate-outlet" data-bid="${escapeHtml(r.bid)}" data-oid="${escapeHtml(r.oid)}" data-name="${escapeHtml(r.outletName)}" ${isReadOnly() ? 'disabled' : ''}>
           <svg data-lucide="play"></svg> Reactivate
         </button>
       </td>
@@ -162,28 +202,26 @@ function renderRows(rows) {
     return;
   }
   tbody.innerHTML = rows.map((r) => {
-    const onboarded = r.whatsappStatus === 'active' && r.botStatus === 'online';
     const stale = isStale(r.updatedAt);
-    const statusCell = onboarded
+    const statusCell = r.botStatus !== 'unknown'
       ? `${statusPillHtml(r.botStatus)}<div class="cell-meta">updated ${formatAge(r.updatedAt)}</div>`
       : r.botStatus === 'unknown' && !r.provisioned
         ? `<span class="status-pill unknown"><span class="static-dot"></span>No bot</span><div class="cell-meta">set up on profile</div>`
         : `<span class="onboard-mini" title="Onboarding in progress">${onboardMiniDots(r)}</span>`;
     return `
     <tr class="row-link ${stale ? 'row-stale' : ''}" data-action="open-profile" data-bid="${escapeHtml(r.bid)}" data-oid="${escapeHtml(r.oid)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(r.outletName)} profile" title="${stale ? 'Last status update was over 5 minutes ago — the bot may be unresponsive.' : ''}">
-      <td><strong>${escapeHtml(r.outletName)}</strong></td>
-      <td>${escapeHtml(r.businessName)}</td>
-      <td style="text-transform:capitalize">${escapeHtml(r.plan)}</td>
-      <td>${escapeHtml(r.contact)}</td>
+      <td><span class="cell-strong">${escapeHtml(r.outletName)}</span><span class="sub">${escapeHtml(r.businessName)} · <span style="text-transform:capitalize">${escapeHtml(r.plan)}</span></span></td>
+      <td class="col-sec">${escapeHtml(r.businessName)}</td>
+      <td class="col-sec" style="text-transform:capitalize">${escapeHtml(r.plan)}</td>
+      <td class="col-sec">${escapeHtml(r.contact)}</td>
       <td>${r.whatsappStatus === 'active'
-          ? '<span class="status-pill online"><span class="pulse-dot"></span>Official API · Connected</span>'
+          ? '<span class="status-pill online"><span class="pulse-dot"></span>Official API</span>'
           : r.transport === 'baileys' && r.botStatus === 'online'
-            ? '<span class="status-pill online"><span class="pulse-dot"></span>WhatsApp Web · Connected</span>'
+            ? '<span class="status-pill online"><span class="pulse-dot"></span>WhatsApp Web</span>'
             : '<span class="status-pill unknown"><span class="static-dot"></span>Not connected</span>'}
-        <div class="cell-meta">${transportBadgeHtml(r.transport)}</div>
       </td>
       <td>${statusCell}</td>
-      <td style="text-align:right"><svg data-lucide="chevron-right" style="width:15px;height:15px;color:var(--text-tertiary)"></svg></td>
+      <td class="col-chev" style="text-align:right"><svg data-lucide="chevron-right" style="width:15px;height:15px;color:var(--text-tertiary)"></svg></td>
     </tr>
   `; }).join('');
   refreshIcons(tbody);

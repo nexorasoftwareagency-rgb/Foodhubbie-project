@@ -26,7 +26,8 @@ let detailEdit = null; // { businessName, contactPhone, contactEmail, plan, outl
 let collapsedSections = new Set(); // collapsible section ids the user has closed — survives re-render ticks
 let pairModalOpen = false; // live QR modal state
 let pairUnsubscribe = null; // stop the QR listener when the modal closes
-let currentTab = 'overview'; // 'overview' | 'analytics' — in-page tab rail state
+const PROFILE_TABS = ['overview', 'billing', 'whatsapp', 'access', 'analytics'];
+let currentTab = 'overview'; // one of PROFILE_TABS — in-page tab rail state
 // Draft for the Billing card inputs (token qty/price) — same idea as
 // detailEdit: survives the live re-render ticks so a half-typed grant form
 // isn't wiped by an incoming botStatus/usage update.
@@ -41,7 +42,7 @@ function reRenderProfile() {
 export function render(bid, oid, tab) {
   currentBid = bid;
   currentOid = oid;
-  currentTab = tab === 'analytics' ? 'analytics' : 'overview';
+  currentTab = PROFILE_TABS.includes(tab) ? tab : 'overview';
   adminEdit = null;
   detailEdit = null;
   billingDraft = null; // scoped to this navigation — must not leak onto another outlet's card
@@ -93,6 +94,10 @@ function renderProfile(bid, oid, biz, outlet) {
   const fullyOnboarded = connected && bot.status === 'online';
   const readOnly = isReadOnly();
   const transport = outlet.bot?.transport || outlet.transport || 'baileys'; // mirrors bot/transport.js getTransportMode default
+  // "Connected" for the header badge must match the Restaurants list KPI:
+  // the official API counts as connected, and so does a paired Baileys socket
+  // that is online (live pizza runs this way — the list says connected).
+  const waLinked = connected || (transport === 'baileys' && bot.status === 'online');
   const pair = outlet.bot?.pair || {};
   const pairStatusHtml = pair.status === 'connected'
     ? `<span style="color:var(--status-online,#16a34a)">Connected</span>`
@@ -123,10 +128,13 @@ function renderProfile(bid, oid, biz, outlet) {
     <div class="panel-header">
       <div>
         <h1>${escapeHtml(outletName)}</h1>
-        <div class="panel-sub">${escapeHtml(bizName)} · ${escapeHtml(contact)} <span class="live-badge"><span class="pulse-dot"></span>Live</span></div>
+        <div class="panel-sub">${escapeHtml(bizName)} · ${escapeHtml(contact)}
+          <span class="transport-badge" style="text-transform:capitalize;margin-left:4px">${escapeHtml(biz.plan || 'starter')}</span>
+          <span class="transport-badge ${waLinked ? 'online' : 'unknown'}">${waLinked ? 'WhatsApp connected' : 'WhatsApp not connected'}</span>
+          <span class="live-badge"><span class="pulse-dot"></span>Live</span></div>
       </div>
       <div class="panel-header-actions">
-        ${currentTab === 'overview'
+        ${currentTab !== 'analytics'
           ? `<button class="btn btn-ghost btn-sm" data-action="profile-tab" data-tab="analytics">
               <svg data-lucide="bar-chart-3"></svg> View analytics
             </button>`
@@ -135,9 +143,18 @@ function renderProfile(bid, oid, biz, outlet) {
       </div>
     </div>
 
-    <div class="profile-tabs" role="tablist" aria-label="Profile sections">
+    <div class="profile-tabs pf-tabs" role="tablist" aria-label="Profile sections">
       <button class="profile-tab${currentTab === 'overview' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'overview'}" aria-controls="tabpanel-overview" id="tab-overview" data-action="profile-tab" data-tab="overview">
         <svg data-lucide="layout-grid"></svg> Overview
+      </button>
+      <button class="profile-tab${currentTab === 'billing' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'billing'}" aria-controls="tabpanel-billing" id="tab-billing" data-action="profile-tab" data-tab="billing">
+        <svg data-lucide="wallet"></svg> Billing
+      </button>
+      <button class="profile-tab${currentTab === 'whatsapp' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'whatsapp'}" aria-controls="tabpanel-whatsapp" id="tab-whatsapp" data-action="profile-tab" data-tab="whatsapp">
+        <svg data-lucide="message-circle"></svg> WhatsApp
+      </button>
+      <button class="profile-tab${currentTab === 'access' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'access'}" aria-controls="tabpanel-access" id="tab-access" data-action="profile-tab" data-tab="access">
+        <svg data-lucide="key-round"></svg> Access
       </button>
       <button class="profile-tab${currentTab === 'analytics' ? ' active' : ''}" role="tab" aria-selected="${currentTab === 'analytics'}" aria-controls="tabpanel-analytics" id="tab-analytics" data-action="profile-tab" data-tab="analytics">
         <svg data-lucide="bar-chart-3"></svg> Analytics
@@ -147,6 +164,7 @@ function renderProfile(bid, oid, biz, outlet) {
     ${currentTab === 'analytics'
       ? `<div id="pa-root" role="tabpanel" aria-labelledby="tab-analytics"><div class="skeleton" style="height:320px;border-radius:14px"></div></div>`
       : `
+    <div class="pf-pane${currentTab === 'overview' ? ' active' : ''}" data-pane="overview" id="tabpanel-overview" role="tabpanel" aria-labelledby="tab-overview">
     ${fullyOnboarded ? '' : renderOnboardingStepper({
       businessCreated: true,
       outletCreated: true,
@@ -171,54 +189,12 @@ function renderProfile(bid, oid, biz, outlet) {
       </div>
     </div>
 
-    <div class="glass-card" style="font-size:13px;margin-bottom:16px">
-      <strong style="display:block;margin-bottom:10px"><svg data-lucide="smartphone" style="width:14px;height:14px;vertical-align:-2px"></svg> Customer app</strong>
-      <div style="color:var(--text-secondary);line-height:1.6;margin-bottom:8px">
-        The installable customer app for this outlet. Share it with the restaurant only — it opens their branded menu and installs as their own icon.
-      </div>
-      <div class="mono" style="word-break:break-all;margin-bottom:10px">${escapeHtml(appUrl)}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" data-action="copy-credential" data-copy="${escapeHtml(appUrl)}">Copy link</button>
-        <button class="btn btn-ghost btn-sm" data-action="toggle-app-qr">Show QR</button>
-      </div>
-      <div id="sa-app-qr" style="margin-top:10px"></div>
     </div>
-
+    <div class="pf-pane${currentTab === 'billing' ? ' active' : ''}" data-pane="billing" id="tabpanel-billing" role="tabpanel" aria-labelledby="tab-billing">
     ${renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSections, billingDraft)}
 
-    <div class="glass-card" style="font-size:13px;margin-bottom:16px;border:1px solid ${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--glass-border,#2a2f3a)'}">
-      <strong style="display:block;margin-bottom:6px;color:${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--status-offline,#f87171)'}">
-        <svg data-lucide="alert-triangle" style="width:14px;height:14px;vertical-align:-2px"></svg> ${outlet.disabled === true ? 'Restaurant status' : 'Danger Zone'}
-      </strong>
-      ${outlet.disabled === true
-        ? `<div style="color:var(--text-secondary);margin-bottom:12px">This restaurant is currently disabled. Reactivating restores QR ordering, dine-in, staff login, and the WhatsApp bot immediately.</div>
-           <button class="btn btn-primary" data-action="reactivate-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
-             <svg data-lucide="play"></svg> Reactivate restaurant
-           </button>`
-        : `<div style="color:var(--text-secondary);margin-bottom:12px">Disabling pauses everything for this outlet — QR/menu ordering, dine-in sessions, staff login, and the WhatsApp bot. No data is deleted and it can be reactivated anytime.</div>
-           <button class="btn btn-danger" data-action="disable-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
-              <svg data-lucide="pause-circle"></svg> Disable restaurant
-            </button>`}
-      ${outlet.locked === true
-        ? `<div style="color:var(--status-degraded,#d97706);margin-bottom:12px">This restaurant is locked — the admin can log in but cannot use any features until unlocked.</div>
-           <button class="btn btn-primary" data-action="unlock-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
-              <svg data-lucide="lock-open"></svg> Unlock access
-            </button>` : ''}
     </div>
-
-    <div class="glass-card accent-edge" style="margin-bottom:16px">
-      <div class="collapsible-header${collapsedSections.has('admin-login-body') ? ' collapsed' : ''}" data-action="toggle-section" data-target="admin-login-body" role="button" tabindex="0" aria-expanded="${!collapsedSections.has('admin-login-body')}" aria-controls="admin-login-body" style="margin-bottom:10px">
-        <strong style="display:block"><svg data-lucide="key-round" style="width:14px;height:14px;vertical-align:-2px"></svg> Admin login</strong>
-        <div style="display:flex;align-items:center;gap:6px">
-          ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" data-action="${adminEdit ? 'cancel-admin-edit' : 'edit-admin-login'}">${adminEdit ? 'Cancel' : 'Update password'}</button>`}
-          <svg data-lucide="chevron-down" class="chevron-icon" style="width:14px;height:14px;color:var(--text-tertiary)"></svg>
-        </div>
-      </div>
-      <div class="collapsible-body${collapsedSections.has('admin-login-body') ? ' collapsed' : ''}" id="admin-login-body">
-        ${adminEdit ? renderAdminForm(adminEdit) : renderAdminCreds(creds)}
-      </div>
-    </div>
-
+    <div class="pf-pane${currentTab === 'whatsapp' ? ' active' : ''}" data-pane="whatsapp" id="tabpanel-whatsapp" role="tabpanel" aria-labelledby="tab-whatsapp">
     <!-- WhatsApp Agent Management scope: locally overrides --accent to
          WhatsApp green so this section reads as belonging to that
          dashboard, even though the rest of the profile stays orange. -->
@@ -330,6 +306,55 @@ function renderProfile(bid, oid, biz, outlet) {
       </div>
     </div>
     </div><!-- /collapsible-body whatsapp -->
+    </div>
+    <div class="pf-pane${currentTab === 'access' ? ' active' : ''}" data-pane="access" id="tabpanel-access" role="tabpanel" aria-labelledby="tab-access">
+    <div class="glass-card accent-edge" style="margin-bottom:16px">
+      <div class="collapsible-header${collapsedSections.has('admin-login-body') ? ' collapsed' : ''}" data-action="toggle-section" data-target="admin-login-body" role="button" tabindex="0" aria-expanded="${!collapsedSections.has('admin-login-body')}" aria-controls="admin-login-body" style="margin-bottom:10px">
+        <strong style="display:block"><svg data-lucide="key-round" style="width:14px;height:14px;vertical-align:-2px"></svg> Admin login</strong>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" data-action="${adminEdit ? 'cancel-admin-edit' : 'edit-admin-login'}">${adminEdit ? 'Cancel' : 'Update password'}</button>`}
+          <svg data-lucide="chevron-down" class="chevron-icon" style="width:14px;height:14px;color:var(--text-tertiary)"></svg>
+        </div>
+      </div>
+      <div class="collapsible-body${collapsedSections.has('admin-login-body') ? ' collapsed' : ''}" id="admin-login-body">
+        ${adminEdit ? renderAdminForm(adminEdit) : renderAdminCreds(creds)}
+      </div>
+    </div>
+
+    <div class="glass-card" style="font-size:13px;margin-bottom:16px">
+      <strong style="display:block;margin-bottom:10px"><svg data-lucide="smartphone" style="width:14px;height:14px;vertical-align:-2px"></svg> Customer app</strong>
+      <div style="color:var(--text-secondary);line-height:1.6;margin-bottom:8px">
+        The installable customer app for this outlet. Share it with the restaurant only — it opens their branded menu and installs as their own icon.
+      </div>
+      <div class="mono" style="word-break:break-all;margin-bottom:10px">${escapeHtml(appUrl)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" data-action="copy-credential" data-copy="${escapeHtml(appUrl)}">Copy link</button>
+        <button class="btn btn-ghost btn-sm" data-action="toggle-app-qr">Show QR</button>
+      </div>
+      <div id="sa-app-qr" style="margin-top:10px"></div>
+    </div>
+
+    <div class="glass-card" style="font-size:13px;margin-bottom:16px;border:1px solid ${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--glass-border,#2a2f3a)'}">
+      <strong style="display:block;margin-bottom:6px;color:${outlet.disabled === true ? 'var(--status-online,#16a34a)' : 'var(--status-offline,#f87171)'}">
+        <svg data-lucide="alert-triangle" style="width:14px;height:14px;vertical-align:-2px"></svg> ${outlet.disabled === true ? 'Restaurant status' : 'Danger Zone'}
+      </strong>
+      ${outlet.disabled === true
+        ? `<div style="color:var(--text-secondary);margin-bottom:12px">This restaurant is currently disabled. Reactivating restores QR ordering, dine-in, staff login, and the WhatsApp bot immediately.</div>
+           <button class="btn btn-primary" data-action="reactivate-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
+             <svg data-lucide="play"></svg> Reactivate restaurant
+           </button>`
+        : `<div style="color:var(--text-secondary);margin-bottom:12px">Disabling pauses everything for this outlet — QR/menu ordering, dine-in sessions, staff login, and the WhatsApp bot. No data is deleted and it can be reactivated anytime.</div>
+           <button class="btn btn-danger" data-action="disable-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
+              <svg data-lucide="pause-circle"></svg> Disable restaurant
+            </button>`}
+      ${outlet.locked === true
+        ? `<div style="color:var(--status-degraded,#d97706);margin-bottom:12px">This restaurant is locked — the admin can log in but cannot use any features until unlocked.</div>
+           <button class="btn btn-primary" data-action="unlock-outlet" ${readOnly ? 'disabled' : ''} title="${readOnly ? 'View-only account' : ''}">
+              <svg data-lucide="lock-open"></svg> Unlock access
+            </button>` : ''}
+    </div>
+
+    </div>
     `}
   `;
   refreshIcons(document.getElementById('profile-content'));
@@ -522,11 +547,23 @@ registerAction('toggle-section', (btn) => {
 
 registerAction('profile-tab', (btn) => {
   const tab = btn.dataset.tab;
-  if (tab === currentTab) return;
+  if (tab === currentTab || !PROFILE_TABS.includes(tab)) return;
+  const prev = currentTab;
   currentTab = tab;
   // replaceState keeps the URL honest for deep-linking/refresh without
   // tearing down the live listener or wizard state.
   history.replaceState(null, '', `#profile/${encodeURIComponent(currentBid)}/${encodeURIComponent(currentOid)}/${tab}`);
+  if (prev !== 'analytics' && tab !== 'analytics') {
+    // Same page, different pane: just show/hide — nothing is torn down, so a
+    // half-typed edit or an open QR wizard is untouched.
+    document.querySelectorAll('.pf-pane').forEach((el) => el.classList.toggle('active', el.dataset.pane === tab));
+    document.querySelectorAll('.pf-tabs .profile-tab').forEach((el) => {
+      const on = el.dataset.tab === tab;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-selected', String(on));
+    });
+    return;
+  }
   reRenderProfile();
 });
 

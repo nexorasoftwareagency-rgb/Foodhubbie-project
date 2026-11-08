@@ -6,6 +6,7 @@
 import { registerAction } from '/js/main.js';
 import { isReadOnly } from '/js/data-store.js';
 import { refreshIcons, escapeHtml, showConfirm, showToast } from '/js/utils.js';
+import { statStrip } from '/js/table-tools.js';
 
 const mainEl = document.getElementById('app-main');
 let state = null;
@@ -21,19 +22,11 @@ export function render() {
       </div>
     </div>
 
-    <div class="table-kpi-grid" id="ob-kpis"></div>
+    <div id="ob-kpis"></div>
 
-    <div class="glass-card" style="margin-bottom:16px;padding:12px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="pending">Pending</button>
-      <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="approved">Approved</button>
-      <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="rejected">Rejected</button>
-      <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="expired">Expired</button>
-      <button class="btn btn-ghost btn-sm ob-filter" data-action="ob-filter" data-filter="all">All</button>
-    </div>
-
-    <div class="glass-card" style="overflow-x:auto">
+    <div class="glass-card table-card">
       <table class="data-table" id="ob-table">
-        <thead><tr><th>Business</th><th>Outlet</th><th>Contact</th><th>Admin Email</th><th>Plan</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th scope="col">Business</th><th scope="col" class="col-sec">Outlet</th><th scope="col" class="col-sec">Contact</th><th scope="col" class="col-sec">Admin email</th><th scope="col" class="col-sec">Plan</th><th scope="col" class="col-sec">Date</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -72,29 +65,13 @@ function renderAll() {
   const rejected = state.requests.filter((r) => r.status === 'rejected').length;
   const expired = state.requests.filter((r) => r.status === 'expired').length;
 
-  document.getElementById('ob-kpis').innerHTML = `
-    <div class="glass-card kpi-tile">
-      <div class="kpi-label">Pending</div>
-      <div class="kpi-value">${pending}</div>
-    </div>
-    <div class="glass-card kpi-tile">
-      <div class="kpi-label">Approved</div>
-      <div class="kpi-value">${approved}</div>
-    </div>
-    <div class="glass-card kpi-tile">
-      <div class="kpi-label">Rejected</div>
-      <div class="kpi-value">${rejected}</div>
-    </div>
-    <div class="glass-card kpi-tile">
-      <div class="kpi-label">Expired</div>
-      <div class="kpi-value">${expired}</div>
-    </div>
-    <div class="glass-card kpi-tile">
-      <div class="kpi-label">Total</div>
-      <div class="kpi-value">${state.requests.length}</div>
-    </div>
-  `;
-
+  document.getElementById('ob-kpis').innerHTML = statStrip([
+    { label: 'Pending', value: pending, tone: pending ? 'warn' : '', action: 'ob-filter', data: { filter: 'pending' }, active: state.filter === 'pending' },
+    { label: 'Approved', value: approved, tone: approved ? 'good' : '', action: 'ob-filter', data: { filter: 'approved' }, active: state.filter === 'approved' },
+    { label: 'Rejected', value: rejected, action: 'ob-filter', data: { filter: 'rejected' }, active: state.filter === 'rejected' },
+    { label: 'Expired', value: expired, action: 'ob-filter', data: { filter: 'expired' }, active: state.filter === 'expired' },
+    { label: 'Total', value: state.requests.length, action: 'ob-filter', data: { filter: 'all' }, active: state.filter === 'all' },
+  ], 'ob-stats');
   const badge = document.getElementById('onboarding-badge');
   if (badge) {
     badge.textContent = pending;
@@ -103,7 +80,7 @@ function renderAll() {
 
   const tbody = document.querySelector('#ob-table tbody');
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="table-empty">No ${state.filter === 'all' ? '' : state.filter + ' '}requests.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="table-empty">No ${state.filter === 'all' ? '' : state.filter + ' '}requests${state.filter === 'pending' ? ' waiting — you’re all caught up' : ''}.</td></tr>`;
     return;
   }
 
@@ -112,14 +89,14 @@ function renderAll() {
     const statusColor = r.status === 'approved' ? 'var(--status-online,#16a34a)' : r.status === 'rejected' ? 'var(--status-offline,#dc2626)' : r.status === 'expired' ? 'var(--text-secondary,#6b7280)' : 'var(--status-degraded,#d97706)';
     return `
       <tr>
-        <td><strong>${escapeHtml(r.businessName || '—')}</strong></td>
-        <td>${escapeHtml(r.outletName || '—')}</td>
-        <td>${escapeHtml(r.contactPhone || '—')}${r.contactEmail ? `<br><span style="color:var(--text-secondary);font-size:12px">${escapeHtml(r.contactEmail)}</span>` : ''}</td>
-        <td>${escapeHtml(r.adminEmail || '—')}</td>
-        <td><span class="transport-badge">${escapeHtml(r.plan || 'starter')}</span></td>
-        <td style="white-space:nowrap">${date}</td>
+        <td><span class="cell-strong">${escapeHtml(r.businessName || '—')}</span><span class="sub">${escapeHtml(r.outletName || '—')} · ${escapeHtml(r.contactPhone || '—')} · ${date}</span></td>
+        <td class="col-sec">${escapeHtml(r.outletName || '—')}</td>
+        <td class="col-sec">${escapeHtml(r.contactPhone || '—')}${r.contactEmail ? `<div class="cell-meta">${escapeHtml(r.contactEmail)}</div>` : ''}</td>
+        <td class="col-sec">${escapeHtml(r.adminEmail || '—')}</td>
+        <td class="col-sec"><span class="transport-badge">${escapeHtml(r.plan || 'starter')}</span></td>
+        <td class="col-sec" style="white-space:nowrap">${date}</td>
         <td><span class="transport-badge" style="color:${statusColor};background:${statusColor}18">${escapeHtml(r.status)}</span></td>
-        <td style="white-space:nowrap">
+        <td class="ob-actions">
           <button class="btn btn-ghost btn-sm" data-action="ob-view" data-key="${r.key}">View</button>
           ${r.status === 'pending' && !isReadOnly() ? `
             <button class="btn btn-primary btn-sm" data-action="ob-approve" data-key="${r.key}">Approve</button>

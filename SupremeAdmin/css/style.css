@@ -872,3 +872,128 @@ select:focus-visible,
 }
 /* Remove default outline for mouse users */
 :focus:not(:focus-visible) { outline: none; }
+
+/* ==========================================================================
+   Dense, data-first pass (Supreme Admin UX refresh)
+   UI-only overrides: solid cards, tighter rhythm, compact sortable tables,
+   one summary strip per screen, filter chips with counts, phone-friendly
+   tables. Nothing here changes behaviour; remove this block to revert.
+   ========================================================================== */
+:root { --radius-md: 10px; --radius-lg: 14px; --row-h: 40px; }
+body { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+
+/* Shell: slimmer, solid, sticky */
+#app-topbar { backdrop-filter: none; background: var(--bg-elevated); padding-top: 8px; padding-bottom: 8px; position: sticky; top: 0; z-index: 30; }
+#app-subnav { padding: 6px 20px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+#app-subnav::-webkit-scrollbar { display: none; }
+.subnav-group.active { flex-wrap: nowrap; }
+#app-subnav a.nav-link { padding: 6px 11px; font-size: 13px; flex: none; }
+.dash-tab { padding: 6px 12px; }
+#app-main { padding: 16px 20px 56px; max-width: 1440px; }
+.panel-header { margin-bottom: 12px; align-items: center; }
+.panel-header h1 { font-size: 18px; margin: 0; }
+.panel-header .panel-sub { margin-top: 2px; font-size: 12.5px; }
+.btn { padding: 7px 12px; font-size: 13px; }
+.btn-sm { padding: 4px 9px; font-size: 12px; }
+
+/* Cards: solid, flat, no glass */
+.glass-card { background: var(--bg-elevated); backdrop-filter: none; -webkit-backdrop-filter: none; padding: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+
+/* Summary strip (replaces the big KPI tiles) */
+.stat-strip { display: flex; flex-wrap: wrap; background: var(--bg-elevated); border: 1px solid var(--glass-border); border-radius: var(--radius-md); margin-bottom: 12px; overflow: hidden; }
+.stat { flex: 1 1 130px; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 9px 14px; border-right: 1px solid var(--glass-border); text-align: left; background: transparent; border-top: 0; border-bottom: 0; border-left: 0; font: inherit; color: inherit; }
+.stat:last-child { border-right: 0; }
+.stat-label { font-size: 11.5px; color: var(--text-secondary); font-weight: 500; }
+.stat-value { font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1.2; }
+.stat-value small { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-left: 4px; }
+.stat-value.tone-bad { color: var(--status-offline); } .stat-value.tone-warn { color: var(--status-degraded); } .stat-value.tone-good { color: var(--status-online); }
+.stat-btn { cursor: pointer; transition: background .12s ease; }
+.stat-btn:hover { background: var(--bg); }
+.stat-btn.active { background: var(--accent-soft); box-shadow: inset 0 -2px 0 var(--accent); }
+.stat-btn:focus-visible, .chip:focus-visible, .th-sort-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Toolbar: search + chips + selects on one tidy row */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.toolbar .search-input-wrap { flex: 1 1 220px; max-width: 340px; min-width: 180px; }
+.toolbar .grow { flex: 1; }
+.toolbar select.text-input, .filters-row select.text-input { padding: 6px 8px; font-size: 13px; width: auto; }
+.search-input-wrap input { padding-top: 7px; padding-bottom: 7px; font-size: 13px; }
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--glass-border); background: var(--bg-elevated); color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.chip:hover { color: var(--text-primary); border-color: var(--accent); }
+.chip.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.chip-count { font-size: 11.5px; padding: 0 6px; border-radius: 999px; background: rgba(15,23,42,.07); color: var(--text-secondary); }
+.chip.active .chip-count { background: var(--accent); color: #fff; }
+.chip.tone-bad:not(.active) .chip-count { background: rgba(220,38,38,.14); color: var(--status-offline); }
+.result-count { font-size: 12px; color: var(--text-tertiary); margin: 0 2px 8px; }
+
+/* Compact tables */
+.table-card { padding: 0; overflow: auto; max-height: calc(100vh - 250px); min-height: 160px; }
+table.data-table th { position: sticky; top: 0; z-index: 2; background: var(--bg-elevated); padding: 8px 12px; font-size: 11.5px; text-transform: none; letter-spacing: 0; color: var(--text-secondary); white-space: nowrap; }
+table.data-table td { padding: 7px 12px; font-size: 13px; height: var(--row-h); vertical-align: middle; }
+table.data-table td.num, table.data-table th.num { text-align: right; }
+table.data-table tr.row-link:hover { background: var(--bg); }
+table.data-table tr.row-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+table.data-table .cell-meta { margin-top: 1px; }
+/* Keep the "updated 2m ago" note on the same line as the status pill so a
+   row is one line tall (40px) instead of two (~55px). */
+table.data-table td .cell-meta { display: inline; margin-top: 0; margin-left: 6px; }
+.th-sort { padding: 0 !important; }
+.th-sort-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 4px; padding: 8px 12px; cursor: pointer; font: inherit; color: inherit; width: 100%; }
+.th-sort.num .th-sort-btn { justify-content: flex-end; }
+.th-sort-btn:hover { color: var(--text-primary); }
+.th-arrow { font-size: 9px; width: 9px; color: var(--accent); }
+.sub { display: none; }
+.status-pill { padding: 2px 9px 2px 7px; font-size: 12px; }
+.cell-strong { font-weight: 600; }
+.status-pill { white-space: nowrap; }
+.amt-due { color: var(--status-offline); font-weight: 600; } .amt-ok { color: var(--status-online); }
+
+/* Phone: secondary columns fold into a sub-line instead of scrolling sideways */
+@media (max-width: 720px) {
+  #app-main { padding: 12px 12px 48px; }
+  table.data-table { min-width: 0; }
+  table.data-table .col-sec { display: none; }
+  .sub { display: block; font-size: 11.5px; color: var(--text-tertiary); margin-top: 1px; }
+  .table-card { max-height: none; }
+  table.data-table td { padding: 7px 8px; }
+  .th-sort-btn { padding: 8px; }
+  table.data-table .col-chev { display: none; }
+  .stat { flex: 1 1 45%; border-bottom: 1px solid var(--glass-border); }
+  .toolbar .search-input-wrap { max-width: none; flex-basis: 100%; }
+  .panel-header { flex-wrap: wrap; }
+  .panel-sub .live-badge { margin-left: 6px; }
+}
+
+/* Agents fleet: denser cards */
+.fleet-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; }
+.fleet-card { padding: 11px 12px; }
+.fleet-card.selectable { padding-left: 34px; }
+.fleet-card .fleet-card-top { margin-bottom: 0; }
+.fleet-card .fleet-metrics { margin-top: 8px; gap: 14px; }
+.fleet-card .fleet-metric-value { font-size: 13px; }
+.fleet-card .fleet-metric-label { font-size: 11px; text-transform: none; letter-spacing: 0; }
+.fleet-card .sparkline-wrap { margin-top: 8px; }
+.fleet-card-select { left: 10px; top: 11px; }
+@media (max-width: 720px) { table.data-table td .btn-sm { padding: 4px 7px; } }
+td.ob-actions { white-space: nowrap; }
+@media (max-width: 720px) { td.ob-actions { white-space: normal; } td.ob-actions .btn { margin: 0 4px 4px 0; } }
+
+/* Restaurant profile: one pane at a time instead of one very long page */
+.pf-pane { display: none; }
+.pf-pane.active { display: block; animation: pf-in .12s ease-out; }
+@keyframes pf-in { from { opacity: .4; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pf-pane.active { animation: none; } }
+.pf-tabs { border-radius: var(--radius-md); margin-bottom: 14px; position: sticky; top: 54px; z-index: 5; }
+.pf-tabs .profile-tab { border-radius: 8px; padding: 6px 14px; }
+.pf-pane > .glass-card, .pf-pane > .theme-agent > .glass-card { margin-bottom: 12px !important; }
+@media (min-width: 1100px) {
+  /* wide screens: Overview and Access cards sit two-up instead of one long column */
+  .pf-pane[data-pane="overview"].active, .pf-pane[data-pane="access"].active { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+  .pf-pane[data-pane="overview"] > .glass-card, .pf-pane[data-pane="access"] > .glass-card { margin-bottom: 0 !important; }
+  .pf-pane[data-pane="overview"] > :first-child { grid-column: 1 / -1; }
+}
+.pf-pane .table-kpi-grid { gap: 8px; margin-bottom: 12px; }
+.pf-pane .kpi-tile { padding: 10px 12px; }
+.pf-pane .kpi-tile .kpi-value { font-size: 20px; }
+@media (max-width: 720px) { .pf-tabs { top: 53px; } .profile-tab { padding: 6px 10px; } }

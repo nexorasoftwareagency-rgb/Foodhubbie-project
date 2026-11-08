@@ -17,7 +17,8 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
       <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:12px;color:var(--text-secondary)">${b ? `${b.tokens?.balance ?? 0} tokens` : 'Not seeded'}</span>
         <svg data-lucide="chevron-down" class="chevron-icon" style="width:14px;height:14px;color:var(--text-tertiary)"></svg>
-      </div>`;
+      </div>
+    </div>`;
 
   if (!b) {
     return `<div class="glass-card" style="font-size:13px;margin-bottom:16px">${header}
