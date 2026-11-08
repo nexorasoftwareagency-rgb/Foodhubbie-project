@@ -11,9 +11,12 @@
  * Usage:
  *   node tools/submit-wa-templates.mjs --bid roshani-pizza --oid pizza --waba 2589174454849821
  *   node tools/submit-wa-templates.mjs --bid roshani-pizza --oid pizza --waba 2589174454849821 --apply
+ *   node tools/submit-wa-templates.mjs --bid roshani-pizza --oid pizza --waba 2589174454849821 --apply --replace
  *
  * Token: WA_PERMANENT_TOKEN from the environment, or from .env at the repo root.
  * Dry-run by default — nothing is created without --apply.
+ * Existing names are skipped. `--replace` deletes a REJECTED template and
+ * resubmits it (APPROVED templates are never touched — they may be in use).
  */
 
 import fs from 'node:fs';
@@ -30,6 +33,7 @@ const arg = (name, fallback = '') => {
   return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
 };
 const APPLY = args.includes('--apply');
+const REPLACE = args.includes('--replace');
 const BID = arg('bid');
 const OID = arg('oid');
 const WABA = arg('waba');
@@ -188,10 +192,25 @@ const results = [];
 for (const t of TEMPLATES) {
   const prior = existing.get(t.name);
   if (prior) {
-    const line = `SKIP   ${t.name} — already exists (status=${prior.status}, id=${prior.id})`;
-    console.log(line);
-    results.push({ name: t.name, action: 'skip', status: prior.status, id: prior.id });
-    continue;
+    const rejected = String(prior.status).toUpperCase() === 'REJECTED';
+    if (!(REPLACE && rejected)) {
+      const why = REPLACE ? ' (only REJECTED is replaced)' : ' (use --replace to resubmit a rejected one)';
+      console.log(`SKIP   ${t.name} — already exists (status=${prior.status}, id=${prior.id})${why}`);
+      results.push({ name: t.name, action: 'skip', status: prior.status, id: prior.id });
+      continue;
+    }
+    if (!APPLY) {
+      console.log(`REPLACE ${t.name} — would delete rejected id=${prior.id} and resubmit`);
+      results.push({ name: t.name, action: 'plan-replace', id: prior.id });
+      continue;
+    }
+    const del = await graph('DELETE', `${WABA}/message_templates?name=${encodeURIComponent(t.name)}`);
+    if (!del.ok || del.json.success === false) {
+      console.log(`FAIL   ${t.name} — could not delete rejected template: HTTP ${del.status} ${JSON.stringify(del.json)}`);
+      results.push({ name: t.name, action: 'fail-delete', status: del.status, error: del.json });
+      continue;
+    }
+    console.log(`DELETE ${t.name} — removed rejected id=${prior.id}`);
   }
   if (!APPLY) {
     console.log(`PLAN   ${t.name} — ${t.job}`);
