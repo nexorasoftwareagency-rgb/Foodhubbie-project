@@ -380,7 +380,7 @@
     }
 
     /* --- Mobile Header Polish --- */
-    .mobile-header #mobilePageTitle {
+    .mobile-header #mobileTabTitle {
         font-size: 1.1rem !important;
         font-weight: 800;
         letter-spacing: -0.02em;
@@ -392,7 +392,7 @@
     }
 
     @media (max-width: 360px) {
-        .mobile-header #mobilePageTitle {
+        .mobile-header #mobileTabTitle {
             max-width: 100px;
             font-size: 1rem !important;
         }
@@ -1049,8 +1049,10 @@
         color: var(--primary) !important;
     }
 
-    /* Payment buttons - Horizontal row */
-    .flex-row.flex-gap-10 {
+    /* Payment buttons - Horizontal row (scoped: this used to be a bare
+       .flex-row.flex-gap-10 selector, which turned EVERY such row in the app
+       into a 3-column grid on mobile — including the mobile header). */
+    .walkin-pay-row {
         display: grid !important;
         grid-template-columns: repeat(3, 1fr) !important;
         gap: 8px !important;

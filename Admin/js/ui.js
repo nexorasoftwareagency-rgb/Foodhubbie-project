@@ -383,16 +383,19 @@ export const switchTab = async (tabId, skipHistory = false) => {
 
     // Update Mobile Bottom Nav & Header Title
     const mobileTitle = document.getElementById('mobileTabTitle');
+    let mobileLabel = null;
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.classList.remove('active');
         if (item.getAttribute('data-tab') === tabId) {
             item.classList.add('active');
-            if (mobileTitle) {
-                const label = item.querySelector('span');
-                if (label) mobileTitle.textContent = label.textContent;
-            }
+            const label = item.querySelector('span');
+            if (label) mobileLabel = label.textContent;
         }
     });
+    // Most tabs are not in the bottom bar at all, so without this fallback the
+    // header kept the previous tab's name (e.g. "Orders" while on Promotions).
+    if (!mobileLabel) mobileLabel = mainItem?.querySelector('span')?.textContent?.trim() || null;
+    if (mobileTitle && mobileLabel) mobileTitle.textContent = mobileLabel;
 
     // Settings registers its delegated subtab handler at module eval — load it
     // before the tab is visible so the first subtab click can't land in the gap.

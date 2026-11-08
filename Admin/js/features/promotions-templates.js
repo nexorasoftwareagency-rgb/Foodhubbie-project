@@ -387,12 +387,26 @@ const WA_TEMPLATE_LABELS = {
   promo_cta_newitem: '🆕 New Item — Order Now button',
 };
 
+/** Replace the select with one disabled row that states why nothing is offered.
+ *  A disabled option (not an empty select) keeps the control readable and
+ *  keyboard-focusable, and `.value` stays '' so a submit falls back safely. */
+function replaceWithPlaceholder(select, text) {
+  select.innerHTML = '';
+  const opt = document.createElement('option');
+  opt.value = '';
+  opt.textContent = text;
+  opt.disabled = true;
+  select.appendChild(opt);
+}
+
 /** Load approved WhatsApp templates from Meta's WABA and populate the
  *  promoWaTemplate select. ONLY templates Meta has APPROVED for this outlet are
  *  offered: an unapproved (or absent) name can never be delivered, so it must
- *  never be selectable. The hardcoded <option>s in index.html are only the
- *  pre-fetch / API-unreachable fallback and are replaced the moment Meta
- *  answers. */
+ *  never be selectable. The hardcoded <option>s in index.html survive only as
+ *  the transient-outage fallback (5xx / network error) and are replaced the
+ *  moment Meta answers. A 4xx means this outlet genuinely has no usable WABA,
+ *  so the picker says so instead of offering names that were never approved
+ *  for it. */
 export async function loadApprovedWaTemplates(bid, oid) {
   const select = document.getElementById('promoWaTemplate');
   if (!select) return;
@@ -416,10 +430,31 @@ export async function loadApprovedWaTemplates(bid, oid) {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 501) {
-      showToast('Meta API endpoint not configured — using fallback templates', 'warning');
+      // The platform has no Meta token at all: no outlet can list templates, so
+      // the seed names were never approved anywhere. Say so instead of faking it.
+      replaceWithPlaceholder(select, 'No WhatsApp templates configured on this platform');
+      showToast('WhatsApp templates are not configured on this platform — campaigns fall back to plain text', 'warning');
       return;
     }
-    if (!res.ok) throw new Error(`Meta API failed ${res.status}`);
+    if (!res.ok) {
+      // 4xx = this outlet genuinely cannot offer templates (no WABA connected,
+      // account not linked, no permission). Falling back to the seed names here
+      // would offer shells that were never approved for this outlet — the exact
+      // thing this picker exists to prevent.
+      if (res.status >= 400 && res.status < 500) {
+        let reason = '';
+        try { reason = (await res.json()).error || ''; } catch (_) {}
+        replaceWithPlaceholder(select, res.status === 404
+          ? 'No WhatsApp number connected for this outlet'
+          : 'No approved marketing template available for this outlet');
+        console.warn(`[Promos] Template list unavailable (${res.status}): ${reason}`);
+        showToast(res.status === 404
+          ? 'No WhatsApp number connected — promo templates need one. Campaigns fall back to plain text.'
+          : 'WhatsApp templates are unavailable for this outlet — campaigns fall back to plain text.', 'warning');
+        return;
+      }
+      throw new Error(`Meta API failed ${res.status}`);
+    }
     const { wabaId, templates } = await res.json();
     // A promotional campaign must use a MARKETING template (Meta classifies and
     // bills by category) with at most ONE body variable — the bot fills {{1}}
@@ -437,11 +472,7 @@ export async function loadApprovedWaTemplates(bid, oid) {
     // Replace the seed list outright — nothing unapproved may stay selectable.
     select.innerHTML = '';
     if (approved.length === 0) {
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = 'No approved marketing template on this WABA';
-      opt.disabled = true;
-      select.appendChild(opt);
+      replaceWithPlaceholder(select, 'No approved marketing template on this WABA');
       showToast('No approved marketing template on this outlet WABA — campaigns fall back to plain text', 'warning');
       return;
     }

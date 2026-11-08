@@ -257,9 +257,12 @@ function _setOfflineBanner(offline) {
 /* ============ KILL SWITCH + DASHBOARD WIDGET ============ */
 
 async function _setKillSwitchUi(on) {
+    _killSwitchLocal = !!on;
+    // Keep the "Sending is ON/OFF" line truthful (this widget can be missing
+    // on the page but the status line must still reflect the stop).
+    _renderPromoStatus();
     const btn = document.getElementById('btnPromoKillAll');
     if (!btn) return;
-    _killSwitchLocal = !!on;
     btn.disabled = !on && !_anyActive();
     btn.classList.toggle('btn-danger', true);
     btn.classList.toggle('btn-warning', !!on);
@@ -276,19 +279,33 @@ function _setPromoEnabledUi(enabled) {
     ['promoKillWidget', 'promoPageKillWidget'].forEach(id => {
         const widget = document.getElementById(id);
         const toggle = document.getElementById(id + 'Toggle');
-        const status = document.getElementById(id + 'Status');
-        const slider = toggle?.nextElementSibling;
         if (!widget || !toggle) return;
         toggle.checked = !!enabled;
-        if (slider) slider.style.background = enabled ? '#22c55e' : '#94a3b8';
-        if (status) {
-            status.textContent = enabled
-                ? 'Sending is ON — all campaigns running normally.'
-                : 'Sending is OFF — all outgoing promo messages are blocked.';
-            status.classList.toggle('text-danger', !enabled);
-        }
     });
+    _renderPromoStatus();
     _refreshLaunchButton();
+}
+
+/** The "Sending is ON/OFF" line must describe the EFFECTIVE state. The bot
+ *  pauses every campaign with pauseReason 'kill-switch' while the emergency
+ *  stop is engaged, so claiming "all campaigns running normally" then is a
+ *  false reassurance (both banners render on the same screen). */
+function _renderPromoStatus() {
+    const enabled = !!_promoEnabledLocal;
+    const killed = !!_killSwitchLocal;
+    const text = !enabled
+        ? 'Sending is OFF — all outgoing promo messages are blocked.'
+        : killed
+            ? 'Sending is PAUSED — emergency stop is engaged.'
+            : 'Sending is ON — all campaigns running normally.';
+    ['promoKillWidget', 'promoPageKillWidget'].forEach(id => {
+        const status = document.getElementById(id + 'Status');
+        const slider = document.getElementById(id + 'Toggle')?.nextElementSibling;
+        if (slider) slider.style.background = !enabled ? '#94a3b8' : killed ? '#f59e0b' : '#22c55e';
+        if (!status) return;
+        status.textContent = text;
+        status.classList.toggle('text-danger', !enabled || killed);
+    });
 }
 
 function _anyActive() {
