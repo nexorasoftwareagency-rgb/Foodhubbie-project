@@ -1,6 +1,6 @@
 # PLAN — Server Branch (`server`)
 
-**Status:** all phases done 2026-11-08 · **Live:** EC2 tracks `origin/server` (`5ba10ad`), sparse-checkout on, deploy script + guard shipped
+**Status:** all phases done 2026-11-08 · **Live:** EC2 tracks `origin/server` (`fc26ec2`), deploy script + invariant guard shipped · sparse-checkout **reverted** (see incident)
 **Replaces:** the standing rule *"EC2 `/var/www/foodhubbie` is a pinned dirty worktree — never `git pull` there"* (AGENTS.md → Key Decisions).
 
 ### Progress
@@ -11,8 +11,46 @@
 | 1 — create + push `server` | **done** `c8b5165` | `merge-base --is-ancestor server main` → 0 |
 | 2 — EC2 snapshot | **done** 2026-11-08 04:12 | `/home/ubuntu/backups/foodhubbie-worktree-20261108-041224.tgz` — 26 MB, 1218 entries, 313 session dirs, `service-account.json` present |
 | 3 — checkout `server` on EC2 | **done** 2026-11-08 04:38 | `HEAD server 5ba10ad`, `git diff --quiet` clean, 4 processes online, `status-all` 401, pizza `[TENANT] outlet=pizza business=roshani-pizza` / `transport=baileys` / `Online`, fresh `pair.connectedAt`, heartbeat 15 s |
-| 4 — sparse-checkout | **done** 2026-11-08 | cone `bot bot-control-api webhook-server shared tools assets`; root files kept; tree 1.3 GB → see deploy log |
+| 4 — sparse-checkout | **reverted** 2026-11-08 | `init --cone` deleted ignored runtime files (`node_modules`, `service-account.json`, `session_data_*`); restored from the Phase 2 snapshot; sparse-checkout disabled — see the incident below |
 | 5 — `tools/server-deploy.sh` + guard | **done** 2026-11-08 | script run twice (2nd = `already up to date`); `tools/check-server-branch.cjs` wired to `npm run test:server-branch` + CI |
+
+### Incident 2026-11-08 — sparse-checkout deleted ignored runtime files
+
+`git sparse-checkout init --cone` sets the cone to **empty** (`/*` + `!/*/`) before `set` runs.
+Applying an empty cone removes the tracked files from every subdirectory **and deletes the ignored
+files inside them**. On this box that was:
+
+- `bot/node_modules/` (the whole bot dependency tree)
+- `bot-control-api/node_modules/`
+- `bot/service-account.json`
+- `bot/session_data_*/` (the paired WhatsApp session — 19 dirs)
+
+`set …` then restored the tracked files, so `git status` looked clean, but the next `pm2 restart`
+took all four apps down with `MODULE_NOT_FOUND`. `webhook-server/node_modules/` and the untracked
+media survived only because their directories had no tracked files at `init` time.
+
+Reproduced in a scratch repo (git 2.43.0):
+
+| step | `bot/node_modules` | `bot/secret.json` | `other/node_modules` |
+|---|---|---|---|
+| baseline | Y | Y | Y |
+| after `git sparse-checkout init --cone` | **N** | **N** | Y |
+| after `git sparse-checkout set bot` | N | N | Y |
+| after `git reset --hard` | N | N | Y |
+
+One-shot `git sparse-checkout set bot` (no separate `init`) keeps everything in the included dir and
+only removes ignored files from **excluded** dirs — that part is expected. `git reset --hard` is safe
+(it does not touch ignored files).
+
+**Recovery:** extracted `bot/service-account.json` + `bot/session_data_*` from
+`/home/ubuntu/backups/foodhubbie-worktree-20261108-041224.tgz`, ran `npm ci` in `bot/` and
+`bot-control-api/`, restarted all four apps. Pizza reconnected on the restored session
+(`pair.connectedAt` fresh, `transport=baileys`, `Online`). **Zero orders** were created in the outage
+window (checked both outlets), so no customer impact.
+
+**Decision:** sparse-checkout stays **off**. It saves ~330 MB on a disk with 21 GB free and its
+failure mode is silent deletion of `node_modules` and the WhatsApp session. The deploy script now
+refuses to restart if any of those runtime paths is missing, and never runs `git clean`.
 
 ---
 
@@ -41,7 +79,7 @@ Measured on EC2 `3.111.39.210` on 2026-11-08:
 | **Real** content drift in server code | **9 files**, all **repo-newer** | the branch already equals what is running |
 | EOL-only drift | 29 files | local `core.autocrlf=true`, EC2 LF — cosmetic |
 | `bot/`, `bot-control-api/`, `webhook-server/`, `shared/`, `assets/` | **byte-identical to repo HEAD** (modulo CRLF) | zero reconciliation needed |
-| `.git` size | 798 MB (worktree 1.3 GB) | full checkout on EC2 is wasteful; see §5.4 |
+| `.git` size | 798 MB (worktree 1.4 GB) | full checkout kept; sparse-checkout was tried and reverted (see incident) |
 | `bot/service-account.json`, `bot/session_data_*/` | already gitignored | safe |
 | Tracked secrets | none | safe |
 
@@ -63,14 +101,15 @@ exercise. The branch already matches production.
 - `server` is a normal branch containing the **same tree** as `main` (cut from `main`).
 - **Invariant: `server` is always an ancestor of `main`** (`git merge-base --is-ancestor server main`).
   `server` is either equal to `main` or behind it. It is never ahead, never diverged.
-- EC2 tracks `origin/server` and materialises only the server paths (§5.4 sparse-checkout).
+- EC2 tracks `origin/server` and keeps the **full tree** (sparse-checkout was tried and reverted —
+  see the incident in the Progress section).
 
 Consequences:
 - No merge conflicts, ever. `git merge --ff-only origin/server` on the box can never fail.
 - `main` stays the complete, browsable history (GitHub default branch untouched).
 - "Deploy" = move the `server` pointer forward. "Roll back" = move it back. Both are one command.
-- Frontend work on `main` never reaches EC2 unless it is promoted, and promoting only carries the
-  paths in the sparse cone.
+- Frontend work on `main` never reaches EC2 unless it is promoted, and promoting carries the whole
+  tree (the box simply ignores the frontend paths).
 
 ### 3.2 Rejected: subset / orphan `server` branch
 
@@ -79,8 +118,7 @@ does not contain `Admin/`, `menu/`, `website/`, then `git merge server` into `ma
 directories** (they are "deleted" relative to the merge base). Every sync-back would need
 `cherry-pick` or `merge -s ours`, and the `shared/*.js` files that are consumed by *both* the bot and
 the browser (`money-math`, `discount-rules`, `cost-math`, `loyalty-math`) would live in two trees
-that drift silently. Not worth it. The sparse-checkout in §5.4 gives the same small-checkout
-benefit without touching branch topology.
+that drift silently. Not worth it.
 
 ### 3.3 Rejected: separate git repository for server code
 
@@ -92,7 +130,7 @@ Duplicates `shared/` (4 files are byte-identical twins already guarded by
 ## 4. Branch contents
 
 `server` carries the whole tree, but **only these paths are "owned" by it** — server work is
-committed here, and these are the paths EC2 materialises:
+committed here, and these are the paths EC2 runs:
 
 ```
 bot/                      bot worker (Baileys + Meta transport), discount engine, pricing, loyalty
@@ -220,7 +258,7 @@ Gate:
 - `md5sum bot/index.js bot-control-api/server.js webhook-server/index.js` → identical to the local
   repo copies
 
-**Then restart and prove the box still works before touching sparse-checkout:**
+**Then restart and prove the box still works:**
 
 ```bash
 pm2 restart webhook-server bot-control-api bot-roshani-pizza-pizza \
@@ -235,28 +273,23 @@ Gate: `status-all` → `401` (auth required = server up), pizza logs
 `[TENANT] outlet=pizza business=roshani-pizza` + transport `baileys` + `Online`. **If red:**
 `git reset --hard c56175b && pm2 restart …` and stop — do not continue to Phase 4.
 
-### Phase 4 — Shrink the EC2 checkout (sparse-checkout)
+### Phase 4 — sparse-checkout — **REVERTED, do not repeat**
 
-Optional but recommended: removes `Admin/`, `menu/`, `website/`, `rider-app/`, `PLAN/` (the 1,363-file
-vendored dir), `reference/` from the box. Nothing on EC2 reads them; hosting deploys run from the dev
-machine.
+> **Never run `git sparse-checkout init --cone` on this box.** With an empty cone it deletes the
+> ignored files inside every subdirectory that contains tracked files — on 2026-11-08 that was
+> `bot/node_modules`, `bot-control-api/node_modules`, `bot/service-account.json` and all of
+> `bot/session_data_*`. See the incident section above. Sparse-checkout is disabled
+> (`git sparse-checkout disable`) and the box keeps the full 1.4 GB tree.
+
+If a small checkout is ever wanted again it must be a **single** command with the full cone — never
+`init` followed by `set`:
 
 ```bash
-cd /var/www/foodhubbie
-git sparse-checkout init --cone
 git sparse-checkout set bot bot-control-api webhook-server shared tools assets
-git sparse-checkout list
 ```
 
-Cone mode keeps **all root-level files** (`ecosystem*.js`, `package.json`, `.gitignore`,
-`firebase.json`) and materialises only the six listed directories.
-
-Gate:
-- `ls` shows the six dirs + root files, and no `Admin/` / `menu/` / `PLAN/`
-- `pm2 list` still all online after `pm2 restart all` (paths are unchanged)
-- `du -sh /var/www/foodhubbie` dropped substantially
-
-Rollback: `git sparse-checkout disable`.
+…and only after verifying that `bot/node_modules`, `bot/service-account.json` and
+`bot/session_data_*` still exist. The ~330 MB saving is not worth the risk.
 
 ### Phase 5 — Replace the deploy path
 
@@ -421,9 +454,9 @@ with:
 > same tree as `main`, always an ancestor of `main`, never diverged. Server work is committed on
 > `server`; frontend work stays on `main` and never reaches the box. Deploy with
 > `bash tools/server-deploy.sh` on EC2 — it refuses to run over hand-edited tracked files, syntax-checks
-> every changed file, and rolls back on failure. The box uses `git sparse-checkout` (cone:
-> `bot bot-control-api webhook-server shared tools assets`), so `Admin/`/`menu/`/`website/` are not
-> present there — hosting deploys run from the dev machine only. Runtime media
+> every changed file, and rolls back on failure. The box keeps the **full tree** (sparse-checkout was
+> tried and reverted — it deleted ignored runtime files), so `Admin/`/`menu/`/`website/` are present
+> but unused; hosting deploys run from the dev machine only. Runtime media
 > (`assets/images/*.jpg`, `webhook-server/public/*.jpg`) and `bot/service-account.json` /
 > `bot/session_data_*/` are box-local and must never be `git clean`ed.
 
@@ -439,7 +472,10 @@ Plus a new **Relevant Files** entry for `tools/server-deploy.sh` and `tools/chec
 - **`git merge --ff-only` protects against divergence, not against a bad commit.** Syntax checks
   catch typos; they do not catch logic errors. The existing bot unit suite (21 tests) should be run
   on the dev machine before pushing to `server` — add it to the pre-push habit.
-- **Sparse-checkout is reversible but not free.** `git sparse-checkout disable` re-materialises ~800 MB.
+- **Sparse-checkout is not safe here.** `git sparse-checkout init --cone` (empty cone) deleted
+  `bot/node_modules`, `bot-control-api/node_modules`, `bot/service-account.json` and all
+  `bot/session_data_*` on 2026-11-08. It stays off; the deploy script now refuses to restart when a
+  required runtime path is missing.
 - **The 105 untracked files are classified by pattern, not by inspection.** Phase 0's `.gitignore`
   covers the observed junk classes; anything genuinely useful that is currently untracked
   (`webhook-server/update-webhook-url.sh`, `bot-control-api/check-cake.js`) gets ignored rather than

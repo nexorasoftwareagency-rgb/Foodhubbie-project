@@ -35,11 +35,20 @@ fi
 before=$(git rev-parse HEAD)
 git fetch --prune origin "$BRANCH" || { echo "ABORT: git fetch failed"; exit 1; }
 
-if ! git merge --ff-only "origin/$BRANCH"; then
-  echo "ABORT: origin/$BRANCH is not a fast-forward of $before."
-  echo "       The server branch must always be an ancestor of main."
+if ! git merge --ff-only "origin/$BRANCH" 2>/tmp/fhmerge.err; then
+  if grep -q "untracked working tree files would be overwritten" /tmp/fhmerge.err; then
+    echo "ABORT: a file that is untracked on this box is now tracked on $BRANCH:"
+    grep -E "^[[:space:]]+" /tmp/fhmerge.err | sed 's/^[[:space:]]*/  /'
+    echo "       If its content is identical, delete it and re-run; otherwise reconcile first."
+  else
+    cat /tmp/fhmerge.err
+    echo "ABORT: origin/$BRANCH is not a fast-forward of $before."
+    echo "       The server branch must always be an ancestor of main."
+  fi
+  rm -f /tmp/fhmerge.err
   exit 1
 fi
+rm -f /tmp/fhmerge.err
 after=$(git rev-parse HEAD)
 
 if [ "$before" = "$after" ]; then
@@ -68,6 +77,24 @@ done < <(git diff --name-only "$before" "$after" -- '*.js' '*.cjs' '*.mjs')
 if [ "$fail" != "0" ]; then
   echo "ROLLBACK: git reset --hard $before"
   git reset --hard "$before" >/dev/null
+  exit 1
+fi
+
+# ── runtime sanity gate ──────────────────────────────────────────────────────
+# Never restart into a tree that cannot boot. This is the guard that would have
+# caught the 2026-11-08 incident: `git sparse-checkout init --cone` deleted
+# bot/node_modules, bot/service-account.json and bot/session_data_* (ignored
+# files inside a directory that contains tracked files). Restarting then took
+# every pm2 app down. Check before touching pm2.
+missing=0
+for p in bot/index.js bot-control-api/server.js webhook-server/index.js \
+         bot/node_modules bot-control-api/node_modules webhook-server/node_modules \
+         bot/service-account.json; do
+  if [ ! -e "$p" ]; then echo "ABORT: required runtime path missing: $p"; missing=1; fi
+done
+if [ "$missing" != "0" ]; then
+  echo "       NOT restarting — the running processes keep serving the previous code."
+  echo "       Restore the missing paths (see docs/PLAN-SERVER-BRANCH.md incident 2026-11-08), then re-run."
   exit 1
 fi
 
