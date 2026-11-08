@@ -30,6 +30,7 @@ const { startMetaCostPublisher } = require('./meta-cost-publisher');
 const sharp = require('sharp');
 const { getBillingDefaults } = require('../shared/billing-defaults.cjs');
 const { prunePushInbox } = require('../shared/push-inbox.cjs');
+const { checkAndConsumeCap } = require('../bot/notification-caps');
 
 const PORT = process.env.BOT_CONTROL_PORT || 4000;
 
@@ -1354,6 +1355,27 @@ app.post('/tenant-api/notify', async (req, res) => {
       const own = (await admin.database().ref(`admins/${req.adminUid}/fcmToken`).get()).val();
       entries = own ? [{ key: 'test', token: own, phone: null }] : [];
     }
+
+    // Frequency cap + quiet-hours gating per recipient.
+    // order-type pushes are transactional (always allowed, generous cap);
+    // anything else is marketing (tight cap + quiet-hours suppression).
+    const notifyType = messageType === 'order' ? 'order' : 'promo';
+    const cappedEntries = [];
+    for (const entry of entries) {
+      const phone = String(entry.phone || '');
+      if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+        // No valid phone — can't cap, let it through
+        cappedEntries.push(entry);
+        continue;
+      }
+      const cap = await checkAndConsumeCap(req.outlet, phone, notifyType);
+      if (cap.allowed) {
+        cappedEntries.push(entry);
+      } else {
+        console.log(`[notify-caps] broadcast suppressed for ${phone}: ${cap.reason}`);
+      }
+    }
+    entries = cappedEntries;
 
     const tokens = entries.map(e => e.token).filter(Boolean);
     if (tokens.length === 0) {

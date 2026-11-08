@@ -41,6 +41,9 @@ jobs:
       - name: Menu add-flow guard (new category, inline checks, live preview)
         run: node tests/admin-add-flow.browser.mjs
 
+      - name: Notification caps guard (frequency + quiet hours)
+        run: node tests/notify-caps.check.cjs
+
       - name: Server branch invariant (server is an ancestor of main)
         run: |
           git fetch --no-tags origin \
