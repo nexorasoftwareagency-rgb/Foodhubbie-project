@@ -84,29 +84,6 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     await page.waitForTimeout(700);
     await page.screenshot({ path: path.join(T, 'menu-compact.png') });
 
-    // ---- Menu Browser tab (grid view) ----
-    await page.locator('.nav-btn[data-tab="menu-browser"]').first().click();
-    await page.waitForTimeout(2500);
-    const br = await page.evaluate(() => {
-        const grid = document.getElementById('browserDishGrid');
-        if (!grid) return { none: true };
-        const cards = [...grid.querySelectorAll('.browser-dish-card')];
-        const rect = grid.getBoundingClientRect();
-        return {
-            cards: cards.length,
-            isList: grid.classList.contains('list-view'),
-            gridWidth: Math.round(rect.width),
-            cardW: cards[0] ? Math.round(cards[0].getBoundingClientRect().width) : 0,
-            cardH: cards[0] ? Math.round(cards[0].getBoundingClientRect().height) : 0,
-            stepX: cards.length > 1 ? Math.round(cards[1].getBoundingClientRect().x - cards[0].getBoundingClientRect().x) : 0,
-            btnW: (grid.querySelector('.browser-dish-actions .btn-action-v4') || {}).offsetWidth || 0,
-        };
-    });
-    ok('browser tab renders grid view', br.none || (!br.isList && br.cards > 0), `${br.cards || 0} cards${br.isList ? ' (LIST VIEW — unexpected default)' : ''}`);
-    ok('browser tab cards compact', br.none || (br.cardW > 0 && br.cardW < 140 && br.cardH < 400), `card ${br.cardW}x${br.cardH}px -> ~${br.stepX ? Math.round(br.gridWidth / br.stepX) : 1} columns on ${br.gridWidth}px`);
-    ok('browser tab action buttons compact', br.none || (br.btnW === 0 || br.btnW <= 26), `edit/delete btn ${br.btnW}px`);
-    await page.screenshot({ path: path.join(T, 'browser-compact.png') });
-
     // ---- Combos tab ----
     await page.locator('#menu-menu .nav-btn').first().click(); await page.locator('.mc-subtab[data-tab="combos"]').first().click();
     await page.waitForTimeout(2500);

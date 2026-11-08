@@ -201,7 +201,7 @@ const TEMPLATES = [
 const ROLES = {
     admin: { name: 'Admin', level: 2, tabs: ['*'] },
     owner: { name: 'Owner', level: 2, tabs: ['*'] },
-    manager: { name: 'Manager', level: 1, tabs: ['dashboard', 'orders', 'live', 'walkin', 'tables', 'promotions', 'discounts', 'menu', 'categories', 'combos', 'menu-browser', 'inventory', 'riders', 'customers', 'loyalty', 'chat', 'reports', 'riderAnalytics', 'feedback', 'liveTracker', 'notifications', 'payments', 'expenses', 'costs'] },
+    manager: { name: 'Manager', level: 1, tabs: ['dashboard', 'orders', 'live', 'walkin', 'tables', 'promotions', 'discounts', 'menu', 'categories', 'combos', 'inventory', 'riders', 'customers', 'loyalty', 'chat', 'reports', 'riderAnalytics', 'feedback', 'liveTracker', 'notifications', 'payments', 'expenses', 'costs'] },
     cashier: { name: 'Cashier', level: 0, tabs: ['dashboard', 'walkin', 'tables', 'orders', 'live', 'notifications'] },
     waiter: { name: 'Waiter', level: -1, tabs: ['orders', 'live', 'notifications'] },
 };

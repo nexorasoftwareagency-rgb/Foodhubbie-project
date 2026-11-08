@@ -761,10 +761,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             (await useMod('catalog')).filterCategories(val);
         } else if (el.id === 'inventorySearch') {
             (await useMod('inventory')).setInventorySearch(val);
-        } else if (el.id === 'menuBrowserSearch') {
-            (await useMod('menu-browser')).filterBrowserDishes(val);
-        } else if (el.id === 'browserCategorySearch') {
-            (await useMod('menu-browser')).filterBrowserCategories(val);
         }
     });
 
@@ -1185,16 +1181,6 @@ window.showUserManual = (tabId, title) => {
                 • Add, edit, delete menu items.<br>
                 • Manage dish categories and organization.<br>
                 • Track dish prices and availability.
-            `
-        },
-        'menu-browser': {
-            title: 'Menu Browser',
-            content: `
-                <strong>Menu Browser</strong><br>
-                • Browse menu items across all categories.<br>
-                • Search dishes by name or category.<br>
-                • View dish details and pricing.<br>
-                • Filter dishes by dietary preferences.
             `
         },
         notifications: {
