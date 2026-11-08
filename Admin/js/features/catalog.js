@@ -1191,9 +1191,11 @@ function _initCategoryDrawer() {
     const drawer = document.getElementById('categoryCreateDrawer');
     if (!drawer) return;
     const close = () => drawer.classList.remove('active');
-    document.getElementById('btnOpenCatDrawer')?.addEventListener('click', () => {
-        drawer.classList.add('active');
-        setTimeout(() => document.getElementById('newCatName')?.focus(), 250);
+    document.querySelectorAll('.btn-add-category').forEach(btn => {
+        btn.addEventListener('click', () => {
+            drawer.classList.add('active');
+            setTimeout(() => document.getElementById('newCatName')?.focus(), 250);
+        });
     });
     document.getElementById('btnCloseCatDrawer')?.addEventListener('click', close);
     drawer.addEventListener('mousedown', e => { if (e.target === drawer) close(); });

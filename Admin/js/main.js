@@ -591,9 +591,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
-        document.getElementById('btnAddDishChoice')?.addEventListener('click', async () => {
-            const { showAddDishChoice } = await useMod('catalog');
-            showAddDishChoice();
+        document.querySelectorAll('.btn-add-dish').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const { showAddDishChoice } = await useMod('catalog');
+                showAddDishChoice();
+            });
         });
         document.querySelectorAll('.btn-open-menu-bank').forEach(btn => {
             btn.addEventListener('click', async () => {
