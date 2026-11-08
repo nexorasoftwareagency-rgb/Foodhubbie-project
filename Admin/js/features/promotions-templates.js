@@ -449,6 +449,8 @@ export async function loadApprovedWaTemplates(bid, oid) {
     }
     // Add each approved template as an <option> to the select
     approved.forEach((t) => {
+      // The fallback option kept above may already be one of the approved set.
+      if (select.querySelector(`option[value="${t.name}"]`)) return;
       const opt = document.createElement('option');
       opt.value = t.name;
       opt.textContent = WA_TEMPLATE_LABELS[t.name] || `${t.name} (${String(t.category).toUpperCase()})`;
