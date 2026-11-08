@@ -2093,9 +2093,9 @@ function renderActiveOffers() {
     // In a real system this would come from the outlet's active discount campaigns.
     // For now we show a sample set based on store settings.
     const offers = [
-        { title: 'Welcome Offer', subtitle: 'First order discount', code: 'WELCOME20', desc: '20% off your first order', valid: 'Valid for 7 days' },
-        { title: 'Weekend Special', subtitle: 'Weekend discount', code: 'WEEKEND10', desc: '10% off orders above ₹500', valid: 'Sat & Sun only' },
-        { title: 'Festive Deal', subtitle: 'Seasonal offer', code: 'FESTIVE15', desc: '15% off all items', valid: 'Valid until month-end' },
+        { title: 'Welcome Offer', subtitle: 'First order discount', code: 'WELCOME20', desc: '20% off your first order', valid: 'Valid for 7 days', variant: 'welcome', emoji: '🎉', daysLeft: 7 },
+        { title: 'Weekend Special', subtitle: 'Weekend discount', code: 'WEEKEND10', desc: '10% off orders above ₹500', valid: 'Sat & Sun only', variant: 'weekend', emoji: '🍕', daysLeft: 2 },
+        { title: 'Festive Deal', subtitle: 'Seasonal offer', code: 'FESTIVE15', desc: '15% off all items', valid: 'Valid until month-end', variant: 'festive', emoji: '🎊', daysLeft: 15 },
     ];
 
     if (offers.length === 0) {
@@ -2124,16 +2124,32 @@ function renderActiveOffers() {
             ? `<span class="promo-card-badge applied">${codeEsc}</span><span class="promo-card-badge applied">Applied</span>`
             : `<span class="promo-card-badge">${codeEsc}</span>`;
 
-        return `<div class="promo-card ${isApplied ? 'promo-card--applied' : ''}">
-            <div class="promo-card-top">${badgeHtml}</div>
-            <div class="promo-card-title">${titleEsc}</div>
-            <div class="promo-card-sub">${subtitleEsc}</div>
-            <div class="promo-card-terms">${descEsc} · ${validEsc}</div>
+        const variantClass = `promo-card-badge-${o.variant || 'generic'}`;
+        const urgencyHtml = o.daysLeft && o.daysLeft <= 7
+            ? `<span class="promo-card-urgency">${o.daysLeft} days left</span>`
+            : '';
+
+        return `<div class="promo-card ${isApplied ? 'promo-card--applied' : ''}" role="button" tabindex="0" aria-label="${titleEsc}, ${descEsc}">
+            <span class="promo-card-icon">${o.emoji || '🎁'}</span>
+            <div class="promo-card-body">
+                <div class="promo-card-top">${badgeHtml}</div>
+                <div class="promo-card-title">${titleEsc}</div>
+                <div class="promo-card-sub">${subtitleEsc}</div>
+                <div class="promo-card-terms">${descEsc} · ${validEsc}${urgencyHtml}</div>
+            </div>
             <div class="promo-card-actions">${actionsHtml}</div>
         </div>`;
     });
 
     grid.innerHTML = cards.join('');
+
+    grid.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        const card = e.target.closest('.promo-card');
+        if (!card) return;
+        const applyBtn = card.querySelector('.promo-btn-apply');
+        if (applyBtn) applyBtn.click();
+    });
 
     grid.querySelectorAll('.promo-btn-copy').forEach(btn => {
         btn.addEventListener('click', async (e) => {
