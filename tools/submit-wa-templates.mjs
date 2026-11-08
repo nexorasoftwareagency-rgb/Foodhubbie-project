@@ -228,13 +228,26 @@ for (const t of TEMPLATES) {
 }
 
 const out = path.join(ROOT, 'docs', `wa-template-submission-${BID}.json`);
-fs.mkdirSync(path.dirname(out), { recursive: true });
-fs.writeFileSync(
-  out,
-  JSON.stringify(
-    { waba: WABA, bid: BID, oid: OID, orderUrl: ORDER_URL, appliedAt: new Date().toISOString(), results },
-    null,
-    2
-  )
-);
-console.log(`\nReport → ${path.relative(ROOT, out)}`);
+if (!APPLY) {
+  console.log('\nDry run — audit report unchanged.');
+} else {
+  // Merge by name and never downgrade a recorded `create` to `skip`, so a
+  // later --replace run keeps the history of what this tool actually created.
+  let prior = [];
+  try { prior = JSON.parse(fs.readFileSync(out, 'utf8')).results || []; } catch { /* first run */ }
+  const byName = new Map(prior.map((r) => [r.name, r]));
+  for (const r of results) {
+    if (byName.get(r.name)?.action === 'create' && r.action === 'skip') continue;
+    byName.set(r.name, r);
+  }
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(
+    out,
+    JSON.stringify(
+      { waba: WABA, bid: BID, oid: OID, orderUrl: ORDER_URL, appliedAt: new Date().toISOString(), results: [...byName.values()] },
+      null,
+      2
+    )
+  );
+  console.log(`\nReport → ${path.relative(ROOT, out)}`);
+}
