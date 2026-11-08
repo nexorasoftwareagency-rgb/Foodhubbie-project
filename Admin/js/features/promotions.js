@@ -21,6 +21,23 @@ import { ensureXlsx } from '../xlsx.js';
 import { loadApprovedWaTemplates } from './promotions-templates.js';
 
 const PROMO_MAX_PER_CAMPAIGN = 300;
+// Human text for the bot's pauseReason values (a raw slug in the UI tells an
+// owner nothing actionable). Short label on the card, full sentence in a toast.
+const PAUSE_REASON_SHORT = {
+    'transport-blocked': 'legacy transport',
+    'meta-cost-guard': 'Meta spend cap / wallet low',
+    'no-tokens': 'no promo tokens',
+    'kill-switch': 'sending switched off',
+    'promo-disabled': 'promotions disabled',
+    'daily-limit': 'daily limit reached',
+    'balance-unreadable': 'wallet unreadable',
+    'high-failure-rate': 'high failure rate',
+};
+const PAUSE_REASON_FULL = {
+    'transport-blocked': 'Promos need the official WhatsApp API — this outlet is on the legacy transport.',
+    'meta-cost-guard': 'Sending paused — the wallet balance is below the send threshold or a Meta spend cap was reached. Top up, then resume.',
+    'no-tokens': 'Sending paused — no prepaid promo tokens left. Buy a token pack, then resume.',
+};
 const PHONE_HINTS = ['whatsapp', 'phone', 'mobile', 'number', 'cell', 'contact', 'tel', 'msisdn'];
 
 let _campaignListener = null;
@@ -355,7 +372,7 @@ async function _renderActivePane() {
                 <div>
                     <strong>${escapeHtml(c.id)}</strong>
                     <span class="promo-badge-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span>
-                    ${c.status === 'paused' && c.pauseReason ? `<span class="text-muted-small" title="${escapeHtml(c.pauseReason)}">${escapeHtml(c.pauseReason)}</span>` : ''}
+                    ${c.status === 'paused' && c.pauseReason ? `<span class="text-muted-small" title="${escapeHtml(PAUSE_REASON_FULL[c.pauseReason] || c.pauseReason)}">${escapeHtml(PAUSE_REASON_SHORT[c.pauseReason] || c.pauseReason)}</span>` : ''}
                     ${c.runAt ? `<span class="text-muted-small">scheduled ${escapeHtml(formatDate(c.runAt))}</span>` : ''}
                     ${c.menuText ? `<span class="text-muted-small" title="Has menu footer">• 🍴 menu</span>` : ''}
                     ${c.waTemplateName && c.waTemplateName !== 'proactive_promo' ? `<span class="text-muted-small" title="WhatsApp shell">• ${escapeHtml(c.waTemplateName)}</span>` : ''}
@@ -649,9 +666,7 @@ export async function _sendTest() {
         const c = snap.val();
         if (!c || !c.pauseReason) return;
         cleanup();
-        const reason = c.pauseReason === 'transport-blocked'
-            ? 'Promos need the official WhatsApp API — this outlet is on the legacy transport.'
-            : `Paused: ${c.pauseReason}`;
+        const reason = PAUSE_REASON_FULL[c.pauseReason] || `Paused: ${c.pauseReason}`;
         window.__updateToast?.(toastId, `⏸️ Test not sent — ${reason}`, 'warning');
     }));
     // Timeout after 10 seconds

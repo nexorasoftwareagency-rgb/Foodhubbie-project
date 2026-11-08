@@ -64,13 +64,20 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, ou
         const isMetaSock = isMetaTransport(sock);
         if (isMetaSock && typeof sock.sendTemplate === 'function') {
             try {
-                await sock.sendTemplate(jid, { name: waTemplateName || process.env.PROACTIVE_TEMPLATE || 'proactive_promo', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
+                const r = await sock.sendTemplate(jid, { name: waTemplateName || process.env.PROACTIVE_TEMPLATE || 'proactive_promo', language: process.env.PROACTIVE_LANGUAGE || 'en', body: finalText, _logChat: false });
+                // A cost-guard block is a DROP, not a delivery: sendTemplate
+                // returns { blocked: true } instead of throwing. Treating that
+                // as success burned a prepaid token and billed ₹1 for a message
+                // nobody received.
+                if (r && r.blocked) throw new Error('promo-blocked-cost-guard');
                 outboundTracker.trackSend(outlet || 'pizza', 'promo');
                 return;
             } catch (e) {
+                if (e.message === 'promo-blocked-cost-guard') throw e;
                 console.warn(`[Promo] Template send failed for ${jid}, text fallback: ${e.message || e}`);
             }
         }
+        let sentMsg;
         if (mediaUrl) {
             let payload;
             if (typeof mediaUrl === 'string' && mediaUrl.startsWith('data:image')) {
@@ -79,10 +86,12 @@ async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, ou
             } else {
                 payload = { image: { url: mediaUrl }, caption: finalText };
             }
-            await sock.sendMessage(jid, payload, { _logChat: false });
+            sentMsg = await sock.sendMessage(jid, payload, { _logChat: false });
         } else {
-            await sock.sendMessage(jid, { text: finalText }, { _logChat: false });
+            sentMsg = await sock.sendMessage(jid, { text: finalText }, { _logChat: false });
         }
+        // Same shape on the text/image path — never count a blocked drop.
+        if (sentMsg && sentMsg.blocked) throw new Error('promo-blocked-cost-guard');
         outboundTracker.trackSend(outlet || 'pizza', 'promo');
     } catch (err) {
         console.error(`[Promo] sendMessage failed for ${jid}:`, err.message || err);
@@ -222,7 +231,12 @@ async function sendWithRetry(sock, jid, text, mediaUrl, maxRetries, sendStopMsg,
             return { ok: true, attempts: attempt };
         } catch (err) {
             lastErr = err;
-            if (err.message === 'promo-blocked-transport') return { ok: false, error: err.message, attempts: attempt };
+            // Both are outlet-wide conditions that cannot clear inside a 5s
+            // retry: legacy transport, and the Meta cost guard (wallet below
+            // threshold or a spend cap hit). Report once, never hammer.
+            if (err.message === 'promo-blocked-transport' || err.message === 'promo-blocked-cost-guard') {
+                return { ok: false, error: err.message, attempts: attempt };
+            }
             console.warn(`[Promo] Attempt ${attempt}/${maxRetries} failed for ${jid}: ${err.message || err}`);
             if (attempt < maxRetries) await new Promise(r => setTimeout(r, 5000));
         }
@@ -390,6 +404,10 @@ async function runPromotionCampaign(sock, cmd, ctx) {
             if (!jid) { await logPromoSkip(campaignId, phone, 'invalid-jid', OUTLET, db); failed++; continue; }
             if (!isTest && await isOptedOut(phone, OUTLET, db)) { await logPromoSkip(campaignId, phone, 'opted-out', OUTLET, db); continue; }
             if (!isTest && !await hasPromoConsent(phone, OUTLET, db)) { await logPromoSkip(campaignId, phone, 'no-consent', OUTLET, db); continue; }
+            // A frozen chat (3 non-intent messages → 30-min silence) receives no
+            // promo at all. Skip it like opt-out: sendPromotionalMessage would
+            // drop it and the campaign would still count (and bill) a send.
+            if (!isTest && isJidFrozen(jid)) { await logPromoSkip(campaignId, phone, 'frozen', OUTLET, db); continue; }
 
             let text = await personalizeTemplate(template, phone, campaignId, null, OUTLET, getData);
             if (greeting) {
@@ -465,6 +483,17 @@ async function runPromotionCampaign(sock, cmd, ctx) {
                 }
             } else {
                 failed++;
+                // A cost-guard block applies to the whole outlet (wallet below
+                // the send threshold, or a Meta spend cap hit) — the next
+                // recipient cannot succeed either. Pause now instead of walking
+                // the rest of the list into the same wall.
+                if (result.error === 'promo-blocked-cost-guard') {
+                    console.warn(`[Promo] Meta cost guard blocked sends — pausing ${campaignId}`);
+                    await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({
+                        status: 'paused', pauseReason: 'meta-cost-guard', currentIndex: i + 1, totalSent: sent, totalFailed: failed
+                    });
+                    return;
+                }
             }
 
             if ((i + 1) % PROMO_HEARTBEAT_EVERY === 0) {

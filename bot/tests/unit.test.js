@@ -278,6 +278,23 @@ test('inbound text extractor understands quick-reply button taps', () => {
     assert.ok(/\/\^\(stop\|unsubscribe/.test(optOut), 'opt-out regex still matches "unsubscribe"');
 });
 
+// The Meta cost guard (wallet below threshold / spend cap hit) returns
+// { blocked: true } instead of throwing. Counting that as a delivered send
+// burned a prepaid promo token and billed ₹1 for a message nobody received.
+test('promo send never counts a cost-guard block as delivered', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(path.join(__dirname, '../promotions.js'), 'utf8');
+    const send = src.slice(src.indexOf('async function sendPromotionalMessage'), src.indexOf('async function personalizeTemplate'));
+    assert.ok(/if \(r && r\.blocked\) throw new Error\('promo-blocked-cost-guard'\)/.test(send), 'template path must reject a blocked result');
+    assert.ok(/if \(sentMsg && sentMsg\.blocked\) throw new Error\('promo-blocked-cost-guard'\)/.test(send), 'text/image path must reject a blocked result');
+    const retry = src.slice(src.indexOf('async function sendWithRetry'), src.indexOf('async function acquirePromoLock'));
+    assert.ok(retry.includes("'promo-blocked-cost-guard'"), 'cost-guard block must not be retried');
+    assert.ok(/pauseReason: 'meta-cost-guard'/.test(src), 'campaign must pause on a cost-guard block');
+    // A frozen chat is dropped inside the send function; the campaign must skip
+    // it up front or it counts and bills a message that was never delivered.
+    assert.ok(/isJidFrozen\(jid\)\) \{ await logPromoSkip\(campaignId, phone, 'frozen'/.test(src), 'frozen recipient must be skipped, not billed');
+});
+
 // Phase 2 loyalty math (shared/loyalty-math.js) — the same formulas the bot
 // runs for earn/tender/clawback, exercised directly.
 test('loyalty-math: earn base, two-stage floor, tender caps, bill split', async () => {
