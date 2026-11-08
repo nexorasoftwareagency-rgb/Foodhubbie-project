@@ -543,31 +543,11 @@
 
                 <li class="nav-group-label">Catalogue</li>
 
-                <li id="menu-menu" title="Manage Product Menu and Items">
+                <li id="menu-menu" title="Menu, Categories and Combos">
 
                     <button data-action="switchTab" data-tab="menu" class="nav-btn">
 
                         <i data-lucide="utensils"></i> <span>Menu</span>
-
-                    </button>
-
-                </li>
-
-                <li id="menu-categories" title="Organize Menu Categories">
-
-                    <button data-action="switchTab" data-tab="categories" class="nav-btn">
-
-                        <i data-lucide="folder-tree"></i> <span>Categories</span>
-
-                    </button>
-
-                </li>
-
-                <li id="menu-combos" title="Manage Combo Offers">
-
-                    <button data-action="switchTab" data-tab="combos" class="nav-btn">
-
-                        <i data-lucide="tag"></i> <span>Combos</span>
 
                     </button>
 
@@ -1302,6 +1282,8 @@
 
             <!-- MENU TAB -->
             <div id="tab-menu" class="tab-content hidden">
+                <div class="mc-subtabs" role="tablist" aria-label="Menu sections"><button type="button" class="mc-subtab active" role="tab" aria-selected="true" data-action="switchTab" data-tab="menu">Menu</button><button type="button" class="mc-subtab" role="tab" aria-selected="false" data-action="switchTab" data-tab="categories">Categories</button><button type="button" class="mc-subtab" role="tab" aria-selected="false" data-action="switchTab" data-tab="combos">Combos</button></div>
+
 
                 <div class="panel">
 
@@ -1346,6 +1328,8 @@
             <!-- CATEGORIES TAB -->
 
             <div id="tab-categories" class="tab-content hidden">
+                <div class="mc-subtabs" role="tablist" aria-label="Menu sections"><button type="button" class="mc-subtab" role="tab" aria-selected="false" data-action="switchTab" data-tab="menu">Menu</button><button type="button" class="mc-subtab active" role="tab" aria-selected="true" data-action="switchTab" data-tab="categories">Categories</button><button type="button" class="mc-subtab" role="tab" aria-selected="false" data-action="switchTab" data-tab="combos">Combos</button></div>
+
 
                 <div class="panel">
 
@@ -1358,6 +1342,7 @@
                             <input type="text" id="categorySearch" placeholder="Search categories..." class="search-input-group flex-1" aria-label="Search categories">
 
                             <button id="btnOpenCatDrawer" class="btn-primary btn-small" title="Create a new category" aria-label="Add Category"><i data-lucide="plus" class="icon-16"></i> Add Category</button>
+                            <button class="btn-secondary btn-small btn-open-menu-bank" title="Browse the platform-wide menu bank and copy dishes into this menu" aria-label="Browse Menu Bank"><i data-lucide="library" class="icon-16"></i> Menu Bank</button>
 
                             <button id="btnMigrateDishAddons" class="btn-secondary btn-secondary-xs"
 
@@ -1404,12 +1389,17 @@
 
                         <!-- COMBOS TAB -->
             <div id="tab-combos" class="tab-content hidden">
+                <div class="mc-subtabs" role="tablist" aria-label="Menu sections"><button type="button" class="mc-subtab" role="tab" aria-selected="false" data-action="switchTab" data-tab="menu">Menu</button><button type="button" class="mc-subtab" role="tab" aria-selected="false" data-action="switchTab" data-tab="categories">Categories</button><button type="button" class="mc-subtab active" role="tab" aria-selected="true" data-action="switchTab" data-tab="combos">Combos</button></div>
+
                 <div class="panel">
                     <div class="panel-header flex-between-header">
                         <h3 class="desktop-only">Combo Offers</h3>
-                        <button id="btnAddCombo" class="btn-secondary" data-action="addCombo">
-                            <i data-lucide="plus"></i> Add Combo
+                        <div class="flex-row flex-center flex-gap-10 flex-wrap-mobile">
+                        <button id="btnAddCombo" class="btn-primary btn-small" data-action="addCombo" title="Create a new combo">
+                            <i data-lucide="plus" class="icon-16"></i> Add Combo
                         </button>
+                        <button class="btn-secondary btn-small btn-open-menu-bank" title="Browse the platform-wide menu bank and copy dishes into this menu" aria-label="Browse Menu Bank"><i data-lucide="library" class="icon-16"></i> Menu Bank</button>
+                        </div>
                     </div>
                     <p class="text-secondary-small mb-14">Combos appear at the top of the customer QR menu and WhatsApp webview. Each combo bundles dishes at a discount for a limited time.</p>
                     <div id="comboListBody" class="browser-dish-grid combo-cards" aria-live="polite"></div>
@@ -1420,7 +1410,7 @@
                         <button class="btn-secondary btn-danger btn-sm" id="btnBulkDelete">Delete Selected</button>
                         <button class="btn-secondary btn-sm" id="btnBulkCancel">Cancel</button>
                     </div>
-                    <div id="noCombosMsg" class="text-secondary-small text-center p-16">No combos yet. Click "Add Combo" to create one.</div>
+                    <div id="noCombosMsg" class="mc-empty"><i data-lucide="tag" class="icon-32"></i><b>No combos yet</b><span>Bundle a few dishes at a discount. Combos show at the top of your customer menu.</span><button type="button" class="btn-primary btn-small" data-mc-add="combo">Add your first combo</button></div>
                 </div>
             </div>
 
@@ -5874,6 +5864,11 @@
 
                     <small id="uploadStatus" class="hidden upload-status-text">Uploading...</small>
 
+                    <div class="mc-preview-wrap">
+                        <div class="mc-group-title">How customers see it</div>
+                        <div id="dishLivePreview" class="mc-preview" aria-live="polite"></div>
+                    </div>
+
                 </div>
 
 
@@ -5882,9 +5877,14 @@
 
                 <div class="modal-details-scroll">
 
+                    <div class="mc-group-title">Basics</div>
+
                     <div class="step-box">
 
-                        <label class="form-label required-label">Category <span class="required-star" aria-hidden="true">*</span></label>
+                        <div class="mc-label-row">
+                            <label class="form-label required-label" for="dishCategory">Category <span class="required-star" aria-hidden="true">*</span></label>
+                            <button type="button" id="btnDishNewCat" class="mc-linkbtn">+ New category</button>
+                        </div>
 
                         <select id="dishCategory" class="form-input category-select" title="Choose Category">
 
@@ -5894,11 +5894,16 @@
 
                         <div class="field-error">Please select a category</div>
 
+                        <div id="dishNewCatRow" class="mc-newcat hidden">
+                            <input id="dishNewCatName" class="form-input" placeholder="New category name" aria-label="New category name">
+                            <button type="button" id="btnDishNewCatSave" class="btn-primary btn-small">Add</button>
+                            <button type="button" id="btnDishNewCatCancel" class="btn-secondary btn-small">Cancel</button>
+                            <div id="dishNewCatMsg" class="mc-hint" role="status"></div>
+                        </div>
+
                     </div>
 
-
-
-                    <div class="step-box">
+<div class="step-box">
 
                         <label class="form-label">Food Type</label>
 
@@ -5918,7 +5923,7 @@
 
                         <div class="flex-3">
 
-                            <label class="form-label">Dish Name</label>
+                            <label class="form-label required-label" for="dishName">Dish Name <span class="required-star" aria-hidden="true">*</span></label>
 
                             <input id="dishName" placeholder="e.g. Farmhouse Pizza" class="form-input w-full">
 
@@ -5928,7 +5933,7 @@
 
                         <div class="flex-1">
 
-                            <label class="form-label">Serial</label>
+                            <label class="form-label" for="dishOrder">Serial</label>
 
                             <input id="dishOrder" type="number" placeholder="0" class="form-input w-full" title="Sorting Order">
 
@@ -5938,9 +5943,13 @@
 
 
 
-                    <label class="form-label">Base Price (₹)</label>
+                    <div class="mc-group-title">Price</div>
 
-                    <input id="dishPriceBase" type="number" placeholder="499" class="form-input w-full mb-20">
+                    <label class="form-label" for="dishPriceBase">Base Price (₹)</label>
+
+                    <input id="dishPriceBase" type="number" placeholder="499" class="form-input w-full">
+
+                    <div class="mc-hint mb-20">Used when the dish has no sizes. If you add sizes below, customers see each size's price.</div>
 
 
 
@@ -5948,7 +5957,7 @@
 
                         <div class="variation-label-row">
 
-                            <label class="form-label">Sizes & Variations</label>
+                            <label class="form-label">Sizes & Variations <span class="mc-opt">optional</span></label>
 
                             <button id="btnAddSizeField" data-action="addSizeField" class="add-variation-btn">+ Add Size</button>
 
@@ -5964,7 +5973,7 @@
 
                         <div class="variation-label-row">
 
-                            <label class="form-label">Add-ons (Toppings/Extras)</label>
+                            <label class="form-label">Add-ons (Toppings/Extras) <span class="mc-opt">optional</span></label>
 
                             <button id="btnAddAddonField" data-action="addDishAddonField" class="add-variation-btn">+ Add Addon</button>
 

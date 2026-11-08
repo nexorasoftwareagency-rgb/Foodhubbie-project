@@ -108,7 +108,7 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     await page.screenshot({ path: path.join(T, 'browser-compact.png') });
 
     // ---- Combos tab ----
-    await page.locator('.nav-btn[data-tab="combos"]').first().click();
+    await page.locator('#menu-menu .nav-btn').first().click(); await page.locator('.mc-subtab[data-tab="combos"]').first().click();
     await page.waitForTimeout(2500);
     const co = await page.evaluate(() => {
         const grid = document.getElementById('comboListBody');
@@ -130,7 +130,7 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     await page.screenshot({ path: path.join(T, 'combos-compact.png') });
 
     // ---- Categories tab (Phase 1 redesign) ----
-    await page.locator('.nav-btn[data-tab="categories"]').first().click();
+    await page.locator('#menu-menu .nav-btn').first().click(); await page.locator('.mc-subtab[data-tab="categories"]').first().click();
     await page.waitForTimeout(2500);
     const cg = await page.evaluate(() => {
         const list = document.getElementById('categoryList');
@@ -236,7 +236,7 @@ const ok = (name, pass, detail) => { results.push({ name, pass }); console.log(`
     // ---- Phase 4: mobile 375px (same session, resized) ----
     await page.setViewportSize({ width: 375, height: 812 });
     await page.waitForTimeout(900);
-    await page.evaluate(() => { document.querySelector('.nav-btn[data-tab="categories"]')?.click(); });
+    await page.evaluate(() => { document.querySelector('.mc-subtab[data-tab="categories"]')?.click(); });
     await page.waitForTimeout(1800);
     const mob = await page.evaluate(() => {
         const grid = document.getElementById('categoryList');

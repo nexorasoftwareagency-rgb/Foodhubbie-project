@@ -33,7 +33,7 @@ async function injectAuth(page, mint) {
     const page = await ctx.newPage();
 
     await injectAuth(page, OWNER);
-    await page.waitForSelector('#menu-combos', { timeout: 15000 });
+    await page.waitForSelector('#menu-menu', { timeout: 15000 });
 
     // Go to Combos tab
     await page.evaluate(() => { location.hash = '#combos'; });

@@ -12,6 +12,9 @@ const _bankSource = () => ({ bid: BUSINESS_ID(), oid: Outlet.current });
 let _categoriesUnsub = null;
 let _dishesUnsub = null;
 
+// Same empty-state look on Menu, Categories and Combos; the button just clicks that page's own Add button.
+const mcEmpty = (icon, title, text, label, kind) => `<div class="mc-empty" style="grid-column:1/-1"><i data-lucide="${icon}" class="icon-32"></i><b>${title}</b><span>${text}</span><button type="button" class="btn-primary btn-small" data-mc-add="${kind}">${label}</button></div>`;
+
 export function loadCategories() {
     cleanupCatalog();
     // Show skeleton while data loads
@@ -79,6 +82,7 @@ cats.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
             `;
             container.appendChild(div);
         });
+        if (cats.length === 0) container.innerHTML = mcEmpty('folder-tree', 'No categories yet', 'Categories group your dishes on the customer menu (for example Pizzas, Drinks).', 'Add your first category', 'category');
         if (window.lucide) window.lucide.createIcons({ root: container });
         updateActiveDishModalCategories();
     });
@@ -323,7 +327,8 @@ dishes.sort((a, b) => ((a.order ?? a.sort) || 0) - ((b.order ?? b.sort) || 0));
         });
 
         if (Object.keys(snap.val() || {}).length === 0) {
-            grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--text-muted);">No dishes yet. Click + Add Dish to get started.</div>';
+            grid.innerHTML = mcEmpty('utensils', 'No dishes yet', 'Add your first dish. Pick a category, a name and a price.', 'Add your first dish', 'dish');
+            window.lucide?.createIcons({ root: grid });
         }
     });
 }
@@ -345,7 +350,7 @@ export async function saveDish() {
     else document.getElementById('dishName').classList.add('valid');
     if (!cat) document.getElementById('dishCategory').classList.add('error');
     else document.getElementById('dishCategory').classList.add('valid');
-    if (!name || !cat) return showToast("Please fill Name and Category", "warning");
+    if (!name || !cat) { document.getElementById(!name ? 'dishName' : 'dishCategory')?.focus(); return; }
 
     const file = document.getElementById('dishFile').files[0];
     const statusLabel = document.getElementById('uploadStatus');
@@ -516,6 +521,8 @@ export async function showDishModal(dishId = null) {
             }
         }
     }
+    resetDishNewCat();
+    refreshDishPreview();
 }
 
 export function hideDishModal() {
@@ -526,6 +533,7 @@ export function hideDishModal() {
     }
     document.querySelectorAll('#dishModal .form-input').forEach(el => el.classList.remove('error', 'valid'));
     state.editingDishId = null;
+    resetDishNewCat();
     const fileInput = document.getElementById('dishFile');
     if (fileInput) fileInput.value = '';
 }
@@ -582,6 +590,110 @@ export function showAddDishChoice() {
     // Load Lucide icons for the new buttons
     if (window.lucide) window.lucide.createIcons({ root: overlay });
 }
+
+// ---- Add Dish form helpers (screen only: the save path is unchanged) ----
+export function resetDishNewCat() {
+    document.getElementById('dishNewCatRow')?.classList.add('hidden');
+    const i = document.getElementById('dishNewCatName'); if (i) { i.value = ''; i.classList.remove('error'); }
+    const m = document.getElementById('dishNewCatMsg'); if (m) m.textContent = '';
+}
+
+// "How customers see it": a small live card from what is typed in the form.
+export function refreshDishPreview() {
+    const box = document.getElementById('dishLivePreview');
+    if (!box) return;
+    const v = id => document.getElementById(id)?.value || '';
+    const name = v('dishName').trim();
+    const cat = v('dishCategory');
+    const veg = v('dishVeg') !== 'nonveg';
+    const sizePrices = [...document.querySelectorAll('#sizesContainer .size-row')]
+        .map(r => { const i = r.querySelectorAll('input'); return i[0]?.value && i[1]?.value ? Number(i[1].value) : null; })
+        .filter(n => n !== null && !isNaN(n));
+    const addonCount = [...document.querySelectorAll('#addonsContainer .addon-row')]
+        .filter(r => { const i = r.querySelectorAll('input'); return i[0]?.value && i[1]?.value; }).length;
+    const price = sizePrices.length ? `from ₹${Math.min(...sizePrices)}` : `₹${Number(v('dishPriceBase')) || 0}`;
+    const extra = [sizePrices.length ? `${sizePrices.length} size${sizePrices.length > 1 ? 's' : ''}` : '', addonCount ? `${addonCount} add-on${addonCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+    box.innerHTML = `<span class="mc-veg ${veg ? 'is-veg' : 'is-nonveg'}" title="${veg ? 'Veg' : 'Non-Veg'}"></span>
+        <div class="mc-preview-main"><b>${name ? escapeHtml(name) : '<i>Dish name</i>'}</b>
+        <small>${cat ? escapeHtml(cat) : 'No category yet'}${extra ? ' · ' + escapeHtml(extra) : ''}</small></div>
+        <span class="mc-preview-price">${escapeHtml(price)}</span>`;
+}
+
+// Create a category without leaving the Add Dish form. Same record as the Categories drawer
+// (no photo, serial 0, mirrored to the menu bank, audit line); photo/serial/add-ons stay editable in Categories.
+let _quickCatBusy = false;
+export async function quickAddCategory() {
+    if (_quickCatBusy) return;
+    const input = document.getElementById('dishNewCatName');
+    const msg = document.getElementById('dishNewCatMsg');
+    const select = document.getElementById('dishCategory');
+    if (!input || !select) return;
+    const say = (t, bad) => { if (msg) { msg.textContent = t; msg.classList.toggle('is-bad', !!bad); } input.classList.toggle('error', !!bad); };
+    const name = input.value.trim();
+    if (!name) { say('Type a category name.', true); input.focus(); return; }
+    const existing = (state.categories || []).find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+        select.value = existing.name; select.classList.remove('error'); select.classList.add('valid'); refreshDishPreview();
+        say('That category already exists. It is selected for you.', false);
+        return;
+    }
+    const saveBtn = document.getElementById('btnDishNewCatSave');
+    try {
+        _quickCatBusy = true;
+        if (saveBtn) saveBtn.disabled = true;
+        const payload = { name, image: '', order: 0, outlet: (window.currentOutlet || 'pizza').toLowerCase(), addons: null };
+        await push(Outlet.ref('categories'), payload);
+        await mirrorToMenuBank(db, ref, set, 'categories', payload, _bankSource());
+        logAudit("Catalog", `Added Category: ${name}`, "Global");
+        if (!Array.from(select.options).some(o => o.value === name)) {
+            const o = document.createElement('option'); o.value = name; o.textContent = name; select.appendChild(o);
+        }
+        select.value = name; select.classList.remove('error'); select.classList.add('valid');
+        resetDishNewCat();
+        refreshDishPreview();
+        showToast(`Category "${name}" added and selected`, 'success');
+    } catch (e) {
+        say('Could not add the category: ' + e.message, true);
+    } finally {
+        _quickCatBusy = false;
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+function _initDishFormHelpers() {
+    const modal = document.getElementById('dishModal');
+    if (!modal) return;
+    const $ = id => document.getElementById(id);
+    // live checks: tell the person as they go, using the same two required fields as Save
+    const check = el => { if (!el) return; el.classList.toggle('error', !el.value); el.classList.toggle('valid', !!el.value); };
+    $('dishName')?.addEventListener('blur', () => check($('dishName')));
+    $('dishName')?.addEventListener('input', () => { if ($('dishName').classList.contains('error') && $('dishName').value) check($('dishName')); });
+    $('dishCategory')?.addEventListener('change', () => check($('dishCategory')));
+    modal.addEventListener('input', refreshDishPreview);
+    modal.addEventListener('change', refreshDishPreview);
+    modal.addEventListener('click', () => setTimeout(refreshDishPreview, 0)); // size/add-on rows added or removed
+    // new category from the form
+    $('btnDishNewCat')?.addEventListener('click', () => {
+        const row = $('dishNewCatRow'); if (!row) return;
+        row.classList.toggle('hidden');
+        if (!row.classList.contains('hidden')) setTimeout(() => $('dishNewCatName')?.focus(), 0);
+    });
+    $('btnDishNewCatSave')?.addEventListener('click', quickAddCategory);
+    $('btnDishNewCatCancel')?.addEventListener('click', resetDishNewCat);
+    $('dishNewCatName')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); quickAddCategory(); }
+        else if (e.key === 'Escape') { e.stopPropagation(); resetDishNewCat(); }
+    });
+}
+document.addEventListener('DOMContentLoaded', _initDishFormHelpers);
+
+// Empty-state buttons on Menu / Categories / Combos just press that page's own Add button.
+document.addEventListener('click', e => {
+    const b = e.target.closest?.('[data-mc-add]');
+    if (!b) return;
+    const id = { dish: 'btnAddDishChoice', category: 'btnOpenCatDrawer', combo: 'btnAddCombo' }[b.dataset.mcAdd];
+    document.getElementById(id)?.click();
+});
 
 export function resetDishValidation() {
     document.querySelectorAll('#dishModal .form-input').forEach(el => el.classList.remove('error', 'valid'));

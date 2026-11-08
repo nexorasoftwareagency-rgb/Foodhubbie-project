@@ -35,6 +35,12 @@ jobs:
       - name: Loyalty dashboard guard (view math, a11y, config shape)
         run: node tests/loyalty-dashboard.check.mjs
 
+      - name: Menu sub-tabs guard (one sidebar entry, three sub-tabs)
+        run: node tests/admin-menu-subtabs.check.mjs
+
+      - name: Menu add-flow guard (new category, inline checks, live preview)
+        run: node tests/admin-add-flow.browser.mjs
+
       - name: Server branch invariant (server is an ancestor of main)
         run: |
           git fetch --no-tags origin \

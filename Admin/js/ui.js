@@ -106,6 +106,10 @@ export const roleLevel = (role) => {
 };
 
 let _roleWarned = false;
+// Menu, Categories and Combos share one sidebar entry (sub-tabs inside the page).
+export const MENU_GROUP = ['menu', 'categories', 'combos'];
+const navIdFor = (tabId) => `menu-${MENU_GROUP.includes(tabId) ? 'menu' : tabId}`;
+
 export const canAccessTab = (tabId) => {
     if (state.adminData?.isSuper) return true; // supreme/super bypass the matrix
     const key = (state.adminData?.role || '').toLowerCase().trim();
@@ -303,7 +307,7 @@ export const switchTab = async (tabId, skipHistory = false) => {
         if (!discard) {
             document.querySelectorAll('.sidebar li, .bottom-nav .nav-item').forEach(el => {
                 el.classList.remove('active');
-                if (el.id === `menu-${state.currentActiveTab}` || el.getAttribute('data-tab') === state.currentActiveTab) {
+                if (el.id === navIdFor(state.currentActiveTab) || el.getAttribute('data-tab') === state.currentActiveTab) {
                     el.classList.add('active');
                 }
             });
@@ -379,7 +383,7 @@ export const switchTab = async (tabId, skipHistory = false) => {
 
     // Update Sidebar Navigation Active State
     document.querySelectorAll('.sidebar li').forEach(li => li.classList.remove('active'));
-    const mainItem = document.getElementById(`menu-${tabId}`);
+    const mainItem = document.getElementById(navIdFor(tabId));
     if (mainItem) mainItem.classList.add('active');
 
     // Update Mobile Bottom Nav & Header Title
@@ -587,10 +591,26 @@ async function refreshNavVisibility() {
     const loyaltyOn = state.features?.loyalty === true;
     TAB_DEFS.forEach(([tab]) => {
         const show = canAccessTab(tab) && (tab !== 'expenses' || expenseOn) && (tab !== 'loyalty' || loyaltyOn);
+        if (MENU_GROUP.includes(tab)) return; // handled below: one shared entry
         const li = document.getElementById(`menu-${tab}`);
         if (li) li.style.display = show ? '' : 'none';
         document.querySelectorAll(`.nav-item[data-tab="${tab}"]`).forEach(b => b.style.display = show ? '' : 'none');
     });
+    refreshMenuGroupNav();
+}
+
+// Menu / Categories / Combos: one sidebar entry, shown if the role can reach any of the three,
+// opening the first one it can reach; each sub-tab shows only if that tab is allowed (same rules as before).
+function refreshMenuGroupNav() {
+    const allowed = MENU_GROUP.filter(canAccessTab);
+    const li = document.getElementById('menu-menu');
+    if (li) {
+        li.style.display = allowed.length ? '' : 'none';
+        const btn = li.querySelector('[data-tab]');
+        if (btn && allowed.length) btn.setAttribute('data-tab', allowed[0]);
+    }
+    document.querySelectorAll('.mc-subtab').forEach(b => { b.style.display = allowed.includes(b.dataset.tab) ? '' : 'none'; });
+    document.querySelectorAll('.mc-subtabs').forEach(bar => { bar.style.display = allowed.length > 1 ? '' : 'none'; });
 }
 
 let _featureWatchInterval = null;

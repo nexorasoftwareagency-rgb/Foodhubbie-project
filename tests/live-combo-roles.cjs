@@ -74,8 +74,9 @@ async function injectAuth(page, mint) {
     console.log('owner shell loaded');
 
     // Combos tab
-    const combosNav = page.locator('#menu-combos .nav-btn');
-    console.log('combos nav visible:', await combosNav.isVisible().catch(() => false));
+    await page.locator('#menu-menu .nav-btn').click(); // Menu, Categories and Combos share one sidebar entry
+    const combosNav = page.locator('#tab-menu .mc-subtab[data-tab="combos"]');
+    console.log('combos sub-tab visible:', await combosNav.isVisible().catch(() => false));
     await combosNav.click();
     await page.waitForSelector('#comboList', { timeout: 10000 });
     await page.screenshot({ path: path.join(SHOTS, 'live-admin-combos.png'), fullPage: true });
@@ -114,8 +115,8 @@ async function injectAuth(page, mint) {
 
     const walkinNav = mpage.locator('#menu-walkin');
     console.log('manager walkin nav visible:', await walkinNav.isVisible().catch(() => false));
-    const combosNavM = mpage.locator('#menu-combos');
-    console.log('manager combos nav visible:', await combosNavM.isVisible().catch(() => false));
+    const combosNavM = mpage.locator('.mc-subtab[data-tab="combos"]');
+    console.log('manager combos sub-tab allowed:', await combosNavM.evaluate(e => e.style.display !== 'none').catch(() => false));
 
     // Attempt blocked switchTab via hash/eval
     const blocked = await mpage.evaluate(() => {

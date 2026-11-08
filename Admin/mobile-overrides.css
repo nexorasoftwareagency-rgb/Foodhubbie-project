@@ -2063,6 +2063,7 @@
        so target by parent: .step-box is the category box, and the name/serial
        row is the next sibling .flex-row with children that include #dishName. */
     #dishModal .modal-details-scroll > .flex-row.flex-gap-10 {
+        display: flex !important; /* a later global .flex-row rule turned this row into a grid (Name/Serial side by side, ~106px each) */
         flex-direction: column !important;
     }
     #dishModal .modal-details-scroll > .flex-row.flex-gap-10 > .flex-3,

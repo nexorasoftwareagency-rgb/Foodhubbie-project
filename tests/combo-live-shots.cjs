@@ -17,7 +17,8 @@ if (!fs.existsSync(SHOT_DIR)) fs.mkdirSync(SHOT_DIR, { recursive: true });
   await page.screenshot({ path: path.join(SHOT_DIR, 'combo-admin-dashboard.png') });
 
   // click Combos in sidebar
-  await page.click('#menu-combos');
+  await page.click('#menu-menu .nav-btn');
+  await page.click('#tab-menu .mc-subtab[data-tab="combos"]');
   await page.waitForTimeout(2500); // loadCombos onValue
   await page.screenshot({ path: path.join(SHOT_DIR, 'combo-admin-tab.png'), fullPage: false });
   console.log('[Shot] admin combos tab done');
