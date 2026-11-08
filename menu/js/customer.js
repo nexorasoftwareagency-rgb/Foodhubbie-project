@@ -831,6 +831,7 @@ document.getElementById('btnApplyPromoCode')?.addEventListener('click', () => {
             prefs.appliedPromoCode = code;
             localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
         } catch (e) { /* ignore */ }
+        renderActiveOffers();
     } else {
         UI.showToast('Invalid or expired promo code', 'error');
     }
@@ -2021,6 +2022,7 @@ export async function renderCustomerPromotions(store, mode = 'dine-in') {
     _mode = mode;
     bindPromoTabs();
     renderPromoCards(store);
+    renderActiveOffers();
     renderPwaCards();
     renderAccount();
     loadInbox();
@@ -2081,6 +2083,13 @@ function renderActiveOffers() {
     const empty = document.getElementById('promoCodesEmpty');
     if (!grid) return;
 
+    // Read currently applied code from prefs
+    let appliedCode = '';
+    try {
+        const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || {});
+        appliedCode = prefs.appliedPromoCode || '';
+    } catch { /* ignore */ }
+
     // In a real system this would come from the outlet's active discount campaigns.
     // For now we show a sample set based on store settings.
     const offers = [
@@ -2095,42 +2104,100 @@ function renderActiveOffers() {
         return;
     }
     document.getElementById('promoCodesEmpty')?.classList.add('hidden');
-    grid.innerHTML = offers.map(o => `
-        <div class="promo-card">
-            <div class="promo-card-top">
-                <span class="promo-card-badge">${o.code}</span>
-            </div>
-            <div class="promo-card-title">${esc(o.title)}</div>
-            <div class="promo-card-sub">${esc(o.subtitle)}</div>
-            <div class="promo-card-terms">${esc(o.desc)} · ${esc(o.valid)}</div>
-            <div class="promo-card-actions">
-                <button type="button" class="promo-btn-copy" data-code="${esc(o.code)}">Copy Code</button>
-                <button type="button" class="promo-btn-apply" data-code="${esc(o.code)}">Apply</button>
-            </div>
-        </div>
-    `).join('');
+
+    const cards = offers.map(o => {
+        const isApplied = o.code === appliedCode;
+        const codeEsc = esc(o.code);
+        const titleEsc = esc(o.title);
+        const subtitleEsc = esc(o.subtitle);
+        const descEsc = esc(o.desc);
+        const validEsc = esc(o.valid);
+
+        let actionsHtml;
+        if (isApplied) {
+            actionsHtml = `<button type="button" class="promo-btn-remove" data-code="${codeEsc}" aria-label="Remove ${codeEsc}">Remove</button>`;
+        } else {
+            actionsHtml = `<button type="button" class="promo-btn-copy" data-code="${codeEsc}">Copy Code</button><button type="button" class="promo-btn-apply" data-code="${codeEsc}">Apply</button>`;
+        }
+
+        const badgeHtml = isApplied
+            ? `<span class="promo-card-badge applied">${codeEsc}</span><span class="promo-card-badge applied">Applied</span>`
+            : `<span class="promo-card-badge">${codeEsc}</span>`;
+
+        return `<div class="promo-card ${isApplied ? 'promo-card--applied' : ''}">
+            <div class="promo-card-top">${badgeHtml}</div>
+            <div class="promo-card-title">${titleEsc}</div>
+            <div class="promo-card-sub">${subtitleEsc}</div>
+            <div class="promo-card-terms">${descEsc} · ${validEsc}</div>
+            <div class="promo-card-actions">${actionsHtml}</div>
+        </div>`;
+    });
+
+    grid.innerHTML = cards.join('');
 
     grid.querySelectorAll('.promo-btn-copy').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const code = btn.dataset.code;
-            navigator.clipboard.writeText(code).then(() => {
+            btn.classList.add('loading');
+            btn.disabled = true;
+            try {
+                await navigator.clipboard.writeText(code);
                 UI.showToast(`Code "${code}" copied`, 'success');
-            });
+            } catch (err) {
+                UI.showToast('Copy failed', 'error');
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
         });
     });
 
     grid.querySelectorAll('.promo-btn-apply').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const code = btn.dataset.code;
-            const input = document.getElementById('promoCodeInput');
-            if (input) {
-                input.value = code;
-                input.dispatchEvent(new Event('input', { bubbles: true }));
+            btn.classList.add('loading');
+            btn.disabled = true;
+            try {
+                const input = document.getElementById('promoCodeInput');
+                if (input) {
+                    input.value = code;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                // Stay on promos tab but show the code is ready to apply
+                UI.showToast(`Code "${code}" ready to apply at checkout`, 'info');
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
             }
-            // Stay on promos tab but show the code is ready to apply
-            UI.showToast(`Code "${code}" ready to apply at checkout`, 'info');
+        });
+    });
+
+    grid.querySelectorAll('.promo-btn-remove').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const code = btn.dataset.code;
+            btn.classList.add('loading');
+            btn.disabled = true;
+            try {
+                const input = document.getElementById('promoCodeInput');
+                if (input && input.value === code) {
+                    input.value = '';
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                // Clear applied code from prefs
+                try {
+                    const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || {});
+                    prefs.appliedPromoCode = '';
+                    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+                } catch { /* ignore */ }
+                UI.showToast(`Code "${code}" removed`, 'success');
+                renderActiveOffers();
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
         });
     });
 }

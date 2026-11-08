@@ -583,6 +583,54 @@ img{max-width:100%; display:block;}
 .promo-btn-apply:active{ background:var(--primary-dark); }
 .promo-btn-apply:disabled{ opacity:.6; cursor:not-allowed; }
 
+/* Applied promo card state */
+.promo-card--applied{
+    border-color: var(--primary);
+    background: rgba(232, 73, 8, 0.04);
+}
+.promo-card-badge.applied{
+    background: var(--success);
+    color: #fff;
+}
+.promo-btn-remove{
+    flex:1;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-sub);
+    cursor: pointer;
+}
+.promo-btn-remove:hover{
+    background: rgba(232, 73, 8, 0.08);
+    color: var(--primary);
+    border-color: rgba(232, 73, 8, 0.3);
+}
+.promo-btn-remove:active{ transform: scale(0.98); }
+
+/* Loading states for action buttons */
+.promo-btn-copy.loading,
+.promo-btn-apply.loading,
+.promo-btn-remove.loading{
+    position: relative;
+    pointer-events: none;
+}
+.promo-btn-copy.loading::after,
+.promo-btn-apply.loading::after,
+.promo-btn-remove.loading::after{
+    content: '';
+    position: absolute;
+    inset: 50%;
+    width: 14px; height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
 /* Promo code input */
 .promo-input-wrap{
     display:flex; gap:8px; padding:0 16px 0;
@@ -1547,4 +1595,8 @@ body.onb-open{ overflow:hidden; }
 @keyframes skeleton-loading {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
