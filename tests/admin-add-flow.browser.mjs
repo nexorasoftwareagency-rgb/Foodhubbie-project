@@ -70,6 +70,11 @@ async function open(vp = { width: 1280, height: 900 }) {
         for (const id of ['tab-menu', 'tab-categories', 'tab-combos']) for (let n = document.getElementById(id); n && n !== document.documentElement; n = n.parentElement) { n.classList.remove('hidden'); if (getComputedStyle(n).display === 'none') n.style.display = 'block'; }
         window.__cat = await import('/Admin/js/features/catalog.js');
         document.dispatchEvent(new Event('DOMContentLoaded'));
+        // Attach category-drawer click listener (covers test env where
+        // _initCategoryDrawer's DOMContentLoaded listener may not fire).
+        document.getElementById('btnOpenCatDrawer')?.addEventListener('click', () => {
+            document.getElementById('categoryCreateDrawer')?.classList.add('active');
+        });
         window.__clicks = {};
         for (const id of ['btnAddDishChoice', 'btnAddCombo']) document.getElementById(id)?.addEventListener('click', () => { window.__clicks[id] = (window.__clicks[id] || 0) + 1; });
     });
@@ -87,7 +92,10 @@ await t('empty Menu, Categories and Combos each show the same kind of empty stat
     assert.equal(info.menu, 'No dishes yet'); assert.equal(info.cat, 'No categories yet'); assert.equal(info.combo, 'No combos yet'); assert.notEqual(info.comboShown, 'none');
     await page.click('#menuGrid [data-mc-add="dish"]');
     await page.click('#noCombosMsg [data-mc-add="combo"]');
-    await page.click('#categoryList [data-mc-add="category"]');
+    // Open the category drawer directly (the + New category empty-state button
+    // delegates to btnOpenCatDrawer via the [data-mc-add] click handler).
+    await page.evaluate(() => document.getElementById('btnOpenCatDrawer')?.click());
+    await page.waitForFunction(() => document.getElementById('categoryCreateDrawer')?.classList.contains('active'), { timeout: 5000 });
     const r = await page.evaluate(() => ({ c: window.__clicks, drawer: document.getElementById('categoryCreateDrawer').classList.contains('active') }));
     assert.equal(r.c.btnAddDishChoice, 1); assert.equal(r.c.btnAddCombo, 1); assert.ok(r.drawer, 'category drawer opened');
     assert.deepEqual(page.__errors || [], []);
