@@ -2122,19 +2122,29 @@ function renderActiveOffers() {
 
         const badgeHtml = isApplied
             ? `<span class="promo-card-badge applied">${codeEsc}</span><span class="promo-card-badge applied">Applied</span>`
-            : `<span class="promo-card-badge">${codeEsc}</span>`;
+            : `<span class="promo-card-badge ${variantClass}">${codeEsc}</span>`;
 
         const variantClass = `promo-card-badge-${o.variant || 'generic'}`;
         const urgencyHtml = o.daysLeft && o.daysLeft <= 7
             ? `<span class="promo-card-urgency">${o.daysLeft} days left</span>`
             : '';
 
+        // Value in rupees: points * redeemValuePaisePerPoint / 100
+        const redeemValuePaise = redeemValuePaisePerPoint();
+        const valueRs = o.cost ? (o.cost * redeemValuePaise / 100).toFixed(2) : '0.00';
+
+        if (isApplied) {
+            actionsHtml = `<button type="button" class="promo-btn-remove" data-code="${codeEsc}" aria-label="Remove ${codeEsc}">Remove</button>`;
+        } else {
+            actionsHtml = `<button type="button" class="promo-btn-copy" data-code="${codeEsc}">Copy Code</button><button type="button" class="promo-btn-apply" data-code="${codeEsc}">Apply</button>`;
+        }
+
         return `<div class="promo-card ${isApplied ? 'promo-card--applied' : ''}" role="button" tabindex="0" aria-label="${titleEsc}, ${descEsc}">
             <span class="promo-card-icon">${o.emoji || '🎁'}</span>
             <div class="promo-card-body">
                 <div class="promo-card-top">${badgeHtml}</div>
                 <div class="promo-card-title">${titleEsc}</div>
-                <div class="promo-card-sub">${subtitleEsc}</div>
+                <div class="promo-card-sub">${subtitleEsc} <span class="promo-card-value">₹${valueRs}</span></div>
                 <div class="promo-card-terms">${descEsc} · ${validEsc}${urgencyHtml}</div>
             </div>
             <div class="promo-card-actions">${actionsHtml}</div>
@@ -2142,6 +2152,9 @@ function renderActiveOffers() {
     });
 
     grid.innerHTML = cards.join('');
+
+    // Render redeemed reward history below active offers
+    renderRewardsHistory();
 
     grid.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
@@ -2216,6 +2229,48 @@ function renderActiveOffers() {
             }
         });
     });
+}
+
+/* Render redeemed reward history */
+async function renderRewardsHistory() {
+    const panel = document.getElementById('promoHistory');
+    if (!panel) return;
+    if (!hasIdentity()) {
+        panel.innerHTML = '';
+        return;
+    }
+    try {
+        const snap = await get(outletRef(`customers/${_profile.phone}/rewards`));
+        const rewards = (snap && snap.exists() && snap.val()) || {};
+        const redeemed = Object.entries(rewards)
+            .filter(([, r]) => r && r.status === 'redeemed')
+            .map(([key, r]) => ({
+                key,
+                rewardId: r.rewardId || '',
+                label: r.label || 'Loyalty reward',
+                cost: Number(r.cost) || 0,
+                code: r.code || '',
+                redeemedAt: Number(r.redeemedAt || 0)
+            }))
+            .sort((a, b) => (b.redeemedAt || 0) - (a.redeemedAt || 0));
+        if (!redeemed.length) {
+            panel.innerHTML = '<div class="promo-empty"><div class="promo-empty-title">No redemptions yet</div><div class="promo-empty-sub">Redeem your first reward to see it here.</div></div>';
+            return;
+        }
+        const rows = redeemed.map(r => {
+            const when = formatWhen(r.redeemedAt);
+            return '<div class="history-row">' +
+                '<span class="history-time">' + esc(when) + '</span>' +
+                '<span class="history-detail">' + esc(r.label) + '</span>' +
+                '<span class="history-pts">-' + Number(r.cost) + ' pts</span>' +
+                '</div>';
+        }).join('');
+        panel.innerHTML =
+            '<div class="promo-section-label">Redeemed rewards</div>' +
+            '<div class="promo-history">' + rows + '</div>';
+    } catch (e) {
+        panel.innerHTML = '<div class="promo-empty">Unable to load reward history.</div>';
+    }
 }
 
 /* Promo code input keyup handler */

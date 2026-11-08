@@ -562,8 +562,26 @@ img{max-width:100%; display:block;}
 .promo-card-badge.weekend{ background:rgba(99,102,241,.08); color:#4f46e5; }
 .promo-card-badge.expires{ background:rgba(239,68,68,.08); color:#dc2626; font-weight:900; }
 
+.promo-card-icon{
+    font-size:26px; line-height:1; margin-bottom:8px;
+}
+
 .promo-card-title{
     font-size:15px; font-weight:800; color:var(--text); margin-bottom:2px;
+}
+.promo-card-value{
+    font-size:12px; font-weight:700; color:var(--primary); margin-left:8px;
+}
+
+/* Urgency badge on terms line */
+.promo-card-terms{
+    font-size:11px; color:var(--text-tertiary); margin-top:6px;
+    display:flex; align-items:center; gap:8px;
+}
+.promo-card-terms .urgency-badge{
+    font-size:9px; font-weight:800; padding:2px 6px;
+    border-radius:6px; background:rgba(239,68,68,.08);
+    color:#dc2626;
 }
 .promo-card-sub{
     font-size:12px; color:var(--text-sub); line-height:1.4;
@@ -656,7 +674,6 @@ img{max-width:100%; display:block;}
 
 /* Promo code input */
 .promo-input-wrap{
-    display:flex; gap:8px; padding:0 16px 0;
 }
 .promo-input{
     flex:1; padding:12px 14px; border:1px solid var(--border);
@@ -1583,6 +1600,25 @@ body.onb-open{ overflow:hidden; }
 .hamburger-footer-item:hover svg{ color:var(--primary); }
 .hamburger-footer-item:focus-visible{ outline:2px solid var(--primary); outline-offset:2px; }
 .hamburger-footer-item:active{ transform:scale(.96); }
+
+/* Reward history */
+#promoHistory{
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+#promoHistory .history-row{
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--card);
+}
+#promoHistory .history-time{
+    font-size: 11px; color: var(--text-sub); min-width: 70px;
+}
+#promoHistory .history-detail{
+    flex: 1; font-size: 13px; color: var(--text);
+}
+#promoHistory .history-pts{
+    font-size: 12px; font-weight: 800; color: var(--primary); min-width: 40px; text-align: right;
+}
 
 /* ---------- Promo section helpers ---------- */
 .promo-divider{
