@@ -184,4 +184,23 @@ wa-user-data2/
 json
 /wa-*.js
 
+# ── EC2 server box artifacts (see docs/PLAN-SERVER-BRANCH.md) ──────────────
+# Deploy staging + pre-deploy backups created by scp / tools/server-deploy.sh.
+# The box tracks origin/server, so anything left untracked here must be junk.
+*.bak
+*.bak-*
+*.bak2
+*.new
+.env.bak-*
+.last-tunnel-url*
+
+# Ad-hoc probes that only ever existed on the server (never part of the app).
+bot/check*.js
+bot/apply_fix.js
+bot/trigger_status.js
+bot/test-wa-send.cjs
+bot/outlet-resolution.js        # legacy duplicate of bot/helpers/outlet-resolution.js
+bot-control-api/check-*.js
+webhook-server/update-webhook-url.sh
+
 
