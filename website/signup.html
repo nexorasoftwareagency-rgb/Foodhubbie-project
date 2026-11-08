@@ -233,6 +233,29 @@
   });
 
   var DB_URL = 'https://foodhubbie-10-default-rtdb.firebaseio.com';
+  var ADMIN_LOGIN_URL = 'https://app.foodhubbie.in/?autoLogin=1&token=';
+
+  // Firebase imports for login token creation
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+  import { getDatabase, ref, set, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+  var signupFirebaseConfig = {
+    apiKey: 'AIzaSyCaVoTjl9_ZT8RECxUUxiBGSZE3G2jTdF4',
+    authDomain: 'foodhubbie-10.firebaseapp.com',
+    databaseURL: 'https://foodhubbie-10-default-rtdb.firebaseio.com',
+    projectId: 'foodhubbie-10',
+    storageBucket: 'foodhubbie-10.firebasestorage.app',
+    messagingSenderId: '372428105696',
+    appId: '1:372428105696:web:a3a979191a5cf94569ed85'
+  };
+  var _signupDb = null;
+  function getSignupDb() {
+    if (!_signupDb) {
+      var app = initializeApp(signupFirebaseConfig, 'fh-signup-db');
+      _signupDb = getDatabase(app);
+    }
+    return _signupDb;
+  }
   // Submission state. A request is created at most once per page visit. The
   // login account is created first, so a failed request write is retried with
   // the same account instead of creating a second one.
@@ -421,6 +444,30 @@
     var ok = document.getElementById('successMsg');
     ok.classList.add('show');
     ok.focus();
+
+    // Step 3: Create a one-time login token for direct Admin access.
+    // The password is stored temporarily (5 min TTL, one-time use) so the
+    // Admin login page can auto-sign-in the user without re-entering credentials.
+    try {
+      var loginToken = Math.random().toString(36).substring(2, 18) + Math.random().toString(36).substring(2, 18);
+      var loginTokenData = {
+        email: v.adminEmail,
+        password: v.adminPassword,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 5 * 60 * 1000
+      };
+      var db = getSignupDb();
+      await set(ref(db, 'loginTokens/' + loginToken), loginTokenData);
+
+      // Redirect to Admin login with auto-login token.
+      // The Admin page reads the token, signs the user in, then deletes the token.
+      var adminLoginUrl = ADMIN_LOGIN_URL + encodeURIComponent(loginToken);
+      window.location.href = adminLoginUrl;
+    } catch (tokenErr) {
+      console.warn('[Signup] Login token creation failed (non-fatal):', tokenErr);
+      // Token failure doesn't block signup success - user can still log in manually
+    }
+
     return false;
   }
 </script>

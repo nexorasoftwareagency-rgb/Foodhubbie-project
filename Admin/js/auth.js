@@ -23,6 +23,44 @@ function cleanupSession() {
 export function initAuth() {
     console.log("[Auth] Initializing State Listener...");
 
+    // --- Auto-login from website signup token ---
+    // After website signup, the user is redirected here with ?autoLogin=1&token={tokenId}.
+    // We read the token from RTDB, sign in with the stored credentials, then delete the token.
+    (async function() {
+        try {
+            var urlParams = new URLSearchParams(window.location.search);
+            var autoLogin = urlParams.get('autoLogin');
+            var loginToken = urlParams.get('token');
+
+            if (autoLogin === '1' && loginToken) {
+                console.log("[Auth] Auto-login token detected, attempting silent sign-in...");
+                var tokenSnap = await get(ref(db, 'loginTokens/' + loginToken));
+                if (tokenSnap.exists()) {
+                    var tokenData = tokenSnap.val();
+                    if (tokenData && tokenData.expiresAt && tokenData.expiresAt > Date.now()) {
+                        await signInWithEmailAndPassword(auth, tokenData.email, tokenData.password);
+                        // Delete the one-time token after successful use
+                        await remove(ref(db, 'loginTokens/' + loginToken));
+                        console.log("[Auth] Auto-login successful for", tokenData.email);
+                    } else {
+                        console.warn("[Auth] Auto-login token expired or invalid");
+                    }
+                } else {
+                    console.warn("[Auth] Auto-login token not found");
+                }
+            }
+        } catch (e) {
+            console.error("[Auth] Auto-login failed:", e);
+        } finally {
+            // Always clean up URL params so they don't linger
+            try {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } catch (e) {
+                console.warn("[Auth] Could not clean up URL params:", e);
+            }
+        }
+    })();
+
     // Setup login form listener
     const loginForm = document.getElementById("loginForm");
     if (loginForm) {
