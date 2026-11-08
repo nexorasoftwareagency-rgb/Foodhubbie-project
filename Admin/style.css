@@ -11147,8 +11147,102 @@ body.pos-selection-mode .walkin-picker {
 }
 
 /* ================================================================
+   App Notifications — char counters, preview, quiet hours, chips
+   ================================================================ */
+.char-count {
+    display: block;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+    text-align: right;
+}
+.preview-card {
+    margin-top: 10px;
+    padding: 16px;
+    border: 1px dashed var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    position: relative;
+}
+.preview-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.preview-icon {
+    font-size: 18px;
+}
+.preview-type {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(34, 197, 94, 0.12);
+    color: var(--success);
+}
+.preview-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+.preview-body {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.stat-card--warn {
+    background: rgba(234, 88, 12, 0.08);
+    border-color: rgba(234, 88, 12, 0.2);
+}
+.stat-card--warn .stat-value {
+    color: #ea580c;
+}
+
+.promo-notifications-pane .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: var(--white);
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    user-select: none;
+}
+.promo-notifications-pane .chip:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.promo-notifications-pane .chip--outline {
+    background: transparent;
+}
+.promo-notifications-pane .chip--radio input {
+    display: none;
+}
+.promo-notifications-pane .chip--radio input:checked + span {
+    /* handled via JS styling for simplicity */
+}
+.promo-notifications-pane .chip--radio.checked,
+.promo-notifications-pane .chip--radio.active {
+    border-color: var(--primary);
+    background: rgba(232, 73, 8, 0.1);
+    color: var(--primary);
+}
+
+/* ================================================================
    COMBO MODAL — Glassmorphism Redesign
    ================================================================ */
+
 
 .cmb-grid {
     display: grid;

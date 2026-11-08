@@ -10,7 +10,7 @@
  * The FCM token itself is never stored in localStorage - it only lives in
  * the outlet's pushSubscriptions record (see pwa-install.js).
  */
-import { outletRef, get, set, push, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
+import { outletRef, get, set, push, update, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
 import * as UI from './ui.js';
 import { esc, buildInstagramUrl, buildWhatsappUrl } from './ui.js';
 import {
@@ -686,22 +686,41 @@ function updateUnreadDot() {
 
 function notificationIcon(type) {
     if (type === 'order') return icon('bell');
-    if (type === 'location') return icon('pin');
+    if (type === 'loyalty') return icon('spark');
     return icon('gift');
+}
+
+function formatDateHeader(ts) {
+    if (!ts) return '';
+    const d = new Date(Number(ts));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (d >= today) return 'Today';
+    if (d >= yesterday) return 'Yesterday';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
 function itemHtml(item) {
     const when = formatWhen(item.sentAt);
     const orderId = item.orderId || '';
     const url = item.url || '';
-    return `<button type="button" class="notif-card ${item.type === 'order' ? 'notif-order' : ''}" data-order-id="${esc(orderId)}" data-url="${esc(url)}">
-        <span class="notif-icon">${notificationIcon(item.type)}</span>
-        <span class="notif-body">
-            <span class="notif-title">${esc(item.title || 'Update')}</span>
-            <span class="notif-text">${esc(item.body || '')}</span>
-            <span class="notif-time">${esc(when)}</span>
-        </span>
-    </button>`;
+    const unread = !item.readAt ? ' notif-unread' : '';
+    const isOrder = item.type === 'order';
+    return `<li class="notif-item${unread}" data-notif-id="${esc(item.id || '')}" data-order-id="${esc(orderId)}" data-url="${esc(url)}" data-type="${esc(item.type)}">
+        <div class="notif-card ${isOrder ? 'notif-order' : ''}" role="button" tabindex="0">
+            <span class="notif-icon">${notificationIcon(item.type)}</span>
+            <div class="notif-body flex-1 min-w-0">
+                <span class="notif-title">${esc(item.title || 'Update')}</span>
+                <span class="notif-text">${esc(item.body || '')}</span>
+            </div>
+            <div class="notif-actions">
+                <span class="notif-time">${esc(when)}</span>
+                <button type="button" class="notif-delete" aria-label="Delete notification" data-notif-id="${esc(item.id || '')}">✕</button>
+            </div>
+        </div>
+    </li>`;
 }
 
 function formatWhen(ts) {
@@ -716,6 +735,9 @@ function formatWhen(ts) {
 
 function renderInboxes() {
     const notifList = document.getElementById('notificationInboxList');
+    const notifEmpty = document.getElementById('notificationEmpty');
+    const notifHeader = document.getElementById('notificationInboxHeader');
+    const notifActions = document.getElementById('notificationInboxActions');
     if (!notifList) return;
 
     let filtered = _inbox;
@@ -725,12 +747,68 @@ function renderInboxes() {
         filtered = _inbox.filter(item => item.type === 'promo' || item.type === 'offer');
     }
 
-    notifList.innerHTML = filtered.length
-        ? filtered.map(itemHtml).join('')
-        : `<div class="notif-empty" role="status" aria-live="polite">No ${_activeFilter === 'all' ? 'notifications' : _activeFilter === 'order' ? 'order updates' : 'offers'} yet.</div>`;
+    const unreadCount = filtered.filter(i => !i.readAt).length;
+
+    // Show/hide header + actions based on filter
+    if (notifHeader) notifHeader.style.display = filtered.length ? 'flex' : 'none';
+    if (notifActions) notifActions.style.display = filtered.length ? 'flex' : 'none';
+    const unreadBadge = document.getElementById('notificationUnreadBadge');
+    if (unreadBadge) {
+        unreadBadge.textContent = unreadCount;
+        unreadBadge.style.display = unreadCount ? 'inline-flex' : 'none';
+    }
+
+    if (filtered.length === 0) {
+        notifList.innerHTML = `<div class="notif-empty" role="status" aria-live="polite">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 16px; display:block; opacity:0.4;"><rect x="3" y="3" width="7" height="7"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M21 3v4a2 2 0 0 0-2 2H5a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2z"/></svg>
+            <div class="promo-empty-title">No notifications yet</div>
+            <div class="promo-empty-sub">Order updates and special offers will appear here.</div>
+        </div>`;
+        bindInboxClicks();
+        updateUnreadDot();
+        return;
+    }
+
+    // Build HTML with date group headers
+    let html = '';
+    let lastDate = null;
+    for (const item of filtered) {
+        const dateKey = formatDateHeader(item.sentAt);
+        if (dateKey !== lastDate) {
+            lastDate = dateKey;
+            html += `<li class="notif-date-header">${esc(dateKey)}</li>`;
+        }
+        html += itemHtml(item);
+    }
+    notifList.innerHTML = html;
 
     bindInboxClicks();
     updateUnreadDot();
+}
+
+/** Mark all visible (filtered) notifications as read. */
+async function markAllRead() {
+    const filtered = _inbox.filter(i => !i.readAt);
+    if (!filtered.length) return;
+    const updates = {};
+    for (const item of filtered) {
+        updates[`pushInbox/${_profile.phone}/${item.id}/readAt`] = Date.now();
+    }
+    try {
+        await update(outletRef(''), updates);
+    } catch (e) { /* best-effort */ }
+    _inbox = _inbox.map(i => (!i.readAt && filtered.includes(i)) ? { ...i, readAt: Date.now() } : i);
+    renderInboxes();
+}
+
+/** Delete a single notification from RTDB and UI. */
+async function deleteNotification(notifId) {
+    if (!notifId) return;
+    try {
+        await update(outletRef(''), { [`pushInbox/${_profile.phone}/${notifId}`]: null });
+    } catch (e) { /* best-effort */ }
+    _inbox = _inbox.filter(i => i.id !== notifId);
+    renderInboxes();
 }
 
 /* ---------- Promo code apply ---------- */
@@ -762,11 +840,34 @@ function bindInboxClicks() {
     if (_inboxBound) return;
     _inboxBound = true;
     document.querySelectorAll('.notif-inbox').forEach(list => {
-        list.addEventListener('click', (e) => {
+        list.addEventListener('click', async (e) => {
             const card = e.target.closest('.notif-card');
-            if (!card) return;
+            const deleteBtn = e.target.closest('.notif-delete');
+            if (!card && !deleteBtn) return;
+
+            // Delete button takes priority
+            if (deleteBtn) {
+                e.stopPropagation();
+                const notifId = deleteBtn.getAttribute('data-notif-id');
+                await deleteNotification(notifId);
+                return;
+            }
+
             const orderId = card.dataset.orderId;
             const url = card.dataset.url;
+            const notifId = card.dataset.notifId;
+
+            // Mark as read on click
+            if (notifId && !card.classList.contains('notif-unread')) {
+                // already read
+            } else if (notifId) {
+                try {
+                    await update(outletRef(''), { [`pushInbox/${_profile.phone}/${notifId}/readAt`]: Date.now() });
+                } catch { /* best-effort */ }
+                card.classList.remove('notif-unread');
+                updateUnreadDot();
+            }
+
             if (orderId) {
                 window.dispatchEvent(new CustomEvent('fh:open-order', { detail: { orderId } }));
             } else if (url) {
@@ -774,6 +875,31 @@ function bindInboxClicks() {
             }
         });
     });
+
+    // Mark all as read button
+    const markAllReadBtn = document.getElementById('btnMarkAllRead');
+    if (markAllReadBtn) {
+        markAllReadBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await markAllRead();
+        });
+    }
+
+    // Delete all button
+    const deleteAllBtn = document.getElementById('btnDeleteAllRead');
+    if (deleteAllBtn) {
+        deleteAllBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const confirmed = await showConfirm('Delete all notifications? This cannot be undone.', 'Clear notifications');
+            if (!confirmed) return;
+            const ids = _inbox.map(i => i.id);
+            for (const id of ids) {
+                await update(outletRef(''), { [`pushInbox/${_profile.phone}/${id}`]: null }).catch(() => {});
+            }
+            _inbox = [];
+            renderInboxes();
+        });
+    }
 
     // Bind filter chips
     bindFilterChips();
@@ -858,10 +984,27 @@ async function loadInbox() {
             .map(([id, item]) => ({ id, ...(item || {}) }))
             .sort((a, b) => (Number(b.sentAt) || 0) - (Number(a.sentAt) || 0))
             .slice(0, 40);
+        // Mark all loaded items as read (user has opened the inbox)
+        const unreadIds = _inbox.filter(i => !i.readAt).map(i => i.id);
+        if (unreadIds.length) {
+            await markInboxRead(unreadIds);
+            _inbox = _inbox.map(i => unreadIds.includes(i.id) ? { ...i, readAt: Date.now() } : i);
+        }
     } catch (e) {
         _inbox = [];
     }
     renderInboxes();
+}
+
+/** Mark specific inbox items as read in RTDB (best-effort, never blocks UI). */
+async function markInboxRead(ids) {
+    const updates = {};
+    for (const id of ids) {
+        updates[`pushInbox/${_profile.phone}/${id}/readAt`] = Date.now();
+    }
+    try {
+        await update(outletRef(''), updates);
+    } catch (e) { /* best-effort only */ }
 }
 
 // ---------------------------------------------------------------

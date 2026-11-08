@@ -25,6 +25,7 @@ const WEBVIEW_BOT_PHONE = process.env.WA_BOT_PHONE || "";
 const fs = require('fs');
 const path = require('path');
 const redis = require('redis');
+const { checkAndConsumeCap } = require('./notification-caps');
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -1567,6 +1568,14 @@ async function notifyCustomerApp(orderId, order, status) {
         );
         if (entries.length === 0) return;
 
+        // Frequency cap: order-status pushes are transactional but still capped
+        // to prevent notification storms from rapid status changes.
+        const cap = await checkAndConsumeCap(outlet, phone, 'order');
+        if (!cap.allowed) {
+            console.log(`[notify-caps] order push suppressed for ${phone}: ${cap.reason}`);
+            return;
+        }
+
         const inboxRef = db.ref(resolvePath(`pushInbox/${phone}/${String(order.orderId || orderId).replace(/[^A-Za-z0-9_-]/g, '')}_${statusKey}`, outlet));
 
         const existing = await inboxRef.once('value').catch(() => null);
@@ -1625,6 +1634,13 @@ async function notifyTierUp(phone, newTier, oldTier, outlet, bid) {
         const subs = subsSnap ? (subsSnap.val() || {}) : {};
         const entries = Object.entries(subs).filter(([, sub]) => sub && sub.token && String(sub.phone || '') === phone);
         if (entries.length === 0) return;
+
+        // Frequency cap: tier-up pushes are loyalty/marketing-adjacent.
+        const cap = await checkAndConsumeCap(outlet, phone, 'loyalty');
+        if (!cap.allowed) {
+            console.log(`[notify-caps] tier-up push suppressed for ${phone}: ${cap.reason}`);
+            return;
+        }
 
         const title = `🎉 You're now ${label}`;
         const body = `Loyalty tier reached: ${label} earns ${(newTier === 'gold') ? '1.5×' : '1.25×'} points on every order from now on.`;

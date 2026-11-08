@@ -4968,20 +4968,68 @@
                                 <span id="pushSubUpdated" class="stat-value">—</span>
                                 <span class="stat-label">Last updated</span>
                             </div>
+                            <div class="stat-card stat-card--warn" id="pushQuietHours" style="display:none">
+                                <span class="stat-value">🌙</span>
+                                <span class="stat-label">Quiet hours (21:00–09:00 IST)</span>
+                            </div>
                         </div>
+
+                        <!-- Notification type -->
+                        <div class="form-group mt-12">
+                            <label for="pushNotifType" class="text-muted-small">Notification type</label>
+                            <div class="flex-row flex-gap-8" role="radiogroup" aria-label="Notification type">
+                                <label class="chip chip--radio">
+                                    <input type="radio" name="pushNotifType" value="order" checked>
+                                    <span>Order Update</span>
+                                </label>
+                                <label class="chip chip--radio">
+                                    <input type="radio" name="pushNotifType" value="promo">
+                                    <span>Promo / Offer</span>
+                                </label>
+                                <label class="chip chip--radio">
+                                    <input type="radio" name="pushNotifType" value="loyalty">
+                                    <span>Loyalty</span>
+                                </label>
+                                <label class="chip chip--radio">
+                                    <input type="radio" name="pushNotifType" value="system">
+                                    <span>System</span>
+                                </label>
+                            </div>
+                            <p class="text-muted-small mt-2">Order updates go to all opted-in subscribers. Promos respect each customer's offers preference.</p>
+                        </div>
+
+                        <!-- Title -->
                         <div class="form-group mt-12">
                             <label for="pushNotifTitle" class="text-muted-small">Title</label>
                             <input type="text" id="pushNotifTitle" class="search-input-group" placeholder="Special Offer!" maxlength="100">
+                            <span class="char-count" id="pushTitleCount">0/100</span>
                         </div>
                         <div class="form-group mt-8">
                             <label for="pushNotifBody" class="text-muted-small">Message</label>
-                            <textarea id="pushNotifBody" rows="3" class="search-input-group" placeholder="20% off all pizzas today only!" maxlength="200"></textarea>
+                            <textarea id="pushNotifBody" rows="3" class="search-input-group" placeholder="20% off all pizzas today only!" maxlength="300"></textarea>
+                            <span class="char-count" id="pushBodyCount">0/300</span>
                         </div>
+
+                        <!-- Test mode -->
                         <div class="form-group mt-8">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="pushNotifTestMode"> <span>Test mode (send to my device only)</span>
                             </label>
                         </div>
+
+                        <!-- Preview card -->
+                        <div class="mt-12">
+                            <label class="text-muted-small">Preview</label>
+                            <div class="preview-card" id="pushPreview">
+                                <div class="preview-header">
+                                    <span class="preview-icon">🔔</span>
+                                    <span class="preview-type">Order Update</span>
+                                </div>
+                                <div class="preview-title" id="pushPreviewTitle">Special Offer!</span>
+                                <div class="preview-body" id="pushPreviewBody">20% off all pizzas today only!</div>
+                            </div>
+                        </div>
+
                         <div class="flex-row flex-gap-8 mt-12">
                             <button class="btn-primary" id="btnSendPushNotif" disabled>
                                 <i data-lucide="send"></i> <span>Send Notification</span>
@@ -4989,6 +5037,19 @@
                             <button class="btn-secondary" id="btnRefreshPushSubs">
                                 <i data-lucide="refresh-cw"></i> <span>Refresh subscriber count</span>
                             </button>
+                        </div>
+
+                        <!-- Template presets -->
+                        <div class="mt-14">
+                            <label class="text-muted-small">Quick templates</label>
+                            <div class="flex-row flex-wrap flex-gap-6">
+                                <button class="chip chip--outline tpl-btn" data-tpl="order" data-title="Order Confirmed ✅" data-body="Your order #{{id}} has been confirmed and is being prepared.">Order Confirmed</button>
+                                <button class="chip chip--outline tpl-btn" data-tpl="order" data-title="Out for Delivery 🛵" data-body="Your order is out for delivery! Track it in the app.">Out for Delivery</button>
+                                <button class="chip chip--outline tpl-btn" data-tpl="order" data-title="Delivered 📦" data-body="Your order has been delivered. Enjoy your meal!">Delivered</button>
+                                <button class="chip chip--outline tpl-btn" data-tpl="promo" data-title="Special Offer 🎉" data-body="20% off all pizzas today only! Use code PIZZA20.">20% Off Pizza</button>
+                                <button class="chip chip--outline tpl-btn" data-tpl="promo" data-title="Weekend Deal 🍕" data-body="Weekend special: Buy 1 Get 1 on all burgers.">Weekend Deal</button>
+                                <button class="chip chip--outline tpl-btn" data-tpl="loyalty" data-title="Loyalty Reward 💎" data-body="You've earned a free dessert! Redeem on your next order.">Free Dessert</button>
+                            </div>
                         </div>
                     </div>
 

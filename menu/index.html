@@ -798,6 +798,14 @@
                 <button type="button" class="promo-filter-chip" data-filter="order" role="tab" aria-selected="false" aria-controls="notificationInboxList" id="tab-notif-order" tabindex="-1">Orders</button>
                 <button type="button" class="promo-filter-chip" data-filter="promo" role="tab" aria-selected="false" aria-controls="notificationInboxList" id="tab-notif-promo" tabindex="-1">Offers</button>
             </div>
+            <div id="notificationInboxHeader" class="notif-header" style="display:none">
+                <span class="notif-header-title">Notifications</span>
+                <div class="notif-header-actions">
+                    <span id="notificationUnreadBadge" class="notif-badge">0</span>
+                    <button type="button" class="notif-btn-sm" id="btnMarkAllRead">Mark all read</button>
+                    <button type="button" class="notif-btn-sm notif-btn-sm--danger" id="btnDeleteAllRead">Delete all</button>
+                </div>
+            </div>
             <div id="notificationInboxList" class="notif-inbox" role="tabpanel" aria-labelledby="tab-notif-all">
                 <div id="notificationEmpty" class="notif-empty" role="status" aria-live="polite">
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 16px; display:block; opacity:0.4;"><rect x="3" y="3" width="7" height="7"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M21 3v4a2 2 0 0 0-2 2H5a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2z"/></svg>
