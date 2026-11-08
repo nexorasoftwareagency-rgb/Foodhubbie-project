@@ -1615,6 +1615,11 @@ body.onb-open{ overflow:hidden; }
     width: 160px;
     flex-shrink: 0;
 }
+.skeleton-loader.promo-card {
+    height: 180px;
+    width: 100%;
+    border-radius: 16px;
+}
 @keyframes skeleton-loading {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }

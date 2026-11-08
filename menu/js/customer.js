@@ -2051,7 +2051,7 @@ function renderPromoCards(store) {
 
     const linksHtml = links.length
         ? links.map(l => `
-            <a class="promo-link-card" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">
+            <a class="promo-link-card" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(l.title)} — opens in new window">
                 <span class="promo-link-icon ${l.cls}">${l.icon}</span>
                 <span class="promo-link-body">
                     <span class="promo-link-title">${esc(l.title)}</span>
