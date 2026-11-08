@@ -210,7 +210,7 @@
                 "devices": {
                   "$uid": {
                     ".read": "auth != null && auth.uid == $uid",
-                    ".write": "(auth != null && auth.uid == $uid && !newData.exists()) || (auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && auth.uid == $uid && $phone.matches(/^[6-9][0-9]{9}$/) && !data.exists() && newData.exists() && (!data.parent().exists() || (newData.hasChild('code') && newData.child('code').val() == data.parent().parent().child('link').child('code').val() && data.parent().parent().child('link').child('exp').val() > now)))",
+                    ".write": "(auth != null && auth.uid == $uid && !data.exists() && newData.exists()) || (auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && auth.uid == $uid && $phone.matches(/^[6-9][0-9]{9}$/) && !data.exists() && newData.exists() && (!data.parent().exists() || (newData.hasChild('code') && newData.child('code').val() == data.parent().parent().child('link').child('code').val() && data.parent().parent().child('link').child('exp').val() > now)))",
                     ".validate": "newData.hasChild('at') && newData.child('at').isNumber() && newData.child('at').val() <= now + 60000 && (!newData.hasChild('code') || (newData.child('code').isString() && newData.child('code').val().length == 8))",
                     "at": { ".validate": "newData.isNumber()" },
                     "code": { ".validate": "newData.isString()" },
