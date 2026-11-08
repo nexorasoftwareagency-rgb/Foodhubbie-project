@@ -29,6 +29,9 @@ jobs:
       - name: Onboarding approval guard (authUid + legacy)
         run: node tests/auto-onboarding.check.cjs
 
+      - name: FCM dead-token prune guard (token-scoped codes only)
+        run: node tests/fcm-dead-token-codes.check.cjs
+
       - name: Install bot dependencies
         working-directory: bot
         run: npm ci

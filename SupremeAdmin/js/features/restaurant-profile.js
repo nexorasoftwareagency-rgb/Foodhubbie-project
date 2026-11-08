@@ -7,7 +7,7 @@ import { renderBillingCard } from './templates/billing-card.js';
 import { detailValues, renderDetailView, renderDetailForm } from './templates/details.js';
 import { renderAdminCreds, renderAdminForm } from './templates/admin-creds.js';
 import { loadWaTemplates, registerWaTemplateView, waTemplatesLoadedFor, waTemplatesHtml, waLibrary } from './templates/wa-templates.js';
-import { loadQuota } from './templates/quota.js';
+import { loadQuota, quotaHtml, resetQuotaCache } from './templates/quota.js';
 import { appLink } from '/shared/app-link.js';
 
 const mainEl = document.getElementById('app-main');
@@ -23,8 +23,6 @@ let adminEdit = null; // { email, pass }
 // typed values here so the live re-render tick never resets a half-filled
 // form. `detailEdit` holds the draft; null means read-only view.
 let detailEdit = null; // { businessName, contactPhone, contactEmail, plan, outletName, storeName, entityName, address, gstin, fssai, tagline, shopOpenTime, shopCloseTime, instagram, facebook, googleReviewLink, notifyPhone }
-let quotaFetchedFor = null; // `${bid}/${oid}` — fetch quota once per profile visit
-let quotaHtml = null; // cached quota content to survive re-render ticks
 let collapsedSections = new Set(); // collapsible section ids the user has closed — survives re-render ticks
 let pairModalOpen = false; // live QR modal state
 let pairUnsubscribe = null; // stop the QR listener when the modal closes
@@ -47,8 +45,7 @@ export function render(bid, oid, tab) {
   adminEdit = null;
   detailEdit = null;
   billingDraft = null; // scoped to this navigation — must not leak onto another outlet's card
-  quotaFetchedFor = null;
-  quotaHtml = null;
+  resetQuotaCache(); // the cached quota card belongs to the outlet we are leaving
   collapsedSections.clear();
   closePairModal();
 
@@ -74,10 +71,10 @@ export function render(bid, oid, tab) {
       return;
     }
     renderProfile(bid, oid, biz, outlet);
-    // loadQuota is a one-off REST call (not realtime), so only fetch on
-    // the first subscribe tick — subsequent ticks just re-render the
-    // profile from cached data without touching the quota element.
-    if (!quotaFetchedFor) loadQuota(bid, oid);
+    // loadQuota is a one-off REST call (not realtime). It re-injects its cached
+    // card on a re-render tick and refetches at most once a minute, so calling
+    // it on every tick is cheap and keeps the send counter current.
+    loadQuota(bid, oid);
   });
 
   return () => {
