@@ -952,10 +952,14 @@ async function addInAppNotification(uid, title, body, type = 'info', icon = 'bel
 // pruned wherever they are found. `messaging/mismatched-credential` is what a
 // token minted for a different Firebase sender returns; `third-party-auth-error`
 // is the webpush "Permission denied by the third party webpush service" case.
+//
+// `messaging/invalid-argument` is deliberately NOT in this set. It is a
+// message-level rejection from the FCM backend, so one malformed payload fails
+// EVERY token in the batch with it — pruning on it would delete the outlet's
+// whole subscriber list for a single bad send. Keep it in the warn log only.
 const DEAD_PUSH_CODES = new Set([
     'messaging/registration-token-not-registered',
     'messaging/invalid-registration-token',
-    'messaging/invalid-argument',
     'messaging/mismatched-credential',
     'messaging/third-party-auth-error',
 ]);

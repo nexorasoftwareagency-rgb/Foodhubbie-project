@@ -1,7 +1,18 @@
 # PLAN — Server Branch (`server`)
 
-**Status:** proposed · **Owner decision needed on:** §9.1 (one-time migration window)
+**Status:** Phases 0–2 done · **Blocked on:** §9.1 (Phase 3 restart window)
 **Replaces:** the standing rule *"EC2 `/var/www/foodhubbie` is a pinned dirty worktree — never `git pull` there"* (AGENTS.md → Key Decisions).
+
+### Progress
+
+| Phase | State | Evidence |
+|---|---|---|
+| 0 — `.gitignore` hardening | **done** `c8b5165` | no pattern shadows a tracked file |
+| 1 — create + push `server` | **done** `c8b5165` | `merge-base --is-ancestor server main` → 0 |
+| 2 — EC2 snapshot | **done** 2026-11-08 04:12 | `/home/ubuntu/backups/foodhubbie-worktree-20261108-041224.tgz` — 26 MB, 1218 entries, 313 session dirs, `service-account.json` present |
+| 3 — checkout `server` on EC2 | **pending** | needs the §9.1 window |
+| 4 — sparse-checkout | pending | after Phase 3 is green |
+| 5 — `tools/server-deploy.sh` | pending | after Phase 4 |
 
 ---
 
@@ -106,18 +117,30 @@ via a promotion from `main`.
 `GUIDEs/SERVER-ACCESS-GUIDE.md`. All already covered by `.gitignore`; §8 adds a guard so a
 `git add -f` mistake fails CI.
 
-### 4.2 Runtime media that is untracked on EC2 — do not "clean up"
+### 4.2 Runtime media on EC2 — leave untracked (§9.2 resolved)
 
-These exist only on the box and are **required at runtime**. Any migration step must leave them
-alone (they are untracked, so a checkout cannot remove them — but a `git clean -xdf` would):
+Measured 2026-11-08: **nothing references these files.** A recursive scan of `businesses/**` in RTDB
+found **0** values containing `/public/` or `assets/images`; every bot image comes from DB settings
+(`botSettings.imgConfirmed` / `menuImage` / `storeSettings.bannerImage`) as base64 data URLs, with an
+inline 1×1 PNG as the final fallback (`bot/index.js:1842`). `webhook-server/index.js:26` does serve
+`express.static(__dirname/public)`, but no stored URL points at it.
+
+They are also **duplicates of each other** — same byte sizes, same six images:
 
 ```
-assets/images/{greetingImage,menuImage,imgConfirmed,imgReady,imgOut,imgDelivered,imgFeedback}.jpg
-webhook-server/public/{status-greeting,status-menu,status-confirmed,status-ready,
-                       status-out,status-delivered,welcome}.jpg
+webhook-server/public/status-greeting.jpg  49,531  ==  assets/images/greetingImage.jpg
+webhook-server/public/status-menu.jpg     408,468  ==  assets/images/menuImage.jpg
+webhook-server/public/status-confirmed.jpg 28,509  ==  assets/images/imgConfirmed.jpg
+webhook-server/public/status-ready.jpg    203,721  ==  assets/images/imgReady.jpg
+webhook-server/public/status-out.jpg       49,915  ==  assets/images/imgOut.jpg
+webhook-server/public/status-delivered.jpg 50,445  ==  assets/images/imgDelivered.jpg
+                                          + assets/images/imgFeedback.jpg (49,841, no public/ twin)
+                                          + assets/images/Roshani-ERP LOGO.jpeg (14,643)
 ```
 
-Separate decision (out of scope): whether these should be versioned.
+**Decision: do not version them.** ~1.7 MB of unreferenced legacy media from the pre-template
+webhook era. They stay untracked and survive any checkout — but a `git clean -xdf` would remove them,
+so the deploy script (§5.5) never runs `git clean`. Deleting them is a separate, safe cleanup.
 
 ---
 
@@ -368,10 +391,11 @@ nothing is lost — the bot reconnects). Options:
   notified.
 - (b) Do Phases 0–2 now and schedule Phase 3.
 
-### 9.2 Runtime media
-`assets/images/*.jpg` and `webhook-server/public/*.jpg` are untracked on the box and required at
-runtime. Version them, or keep them as box-local assets? (Recommend: version them on `server` — they
-are brand assets, not secrets, and a fresh box otherwise ships without greeting images.)
+### 9.2 Runtime media — **RESOLVED: do not version**
+
+See §4.2. Zero DB references, and `assets/images/*` are byte-identical duplicates of
+`webhook-server/public/*`. ~1.7 MB of dead legacy media. Left untracked on the box; the deploy script
+must never `git clean`.
 
 ### 9.3 The 798 MB `.git`
 The history contains the 1,363-file vendored `PLAN/FoodHubbie-Customer APP by CLaude/FoodHubbie-Final/**`
