@@ -696,7 +696,7 @@
     "loginTokens": {
       "$tokenId": {
         ".read": "auth != null || ($tokenId.matches(/^[a-zA-Z0-9]{32,64}$/) && data.exists() && data.child('expiresAt').val() > now)",
-        ".write": "auth != null || (!$data.exists() && newData.exists() && $tokenId.matches(/^[a-zA-Z0-9]{32,64}$/) && newData.child('email').isString() && newData.child('password').isString() && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now) || (!newData.exists() && data.exists() && $tokenId.matches(/^[a-zA-Z0-9]{32,64}$/))",
+        ".write": "auth != null || (!data.exists() && newData.exists() && $tokenId.matches(/^[a-zA-Z0-9]{32,64}$/) && newData.child('email').isString() && newData.child('password').isString() && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now) || (!newData.exists() && data.exists() && $tokenId.matches(/^[a-zA-Z0-9]{32,64}$/))",
         "email": { ".validate": "newData.isString() && newData.val().matches(/@.*\\..*/)" },
         "password": { ".validate": "newData.isString() && newData.val().length >= 8" },
         "createdAt": { ".validate": "newData.isNumber()" },
