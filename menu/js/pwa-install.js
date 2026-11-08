@@ -157,6 +157,42 @@ export function getNotificationPermission() {
     }
 }
 
+/**
+ * Quiet-permission handling (Chrome "quieter UI" blocks prompts for users who
+ * typically deny). We track dismissals in localStorage and only re-prompt after
+ * genuine user engagement — never on every page load. Returns:
+ *   'granted'   → system permission already on
+ *   'denied'    → user explicitly blocked; direct them to browser settings
+ *   'dismissed' → user closed/ignored the prompt; safe to re-prompt later
+ *   'default'   → never asked
+ *   'unsupported' → browser doesn't support push
+ */
+const PROMPT_STORAGE_KEY = 'fh_push_prompt_dismissals';
+const MAX_PROMPT_DISMISSELS = 3; // stop asking after 3 user dismissals
+
+export function getPromptDismissals() {
+    try {
+        return Number(localStorage.getItem(PROMPT_STORAGE_KEY)) || 0;
+    } catch { return 0; }
+}
+
+export function recordPromptDismissal() {
+    try {
+        const n = getPromptDismissals() + 1;
+        localStorage.setItem(PROMPT_STORAGE_KEY, String(n));
+    } catch { /* storage unavailable — keep prompting */ }
+}
+
+export function clearPromptDismissals() {
+    try { localStorage.removeItem(PROMPT_STORAGE_KEY); } catch { /* ignore */ }
+}
+
+export function canPromptAgain() {
+    const perm = getNotificationPermission();
+    if (perm !== 'default' && perm !== 'dismissed') return false;
+    return getPromptDismissals() < MAX_PROMPT_DISMISSELS;
+}
+
 function subscriptionPayload(token, { name, phone, prefs, appMode } = {}) {
     const cleanPhone = (phone || getStoredPhone() || '').replace(/[^\d]/g, '').slice(-10);
     const payload = {
@@ -187,11 +223,22 @@ export async function subscribeToNotifications({ name, phone, prefs, appMode } =
     const messaging = getMessagingInstance();
     if (!messaging) return { ok: false, error: 'Push notifications are not supported in this browser.' };
 
+    // Quiet-permission gate: if Chrome has already quieter-UI'd us into 'denied',
+    // don't hammer the user with a system prompt they'll dismiss again.
+    const currentPerm = getNotificationPermission();
+    if (currentPerm === 'denied') {
+        return { ok: false, error: 'notifications_blocked', blocked: true };
+    }
+
     try {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
-            return { ok: false, error: 'Notification permission was not granted.' };
+            // User dismissed or blocked — record and surface an honest message.
+            if (permission === 'denied') recordPromptDismissal();
+            return { ok: false, error: 'Notification permission was not granted.', permission };
         }
+        // Permission granted — reset dismissal counter so we never nag again.
+        clearPromptDismissals();
 
         const swRegistration = await getFcmRegistration();
         if (!swRegistration) return { ok: false, error: 'Notifications could not start on this browser.' };
