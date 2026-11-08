@@ -16,7 +16,7 @@ const t = async (name, fn) => { try { await fn(); console.log('ok  ', name); } c
 await t('sidebar has one Menu entry; Categories and Combos entries are gone', async () => {
     assert.equal((html.match(/id="menu-menu"/g) || []).length, 1);
     assert.ok(!/id="menu-categories"/.test(html) && !/id="menu-combos"/.test(html));
-    assert.ok(/id="menu-menu-browser"/.test(html), 'Menu Browser stays its own entry');
+    assert.ok(!/id="menu-menu-browser"/.test(html), 'Menu Browser tab was removed upstream; it opens from the Menu Bank button');
 });
 await t('all three pages keep their ids and each carries the same sub-tab bar', async () => {
     for (const tab of ['menu', 'categories', 'combos']) {
@@ -42,7 +42,7 @@ await t('same permissions: ui.js hides a sub-tab the role cannot open, and the M
     assert.ok(/MENU_GROUP = \['menu', 'categories', 'combos'\]/.test(ui));
     assert.ok(/MENU_GROUP\.filter\(canAccessTab\)/.test(ui));
     assert.ok(/navIdFor\(tabId\)/.test(ui) && /navIdFor\(state\.currentActiveTab\)/.test(ui), 'sidebar highlight maps sub-tabs to Menu');
-    assert.ok(/'categories', 'combos', 'menu-browser'/.test(ui), 'tab ids/permission list unchanged');
+    assert.ok(/SETUP_TABS = \['dashboard', 'menu', 'categories', 'combos'/.test(ui), 'tab ids/permission list unchanged');
 });
 
 const browser = await chromium.launch();
