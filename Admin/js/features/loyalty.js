@@ -1,477 +1,188 @@
 // ============================================================================
-// LOYALTY ADMIN — configure earn rate, tiers and rewards; look up a customer's
-// loyalty record. Everything here runs on existing RTDB rules:
-//   loyalty/config          admin write (outlet-scoped)
-//   customers/{phone}/loyalty   public read by phone
-//   loyalty/rankings/{phone}    public read by phone (single entry only)
-//   customers/{phone}/rewards   public read by phone
-//   customers/{phone}/orders    public read by phone
-//   customers/{phone}/app       public read by phone
-// No bulk reads are used: the rankings parent is deliberately read-restricted,
-// so there is no full leaderboard in this view — individual customers are
-// looked up by phone instead.
+// LOYALTY ADMIN — controller for the Loyalty tab (fetch, save, wire events).
+// All markup and display maths live in ./loyalty-view.js (pure, unit-tested).
+//
+// Everything here runs on existing RTDB rules — nothing new to deploy:
+//   loyalty/config               admin write (outlet-scoped)
+//   loyalty/rankings             admin read (whole list) — Overview numbers
+//   loyalty/adjustments          admin read/write — manual point changes
+//   customers/{phone}/loyalty    public read by phone
+//   loyalty/rankings/{phone}     public read by phone (single entry only)
+//   customers/{phone}/rewards    public read by phone
+//   customers/{phone}/orders     public read by phone
+//   customers/{phone}/app        public read by phone
 // ============================================================================
 
-import { escapeHtml, showToast, showConfirm } from '../utils.js';
-import { get, set, runTransaction, auth, Outlet, BUSINESS_ID } from '../firebase.js';
+import { showToast, showConfirm } from '../utils.js';
+import { get, set, runTransaction, query, orderByChild, limitToLast, auth, Outlet, BUSINESS_ID } from '../firebase.js';
 import { logger } from '../utils/logger.js';
+import { computeEarnPoints, computeTenderPaise } from '../../shared/loyalty-math.js';
+import {
+    LOYALTY_CSS, backPct, earnForBackPct, cloneConfig, buildPayload, formFromConfig, validateForm, sameForm,
+    buildExample, summarize, pickName, tallyOutstanding, renderShell, renderOverview, renderMembers, renderMemberSheet,
+    renderNoRecord, renderRewards, renderRules, renderBill, esc, fmtPhone
+} from './loyalty-view.js';
 
-const TIER_KEYS = ['bronze', 'silver', 'gold'];
-const TIER_LABEL = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' };
-const TIER_COLOUR = { bronze: '#8a6d3b', silver: '#a8a8a8', gold: '#c5a005' };
+const CALC = { computeEarnPoints, computeTenderPaise };
+const VIEW_ORDER = ['overview', 'members', 'rewards', 'rules'];
+const STATS_TTL_MS = 60 * 1000;
+const COUNT_CONCURRENCY = 8;   // member balances read at a time while counting outstanding points
 
-const DEFAULTS = {
-  earnRatePaisePerPoint: 5000,
-  expiryDays: 180,
-  redeemValuePaisePerPoint: 100,
-  minSpendAfterRedemption: 0,
-  maxRedeemPercentOfOrder: 0,
-  earnEnabled: true,
-  dineInEarnEnabled: true,
-  clawbackEnabled: true,
-  tiers: {
-    bronze: { min: 0, label: 'Bronze', multiplier: 1 },
-    silver: { min: 1000, label: 'Silver', multiplier: 1.25 },
-    gold: { min: 5000, label: 'Gold', multiplier: 1.5 }
-  },
-  rewards: [
-    { id: 'free-samosa', label: 'Free Samosa', cost: 200, type: 'item' },
-    { id: '10pct-off', label: '10% Off Next Order', cost: 500, type: 'discount' },
-    { id: 'free-dessert', label: 'Free Dessert', cost: 800, type: 'item' }
-  ]
-};
-
-let _config = null;
-let _server = null;
+let _config = null;          // working copy of the saved program settings
+let _server = null;          // what loyalty/config held when last read (null = never saved)
+let _view = 'overview';
+let _stats = null;           // summarize() of loyalty/rankings
+let _adjs = null;            // last few manual adjustments
+let _names = {};             // phone -> display name for the people shown on Overview
+let _phones = [];            // every phone in loyalty/rankings (what "Update" counts)
+let _outstanding = null;     // last tally of spendable points (kept until the next Update)
+let _outState = 'idle';      // idle | counting
+let _progress = { done: 0, total: 0 };
+let _runToken = 0;           // lets a reload cancel an in-flight count
+let _statsState = 'idle';    // idle | loading | ok | failed
+let _statsAt = 0;
+let _draft = null;           // unsaved Rules form values (survives switching tabs)
+let _billRs = '500';
+let _prefill = '';
 let _editingReward = null;
-let _formListenersAttached = false;
+let _boundEl = null;
+let _busy = false;
 
 function normPhone(raw) {
-    const d = String(raw || '').replace(/\D/g, '');
-    return d.slice(-10);
+    return String(raw || '').replace(/\D/g, '').slice(-10);
 }
-
 function validPhone(p) {
     return /^[6-9][0-9]{9}$/.test(p);
 }
-
-function tierLabel(t) {
-    return TIER_LABEL[t] || t;
-}
-
-function tierColour(t) {
-    return TIER_COLOUR[t] || '#6b7280';
-}
-
-function money(n) {
-    const v = Number(n || 0);
-    return '₹' + (v % 1 === 0 ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: 1 }));
-}
-
-function ptsPer100(config) {
-    const rate = Number(config && config.earnRatePaisePerPoint || DEFAULTS.earnRatePaisePerPoint);
-    return (10000 / rate).toFixed(rate % 100 === 0 ? 0 : 2);
-}
-
-function tierForPoints(pts, config) {
-    const tiers = (config && config.tiers) || DEFAULTS.tiers;
-    let t = 'bronze';
-    for (const k of TIER_KEYS) {
-        const td = tiers[k];
-        if (td && typeof td.min === 'number' && pts >= td.min) t = k;
-    }
-    return t;
-}
-
-function nextTier(pts, config) {
-    const tiers = (config && config.tiers) || DEFAULTS.tiers;
-    const cur = tierForPoints(pts, config);
-    const curMin = tiers[cur]?.min || 0;
-    for (const k of TIER_KEYS) {
-        const td = tiers[k];
-        if (td && typeof td.min === 'number' && td.min > curMin) {
-            const range = td.min - curMin;
-            return {
-                k, label: td.label, min: td.min, multiplier: td.multiplier,
-                percent: range > 0 ? Math.min(100, Math.floor(((pts - curMin) / range) * 100)) : 100
-            };
-        }
-    }
-    return null;
-}
-
-function cloneConfig(c) {
-    if (!c) return JSON.parse(JSON.stringify(DEFAULTS));
-    return {
-        earnRatePaisePerPoint: Number(c.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint,
-        redeemValuePaisePerPoint: (Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
-            ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
-        minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
-        maxRedeemPercentOfOrder: Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0)),
-        expiryDays: c.expiryDays != null && Number.isFinite(Number(c.expiryDays)) ? Math.max(0, Math.round(Number(c.expiryDays))) : DEFAULTS.expiryDays,
-        earnEnabled: c.earnEnabled !== false,
-        dineInEarnEnabled: c.dineInEarnEnabled !== false,
-        clawbackEnabled: c.clawbackEnabled !== false,
-        tiers: { ...DEFAULTS.tiers, ...(c.tiers || {}) },
-        rewards: Array.isArray(c.rewards) ? c.rewards.slice() : DEFAULTS.rewards.slice()
-    };
-}
-
-function buildConfigPayload(overrides = {}) {
-    const c = _config || {};
-    return {
-        earnRatePaisePerPoint: Number(c.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint,
-        redeemValuePaisePerPoint: (Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
-            ? Number(c.redeemValuePaisePerPoint) : DEFAULTS.redeemValuePaisePerPoint,
-        minSpendAfterRedemption: Number(c.minSpendAfterRedemption) || 0,
-        maxRedeemPercentOfOrder: Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0)),
-        expiryDays: c.expiryDays != null && Number.isFinite(Number(c.expiryDays)) ? Math.max(0, Math.round(Number(c.expiryDays))) : DEFAULTS.expiryDays,
-        earnEnabled: c.earnEnabled !== false,
-        dineInEarnEnabled: c.dineInEarnEnabled !== false,
-        clawbackEnabled: c.clawbackEnabled !== false,
-        tiers: c.tiers || JSON.parse(JSON.stringify(DEFAULTS.tiers)),
-        rewards: Array.isArray(c.rewards) ? c.rewards.slice() : DEFAULTS.rewards.slice(),
-        ...overrides
-    };
-}
-
-function effectiveCashback(config) {
-    const earn = Number(config && config.earnRatePaisePerPoint) || DEFAULTS.earnRatePaisePerPoint;
-    const redeem = Number(config && config.redeemValuePaisePerPoint) || DEFAULTS.redeemValuePaisePerPoint;
-    const tiers = (config && config.tiers) || DEFAULTS.tiers;
-    return TIER_KEYS.map(tk => {
-        const mult = (tiers[tk] && Number(tiers[tk].multiplier)) || 1;
-        const pct = (redeem / earn) * mult * 100;
-        return `${tierLabel(tk)} ${pct % 1 === 0 ? pct : pct.toFixed(1)}%`;
-    }).join(' · ');
-}
-
 function rewardSlug(label) {
     return String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'reward';
 }
-
-function escapeHtmlAttr(s) {
-    return String(s == null ? '' : s).replace(/"/g, '&quot;');
-}
-
-// ---------------------------------------------------------------- rendering
-
-function renderTierRow(tk, tiers) {
-    const td = tiers[tk] || { min: 0, label: TIER_LABEL[tk], multiplier: 1 };
-    const isBronze = tk === 'bronze';
-    const disabled = isBronze ? 'disabled' : '';
-    return `
-    <tr data-tier="${escapeHtml(tk)}">
-        <td>
-            <span style="color:${tierColour(tk)};font-weight:800;text-transform:uppercase;font-size:11px;">
-                ${escapeHtml(tierLabel(tk))}
-            </span>
-            <div class="mob-td-sub" style="font-size:10.5px;">${isBronze ? 'everyone starts here' : 'points threshold'}</div>
-        </td>
-        <td class="mob-th-center">
-            <input type="number" min="0" step="1" data-field="min" data-tier="${escapeHtml(tk)}"
-                value="${Number(td.min || 0)}" class="mob-input-tier" ${disabled}>
-            <div class="mob-td-sub">${isBronze ? 'fixed' : 'minimum points'}</div>
-        </td>
-        <td class="mob-th-center">
-            <input type="number" min="0.1" step="0.05" data-field="mult" data-tier="${escapeHtml(tk)}"
-                value="${Number(td.multiplier || 1).toFixed(2)}" class="mob-input-tier" ${disabled}>
-            <div class="mob-td-sub">points earned per ₹100</div>
-        </td>
-    </tr>`;
-}
-
-function renderRewardRow(r, editing) {
-    if (editing && editing.id === r.id) {
-        return `
-    <tr data-reward="${escapeHtml(r.id)}">
-        <td colspan="4">
-            <div style="display:flex;gap:8px;align-items:center;">
-                <input type="text" data-field="label" value="${escapeHtmlAttr(r.label)}" class="mob-input-reward" placeholder="Reward name">
-                <input type="number" min="0" data-field="cost" value="${Number(r.cost || 0)}" class="mob-input-reward mob-input-cost" placeholder="0">
-                <select data-field="type" class="mob-input-reward mob-input-type">
-                    <option value="item" ${r.type === 'discount' ? '' : 'selected'}>Item</option>
-                    <option value="discount" ${r.type === 'discount' ? 'selected' : ''}>Discount</option>
-                </select>
-                <button type="button" data-action="loyalty-save-reward" data-reward-id="${escapeHtml(r.id)}" class="btn-small btn-primary">Save</button>
-                <button type="button" data-action="loyalty-cancel-edit" data-reward-id="${escapeHtml(r.id)}" class="btn-small btn-secondary">Cancel</button>
-            </div>
-        </td>
-    </tr>`;
-    }
-    const typeChip = r.type === 'discount' ? 'mob-badge-type-dinein' : 'mob-badge-type-pos';
-    return `
-    <tr data-reward="${escapeHtml(r.id)}">
-        <td>
-            <div class="mob-td-strong">${escapeHtml(r.label || 'Reward')}</div>
-            <div class="mob-td-sub">${escapeHtml(r.id)}</div>
-        </td>
-        <td class="mob-th-center">${Number(r.cost || 0)} pts</td>
-        <td class="mob-th-center"><span class="mob-badge ${typeChip}">${escapeHtml(r.type || 'item')}</span></td>
-        <td class="mob-th-center">
-            <button type="button" data-action="loyalty-edit-reward" data-reward-id="${escapeHtml(r.id)}" class="btn-small btn-secondary">Edit</button>
-            <button type="button" data-action="loyalty-delete-reward" data-reward-id="${escapeHtml(r.id)}" class="btn-small btn-secondary">Delete</button>
-        </td>
-    </tr>`;
-}
-
-function renderAddRewardRow() {
-    return `
-    <tr>
-        <td colspan="4">
-            <div style="display:flex;gap:8px;align-items:center;">
-                <input type="text" id="loyalty-new-label" class="mob-input-reward" placeholder="Reward name (e.g. Free Samosa)">
-                <input type="number" id="loyalty-new-cost" min="0" class="mob-input-reward mob-input-cost" placeholder="Cost in points">
-                <select id="loyalty-new-type" class="mob-input-reward mob-input-type">
-                    <option value="item">Item</option>
-                    <option value="discount">Discount</option>
-                </select>
-                <button type="button" data-action="loyalty-add-reward" class="btn-small btn-primary">Add</button>
-            </div>
-        </td>
-    </tr>`;
-}
-
-// Tier progress mini-ring — one data hue on the customer's progress (§6: one hue per chart)
-function tierRing(pts, nt, disp) {
-    if (!nt || nt.k === null) return `<div style="font-size:11.5px;color:var(--mob-sub);">Top tier reached</div>`;
-    return `
-    <div style="display:flex;align-items:center;gap:10px;">
-        <div style="font-size:11.5px;color:var(--mob-sub);">
-            ${Math.max(0, nt.min - pts)} points to ${tierLabel(nt.k)}
-        </div>
-        <svg width="56" height="56" viewBox="0 0 56 56" role="img" aria-label="Tier progress: ${nt.percent}%">
-            <circle cx="28" cy="28" r="24" fill="none" stroke="var(--mob-border)" stroke-width="4"/>
-            <circle cx="28" cy="28" r="24" fill="none" stroke="${disp}" stroke-width="4"
-                stroke-dasharray="150" stroke-dashoffset="${150 - (150 * nt.percent / 100)}"
-                style="stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%;"/>
-            <text x="28" y="34" text-anchor="middle" fill="var(--mob-ink)" font-size="14" font-weight="800">${nt.percent}%</text>
-        </svg>
-    </div>`;
-}
-
-function renderConfigForm() {
-    const c = _config;
-    const rateRs = (c.earnRatePaisePerPoint || DEFAULTS.earnRatePaisePerPoint) / 100;
-    const redeemRs = ((Number.isFinite(Number(c.redeemValuePaisePerPoint)) && Number(c.redeemValuePaisePerPoint) > 0)
-        ? c.redeemValuePaisePerPoint : DEFAULTS.redeemValuePaisePerPoint) / 100;
-    const minSpendRs = Number(c.minSpendAfterRedemption) || 0;
-    const maxPct = Math.max(0, Math.min(100, Number(c.maxRedeemPercentOfOrder) || 0));
-    const expiryDays = c.expiryDays != null && Number.isFinite(Number(c.expiryDays)) ? Math.max(0, Math.round(Number(c.expiryDays))) : DEFAULTS.expiryDays;
-    const earnOn = c.earnEnabled !== false;
-    const dineInOn = c.dineInEarnEnabled !== false;
-    const clawbackOn = c.clawbackEnabled !== false;
-    const tiers = c.tiers || DEFAULTS.tiers;
-    const toggle = (id, checked, label, sub) => `
-                <label style="display:flex;gap:8px;align-items:flex-start;min-width:200px;cursor:pointer;">
-                    <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} style="margin-top:3px;">
-                    <span><span style="font-size:12px;font-weight:600;">${label}</span><br><span style="font-size:11px;color:var(--mob-sub);">${sub}</span></span>
-                </label>`;
-    return `
-    <div class="mob-card mob-table-card" style="margin:0;">
-        <div class="mob-section-head-row">
-            <h3 class="mob-card-title">Program settings</h3>
-            <p class="mob-td-sub" style="margin-left:auto;max-width:420px;color:var(--mob-sub);">
-                Customers earn <b>${ptsPer100(c)} points per ₹100 spent</b> (${money(c.earnRatePaisePerPoint / 100)} spent per point).
-                Points redeem at <b>${money(redeemRs)} per point</b> as payment tender at checkout.
-            </p>
-        </div>
-        <div style="padding:16px;">
-            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Amount spent for 1 point</label>
-                    <input type="number" id="loyalty-earn-rate" min="1" step="1"
-                        value="${Number(rateRs).toFixed(rateRs % 1 === 0 ? 0 : 2)}" class="mob-input-reward">
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Value of 1 point</label>
-                    <input type="number" id="loyalty-redeem-value" min="0.25" step="0.25"
-                        value="${Number(redeemRs).toFixed(redeemRs % 1 === 0 ? 0 : 2)}" class="mob-input-reward">
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Min spend after redemption</label>
-                    <input type="number" id="loyalty-min-spend" min="0" step="10"
-                        value="${minSpendRs}" class="mob-input-reward" style="max-width:140px;">
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Max tender (% of order)</label>
-                    <input type="number" id="loyalty-max-redeem-pct" min="0" max="100" step="1"
-                        value="${maxPct}" class="mob-input-reward" style="max-width:140px;">
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Points expire after (days idle)</label>
-                    <input type="number" id="loyalty-expiry-days" min="0" step="30"
-                        value="${expiryDays}" class="mob-input-reward" style="max-width:140px;">
-                </div>
-                <button type="button" data-action="loyalty-save-config" class="btn-primary">Save program settings</button>
-            </div>
-            <div class="mob-td-sub" style="margin-top:6px;">Min spend 0 = no minimum. Max tender 0 = no cap; e.g. 10 caps one bill's redemption at 10% of its own subtotal. Expiry 0 = points never lapse; 180 days is the default. Customers redeem rewards directly in the app — no WhatsApp code needed.</div>
-            <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;">
-                ${toggle('loyalty-earn-enabled', earnOn, 'Points earning', 'Turn off to pause all earning')}
-                ${toggle('loyalty-dinein-earn-enabled', dineInOn, 'Dine-in earning', 'Award points when a table bill is paid')}
-                ${toggle('loyalty-clawback-enabled', clawbackOn, 'Clawback on cancel/void', 'Reverse points when an order is cancelled or a paid bill is voided')}
-            </div>
-            <table class="mob-data-table" style="margin-top:14px;">
-                <thead>
-                    <tr>
-                        <th>Tier</th>
-                        <th class="mob-th-center">Tier name</th>
-                        <th class="mob-th-center">Minimum points</th>
-                        <th class="mob-th-center">Multiplier</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${TIER_KEYS.map(tk => renderTierRow(tk, tiers)).join('')}
-                </tbody>
-            </table>
-            <div class="mob-td-sub" style="margin-top:8px;">Effective value back when redeemed: <b>${effectiveCashback(c)}</b> <span style="opacity:0.8;">(point value ÷ earn rate × tier multiplier)</span></div>
-        </div>
-    </div>`;
-}
-
-function renderRewardsCatalog() {
-    const rewards = (_config && _config.rewards) || DEFAULTS.rewards.slice();
-    return `
-    <div class="mob-card mob-table-card" style="margin:0;">
-        <div class="mob-section-head-row">
-            <h3 class="mob-card-title">Reward catalog</h3>
-            <p class="mob-td-sub" style="margin-left:auto;max-width:420px;color:var(--mob-sub);">
-                Rewards customers can redeem their points for. Edit a row to change it; deleted rewards stay valid
-                for customers who already redeemed them.
-            </p>
-        </div>
-        <div style="padding:16px;">
-            <table class="mob-data-table">
-                <thead>
-                    <tr>
-                        <th>Reward</th>
-                        <th class="mob-th-center">Cost</th>
-                        <th class="mob-th-center">Type</th>
-                        <th class="mob-th-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rewards.map(r => renderRewardRow(r, _editingReward)).join('')}
-                    ${renderAddRewardRow()}
-                </tbody>
-            </table>
-        </div>
-    </div>`;
-}
-
-function fmtDate(ts) {
-    if (!ts) return '\u2014';
-    const d = new Date(Number(ts));
-    if (isNaN(d.getTime())) return '\u2014';
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
-        + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
-}
-
-function renderCustomerCard(phone, appRec, loyRec, rankRec, rewardsSnap, ordersSnap) {
-    const loy = loyRec || {};
-    const pts = Number(loy.lifetimePoints || 0);
-    const balance = Math.max(0, Number(loy.points) || 0);
-    const tier = loy.tier || tierForPoints(pts, _config);
-    const disp = tierColour(tier);
-    const nt = nextTier(pts, _config);
-    const app = appRec || {};
-    const orders = ordersSnap ? Object.entries(ordersSnap.val() || {})
-        .map(([id, o]) => (o ? { id, ...o } : null)).filter(Boolean)
-        .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)).slice(0, 5) : [];
-    const redeemed = rewardsSnap ? Object.entries(rewardsSnap.val() || {})
-        .map(([id, r]) => (r ? { id, ...r } : null)).filter(Boolean)
-        .sort((a, b) => Number(b.redeemedAt || 0) - Number(a.redeemedAt || 0)) : [];
-
-    const rankLine = rankRec && Number.isFinite(Number(rankRec.rank))
-        ? `<span class="mob-td-strong">Rank #${rankRec.rank}</span> <span class="mob-td-sub">among this kitchen's customers</span>`
-        : `<span class="mob-td-sub">Not ranked yet</span>`;
-
-    const progress = tierRing(pts, nt, disp);
-
-    const recentOrders = orders.map(o => `
-        <tr>
-            <td class="mob-td-strong">${escapeHtml(o.orderId || o.id || '\u2014')}</td>
-            <td class="mob-th-center">${fmtDate(o.createdAt)}</td>
-            <td class="mob-th-right">${money(o.total || 0)}</td>
-            <td class="mob-th-center"><span class="mob-badge mob-badge-status-${(o.status || 'placed').toLowerCase()}">${escapeHtml(o.status || 'Placed')}</span></td>
-        </tr>`);
-
-    const redeemedRows = redeemed.map(r => `
-        <tr>
-            <td class="mob-td-strong">${escapeHtml(r.label || r.rewardId || 'Reward')}</td>
-            <td class="mob-th-center">${escapeHtml(r.code || '\u2014')}</td>
-            <td class="mob-th-center">${fmtDate(r.redeemedAt)}</td>
-            <td class="mob-th-center">${escapeHtml(r.status || 'active')}</td>
-        </tr>`);
-
-    return `
-    <div class="mob-card mob-table-card" style="margin:0;">
-        <div class="mob-section-head-row">
-            <h3 class="mob-card-title">Customer: ${escapeHtml(phone)}</h3>
-            <div class="mob-td-sub" style="margin-left:auto;">${escapeHtml(app.name || 'No name on file')} <span style="font-weight:700;">${escapeHtml(app.phone || phone)}</span></div>
-        </div>
-        <div style="padding:16px;">
-            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <span class="mob-td-sub">Tier</span>
-                    <span style="color:${disp};font-weight:800;text-transform:uppercase;font-size:13px;">${tierLabel(tier)}</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <span class="mob-td-sub">Points</span>
-                    <span class="mob-td-strong" style="font-size:28px;font-variant-numeric:tabular-nums;">${balance}</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <span class="mob-td-sub">Lifetime points</span>
-                    <span class="mob-td-strong" style="font-variant-numeric:tabular-nums;">${pts}</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <span class="mob-td-sub">Lifetime spent</span>
-                    <span class="mob-td-strong">${money(loy.totalSpent || 0)}</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <span class="mob-td-sub">Orders</span>
-                    <span class="mob-td-strong">${Number(loy.orderCount || orders.length)}</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    ${rankLine}
-                </div>
-            </div>
-            <div style="margin-top:10px;">${progress}</div>
-            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--mob-border);">
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Adjust points (±)</label>
-                    <input type="number" id="loyalty-adj-delta" step="1" class="mob-input-reward" style="max-width:120px;" placeholder="e.g. -50 or 25">
-                </div>
-                <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:220px;">
-                    <label style="font-size:12px;font-weight:600;color:var(--mob-sub);">Reason (required)</label>
-                    <input type="text" id="loyalty-adj-reason" class="mob-input-reward" maxlength="200" placeholder="e.g. goodwill / recovering a lost order">
-                </div>
-                <button type="button" data-action="loyalty-adjust-points" data-phone="${escapeHtml(phone)}" class="btn-primary btn-small">Apply</button>
-            </div>
-            <div class="mob-td-sub" style="margin-top:4px;">Adjusts the spendable balance only — tier and lifetime points stay as earned. Every change is logged under loyalty/adjustments.</div>
-            ${redeemed.length ? `
-            <table class="mob-data-table" style="margin-top:10px;">
-                <thead><tr><th>Redeemed reward</th><th class="mob-th-center">Code</th><th class="mob-th-center">Redeemed on</th><th class="mob-th-center">Status</th></tr></thead>
-                <tbody>${redeemedRows.join('')}</tbody>
-            </table>` : `<p class="mob-table-empty" style="margin-top:10px;">No rewards redeemed yet.</p>`}
-            ${orders.length ? `
-            <table class="mob-data-table" style="margin-top:10px;">
-                <thead><tr><th>Recent order</th><th class="mob-th-center">Date</th><th class="mob-th-right">Total</th><th class="mob-th-center">Status</th></tr></thead>
-                <tbody>${recentOrders.join('')}</tbody>
-            </table>` : ''}
-        </div>
-    </div>`;
-}
-
-function formatOrderId(o) {
-    return o || '\u2014';
-}
-
-// ---------------------------------------------------------------- data
-
 function cfgPath() {
     return Outlet.ref('loyalty/config');
 }
+function ensureStyles() {
+    if (document.getElementById('lyd-css')) return;
+    const st = document.createElement('style');
+    st.id = 'lyd-css';
+    st.textContent = LOYALTY_CSS;
+    document.head.appendChild(st);
+}
+function announce(msg) {
+    const el = document.getElementById('lyd-live');
+    if (el) el.textContent = msg;
+}
+
+// ---------------------------------------------------------------- rules form
+
+const FORM_IDS = {
+    earnRs: 'loyalty-earn-rate', redeemRs: 'loyalty-redeem-value', minSpend: 'loyalty-min-spend',
+    maxPct: 'loyalty-max-redeem-pct', expiry: 'loyalty-expiry-days',
+    silverMin: 'loyalty-tier-silver-min', goldMin: 'loyalty-tier-gold-min',
+    bronzeMult: 'loyalty-tier-bronze-mult', silverMult: 'loyalty-tier-silver-mult', goldMult: 'loyalty-tier-gold-mult'
+};
+const CHECK_IDS = { earnOn: 'loyalty-earn-enabled', dineOn: 'loyalty-dinein-earn-enabled', clawOn: 'loyalty-clawback-enabled' };
+
+function savedForm() {
+    return formFromConfig(_config);
+}
+function currentForm() {
+    return _draft || savedForm();
+}
+function isDirty() {
+    return !!_draft && !sameForm(_draft, savedForm());
+}
+function readFormFromDom() {
+    const out = {};
+    for (const [k, id] of Object.entries(FORM_IDS)) {
+        const el = document.getElementById(id);
+        out[k] = el ? el.value.trim() : '';
+    }
+    for (const [k, id] of Object.entries(CHECK_IDS)) {
+        const el = document.getElementById(id);
+        out[k] = !!(el && el.checked);
+    }
+    return out;
+}
+
+function syncRulesUi() {
+    const dirty = isDirty();
+    const bar = document.getElementById('lyd-savebar');
+    if (bar) bar.classList.toggle('is-dirty', dirty);
+    const msg = document.getElementById('lyd-savebar-msg');
+    if (msg) msg.textContent = dirty ? 'You have unsaved changes.' : 'All changes saved.';
+    const discard = document.getElementById('lyd-discard');
+    if (discard) discard.disabled = !dirty;
+    const tab = document.getElementById('lyd-tab-rules');
+    if (tab) {
+        const dot = tab.querySelector('.lyd-unsaved-dot');
+        if (dirty && !dot) tab.insertAdjacentHTML('beforeend', '<span class="lyd-unsaved-dot" title="Unsaved changes"><span class="lyd-sr">Unsaved changes</span></span>');
+        if (!dirty && dot) dot.remove();
+    }
+    const f = currentForm();
+    const cur = backPct(f);
+    document.querySelectorAll('.lyd-chip[data-pct]').forEach(ch => {
+        const pct = Number(ch.getAttribute('data-pct'));
+        ch.setAttribute('aria-pressed', cur !== null && Math.abs(cur - pct) < 0.01 ? 'true' : 'false');
+        ch.disabled = earnForBackPct(pct, Number(f.redeemRs)) === null;
+    });
+    const note = document.getElementById('lyd-back-note');
+    if (note) note.textContent = cur === null ? '' : `A normal-rate member gets about ${+(Math.round(cur * 100) / 100).toFixed(2)}% back on every bill.`;
+    const bill = document.getElementById('lyd-bill');
+    if (bill) bill.innerHTML = renderBill(buildExample(currentForm(), Number(_billRs), CALC), _billRs);
+}
+
+// ------------------------------------------------------------------- render
+
+function renderBody() {
+    const c = _config;
+    if (_view === 'members') return renderMembers({ prefill: _prefill });
+    if (_view === 'rewards') return renderRewards({ config: c, editingId: _editingReward });
+    if (_view === 'rules') {
+        const f = currentForm();
+        return renderRules({ form: f, dirty: isDirty(), billRs: _billRs, example: buildExample(f, Number(_billRs), CALC) });
+    }
+    return renderOverview({
+        config: c, stats: _stats, adjustments: _adjs, configured: _server != null,
+        names: _names, outstandingState: _outState, progress: _progress,
+        outstanding: _outstanding ? { ..._outstanding, valueRs: Math.round((_outstanding.points * c.redeemValuePaisePerPoint) / 100) } : null,
+        loading: _statsState === 'loading' || _statsState === 'idle',
+        failed: _statsState === 'failed'
+    });
+}
+
+function renderAll(focusSel) {
+    const container = document.getElementById('loyaltyApp');
+    if (!container || !_config) return;
+    ensureStyles();
+    container.innerHTML = renderShell({
+        view: _view,
+        earnOn: _config.earnEnabled !== false,
+        dirty: isDirty(),
+        outlet: Outlet.current,
+        body: renderBody()
+    });
+    if (focusSel) container.querySelector(focusSel)?.focus();
+}
+
+function renderPanelOnly() {
+    const panel = document.getElementById('lyd-panel');
+    if (!panel) return renderAll();
+    panel.innerHTML = renderBody();
+}
+
+function setView(v, { focusTab = false } = {}) {
+    if (!VIEW_ORDER.includes(v)) return;
+    _view = v;
+    renderAll(focusTab ? `#lyd-tab-${v}` : null);
+    const panel = document.getElementById('lyd-panel');
+    if (panel) {
+        panel.classList.add('is-entering');
+        panel.addEventListener('animationend', () => panel.classList.remove('is-entering'), { once: true });
+    }
+    if (v === 'overview' && (_statsState !== 'ok' || Date.now() - _statsAt > STATS_TTL_MS)) refreshStats();
+}
+
+// ------------------------------------------------------------------- data
 
 async function readServerConfig() {
     try {
@@ -483,143 +194,259 @@ async function readServerConfig() {
     }
 }
 
-async function saveConfig() {
-    const rateEl = document.getElementById('loyalty-earn-rate');
-    const rateRs = parseFloat(rateEl.value);
-    if (!Number.isFinite(rateRs) || rateRs <= 0) {
-        showToast('Enter a valid amount per point', 'error');
-        rateEl.focus();
-        return;
-    }
-    const redeemEl = document.getElementById('loyalty-redeem-value');
-    const redeemRs = parseFloat(redeemEl.value);
-    if (!Number.isFinite(redeemRs) || redeemRs <= 0) {
-        showToast('Enter a valid value per point', 'error');
-        redeemEl.focus();
-        return;
-    }
-    const minSpendEl = document.getElementById('loyalty-min-spend');
-    const minSpendRs = parseFloat(minSpendEl.value) || 0;
-    if (minSpendRs < 0) {
-        showToast('Minimum spend cannot be negative', 'error');
-        minSpendEl.focus();
-        return;
-    }
-    const pctEl = document.getElementById('loyalty-max-redeem-pct');
-    const maxPct = Math.max(0, Math.min(100, parseFloat(pctEl.value) || 0));
-    if (parseFloat(pctEl.value) > 100) {
-        showToast('Max tender cannot exceed 100% of the order', 'error');
-        pctEl.focus();
-        return;
-    }
-    const tiers = {};
-    let ok = true;
-    for (const tk of TIER_KEYS) {
-        const row = document.querySelector(`tr[data-tier="${tk}"]`);
-        if (!row) continue;
-        const min = parseFloat(row.querySelector('[data-field="min"]').value);
-        const mult = parseFloat(row.querySelector('[data-field="mult"]').value);
-        const labelEl = row.querySelector('[data-field="label"]');
-        const label = (labelEl && labelEl.value.trim()) || TIER_LABEL[tk];
-        if (!Number.isFinite(min) || min < 0 || !Number.isFinite(mult) || mult <= 0) {
-            ok = false;
-            break;
-        }
-        tiers[tk] = { min, label, multiplier: mult };
-    }
-    if (!ok) { showToast('Enter valid tier thresholds and multipliers', 'error'); return; }
-
-    _config = {
-        ...(_config || {}),
-        earnRatePaisePerPoint: Math.round(rateRs * 100),
-        redeemValuePaisePerPoint: Math.round(redeemRs * 100),
-        minSpendAfterRedemption: minSpendRs,
-        maxRedeemPercentOfOrder: maxPct,
-        expiryDays: Math.max(0, Math.round(parseFloat(document.getElementById('loyalty-expiry-days').value) || 0)),
-        earnEnabled: document.getElementById('loyalty-earn-enabled').checked,
-        dineInEarnEnabled: document.getElementById('loyalty-dinein-earn-enabled').checked,
-        clawbackEnabled: document.getElementById('loyalty-clawback-enabled').checked,
-        tiers
-    };
-    const payload = buildConfigPayload();
-    try {
-        const btn = document.querySelector('[data-action="loyalty-save-config"]');
-        const oldText = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Saving.';
-        await set(cfgPath(), payload);
-        _server = JSON.parse(JSON.stringify(payload));
-        _config = cloneConfig(payload);
-        btn.disabled = false;
-        btn.textContent = oldText;
-        showToast('Program settings saved', 'success');
-        logger.info('LOYALTY', 'Config saved', { outlet: Outlet.current, earnRate: payload.earnRatePaisePerPoint, redeemValue: payload.redeemValuePaisePerPoint });
-        renderAll();
-    } catch (e) {
-        console.error('[Loyalty] save failed:', e);
-        showToast('Save failed. Try again.', 'error');
-        const btn = document.querySelector('[data-action="loyalty-save-config"]');
-        if (btn) { btn.disabled = false; btn.textContent = 'Save program settings'; }
-    }
-}
-
-async function saveRewards() {
-    try {
-        const btn = document.querySelector('[data-action="loyalty-add-reward"]');
-        const oldText = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Saving.';
-        const payload = buildConfigPayload();
-        await set(cfgPath(), payload);
-        _server = JSON.parse(JSON.stringify(payload));
-        btn.disabled = false;
-        btn.textContent = oldText;
-        showToast('Reward catalog saved', 'success');
-        logger.info('LOYALTY', 'Rewards saved', { outlet: Outlet.current, count: payload.rewards.length });
-        renderAll();
-    } catch (e) {
-        console.error('[Loyalty] reward save failed:', e);
-        showToast('Save failed. Try again.', 'error');
-    }
-}
-
-async function deleteReward(id) {
-    const sure = await showConfirm(`Remove this reward from the catalog? Already redeemed codes stay valid for customers.`, 'Delete reward');
-    if (!sure) return;
-    const rewards = ((_config && _config.rewards) || DEFAULTS.rewards.slice()).filter(r => r.id !== id);
-    const payload = buildConfigPayload({ rewards });
-    try {
-        await set(cfgPath(), payload);
-        _server = JSON.parse(JSON.stringify(payload));
-        _editingReward = null;
-        showToast('Reward removed', 'success');
-        renderAll();
-    } catch (e) {
-        console.error('[Loyalty] delete failed:', e);
-        showToast('Delete failed. Try again.', 'error');
-    }
-}
-
-// KPI: points ever issued (Σ lifetimePoints over the rankings mirror) and
-// how many customers are ranked. Uses the owner-scoped rankings read —
-// customers still cannot bulk-read the leaderboard (per-phone rows only).
-async function refreshKpis() {
-    const issuedEl = document.getElementById('loyalty-kpi-issued');
-    const membersEl = document.getElementById('loyalty-kpi-members');
-    if (!issuedEl || !membersEl) return;
+// Overview numbers: the owner-scoped rankings list (one row per member) and
+// the last few manual adjustments. Customers still cannot bulk-read either.
+async function refreshStats() {
+    _statsState = 'loading';
+    if (_view === 'overview') renderPanelOnly();
     try {
         const snap = await get(Outlet.ref('loyalty/rankings'));
         const rows = snap && snap.exists() ? Object.values(snap.val() || {}) : [];
-        const lifetime = rows.reduce((s, r) => s + (Number(r && r.lifetimePoints) || 0), 0);
-        const valueRs = Math.round((lifetime * (Number(_config && _config.redeemValuePaisePerPoint) || DEFAULTS.redeemValuePaisePerPoint)) / 100);
-        issuedEl.textContent = lifetime > 0
-            ? `${lifetime.toLocaleString('en-IN')} pts · ${money(valueRs)} value`
-            : '0 pts · ₹0 value';
-        membersEl.textContent = String(rows.length);
+        _stats = summarize(rows, _config);
+        _phones = rows.map(r => r && r.phone).filter(p => validPhone(String(p)));
+        _statsState = 'ok';
+        _statsAt = Date.now();
     } catch (e) {
-        console.warn('[Loyalty] KPI read failed:', e);
-        issuedEl.textContent = '\u2014';
-        membersEl.textContent = '\u2014';
+        console.warn('[Loyalty] rankings read failed:', e);
+        _stats = null;
+        _statsState = 'failed';
+    }
+    try {
+        const aSnap = await get(query(Outlet.ref('loyalty/adjustments'), orderByChild('createdAt'), limitToLast(6)));
+        const rows = aSnap && aSnap.exists() ? Object.values(aSnap.val() || {}) : [];
+        _adjs = rows.filter(Boolean).sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    } catch (e) {
+        console.warn('[Loyalty] adjustments read failed:', e);
+        _adjs = null;
+    }
+    if (_view === 'overview') renderPanelOnly();
+    // Names are a nicety: show the numbers first, then fill names in.
+    loadNames([...(_stats ? _stats.top.map(r => r.phone) : []), ...((_adjs || []).map(a => a.phone))]);
+}
+
+// Reads customers/{phone}/app/name (customer app) then customers/{phone}/name
+// (WhatsApp / POS) for the few people Overview lists. A failed read just means
+// that person is shown by phone number.
+async function loadNames(phones) {
+    const todo = [...new Set(phones.filter(p => validPhone(String(p)) && !_names[p]))];
+    if (!todo.length) return;
+    await Promise.all(todo.map(async (ph) => {
+        const [a, b] = await Promise.allSettled([
+            get(Outlet.ref(`customers/${ph}/app/name`)),
+            get(Outlet.ref(`customers/${ph}/name`))
+        ]);
+        const val = (r) => (r.status === 'fulfilled' && r.value && r.value.exists()) ? r.value.val() : '';
+        const n = pickName(val(a), val(b));
+        if (n) _names[ph] = n;
+    }));
+    if (_view === 'overview' && _outState !== 'counting') renderPanelOnly();
+}
+
+// "Points outstanding": add up each member's spendable balance, in this
+// browser, from their own customers/{phone}/loyalty record. No server job.
+// One small read per member, a few at a time, with live progress.
+async function updateOutstanding() {
+    if (_outState === 'counting' || !_phones.length) return;
+    const token = ++_runToken;
+    const phones = _phones.slice();
+    _outState = 'counting';
+    _progress = { done: 0, total: phones.length };
+    if (_view === 'overview') renderPanelOnly();
+    const rows = [];
+    let failed = 0, next = 0;
+    const paint = () => {
+        const cap = document.getElementById('lyd-outstanding-cap');
+        if (cap) cap.textContent = `Counting ${_progress.done.toLocaleString('en-IN')} of ${_progress.total.toLocaleString('en-IN')} members\u2026`;
+    };
+    async function worker() {
+        while (next < phones.length) {
+            if (token !== _runToken) return;
+            const ph = phones[next++];
+            try {
+                const snap = await get(Outlet.ref(`customers/${ph}/loyalty`));
+                rows.push(snap && snap.exists() ? snap.val() : {});
+            } catch (e) {
+                failed++;
+            }
+            _progress.done++;
+            if (_progress.done % 5 === 0 || _progress.done === _progress.total) paint();
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(COUNT_CONCURRENCY, phones.length) }, worker));
+    if (token !== _runToken) return; // reloaded while counting
+    _outstanding = tallyOutstanding(rows, _config, { failed, total: phones.length, at: Date.now() });
+    _outState = 'idle';
+    logger.info('LOYALTY', 'Outstanding counted', { outlet: Outlet.current, members: phones.length, failed });
+    if (failed === phones.length) showToast('Could not read any member balances. Check your connection and try again.', 'error');
+    else if (failed) showToast(`Counted ${phones.length - failed} of ${phones.length} members. ${failed} could not be read.`, 'error');
+    else showToast('Points outstanding updated', 'success');
+    announce(`Points outstanding: ${_outstanding.points}`);
+    if (_view === 'overview') renderPanelOnly();
+}
+
+async function writeConfig(payload) {
+    await set(cfgPath(), payload);
+    _server = JSON.parse(JSON.stringify(payload));
+    _config = cloneConfig(payload);
+}
+
+function markInvalid(ids) {
+    document.querySelectorAll('.lyd-input[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+    ids.forEach(id => document.getElementById(id)?.setAttribute('aria-invalid', 'true'));
+}
+
+async function saveRules() {
+    if (_busy) return;
+    const values = readFormFromDom();
+    const res = validateForm(values, _config);
+    if (!res.ok) {
+        markInvalid(res.errors.map(e => e.id));
+        showToast(res.errors[0].msg, 'error');
+        announce(res.errors[0].msg);
+        document.getElementById(res.errors[0].id)?.focus();
+        return;
+    }
+    markInvalid([]);
+    const btn = document.getElementById('lyd-save');
+    _busy = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+        const payload = buildPayload(_config, res.fields);
+        await writeConfig(payload);
+        _draft = null;
+        showToast('Rules saved', 'success');
+        announce('Rules saved');
+        logger.info('LOYALTY', 'Config saved', { outlet: Outlet.current, earnRate: payload.earnRatePaisePerPoint, redeemValue: payload.redeemValuePaisePerPoint });
+        _statsAt = 0;
+        renderAll();
+    } catch (e) {
+        console.error('[Loyalty] save failed:', e);
+        showToast('Could not save the rules. Check your connection and try again.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Save rules'; }
+    } finally {
+        _busy = false;
+    }
+}
+
+async function toggleEarning() {
+    if (_busy) return;
+    const next = !(_config.earnEnabled !== false);
+    if (!next) {
+        const sure = await showConfirm('Customers will not earn points on new orders until you turn earning back on. Points they already have stay.', 'Pause earning');
+        if (!sure) return;
+    }
+    const sw = document.getElementById('lyd-earn-switch');
+    _busy = true;
+    if (sw) sw.disabled = true;
+    try {
+        await writeConfig(buildPayload(_config, { earnEnabled: next }));
+        if (_draft) _draft = { ..._draft, earnOn: next };
+        showToast(next ? 'Earning is on' : 'Earning is paused', 'success');
+        logger.info('LOYALTY', 'Earning toggled', { outlet: Outlet.current, earnEnabled: next });
+        renderAll('#lyd-earn-switch');
+        announce(next ? 'Earning is on' : 'Earning is paused');
+    } catch (e) {
+        console.error('[Loyalty] toggle failed:', e);
+        showToast('Could not change earning. Try again.', 'error');
+        if (sw) sw.disabled = false;
+    } finally {
+        _busy = false;
+    }
+}
+
+// ------------------------------------------------------------------ rewards
+
+function findRewardRow(id) {
+    return Array.from(document.querySelectorAll('[data-reward]')).find(el => el.getAttribute('data-reward') === id) || null;
+}
+
+async function persistRewards(nextRewards, okMsg) {
+    try {
+        await writeConfig(buildPayload(_config, { rewards: nextRewards }));
+        showToast(okMsg, 'success');
+        logger.info('LOYALTY', 'Rewards saved', { outlet: Outlet.current, count: nextRewards.length });
+        return true;
+    } catch (e) {
+        console.error('[Loyalty] reward save failed:', e);
+        showToast('Could not save. Check your connection and try again.', 'error');
+        return false;
+    }
+}
+
+async function saveRewardEdit(id) {
+    const row = findRewardRow(id);
+    if (!row) return;
+    const label = row.querySelector('[data-field="label"]').value.trim();
+    const cost = Math.round(parseFloat(row.querySelector('[data-field="cost"]').value));
+    const type = row.querySelector('[data-field="type"]').value === 'discount' ? 'discount' : 'item';
+    if (!label || !Number.isFinite(cost) || cost < 0) { showToast('Enter a reward name and a cost in points.', 'error'); return; }
+    const next = (_config.rewards || []).map(r => r.id === id ? { id, label, cost, type } : r);
+    if (await persistRewards(next, 'Reward saved')) { _editingReward = null; renderPanelOnly(); }
+}
+
+async function addReward() {
+    const labelEl = document.getElementById('loyalty-new-label');
+    const costEl = document.getElementById('loyalty-new-cost');
+    const label = labelEl.value.trim();
+    const cost = Math.round(parseFloat(costEl.value));
+    const type = document.getElementById('loyalty-new-type').value === 'discount' ? 'discount' : 'item';
+    if (!label || !Number.isFinite(cost) || cost < 0) { showToast('Enter a reward name and a cost in points.', 'error'); return; }
+    const rewards = (_config.rewards || []).slice();
+    const id = rewardSlug(label);
+    if (rewards.some(r => r.id === id)) { showToast('A reward with this name already exists.', 'error'); labelEl.focus(); return; }
+    rewards.push({ id, label, cost, type });
+    if (await persistRewards(rewards, 'Reward added')) renderPanelOnly();
+}
+
+async function deleteReward(id) {
+    const sure = await showConfirm('Remove this reward from the list? Customers who already claimed it can still use it.', 'Delete reward');
+    if (!sure) return;
+    const next = (_config.rewards || []).filter(r => r.id !== id);
+    if (await persistRewards(next, 'Reward deleted')) { _editingReward = null; renderPanelOnly(); }
+}
+
+// ------------------------------------------------------------------ members
+
+async function lookupCustomer() {
+    const input = document.getElementById('loyalty-lookup-phone');
+    const container = document.getElementById('loyalty-customer-result');
+    if (!input || !container) return;
+    const phone = normPhone(input.value);
+    _prefill = input.value;
+    if (!validPhone(phone)) {
+        input.setAttribute('aria-invalid', 'true');
+        container.innerHTML = `<p class="lyd-quiet" role="alert">Enter a 10-digit mobile number that starts with 6, 7, 8 or 9.</p>`;
+        return;
+    }
+    input.removeAttribute('aria-invalid');
+    container.innerHTML = `<p class="lyd-quiet">Looking up ${esc(fmtPhone(phone))}…</p>`;
+    try {
+        const [loyalSnap, rankSnap, rewardsSnap, ordersSnap, appSnap] = await Promise.all([
+            get(Outlet.ref(`customers/${phone}/loyalty`)),
+            get(Outlet.ref(`loyalty/rankings/${phone}`)),
+            get(Outlet.ref(`customers/${phone}/rewards`)),
+            get(Outlet.ref(`customers/${phone}/orders`)),
+            get(Outlet.ref(`customers/${phone}/app`))
+        ]);
+        if (!loyalSnap || !loyalSnap.exists()) {
+            container.innerHTML = renderNoRecord(phone);
+            return;
+        }
+        const list = (snap, sortKey, limit) => Object.entries((snap && snap.val()) || {})
+            .map(([id, o]) => (o ? { id, ...o } : null)).filter(Boolean)
+            .sort((a, b) => Number(b[sortKey] || 0) - Number(a[sortKey] || 0))
+            .slice(0, limit);
+        container.innerHTML = renderMemberSheet({
+            phone,
+            app: appSnap && appSnap.exists() ? appSnap.val() : null,
+            loy: loyalSnap.val(),
+            rank: rankSnap && rankSnap.exists() ? rankSnap.val() : null,
+            rewards: list(rewardsSnap, 'redeemedAt', 50),
+            orders: list(ordersSnap, 'createdAt', 5)
+        }, _config);
+    } catch (e) {
+        console.error('[Loyalty] lookup failed:', e);
+        container.innerHTML = `<p class="lyd-quiet" role="alert">Could not look this customer up. Check your connection and try again.</p>`;
     }
 }
 
@@ -634,26 +461,40 @@ async function adjustPoints(phone) {
     const delta = Math.round(parseFloat(deltaEl.value));
     const reason = reasonEl.value.trim();
     if (!Number.isFinite(delta) || delta === 0) {
-        showToast('Enter a non-zero whole number of points (e.g. -50 or 25)', 'error');
+        showToast('Enter a whole number of points, like -50 or 25.', 'error');
+        deltaEl.setAttribute('aria-invalid', 'true');
         deltaEl.focus();
         return;
     }
+    deltaEl.removeAttribute('aria-invalid');
     if (reason.length < 3) {
-        showToast('Give a short reason for the adjustment', 'error');
+        showToast('Add a short reason for this change.', 'error');
+        reasonEl.setAttribute('aria-invalid', 'true');
         reasonEl.focus();
         return;
     }
-    const sure = await showConfirm(`Adjust ${phone} by ${delta > 0 ? '+' : ''}${delta} points?`, 'Apply adjustment');
+    reasonEl.removeAttribute('aria-invalid');
+    const sure = await showConfirm(`${delta > 0 ? 'Add' : 'Remove'} ${Math.abs(delta)} points ${delta > 0 ? 'to' : 'from'} ${fmtPhone(phone)}?`, 'Apply change');
     if (!sure) return;
     const btn = document.querySelector('[data-action="loyalty-adjust-points"]');
     if (btn) btn.disabled = true;
     const now = Date.now();
     const uid = (auth && auth.currentUser && auth.currentUser.uid) || '';
     const bid = BUSINESS_ID();
+    const rowRef = Outlet.ref(`customers/${phone}/loyalty`);
     try {
-        const result = await runTransaction(Outlet.ref(`customers/${phone}/loyalty`), (cur) => {
-            const c = cur || null;
-            if (!c || !c.phone) return null;
+        // Read once first: a transaction's update function can be called with
+        // null even when the node exists, so seed it with the real record. Never
+        // return null from the transition - that deletes the customer's points.
+        const snap = await get(rowRef);
+        const seed = snap.exists() ? snap.val() : null;
+        if (!seed || typeof seed !== 'object') {
+            showToast('This customer has no loyalty record yet. Points can be changed after their first paid order.', 'error');
+            if (btn) btn.disabled = false;
+            return;
+        }
+        const result = await runTransaction(rowRef, (cur) => {
+            const c = cur || seed;
             const curPoints = Number.isFinite(Number(c.points)) ? Number(c.points) : 0;
             const newPoints = Math.max(0, curPoints + delta);
             return { ...c, points: newPoints, updatedAt: now, lastAdjustment: { delta, reason, by: uid, at: now } };
@@ -664,198 +505,121 @@ async function adjustPoints(phone) {
             phone, outlet: Outlet.current, business: bid,
             delta, pointsAfter: after, reason, createdBy: uid, createdAt: now
         });
-        showToast(`Adjusted ${phone} to ${after} points`, 'success');
+        showToast(`${fmtPhone(phone)} now has ${after} points`, 'success');
         logger.info('LOYALTY', 'Manual adjustment', { outlet: Outlet.current, delta, pointsAfter: after });
+        _statsAt = 0;
         await lookupCustomer();
     } catch (e) {
-        if (e && e.message && e.message.includes('transaction aborted — row changed underneath')) {
-            showToast('Adjustment failed — the loyalty record changed underneath. Try again.', 'error');
+        if (e && e.message && e.message.includes('row changed underneath')) {
+            showToast('Their points changed while you were editing. Look them up again and retry.', 'error');
         } else if (e && e.message && e.message.includes('aborted')) {
-            showToast(`This customer (${phone}) has no loyalty record yet — points can only be adjusted after they earn their first order.`, 'error');
+            showToast('This customer has no loyalty record yet. Points can be changed after their first paid order.', 'error');
         } else {
             console.error('[Loyalty] adjustment failed:', e);
-            showToast('Adjustment failed. Try again.', 'error');
+            showToast('Could not change the points. Try again.', 'error');
         }
         if (btn) btn.disabled = false;
     }
 }
 
-async function lookupCustomer() {
-    const raw = document.getElementById('loyalty-lookup-phone').value;
-    const phone = normPhone(raw);
-    const container = document.getElementById('loyalty-customer-result');
-    if (!validPhone(phone)) {
-        container.innerHTML = `<p class="mob-table-empty">Enter a valid 10-digit mobile number.</p>`;
-        return;
-    }
-    container.innerHTML = `<div class="mob-table-empty" style="padding:24px;">Looking up ${phone}…</div>`;
-    try {
-        const [loyalSnap, rankSnap, rewardsSnap, ordersSnap, appSnap] = await Promise.all([
-            get(Outlet.ref(`customers/${phone}/loyalty`)),
-            get(Outlet.ref(`loyalty/rankings/${phone}`)),
-            get(Outlet.ref(`customers/${phone}/rewards`)),
-            get(Outlet.ref(`customers/${phone}/orders`)),
-            get(Outlet.ref(`customers/${phone}/app`))
-        ]);
-        if (!loyalSnap || !loyalSnap.exists()) {
-            container.innerHTML = `
-                <div class="mob-card mob-table-card" style="margin:0;padding:24px;">
-                    <div class="mob-section-head-row">
-                        <h3 class="mob-card-title">Customer: ${escapeHtml(phone)}</h3>
-                    </div>
-                    <div style="padding:16px;text-align:center;color:var(--mob-sub);">
-                        <p style="margin:0 0 8px 0;">No loyalty record yet.</p>
-                        <p style="margin:0; font-size:12px;">This customer hasn't earned any points at this outlet. Points are awarded on paid orders.</p>
-                    </div>
-                </div>`;
-            return;
-        }
-        container.innerHTML = renderCustomerCard(phone,
-            appSnap && appSnap.exists() ? appSnap.val() : null,
-            loyalSnap && loyalSnap.exists() ? loyalSnap.val() : null,
-            rankSnap && rankSnap.exists() ? rankSnap.val() : null,
-            rewardsSnap,
-            ordersSnap);
-    } catch (e) {
-        console.error('[Loyalty] lookup failed:', e);
-        container.innerHTML = `<p class="mob-table-empty">Lookup failed. Try again.</p>`;
-    }
-}
+// ------------------------------------------------------------------- events
 
-function renderAll() {
-    const container = document.getElementById('loyaltyApp');
-    if (!container) return;
-    const rateRs = (_config && _config.earnRatePaisePerPoint) ? _config.earnRatePaisePerPoint / 100 : 20;
-    const configured = _server != null;
-    container.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:16px;">
-        <div class="mob-section-head-row" style="align-items:flex-start;">
-            <div>
-                <h2 class="mob-card-title" style="font-size:22px;">Loyalty</h2>
-                <p class="mob-td-sub">Points, tiers and rewards customers earn at this kitchen.</p>
-            </div>
-        </div>
-        <div class="mob-card" style="margin:0;padding:0;">
-            <div style="padding:16px;">
-                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">
-                    <div style="display:flex;flex-direction:column;gap:2px;">
-                        <span class="mob-td-sub">Program</span>
-                        <span class="mob-td-strong">${configured ? 'Configured' : 'Using defaults'}</span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:2px;">
-                        <span class="mob-td-sub">Earn rate</span>
-                        <span class="mob-td-strong">${ptsPer100(_config)} points per ₹100</span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:2px;">
-                        <span class="mob-td-sub">Rewards in catalog</span>
-                        <span class="mob-td-strong">${((_config && _config.rewards) || DEFAULTS.rewards).length}</span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:2px;">
-                        <span class="mob-td-sub">Ranked members</span>
-                        <span class="mob-td-strong" id="loyalty-kpi-members">…</span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:2px;">
-                        <span class="mob-td-sub">Points ever issued</span>
-                        <span class="mob-td-strong" id="loyalty-kpi-issued">…</span>
-                    </div>
-                    <div style="margin-left:auto;display:flex;flex-direction:column;gap:2px;text-align:right;">
-                        <span class="mob-td-sub">Outlet</span>
-                        <span class="mob-td-sub" style="font-size:11px;text-transform:uppercase;">${escapeHtml(Outlet.current)}</span>
-                    </div>
-                </div>
-                ${!configured ? `<p class="mob-table-empty" style="margin:8px 0 0 0;">Not yet configured by an admin — customers earn at the default rates shown below. Open any panel to save your own settings.</p>` : ''}
-            </div>
-        </div>
-        <!-- Customer lookup is the most frequent job — placed first -->
-        <div class="mob-card mob-table-card" style="margin:0;">
-            <div class="mob-section-head-row">
-                <h3 class="mob-card-title">Look up a customer</h3>
-                <p class="mob-td-sub" style="margin-left:auto;">Search by phone to see tier, points, rank and redemptions.</p>
-            </div>
-            <div style="padding:16px;">
-                <div style="display:flex;gap:8px;align-items:flex-end;">
-                    <input type="text" id="loyalty-lookup-phone" maxlength="15" placeholder="98765 43210" class="mob-input-reward" style="max-width:220px;">
-                    <button type="button" id="loyalty-search-customer" data-action="loyalty-search-customer" class="btn-primary">Look up</button>
-                </div>
-                <div class="mob-td-sub" style="margin-top:4px;">Enter the customer's registered mobile number.</div>
-                <div id="loyalty-customer-result"></div>
-            </div>
-        </div>
-        ${renderConfigForm()}
-        ${renderRewardsCatalog()}
-    </div>`;
-    document.getElementById('loyalty-search-customer')?.addEventListener('click', () => lookupCustomer());
-    document.getElementById('loyalty-lookup-phone')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') lookupCustomer(); });
-    window.__adminLogger?.info('LOYALTY', 'Tab mounted', { outlet: Outlet.current });
-}
+function bindEvents(container) {
+    if (_boundEl === container) return;
+    _boundEl = container;
 
-// Deferred form listeners (attached after render so inputs exist)
-function attachFormListeners() {
-    if (_formListenersAttached) return;
-    const container = document.getElementById('loyaltyApp');
-    if (!container) return;
-    _formListenersAttached = true;
     container.addEventListener('click', async (e) => {
         const btn = e.target.closest('button[data-action]');
-        if (!btn) return;
+        if (!btn || btn.type === 'submit') return; // submit buttons go through the form's submit event
         const action = btn.getAttribute('data-action');
         const rewardId = btn.getAttribute('data-reward-id');
-        if (action === 'loyalty-save-config') { await saveConfig(); return; }
-        if (action === 'loyalty-edit-reward') { _editingReward = rewardId; renderAll(); return; }
-        if (action === 'loyalty-cancel-edit') { _editingReward = null; renderAll(); return; }
-        if (action === 'loyalty-save-reward') {
-            const row = document.querySelector(`tr[data-reward="${escapeHtml(rewardId)}"]`);
-            if (!row) return;
-            const label = row.querySelector('[data-field="label"]').value.trim();
-            const cost = parseFloat(row.querySelector('[data-field="cost"]').value);
-            const type = row.querySelector('[data-field="type"]').value;
-            if (!label || !Number.isFinite(cost) || cost < 0) { showToast('Enter a valid name and cost', 'error'); return; }
-            const rewards = (_config && _config.rewards) || DEFAULTS.rewards.slice();
-            const idx = rewards.findIndex(r => r.id === rewardId);
-            if (idx >= 0) rewards[idx] = { id: rewardId, label, cost, type };
-            _config.rewards = rewards;
-            _editingReward = null;
-            await saveRewards();
-            return;
-        }
-        if (action === 'loyalty-add-reward') {
-            const label = document.getElementById('loyalty-new-label').value.trim();
-            const cost = parseFloat(document.getElementById('loyalty-new-cost').value);
-            const type = document.getElementById('loyalty-new-type').value;
-            if (!label || !Number.isFinite(cost) || cost < 0) { showToast('Enter a valid name and cost', 'error'); return; }
-            const rewards = (_config && _config.rewards) || DEFAULTS.rewards.slice();
-            const id = rewardSlug(label);
-            if (rewards.some(r => r.id === id)) { showToast('A reward with this name already exists', 'error'); return; }
-            rewards.push({ id, label, cost, type });
-            _config.rewards = rewards;
-            document.getElementById('loyalty-new-label').value = '';
-            document.getElementById('loyalty-new-cost').value = '';
-            await saveRewards();
-            return;
-        }
-        if (action === 'loyalty-delete-reward') {
-            await deleteReward(rewardId);
-            return;
-        }
-        if (action === 'loyalty-adjust-points') {
-            await adjustPoints(btn.getAttribute('data-phone'));
-            return;
+        switch (action) {
+            case 'loyalty-view': setView(btn.getAttribute('data-view'), { focusTab: true }); break;
+            case 'loyalty-toggle-earning': await toggleEarning(); break;
+            case 'loyalty-refresh': await refreshStats(); break;
+            case 'loyalty-update-outstanding': await updateOutstanding(); break;
+            case 'loyalty-quick-rate': {
+                const input = document.getElementById('loyalty-earn-rate');
+                const redeem = Number((document.getElementById('loyalty-redeem-value') || {}).value);
+                const target = earnForBackPct(Number(btn.getAttribute('data-pct')), redeem);
+                if (input && target !== null) {
+                    input.value = String(target);
+                    input.dispatchEvent(new Event('input', { bubbles: true })); // updates the draft, the chips and the example bill
+                }
+                break;
+            }
+            case 'loyalty-save-config': await saveRules(); break;
+            case 'loyalty-discard': _draft = null; renderPanelOnly(); syncRulesUi(); break;
+            case 'loyalty-edit-reward': _editingReward = rewardId; renderPanelOnly(); document.getElementById('lyd-edit-label')?.focus(); break;
+            case 'loyalty-cancel-edit': _editingReward = null; renderPanelOnly(); break;
+            case 'loyalty-save-reward': await saveRewardEdit(rewardId); break;
+            case 'loyalty-add-reward': await addReward(); break;
+            case 'loyalty-delete-reward': await deleteReward(rewardId); break;
+            case 'loyalty-adjust-points': await adjustPoints(btn.getAttribute('data-phone')); break;
+            case 'loyalty-open-member':
+                _view = 'members';
+                _prefill = fmtPhone(btn.getAttribute('data-phone'));
+                renderAll();
+                await lookupCustomer();
+                document.getElementById('loyalty-customer-result')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                break;
+            default: break;
         }
     });
+
+    container.addEventListener('submit', (e) => {
+        if (e.target.closest('[data-lyd-find]')) { e.preventDefault(); lookupCustomer(); }
+        else if (e.target.closest('#lyd-rules-form')) { e.preventDefault(); }
+    });
+
     container.addEventListener('input', (e) => {
-        const field = e.target.closest('[data-field]');
-        if (!field) return;
-        const tk = field.getAttribute('data-tier');
-        if (tk) {
-            const tiers = (_config && _config.tiers) || {};
-            tiers[tk] = tiers[tk] || {};
-            const v = field.value === '' ? 0 : parseFloat(field.value);
-            if (field.getAttribute('data-field') === 'label') tiers[tk].label = field.value;
-            else tiers[tk][field.getAttribute('data-field')] = Number.isFinite(v) ? v : tiers[tk][field.getAttribute('data-field')];
-            _config.tiers = tiers;
+        const t = e.target;
+        if (t.id === 'lyd-bill-amount') {
+            _billRs = t.value;
+            syncRulesUi();
+            return;
         }
+        if (t.hasAttribute && t.hasAttribute('data-rule')) {
+            t.removeAttribute('aria-invalid');
+            _draft = readFormFromDom();
+            syncRulesUi();
+            return;
+        }
+        if (t.id === 'loyalty-adj-delta') {
+            const bal = Number((document.getElementById('lyd-balance') || {}).dataset?.balance) || 0;
+            const d = Math.round(parseFloat(t.value));
+            const prev = document.getElementById('lyd-adj-preview');
+            if (prev) {
+                prev.textContent = Number.isFinite(d) && d !== 0
+                    ? `Their points to spend would go from ${bal} to ${Math.max(0, bal + d)}.`
+                    : 'Only the points to spend change. Their tier and points earned over time stay as they are.';
+            }
+        }
+    });
+
+    container.addEventListener('change', (e) => {
+        if (e.target.hasAttribute && e.target.hasAttribute('data-rule')) {
+            _draft = readFormFromDom();
+            syncRulesUi();
+        }
+    });
+
+    container.addEventListener('keydown', (e) => {
+        const tab = e.target.closest && e.target.closest('[role="tab"]');
+        if (!tab) return;
+        const i = VIEW_ORDER.indexOf(tab.getAttribute('data-view'));
+        let n = null;
+        if (e.key === 'ArrowRight') n = (i + 1) % VIEW_ORDER.length;
+        else if (e.key === 'ArrowLeft') n = (i - 1 + VIEW_ORDER.length) % VIEW_ORDER.length;
+        else if (e.key === 'Home') n = 0;
+        else if (e.key === 'End') n = VIEW_ORDER.length - 1;
+        if (n === null) return;
+        e.preventDefault();
+        setView(VIEW_ORDER[n], { focusTab: true });
     });
 }
+
+// -------------------------------------------------------------------- entry
 
 export async function loadLoyalty() {
     const container = document.getElementById('loyaltyApp');
@@ -863,7 +627,8 @@ export async function loadLoyalty() {
         logger.warn('LOYALTY', 'tab-loyalty not found in DOM');
         return;
     }
-    container.innerHTML = `<div class="mob-table-empty" style="padding:30px;">Loading loyalty program…</div>`;
+    ensureStyles();
+    container.innerHTML = `<div class="lyd"><p class="lyd-quiet" style="padding:30px 0">Loading your loyalty program…</p></div>`;
     try {
         const server = await readServerConfig();
         _config = cloneConfig(server);
@@ -874,7 +639,15 @@ export async function loadLoyalty() {
         _config = cloneConfig(null);
         _server = null;
     }
+    _draft = null;
+    _runToken++;
+    _outState = 'idle';
+    _outstanding = null;
+    _names = {};
+    _phones = [];
+    _statsState = 'idle';
+    bindEvents(container);
     renderAll();
-    attachFormListeners();
-    refreshKpis();
+    refreshStats();
+    window.__adminLogger?.info('LOYALTY', 'Tab mounted', { outlet: Outlet.current, configured: _server != null });
 }

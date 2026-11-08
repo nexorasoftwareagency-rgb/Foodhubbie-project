@@ -998,6 +998,9 @@ function buildLoyalty({ rnd, money, fx, orders, byPhone, rankings, ordersByPhone
             registeredAt: NOW - (60 + Math.floor(rnd() * 60)) * DAY,
             promotionalConsent: true,
             loyalty: {
+                phone,
+                outlet: OID,
+                business: BID,
                 lifetimePoints: agg.lifetimePoints,
                 points: agg.lifetimePoints,
                 tier: tierFor(agg.lifetimePoints),

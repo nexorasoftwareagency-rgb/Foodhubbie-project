@@ -32,6 +32,9 @@ jobs:
       - name: FCM dead-token prune guard (token-scoped codes only)
         run: node tests/fcm-dead-token-codes.check.cjs
 
+      - name: Loyalty dashboard guard (view math, a11y, config shape)
+        run: node tests/loyalty-dashboard.check.mjs
+
       - name: Server branch invariant (server is an ancestor of main)
         run: |
           git fetch --no-tags origin \

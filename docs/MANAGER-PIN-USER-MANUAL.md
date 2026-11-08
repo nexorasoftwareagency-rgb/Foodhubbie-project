@@ -708,5 +708,70 @@ All budget amounts in the system are stored and displayed in **Rupees (₹)**, n
 
 ---
 
+## 💳 Loyalty Module — User Manual
+
+**Location:** Admin dashboard → **Loyalty** tab (visible when `Settings → Features → Loyalty` is enabled).
+
+The Loyalty module configures your restaurant's points program: how customers earn points, what they can redeem them for, each member's balance, and manual point adjustments. Customers earn on paid orders automatically; nothing is written by this module except saved rules and manual adjustments.
+
+### Where things live (RTDB, no new paths)
+
+| Path | Purpose |
+|------|---------|
+| `loyalty/config` | Saved program settings (earn rate, redeem value, tiers, rewards, expiry) |
+| `loyalty/rankings` | Every member's lifetime points, tier, total spent, order count (read-only leaderboard) |
+| `customers/{phone}/loyalty` | That member's spendable `points`, tier, last adjustment |
+| `customers/{phone}/rewards` | That member's active/redeemed reward codes |
+| `loyalty/adjustments` | Audit log of manual +/- point changes |
+
+### Overview tab
+
+- **Members earning points** — count of ranked members.
+- **Points handed out** — total lifetime points across members.
+- **Points outstanding** — sum of members' *spendable* `points` (not lifetime), worth `₹` at the saved `redeemValuePaisePerPoint`. Press **Update** to count in-browser (one small read per member, never writes). Partial failures are labelled "may be low."
+- **Tier split** — bronze / silver / gold by lifetime points.
+- **Top members** — ranked by points earned over time, with name (`app/name` → WhatsApp `name` → phone) and spend. Click a member to open their sheet.
+- **Recent manual changes** — last adjustments from `loyalty/adjustments`.
+
+### Members tab
+
+- Search a customer by phone (or open from the leaderboard).
+- Shows spendable balance in points and rupees, progress to next tier, rank, lifetime points, orders, total spent, and recent orders/rewards used.
+- **Add or remove points:** enter a whole-number delta + reason (≥ 3 chars), confirm. Writes the new balance via a transaction and an audit row under `loyalty/adjustments`. Tier and lifetime points are untouched by manual changes.
+
+### Rewards tab
+
+- Lists configured rewards with cost in points and rupees (cheapest reward shown in the Rules health check).
+- Add / edit / delete rewards. Each has an id, label, cost (points), type (`item` or `discount`).
+
+### Rules tab
+
+Configures the program (saved to `loyalty/config`):
+
+- **Earn rate** — rupees spent to earn 1 point (default 20 → 1 pt).
+- **Redeem value** — ₹ per point at checkout (default ₹1).
+- **Min spend after redemption** — floor so points can't pay a whole bill (default ₹199).
+- **Max redeem % of order** — cap on how much of a bill points can cover (0 = no cap).
+- **Expiry days** — points unused for N days expire (0 = never; blank = error).
+- **Earning switch** — header toggle to pause/resume earning on new orders.
+- **Dine-in earning / Clawback** — toggle earn on dine-in bills and reverse points on cancel/void.
+- **Tiers** — bronze (0), silver, gold mins; gold min must exceed silver min; higher tiers earn points faster (multiplier).
+- **Live example bill** — shows what Bronze/Silver/Gold earn on a bill, using the real `shared/loyalty-math.js`, so it always matches what the bot awards. Unsaved changes are flagged; a failed save never mutates on-screen config.
+
+### Quick picks
+
+1% / 2% / 4% back chips set the earn rate instantly and update the example bill and unsaved state.
+
+### Behaviour & limits to know
+
+- Gold min must exceed silver min; blank expiry is an error (0 = never).
+- A failed save does **not** mutate in-memory config — draft survives tab switches.
+- Rewards edit/add/delete only adopt the new list after the write succeeds.
+- Points outstanding sums *spendable* points only — already-expired points still count until the bot sweeps them.
+- Browser tests run against an in-memory Firebase stub (not the live database); the UI is Chromium-tested.
+- Each "Update" on Points outstanding costs one small read per ranked member (8 at a time, live progress).
+
+---
+
 *End of Manual — Last updated: 2026-09-27 | Version 5.3.6*
 
