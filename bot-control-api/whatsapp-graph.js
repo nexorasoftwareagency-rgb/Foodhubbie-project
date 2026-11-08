@@ -127,10 +127,20 @@ async function subscribeApps(wabaId) {
   return graphOk(res, 'Subscribe WABA').then((r) => r.json());
 }
 
-/** List message templates on the WABA. */
+/** List message templates on the WABA.
+ *  Contract: `status` and `category` are returned LOWERCASE. Graph sends them
+ *  uppercase ("APPROVED"/"MARKETING") and callers compare lowercase — the
+ *  Admin promo-shell picker filtered `status === 'approved'`, never matched,
+ *  and silently fell back to its hardcoded options (found 2026-11-08).
+ *  `components` is included so a caller can count body variables. */
 async function listTemplates(wabaId) {
-  const res = await gql(`${wabaId}/message_templates?fields=name,status,category,language`);
-  return graphOk(res, 'List templates').then((r) => r.json());
+  const res = await gql(`${wabaId}/message_templates?fields=name,status,category,language,components`);
+  const json = await graphOk(res, 'List templates').then((r) => r.json());
+  const lower = (v) => String(v || '').toLowerCase();
+  return {
+    ...json,
+    data: (json.data || []).map((t) => ({ ...t, status: lower(t.status), category: lower(t.category) })),
+  };
 }
 
 /** Create a message template on the WABA. Sample values for each variable

@@ -430,17 +430,28 @@ export async function loadApprovedWaTemplates(bid, oid) {
     }
     if (!res.ok) throw new Error(`Meta API failed ${res.status}`);
     const { wabaId, templates } = await res.json();
-    // Filter to only approved templates (status: 'approved')
-    const approved = (templates || []).filter(t => t.status === 'approved');
+    // A promotional campaign must use a MARKETING template (Meta classifies and
+    // bills by category) with at most ONE body variable — the bot fills {{1}}
+    // with the offer text, so a 2-variable shell would fail at send. The Bot
+    // Control API returns status/category lowercase; compare case-insensitively
+    // anyway so a stale server can never silently empty this list again.
+    const bodyVarCount = (t) => {
+      const body = (t.components || []).find((c) => String(c.type).toUpperCase() === 'BODY');
+      return new Set(String(body?.text || '').match(/\{\{\d+\}\}/g) || []).size;
+    };
+    const approved = (templates || []).filter((t) =>
+      String(t.status).toLowerCase() === 'approved'
+      && String(t.category).toLowerCase() === 'marketing'
+      && bodyVarCount(t) <= 1);
     if (approved.length === 0) {
-      showToast('No approved WhatsApp templates on the outlet WABA — using fallback templates', 'info');
+      showToast('No approved marketing templates on the outlet WABA — using fallback templates', 'info');
       return;
     }
     // Add each approved template as an <option> to the select
     approved.forEach((t) => {
       const opt = document.createElement('option');
       opt.value = t.name;
-      opt.textContent = WA_TEMPLATE_LABELS[t.name] || `${t.name} (${t.category})`;
+      opt.textContent = WA_TEMPLATE_LABELS[t.name] || `${t.name} (${String(t.category).toUpperCase()})`;
       select.appendChild(opt);
     });
     // Select the current value if still present in approved list
