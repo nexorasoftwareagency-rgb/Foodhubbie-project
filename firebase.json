@@ -32,7 +32,8 @@
       "public": "Admin/dist",
       "predeploy": ["node tools/stamp-version.cjs admin"],
       "domains": [
-        "admin.foodhubbie.in"
+        "admin.foodhubbie.in",
+        "app.foodhubbie.in"
       ],
       "ignore": [
         "firebase.json",
@@ -475,7 +476,6 @@
       "public": "website",
       "predeploy": ["node tools/stamp-version.cjs website"],
       "domains": [
-        "app.foodhubbie.in",
         "foodhubbie.in"
       ],
       "cleanUrls": true,
