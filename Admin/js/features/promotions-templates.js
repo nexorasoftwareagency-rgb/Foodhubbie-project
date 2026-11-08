@@ -387,27 +387,18 @@ const WA_TEMPLATE_LABELS = {
   promo_cta_newitem: '🆕 New Item — Order Now button',
 };
 
-/** Load approved WhatsApp templates from Meta WABA, populate the promoWaTemplate select. */
+/** Load approved WhatsApp templates from Meta's WABA and populate the
+ *  promoWaTemplate select. ONLY templates Meta has APPROVED for this outlet are
+ *  offered: an unapproved (or absent) name can never be delivered, so it must
+ *  never be selectable. The hardcoded <option>s in index.html are only the
+ *  pre-fetch / API-unreachable fallback and are replaced the moment Meta
+ *  answers. */
 export async function loadApprovedWaTemplates(bid, oid) {
   const select = document.getElementById('promoWaTemplate');
   if (!select) return;
 
-  // Preserve the current selection if it exists (fallback to value if empty)
+  // Preserve the current selection across the rebuild.
   const current = select.value;
-
-  // Clear existing options except the first fallback (Special Offer — English if it's the first)
-  const optionsToKeep = [];
-  for (let i = 0; i < select.options.length; i++) {
-    if (i === 0 && select.options[i].value === 'proactive_promo') {
-      optionsToKeep.push(select.options[i]);
-    } else {
-      select.remove(i);
-      i--;
-    }
-  }
-  // Rebuild with fallback
-  select.innerHTML = '';
-  select.appendChild(optionsToKeep[0]);
 
   try {
     const token = await _getAdminAuthToken();
@@ -443,26 +434,34 @@ export async function loadApprovedWaTemplates(bid, oid) {
       String(t.status).toLowerCase() === 'approved'
       && String(t.category).toLowerCase() === 'marketing'
       && bodyVarCount(t) <= 1);
+    // Replace the seed list outright — nothing unapproved may stay selectable.
+    select.innerHTML = '';
     if (approved.length === 0) {
-      showToast('No approved marketing templates on the outlet WABA — using fallback templates', 'info');
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No approved marketing template on this WABA';
+      opt.disabled = true;
+      select.appendChild(opt);
+      showToast('No approved marketing template on this outlet WABA — campaigns fall back to plain text', 'warning');
       return;
     }
-    // Add each approved template as an <option> to the select
+    // Stable order: the generic English shell first (the sane default for a new
+    // campaign), then alphabetical.
+    approved.sort((a, b) => (a.name === 'proactive_promo' ? -1 : b.name === 'proactive_promo' ? 1 : a.name.localeCompare(b.name)));
     approved.forEach((t) => {
-      // The fallback option kept above may already be one of the approved set.
-      if (select.querySelector(`option[value="${t.name}"]`)) return;
       const opt = document.createElement('option');
       opt.value = t.name;
       opt.textContent = WA_TEMPLATE_LABELS[t.name] || `${t.name} (${String(t.category).toUpperCase()})`;
       select.appendChild(opt);
     });
-    // Select the current value if still present in approved list
-    if (current && approved.some(t => t.name === current)) select.value = current;
-    else select.value = 'proactive_promo'; // default
+    // Keep the previous choice only if Meta still approves it; never fall back
+    // to a hardcoded name that may not exist on this WABA.
+    select.value = (current && approved.some((t) => t.name === current)) ? current : approved[0].name;
     showToast(`Loaded ${approved.length} approved WhatsApp templates`, 'success');
   } catch (err) {
+    // The hardcoded seed list stays as the offline fallback — but say so.
     console.error('Failed to load approved WhatsApp templates:', err);
-    showToast('Could not load approved WhatsApp templates — using fallback', 'warning');
+    showToast('Could not load approved templates from Meta — showing default shells', 'warning');
   }
 }
 
