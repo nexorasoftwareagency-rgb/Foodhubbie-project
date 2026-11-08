@@ -259,6 +259,25 @@ test('loyalty redemption: only an earned, unspent balance can pay', () => {
     assert.strictEqual(redeem.canAfford(500, 0, NaN), false);
 });
 
+// OPT-OUT BUTTON regression: the promo_cta_* templates carry an "Unsubscribe"
+// quick reply, but a button tap arrives as buttonsResponseMessage /
+// templateButtonReplyMessage — no conversation text. If the inbound text
+// extractor ignores those, the tap yields '' and the opt-out handler is
+// skipped, so the customer stays subscribed to promos they asked to stop.
+test('inbound text extractor understands quick-reply button taps', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
+    const start = src.indexOf('const buttonReply =');
+    assert.ok(start > -1, 'buttonReply fallback must exist');
+    const block = src.slice(start, src.indexOf('const text =', start));
+    for (const key of ['buttonsResponseMessage', 'templateButtonReplyMessage', 'selectedDisplayText']) {
+        assert.ok(block.includes(key), `extractor must read ${key}`);
+    }
+    // The opt-out regex must keep matching the button label we ship.
+    const optOut = src.slice(src.indexOf('PROMOTIONAL OPT-OUT'), src.indexOf('if (/^start$/i'));
+    assert.ok(/\/\^\(stop\|unsubscribe/.test(optOut), 'opt-out regex still matches "unsubscribe"');
+});
+
 // Phase 2 loyalty math (shared/loyalty-math.js) — the same formulas the bot
 // runs for earn/tender/clawback, exercised directly.
 test('loyalty-math: earn base, two-stage floor, tender caps, bill split', async () => {

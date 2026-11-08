@@ -3103,7 +3103,21 @@ async function sendDailyReportSafely(dateOverride = null) {
             // Baileys 6.x supports @lid natively — keep the JID as-is from WhatsApp
             // for consistent session keys and correct routing via relayMessage's isLid path.
             // Prevents session fragmentation between @lid and @s.whatsapp.net formats.
-            const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || "").trim();
+            // Quick-reply / list taps carry no conversation text — Baileys
+            // surfaces them as buttonsResponseMessage / templateButtonReplyMessage.
+            // Without this fallback the "Unsubscribe" button on the promo_cta_*
+            // templates was a no-op: empty text skipped the opt-out handler
+            // below and the customer stayed subscribed (found 2026-11-08).
+            const buttonReply = (
+                msg.message.buttonsResponseMessage?.selectedDisplayText
+                || msg.message.buttonsResponseMessage?.selectedButtonId
+                || msg.message.templateButtonReplyMessage?.selectedDisplayText
+                || msg.message.templateButtonReplyMessage?.selectedId
+                || msg.message.listResponseMessage?.title
+                || msg.message.listResponseMessage?.singleSelectReply?.selectedRowId
+                || ""
+            );
+            const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || buttonReply || "").trim();
             const pushName = msg.pushName || "";
             console.log(`[IN] ${maskJid(sender)}: "${text.slice(0, 80)}"`);
 
