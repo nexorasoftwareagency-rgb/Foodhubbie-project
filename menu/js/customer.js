@@ -2083,7 +2083,10 @@ function renderPromoCards(store) {
 /* ---------- Active offers (coupon codes customers can use) ---------- */
 function renderActiveOffers() {
     const grid = document.getElementById('activeOffersGrid');
-    const empty = document.getElementById('promoCodesEmpty');
+    // Static markup calls this #promoCardsEmpty; #promoCodesEmpty was only ever
+    // emitted by the (inert) renderPromoCards(), so the empty state used to
+    // stay visible underneath a grid that had offers in it.
+    const empty = document.getElementById('promoCardsEmpty');
     if (!grid) return;
 
     // Read currently applied code from prefs
@@ -2103,10 +2106,10 @@ function renderActiveOffers() {
 
     if (offers.length === 0) {
         grid.innerHTML = '';
-        document.getElementById('promoCodesEmpty')?.classList.remove('hidden');
+        empty?.classList.remove('hidden');
         return;
     }
-    document.getElementById('promoCodesEmpty')?.classList.add('hidden');
+    empty?.classList.add('hidden');
 
     const cards = offers.map(o => {
         const isApplied = o.code === appliedCode;
@@ -2130,22 +2133,18 @@ function renderActiveOffers() {
             ? `<span class="promo-card-urgency">${o.daysLeft} days left</span>`
             : '';
 
-        // Value in rupees: points * redeemValuePaisePerPoint / 100
+        // Value in rupees: points * redeemValuePaisePerPoint / 100. Sample offers
+        // carry no cost, and a printed "₹0.00" reads as a broken price — so the
+        // amount renders only when there really is one.
         const redeemValuePaise = redeemValuePaisePerPoint();
-        const valueRs = o.cost ? (o.cost * redeemValuePaise / 100).toFixed(2) : '0.00';
-
-        if (isApplied) {
-            actionsHtml = `<button type="button" class="promo-btn-remove" data-code="${codeEsc}" aria-label="Remove ${codeEsc}">Remove</button>`;
-        } else {
-            actionsHtml = `<button type="button" class="promo-btn-copy" data-code="${codeEsc}">Copy Code</button><button type="button" class="promo-btn-apply" data-code="${codeEsc}">Apply</button>`;
-        }
+        const valueRs = o.cost ? (o.cost * redeemValuePaise / 100).toFixed(2) : '';
 
         return `<div class="promo-card ${isApplied ? 'promo-card--applied' : ''}" role="button" tabindex="0" aria-label="${titleEsc}, ${descEsc}">
             <span class="promo-card-icon">${o.emoji || '🎁'}</span>
             <div class="promo-card-body">
                 <div class="promo-card-top">${badgeHtml}</div>
                 <div class="promo-card-title">${titleEsc}</div>
-                <div class="promo-card-sub">${subtitleEsc} <span class="promo-card-value">₹${valueRs}</span></div>
+                <div class="promo-card-sub">${subtitleEsc}${valueRs ? ` <span class="promo-card-value">₹${valueRs}</span>` : ''}</div>
                 <div class="promo-card-terms">${descEsc} · ${validEsc}${urgencyHtml}</div>
             </div>
             <div class="promo-card-actions">${actionsHtml}</div>
@@ -2157,13 +2156,19 @@ function renderActiveOffers() {
     // Render redeemed reward history below active offers
     renderRewardsHistory();
 
-    grid.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
-        const card = e.target.closest('.promo-card');
-        if (!card) return;
-        const applyBtn = card.querySelector('.promo-btn-apply');
-        if (applyBtn) applyBtn.click();
-    });
+    // #activeOffersGrid survives between renders, so this must bind once —
+    // otherwise every re-open stacks another handler and Enter applies the code
+    // once per visit.
+    if (!grid.dataset.kbdBound) {
+        grid.dataset.kbdBound = '1';
+        grid.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            const card = e.target.closest('.promo-card');
+            if (!card) return;
+            const applyBtn = card.querySelector('.promo-btn-apply');
+            if (applyBtn) applyBtn.click();
+        });
+    }
 
     grid.querySelectorAll('.promo-btn-copy').forEach(btn => {
         btn.addEventListener('click', async (e) => {

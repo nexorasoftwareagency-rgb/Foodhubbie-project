@@ -829,6 +829,8 @@ export function renderPromotionsLinks(store) {
     const links = [
         { key: 'google', title: 'Rate us on Google', sub: 'Leave a review — it helps a lot!', url: s.googleReviewLink, cls: 'promo-link-google',
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5L18 21l-6-4.4L6 21l2.2-7.1L2 9.4h7.6z"/></svg>' },
+        { key: 'feedback', title: 'Share your feedback', sub: 'Tell us how we did', url: s.reviewUrl, cls: 'promo-link-feedback',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>' },
         { key: 'instagram', title: 'Follow on Instagram', sub: 'See our latest dishes & offers', url: buildInstagramUrl(s.instagram), cls: 'promo-link-instagram',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>' },
         { key: 'facebook', title: 'Like us on Facebook', sub: 'Stay updated with news & events', url: s.facebook, cls: 'promo-link-facebook',
@@ -838,18 +840,19 @@ export function renderPromotionsLinks(store) {
     ].filter(l => l.url);
 
     if (links.length === 0) {
-        wrap.innerHTML = `<div class="promotions-empty">No promotion links have been set up yet. Check back soon!</div>`;
+        wrap.innerHTML = `<div class="promotions-empty">The restaurant hasn't added any links yet. Check back soon!</div>`;
         return;
     }
 
     wrap.innerHTML = links.map(l => `
-        <a class="promo-link-card" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">
-            <span class="promo-link-icon ${l.cls}">${l.icon}</span>
+        <a class="promo-link-card" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"
+           aria-label="${esc(l.title)} — opens in a new tab">
+            <span class="promo-link-icon ${l.cls}" aria-hidden="true">${l.icon}</span>
             <span class="promo-link-body">
                 <span class="promo-link-title">${esc(l.title)}</span>
                 <span class="promo-link-sub">${esc(l.sub)}</span>
             </span>
-            <svg class="promo-link-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            <svg class="promo-link-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
         </a>`).join('');
 }
 
