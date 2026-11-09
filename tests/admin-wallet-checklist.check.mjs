@@ -5,7 +5,7 @@ import fs from 'fs'; import os from 'os'; import path from 'path'; import { spaw
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fh-wallet-'));
 const put = (rel, txt) => { const f = path.join(tmp, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, txt); };
 const copy = (rel, to = rel) => put(to, fs.readFileSync(rel, 'utf8'));
-copy('Admin/js/features/costs.js'); copy('Admin/js/features/setup-checklist.js'); copy('Admin/js/features/wallet-alert.js'); copy('Admin/js/support-wa.js'); copy('shared/cost-math.js', 'Admin/shared/cost-math.js'); copy('shared/cost-math.js', 'shared/cost-math.js');
+copy('Admin/js/features/costs.js'); copy('Admin/js/features/setup-checklist.js'); copy('Admin/js/features/wallet-alert.js'); copy('Admin/js/support-wa.js'); copy('shared/cost-math.js', 'Admin/shared/cost-math.js'); copy('shared/cost-math.js', 'shared/cost-math.js'); copy('shared/meta-cost-math.js', 'shared/meta-cost-math.js'); copy('shared/meta-cost-math.js', 'Admin/shared/meta-cost-math.js');
 put('Admin/js/state.js', 'export const state = { locked: false };');
 put('Admin/js/ui.js', "import { supportWaText } from './support-wa.js'; export const supportWa = (t) => 'https://wa.me/919724649971?text=' + encodeURIComponent(t); export const supportWaFor = (k, o = {}) => supportWa(supportWaText(k, { bid: 'b1', oid: 'o1', email: 'owner@example.com', ...o })); export const canAccessTab = () => true; export const switchTab = async (t) => { (globalThis.__TABS ||= []).push(t); };");
 put('Admin/js/firebase.js', `export const Outlet = { ref: (p) => p, current: 'o1' };

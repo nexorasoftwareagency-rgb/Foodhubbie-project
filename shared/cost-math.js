@@ -29,13 +29,35 @@ export const LOW_BALANCE_RATIO = 0.25;
 // FINAL rates (owner, 2026-11-02): WhatsApp-based 3% · Customer App 2% · QR/POS 1% · unknown 3%.
 export const PERCENT_RATES = { QR: 0.01, POS: 0.01, app: 0.02, webview_delivery: 0.03, WA: 0.03, other: 0.03, default: 0.03 };
 export const APP_PLAN_NAME = 'Foodhubbie-App Orders';
-// Meta-cost planning slots (S2 / S1 track — not a billing behavior).
-// Meta charges per Message (utility / marketing / auth / service) and has a
-// 1,000 / month / phone-number free tier for service messages (reset monthly,
-// does not roll over; per WABA — NOT per business). Per BILLING-MODEL.md §4.
-// These fields are placeholders for the cost-ledger to track — they do NOT
-// change restaurant-facing pricing (percentage plan stays). See docs/BILLING-MODEL.md.
+// Meta cost tracking — internal / platform side only. Restaurants never see
+// Meta cost line items; metaCostPaise and grossMarginPaise are returned by
+// computeWallet() for the owner's gross-margin view. Rates from the Meta IN
+// rate card (verified 2026-11-01, GST included in Meta's INR list prices).
+export const META_RATE_TABLE_DEFAULT = { utility: 115, marketing: 86, authentication: 115, service: 115 }; // paise per delivered message
+export const META_SERVICE_FREE_TIER_PER_MONTH = 1000; // free service msgs / month / number, no rollover
 export const META_COST_PLANNING = { tierCandidate: 'TechProvider', serviceFreeTierPerMonth: 1000, serviceFreeResetsMonthly: true, metaCurrency: 'INR' };
+
+// Meta cost helpers live in shared/meta-cost-math.js (pure, no imports).
+import { classifySend, estimateCostPaise, buildMetaCostNode } from './meta-cost-math.js';
+
+/**
+ * Extract the latest Meta cost (paise) from a billing node's metaCost sub-node.
+ * Accepts either a single node { estimatedCostPaise, ... } or a per-month map
+ * { '2026-11': { estimatedCostPaise, reconciledAt } }. Returns 0 when absent.
+ * Internal only — never rendered to the restaurant.
+ */
+export function metaCostFromBilling(billing = {}) {
+    const mc = billing && billing.metaCost;
+    if (!mc) return 0;
+    if (mc.estimatedCostPaise !== undefined) return _n(mc.estimatedCostPaise);
+    let best = 0, bestTs = 0;
+    for (const [, node] of Object.entries(mc)) {
+        const n = node || {};
+        const ts = n.reconciledAt ? new Date(n.reconciledAt).getTime() : 0;
+        if (ts >= bestTs) { bestTs = ts; best = _n(n.estimatedCostPaise); }
+    }
+    return best;
+}
 export function normalizeMode(mode) {
     if (mode === 'per_order' || mode === 'commission_1pct') return mode;
     return 'percentage';
@@ -132,9 +154,14 @@ export function promoSendUsage({ billing, campaigns } = {}) {
  * Prepaid wallet view of the existing billing ledger.
  * balance = paid - (order fees + promo sends + manual charges). Same numbers as Supreme's "due", sign flipped.
  * `billing` = outlet.billing node, `orders` = all outlet orders, `campaigns` = bot.promotions.campaigns,
+ * `metaCost` = billing.metaCost node (paise; internal, never customer-facing),
  * `hasWhatsApp` = the outlet has a WhatsApp bot (raises the first top-up minimum to ₹1,500).
+ *
+ * Meta cost is tracked separately from the wallet: balance stays paid - used - charges
+ * (what the restaurant sees), while metaCostPaise and grossMarginPaise are internal
+ * platform figures for gross-margin review. Restaurants never see Meta cost line items.
  */
-export function computeWallet({ billing, orders, campaigns, hasWhatsApp = false } = {}) {
+export function computeWallet({ billing, orders, campaigns, metaCost, hasWhatsApp = false } = {}) {
     const b = billing || {};
     const rates = { ...DEFAULT_RATES, ...(b.rates || {}) };
     const mode = normalizeMode(b.mode);
@@ -145,10 +172,16 @@ export function computeWallet({ billing, orders, campaigns, hasWhatsApp = false 
     const charges = _r2(sum(b.charges));
     const used = _r2(idx.total + promo.cost);
     const minTopUp = minTopUpFor(hasWhatsApp);
+    // Meta cost: internal only, never subtracted from the customer-facing wallet balance.
+    const metaCostPaise = metaCostFromBilling(metaCost || b);
+    const metaCostRs = _r2(metaCostPaise / 100);
+    const grossMarginPaise = _r2(Math.round(idx.total * 100) - metaCostPaise);
     return {
         paid, charges, used, balance: _r2(paid - used - charges), topUpDone: paid >= minTopUp, minTopUp,
         level: walletLevel({ paid, used, charges }),
         promoSends: promo.sends, promoCovered: promo.covered, promoBilled: promo.billed,
+        // Internal Meta cost tracking (platform-side only — never customer-facing)
+        metaCostPaise, metaCostRs, grossMarginPaise,
     };
 }
 
@@ -338,5 +371,44 @@ function selfCheck(assert) {
     assert.equal(walletGate({ paid: 1500, balance: 149 }), 'low', 'below 10% of topped-up (150) → low');
     assert.equal(walletGate({ paid: 200, balance: 20 }), 'low', '10% of small top-up yields the flat ₹100 floor');
     assert.equal(walletGate({ paid: 200, balance: 100 }), 'low', 'at exactly the flat ₹100 → low');
+
+    // --- Meta cost tracking (internal, never customer-facing) ---
+    assert.equal(metaCostFromBilling({}), 0, 'no metaCost node → 0');
+    assert.equal(metaCostFromBilling({ billing: {} }), 0, 'no metaCost → 0');
+    assert.equal(metaCostFromBilling({ metaCost: { estimatedCostPaise: 575 } }), 575, 'single node reads estimatedCostPaise');
+    assert.equal(metaCostFromBilling({ metaCost: { estimatedCostPaise: 900 } }), 900, 'single node reads estimatedCostPaise (alt value)');
+    assert.equal(metaCostFromBilling({
+        metaCost: {
+            '2026-10': { estimatedCostPaise: 200, reconciledAt: '2026-10-31T00:00:00Z' },
+            '2026-11': { estimatedCostPaise: 575, reconciledAt: '2026-11-30T00:00:00Z' },
+        },
+    }), 575, 'per-month map picks latest month by reconciledAt');
+    assert.equal(metaCostFromBilling({
+        metaCost: {
+            '2026-11': { estimatedCostPaise: 575, reconciledAt: '2026-11-30T00:00:00Z' },
+            '2026-10': { estimatedCostPaise: 2000, reconciledAt: '2026-10-31T00:00:00Z' },
+        },
+    }), 575, 'per-month map: later reconciledAt wins even if older month had more cost');
+    // computeWallet returns metaCostPaise + grossMarginPaise without touching balance
+    const wm = computeWallet({
+        billing: { payments: { a: { amount: 2000 } }, metaCost: { estimatedCostPaise: 575 } },
+        orders: { x: { total: 1000, source: 'WA', status: 'Delivered' } }, // 3% = ₹30 = 3000 paise
+    });
+    assert.equal(wm.balance, 1970, 'wallet balance: paid 2000 - used 30 = ₹1970');
+    assert.equal(wm.metaCostPaise, 575, 'metaCostPaise exposed in paise');
+    assert.equal(wm.metaCostRs, 5.75, 'metaCostRs exposed in rupees');
+    assert.equal(wm.grossMarginPaise, 3000 - 575, 'grossMarginPaise = order revenue paise − meta cost paise');
+    // Meta cost must not reduce the customer-facing wallet balance
+    const wm2 = computeWallet({
+        billing: { payments: { a: { amount: 1000 } }, metaCost: { estimatedCostPaise: 50000 } },
+        orders: { x: { total: 1000, source: 'WA', status: 'Delivered' } },
+    });
+    assert.equal(wm2.balance, 970, 'wallet balance unchanged by Meta cost (₹1000 − ₹30)');
+    assert.equal(wm2.metaCostPaise, 50000, 'large Meta cost still tracked separately');
+    // classifySend / estimateCostPaise pass-through from meta-cost-math
+    assert.equal(classifySend({ templateCategory: 'marketing' }), 'marketing');
+    assert.equal(classifySend({ windowOpen: true }), 'free');
+    assert.equal(estimateCostPaise([{ category: 'utility' }]), 115, 'one utility message = 115 paise');
+    assert.equal(estimateCostPaise([{ category: 'utility' }, { category: 'marketing' }]), 201, 'utility + marketing = 115 + 86');
     console.log('cost-math OK');
 }
