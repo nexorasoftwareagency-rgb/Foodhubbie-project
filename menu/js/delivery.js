@@ -884,7 +884,6 @@ async function renderPromotionsScreen() {
         const snap = await get(outletRef('settings/Store'));
         _storeSettingsCache = snap.val() || {};
     }
-    UI.renderPromotionsLinks(_storeSettingsCache);
     await renderCustomerPromotions(_storeSettingsCache, 'delivery');
 }
 

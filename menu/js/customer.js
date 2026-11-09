@@ -2021,6 +2021,9 @@ export function openAccountTab() { setPromoTab('account'); }
 export async function renderCustomerPromotions(store, mode = 'dine-in') {
     _mode = mode;
     bindPromoTabs();
+    // Social / URL cards. Owned here (not by each page entry) so no caller can
+    // forget it: app.js and delivery.js both funnel through this function.
+    UI.renderPromotionsLinks(store);
     renderPromoCards(store);
     renderActiveOffers();
     renderPwaCards();
