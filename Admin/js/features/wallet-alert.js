@@ -9,7 +9,7 @@
  */
 import { Outlet, billingRef, get } from '../firebase.js';
 import { state } from '../state.js';
-import { canAccessTab, SUPPORT_WA } from '../ui.js';
+import { canAccessTab, supportWaFor } from '../ui.js';
 import { computeWallet, LOW_BALANCE_RATIO } from '../../shared/cost-math.js';
 
 const PANEL_ID = 'walletAlert';
@@ -59,7 +59,8 @@ export async function loadWalletAlert() {
                 : `${inr(w.balance)} left, which is ${pct}% or less of what you have topped up. Top up soon.`}</div></div>
             <div style="display:flex;gap:8px"><button type="button" class="btn-primary btn-sm" data-wallet-alert-contact>Top up via support</button>
             ${canAccessTab('costs') ? '<button type="button" class="btn-secondary btn-sm" data-action="switchTab" data-tab="costs">View wallet</button>' : ''}</div>`;
-        el.querySelector('[data-wallet-alert-contact]')?.addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+        el.querySelector('[data-wallet-alert-contact]')?.addEventListener('click', () => window.open(
+            supportWaFor('topup', { amount: inr(w.minTopUp) }), '_blank', 'noopener'));
     } catch (e) {
         console.warn('[WalletAlert] skipped:', e && e.message);
     }

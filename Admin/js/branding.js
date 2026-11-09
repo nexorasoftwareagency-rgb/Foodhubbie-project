@@ -68,9 +68,14 @@ async function refreshBrand() {
         const { Outlet, get } = await import('./firebase.js');
         const snap = await get(Outlet.ref('settings/Store'));
         const storeName = snap.exists() && snap.val().storeName ? snap.val().storeName : 'Our Restaurant';
+        // Cached for support hand-offs (the prefilled text names the restaurant).
+        // A support click must build its text synchronously: window.open after an
+        // await would be popup-blocked.
+        state.storeName = snap.exists() && snap.val().storeName ? snap.val().storeName : '';
         if (badge) badge.innerText = storeName;
         if (mobBadge) mobBadge.innerText = storeName;
     } catch (_) {
+        state.storeName = '';
         if (badge) badge.innerText = 'Our Restaurant';
         if (mobBadge) mobBadge.innerText = 'Our Restaurant';
     }

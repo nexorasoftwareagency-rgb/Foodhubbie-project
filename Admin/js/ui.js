@@ -2,6 +2,8 @@ import { MIN_TOPUP } from '../../shared/cost-math.js';
 import { haptic } from './utils.js';
 import { showToast, showConfirm } from './ui-utils.js';
 import { state } from './state.js';
+import { BUSINESS_ID, Outlet } from './firebase.js';
+import { supportWaText } from './support-wa.js';
 import { toggleNotificationSheet, updateNotificationUI, updateNotificationSettingsUI } from './features/notifications.js';
 
 const _modCache = {};
@@ -497,7 +499,19 @@ export const toggleMobileCart = (state) => import('./features/pos.js').then(m =>
 const SUPPORT_NUMBER = '919724649971';
 // Build a prefilled support link so every hand-off says what the owner actually needs.
 export const supportWa = (text) => `https://wa.me/${SUPPORT_NUMBER}?text=${encodeURIComponent(text)}`;
-export const SUPPORT_WA = supportWa(`Hi FoodHubbie Team! I want to top up my wallet (minimum \u20B9${MIN_TOPUP}) and go live.`);
+// A hand-off must identify the tenant: Supreme Admin finds an outlet by its
+// business id + outlet id (that exact pair is the profile URL) and the admin
+// email says who is asking. A store name alone is ambiguous. Wording lives once
+// in support-wa.js; every "contact support" button goes through here.
+export function supportWaFor(kind = 'topup', opts = {}) {
+    return supportWa(supportWaText(kind, {
+        storeName: opts.storeName || state.storeName,
+        amount: opts.amount,
+        bid: BUSINESS_ID(),
+        oid: Outlet.current,
+        email: (state.adminData && state.adminData.email) || '',
+    }));
+}
 const LOCK_MSG = `Your restaurant is in <strong>setup mode</strong>. You can set up your menu, tables and settings now. To start taking orders, add a minimum wallet balance of <strong>\u20B9${MIN_TOPUP.toLocaleString('en-IN')}</strong>. Contact FoodHubbie support and we will add it once your payment is received.`;
 
 // Dismissible popup shown when a locked outlet tries something that needs go-live.
@@ -520,7 +534,7 @@ export function showLockedScreen() {
                 </div>
             </div>`;
         document.body.appendChild(el);
-        el.querySelector('#lockedContactBtn').addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+        el.querySelector('#lockedContactBtn').addEventListener('click', () => window.open(supportWaFor('topup'), '_blank', 'noopener'));
         const close = () => { el.style.display = 'none'; };
         el.querySelector('#lockedCloseBtn').addEventListener('click', close);
         el.addEventListener('click', (e) => { if (e.target === el) close(); });
@@ -541,7 +555,7 @@ export function enterSetupMode() {
         b.style.cssText = 'position:sticky;top:0;z-index:60;background:#fef3c7;color:#78350f;padding:8px 14px;font-size:13px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;';
         b.innerHTML = `<span>Setup mode: add a minimum wallet balance of \u20B9${MIN_TOPUP.toLocaleString('en-IN')} to start taking orders.</span><button type="button" class="btn-secondary btn-sm" id="lockedBannerBtn">Contact support</button>`;
         (document.querySelector('.main') || document.body).prepend(b);
-        b.querySelector('#lockedBannerBtn').addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+        b.querySelector('#lockedBannerBtn').addEventListener('click', () => window.open(supportWaFor('topup'), '_blank', 'noopener'));
     }
     if (state.currentActiveTab && !SETUP_TABS.includes(state.currentActiveTab)) {
         switchTab('dashboard', true);

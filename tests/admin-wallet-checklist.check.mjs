@@ -5,9 +5,9 @@ import fs from 'fs'; import os from 'os'; import path from 'path'; import { spaw
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fh-wallet-'));
 const put = (rel, txt) => { const f = path.join(tmp, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, txt); };
 const copy = (rel, to = rel) => put(to, fs.readFileSync(rel, 'utf8'));
-copy('Admin/js/features/costs.js'); copy('Admin/js/features/setup-checklist.js'); copy('Admin/js/features/wallet-alert.js'); copy('shared/cost-math.js', 'Admin/shared/cost-math.js');
+copy('Admin/js/features/costs.js'); copy('Admin/js/features/setup-checklist.js'); copy('Admin/js/features/wallet-alert.js'); copy('Admin/js/support-wa.js'); copy('shared/cost-math.js', 'Admin/shared/cost-math.js'); copy('shared/cost-math.js', 'shared/cost-math.js');
 put('Admin/js/state.js', 'export const state = { locked: false };');
-put('Admin/js/ui.js', "export const SUPPORT_WA = 'https://wa.me/919724649971?text=x'; export const supportWa = (t) => 'https://wa.me/919724649971?text=' + encodeURIComponent(t); export const canAccessTab = () => true; export const switchTab = async (t) => { (globalThis.__TABS ||= []).push(t); };");
+put('Admin/js/ui.js', "import { supportWaText } from './support-wa.js'; export const supportWa = (t) => 'https://wa.me/919724649971?text=' + encodeURIComponent(t); export const supportWaFor = (k, o = {}) => supportWa(supportWaText(k, { bid: 'b1', oid: 'o1', email: 'owner@example.com', ...o })); export const canAccessTab = () => true; export const switchTab = async (t) => { (globalThis.__TABS ||= []).push(t); };");
 put('Admin/js/firebase.js', `export const Outlet = { ref: (p) => p, current: 'o1' };
 export const billingRef = () => 'billing';
 export const limitToLast = () => null, query = (p) => p;
@@ -190,8 +190,19 @@ globalThis.window.open = (u) => { opened = u; };
 await run({ ...profile, ...menu });
 await click('topup');
 assert.ok(opened && opened.includes('wa.me/919724649971'), 'opens WhatsApp support');
-assert.ok(decodeURIComponent(opened).includes('top up my wallet'), 'prefilled message says what is needed');
+const topupText = decodeURIComponent(opened);
+assert.ok(topupText.includes('top up my wallet'), 'prefilled message says what is needed');
+assert.ok(topupText.includes('for A and go live'), 'prefilled message names the restaurant');
+assert.ok(topupText.includes('Business ID: b1') && topupText.includes('Outlet ID: o1') && topupText.includes('Admin email: owner@example.com'),
+  'hand-off identifies the tenant (business + outlet + admin email) so Supreme Admin can find it');
 assert.deepEqual(globalThis.__TABS, [], 'support steps do not switch tabs');
+opened = null;
+await click('whatsapp');
+const connectText = decodeURIComponent(opened || '');
+assert.ok(connectText.includes('connect WhatsApp ordering for A'), 'connect hand-off names the restaurant');
+assert.ok(connectText.includes('Business ID: b1') && connectText.includes('Outlet ID: o1') && connectText.includes('Admin email: owner@example.com'),
+  'connect hand-off identifies the tenant too');
+assert.deepEqual(globalThis.__TABS, [], 'connect hand-off does not switch tabs');
 await click('topup', true);
 assert.deepEqual(globalThis.__TABS, ['costs'], 'secondary link opens the wallet');
 console.log('PASS deep-link: top-up -> support hand-off + wallet secondary');
@@ -209,6 +220,12 @@ try {
   if (!read('SupremeAdmin/js/billing-shared.js').includes('promoSendUsage(')) throw new Error('Supreme does not apply the prepaid split');
   if (!read('bot/promotions.js').includes('campaigns/${campaignId}/isTest')) throw new Error('the bot does not stamp test campaigns');
   console.log('PASS promo self-test rule is shared by Admin, Supreme and the bot');
+  // --- source guards: every support hand-off carries the tenant identity ---
+  for (const f of ['Admin/js/ui.js', 'Admin/js/features/costs.js', 'Admin/js/features/wallet-alert.js', 'Admin/js/features/setup-checklist.js']) {
+    if (!read(f).includes('supportWaFor(')) throw new Error(f + ' bypasses the shared support hand-off');
+  }
+  if (read('Admin/js/ui.js').includes('SUPPORT_WA =')) throw new Error('a hard-coded support message is back');
+  console.log('PASS every support hand-off goes through supportWaFor (tenant ids + admin email)');
 } catch (e) { bad++; console.error('FAIL ' + e.message); }
 for (const f of ['wallet.mjs', 'checklist.mjs', 'alert.mjs']) {
   const r = spawnSync(process.execPath, [f], { cwd: tmp, encoding: 'utf8' });

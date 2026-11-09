@@ -15,7 +15,7 @@
  */
 import { state } from '../state.js';
 import { Outlet, billingRef, get, query, limitToLast } from '../firebase.js';
-import { canAccessTab, switchTab, supportWa } from '../ui.js';
+import { canAccessTab, switchTab, supportWaFor } from '../ui.js';
 import { computeWallet, MIN_TOPUP } from '../../shared/cost-math.js';
 
 const PANEL_ID = 'setupChecklist';
@@ -109,10 +109,9 @@ const canGo = (t) => t.done !== true && !(t.needsLive && state.locked) && !!t.ct
     && (!!t.cta.support || (!!t.cta.tab && canAccessTab(t.cta.tab)));
 
 function openSupport(kind, outletLabel) {
-    const text = kind === 'connect'
-        ? `Hi FoodHubbie Team! I want to connect WhatsApp ordering for ${outletLabel}.`
-        : `Hi FoodHubbie Team! I want to top up my wallet (minimum ${WALLET_AMOUNT}) for ${outletLabel} and go live.`;
-    window.open(supportWa(text), '_blank', 'noopener');
+    // The prefilled message carries the tenant ids + the admin email so Supreme
+    // Admin can open the exact outlet profile instead of guessing by name.
+    window.open(supportWaFor(kind, { storeName: outletLabel, amount: WALLET_AMOUNT }), '_blank', 'noopener');
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));

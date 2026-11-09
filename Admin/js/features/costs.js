@@ -17,7 +17,7 @@
  */
 import { Outlet, billingRef, get, onValue, onChildAdded, onChildChanged, query, orderByChild, startAt, endAt } from '../firebase.js';
 import { state } from '../state.js';
-import { SUPPORT_WA } from '../ui.js';
+import { supportWaFor } from '../ui.js';
 import { DEFAULT_RATES, PROMO_RATE, MIN_TOPUP, sourceOf, feeOf, computeCostIndex, computeWallet, normalizeMode, rateLabel, isBilledOrder, promoSendUsage } from '../../shared/cost-math.js';
 
 let _unsubs = [];
@@ -33,6 +33,7 @@ let _orderUnsubs = [];
 let _allOrders = null;       // all-time orders (one-time read) for the wallet balance; null = not loaded
 let _hasWhatsApp = null;     // outlet has a bot → first top-up minimum is ₹1,500; null = not known yet
 let _gate = null;            // published outlets/{oid}/walletGate: 'low' | 'closed' | '' | null
+let _walletMinTopUp = null;  // last computed minimum (₹1,000 / ₹1,500) for the support hand-off
 let _walletWired = false;
 
 function _wireSubtabs() {
@@ -294,6 +295,7 @@ function _renderWallet() {
     if (_allOrders === null || _billing === null) { _setText('walletStatus', 'Calculating\u2026'); }
     const w = computeWallet({ billing: _billing || {}, orders: _allOrders || {}, campaigns: _campaigns || {}, hasWhatsApp: _hasWhatsApp === true });
     _setText('walletMinLabel', _inr(w.minTopUp));
+    _walletMinTopUp = w.minTopUp;
     const el = document.getElementById('walletBalance');
     if (el) {
         el.textContent = (w.balance < 0 ? '\u2212' : '') + _inr(Math.abs(w.balance));
@@ -342,7 +344,8 @@ function _renderWallet() {
 function _wireWallet() {
     if (_walletWired) return;
     _walletWired = true;
-    document.getElementById('walletContactBtn')?.addEventListener('click', () => window.open(SUPPORT_WA, '_blank', 'noopener'));
+    document.getElementById('walletContactBtn')?.addEventListener('click', () => window.open(
+        supportWaFor('topup', { amount: _inr(_walletMinTopUp || MIN_TOPUP) }), '_blank', 'noopener'));
 }
 
 export function loadCosts() {

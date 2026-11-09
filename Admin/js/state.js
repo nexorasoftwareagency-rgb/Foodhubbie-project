@@ -6,6 +6,7 @@
 export const state = {
     adminData: null,
     currentOutlet: 'pizza',
+    storeName: '',           // settings/Store/storeName, cached by branding.js for support hand-offs
     categories: [],
     dishes: [],
     allWalkinDishes: [],
