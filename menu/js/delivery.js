@@ -1073,7 +1073,10 @@ async function dhBuildHamburgerMenu() {
         dhHamburgerBrand.textContent = brandSnap.val();
     }
 
-    const activeTab = state.currentActiveTab || '';
+    // `state` only exists on pages that load app.js — delivery.html doesn't, and
+    // an unguarded read threw (swallowed by the caller's .catch), leaving the
+    // drawer with zero items. Same guard as app.js.
+    const activeTab = (typeof state !== 'undefined' && state?.currentActiveTab) || '';
 
     const sections = [
         {
