@@ -2,18 +2,18 @@
   "database": {
     "rules": "database.rules.json"
   },
+  "functions": {
+    "code": "functions",
+    "predeploy": ["npm --prefix functions run build"],
+    "runtime": "nodejs24"
+  },
   "auth": {
     "authorizedDomains": [
       "localhost",
       "https://app.foodhubbie.in",
       "https://menu.foodhubbie.in",
       "https://control.foodhubbie.in",
-      "https://foodhubbie.in",
-      "https://foodhubbie-admins.web.app",
-      "https://foodhubbie-supremeadmin.web.app",
-      "https://foodhubbie-riderapp.web.app",
-      "https://foodhubbie-qrmenu.web.app",
-      "https://foodhubbie-web.web.app"
+      "https://foodhubbie.in"
     ],
     "providers": {
       "emailPassword": true,
@@ -21,7 +21,7 @@
         "oAuthBrandDisplayName": "FoodHubbie",
         "supportEmail": "foodhubbie10@gmail.com",
         "authorizedRedirectUris": [
-          "https://foodhubbie-supremeadmin.web.app/__/auth/handler"
+          "https://control.foodhubbie.in/__/auth/handler"
         ]
       }
     }
@@ -32,7 +32,6 @@
       "public": "Admin/dist",
       "predeploy": ["node tools/stamp-version.cjs admin"],
       "domains": [
-        "admin.foodhubbie.in",
         "app.foodhubbie.in"
       ],
       "ignore": [
@@ -482,7 +481,7 @@
       "public": "SupremeAdmin/dist",
       "predeploy": ["node tools/stamp-version.cjs supreme"],
       "domains": [
-        "supreme.foodhubbie.in"
+        "control.foodhubbie.in"
       ],
       "ignore": [
         "firebase.json",
