@@ -17,7 +17,10 @@
  */
 
 const ADMIN = require('firebase-admin');
-const db = ADMIN.database();
+// Lazy: consumers require this module at their own top level, often BEFORE
+// admin.initializeApp() runs (server.js requires it at line 33, inits at 52).
+// Calling ADMIN.database() at module load crashed the control-API boot.
+function db() { return ADMIN.database(); }
 
 // IST offset in ms: UTC + 5:30 = 19800000 ms
 const IST_OFFSET_MS = 5 * 3600000 + 30 * 60000;
@@ -25,7 +28,7 @@ const IST_OFFSET_MS = 5 * 3600000 + 30 * 60000;
 /** Caps per (outlet, phone, notificationType). Stored under
  *  businesses/{bid}/outlets/{oid}/notifyCaps/{phone}/{type}/{bucket} */
 function capRef(outlet, phone, type) {
-    return db.ref(`outlets/${outlet}/notifyCaps/${phone}/${type}`);
+    return db().ref(`outlets/${outlet}/notifyCaps/${phone}/${type}`);
 }
 
 /** Returns the IST bucket key for a timestamp (UTC date string in IST). */

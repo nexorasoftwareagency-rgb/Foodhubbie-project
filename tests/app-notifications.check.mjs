@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -147,6 +148,13 @@ t('notifyLog rule: admin read only, no client write', () => {
     assert.ok(n, 'notifyLog rule exists');
     assert.ok(String(n['.read']).includes('isSuper'), 'read gated to admins');
     assert.equal(n['.write'], undefined, 'no client write grant (server writes via Admin SDK)');
+});
+
+// The caps module used to call ADMIN.database() at load, but server.js requires
+// it BEFORE initializeApp() - a guaranteed boot crash the moment the file ships.
+t('notification-caps loads before initializeApp (control-API boot order)', () => {
+    const r = spawnSync(process.execPath, ['-e', "require('./bot/notification-caps.js')"], { cwd: root, encoding: 'utf8' });
+    assert.equal(r.status, 0, 'module must load with no Firebase app initialized:\n' + (r.stderr || '').slice(0, 300));
 });
 
 console.log(failed ? `\n${failed} check(s) failed` : '\napp notifications guard ok');
