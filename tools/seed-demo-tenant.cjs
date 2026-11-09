@@ -1224,10 +1224,12 @@ function buildBilling() {
     };
 }
 
+// Keep in sync with TAB_DEFS in Admin/js/ui.js — a saved roles copy missing a
+// tab hides that nav item for the role (drifted once: 'app-notifications').
 const ALL_TABS = ['dashboard', 'orders', 'live', 'walkin', 'tables', 'promotions', 'discounts',
     'menu', 'categories', 'combos', 'menu-browser', 'inventory', 'riders', 'customers', 'loyalty',
     'chat', 'reports', 'riderAnalytics', 'feedback', 'liveTracker', 'payments', 'expenses',
-    'notifications', 'costs', 'settings'];
+    'notifications', 'app-notifications', 'costs', 'settings'];
 
 function buildSettings({ rnd, fx }) {
     const store = {
