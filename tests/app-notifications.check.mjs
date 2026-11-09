@@ -174,5 +174,45 @@ t('server injects its database into notification-caps after initializeApp', () =
     assert.ok(/return _injectedDb \|\| ADMIN\.database\(\)/.test(caps), 'db() prefers the injected instance');
 });
 
+// --- Review round 3 (2026-11-10): test-mode send, blank composer, re-entrancy, honest stat label ---
+
+t('a test send never carries an audience (the server rejects an empty phone before checking testMode)', () => {
+    // An order-type send forces the one-customer audience; with test mode on
+    // and no phone typed, the server answered 400 "A valid phone is required
+    // for this audience" - the recommended first action failed.
+    assert.ok(/\.\.\.\(testMode \? \{\} : \{[\s\S]{0,220}audience:/.test(js), 'audience must be gated on !testMode');
+    assert.ok(/\.\.\.\(testMode \? \{\} : \{[\s\S]{0,220}\.\.\.\(aud === 'one' \? \{ phone \} : \{\}\)/.test(js), 'phone travels only with a real one-customer send');
+});
+
+t('a test send never depends on the subscriber list (test mode only needs the admin token)', () => {
+    const iTest = js.indexOf('if (testMode) {');
+    const iLoaded = js.indexOf('if (!_loaded)');
+    const iErr = js.indexOf('if (_loadError)');
+    assert.ok(iTest > 0 && iLoaded > 0 && iErr > 0, 'all three gates must exist');
+    assert.ok(iTest < iLoaded && iTest < iErr,
+        `test mode must be evaluated before the subscriber gates (test@${iTest}, loaded@${iLoaded}, err@${iErr})`);
+});
+
+t('the send button stays disabled until there is a title and a message', () => {
+    assert.ok(/const contentOk = !!/.test(js), 'content gate must be computed');
+    assert.ok(/btn\.disabled = _sending \|\| !ev\.ok \|\| !contentOk/.test(js), 'button must be gated on content');
+    assert.ok(js.includes("'Add title and message'"), 'label must say what is missing');
+    // Typing has to refresh the gate, otherwise the button could never re-enable.
+    const titleListener = js.match(/pushNotifTitle'\)\?\.addEventListener\('input'[\s\S]{0,220}?_syncUi\(\)/);
+    assert.ok(titleListener, 'title input must re-run _syncUi');
+    const bodyListener = js.match(/pushNotifBody'\)\?\.addEventListener\('input'[\s\S]{0,220}?_syncUi\(\)/);
+    assert.ok(bodyListener, 'body input must re-run _syncUi');
+});
+
+t('a second tap while the confirm is open cannot queue a second send', () => {
+    const fn = js.match(/async function _sendPushNotification\(\) \{[\s\S]{0,400}/);
+    assert.ok(fn && fn[0].includes('if (_sending) return;'), 'early return while a send is in flight');
+});
+
+t('the subscription stat says "Last updated" (updatedAt is not an app-open signal)', () => {
+    assert.ok(html.includes('>Last updated</span>'), 'honest label in the markup');
+    assert.ok(!/>Last active<\/span>/.test(html), 'no overstated label');
+});
+
 console.log(failed ? `\n${failed} check(s) failed` : '\napp notifications guard ok');
 process.exit(failed ? 1 : 0);
