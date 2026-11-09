@@ -92,5 +92,62 @@ t('result tone classes exist literally (PurgeCSS drops built-up names)', () => {
     }
 });
 
+// --- Review round 2 (2026-11-09): quiet-hours hole, inbox honesty, history ---
+
+t('quiet hours gate every marketing send, including one-customer', () => {
+    const server = fs.readFileSync(path.join(root, 'bot-control-api/server.js'), 'utf8');
+    assert.ok(/return type !== 'order' && _isQuietHours\(\);/.test(js), '_quietBlocked must exempt only order type');
+    const one = js.match(/if \(aud === 'one'\) \{[\s\S]*?\n    \}/);
+    assert.ok(one, 'one-customer branch exists');
+    assert.ok(one[0].includes('_quietBlocked(type)'), 'one-customer branch must apply quiet hours (server gates every promo entry)');
+    assert.ok(/\/\/ Broadcast[\s\S]{0,400}_quietBlocked\(type\)/.test(js), 'broadcast branch must apply quiet hours');
+    // Definition + the single helper call. A second direct call would bypass the gate.
+    assert.equal((js.match(/_isQuietHours\(\)/g) || []).length, 2, 'exactly one quiet-hours call site');
+    assert.ok(server.includes("notifyType = messageType === 'order' ? 'order' : 'promo'"), 'server quiet-gates every non-order type');
+});
+
+t('send result reports the in-app inbox (delivered independently of FCM)', () => {
+    assert.ok(js.includes('result.inbox'), 'client must read the inbox count');
+    assert.ok(js.includes('saved to the in-app inbox'), '0-push result must mention the inbox');
+    assert.ok(/inbox > 0\) bits\.push\(`\$\{inbox\} in-app`\)/.test(js), 'success line must include the inbox count');
+});
+
+t('send history renders from notifyLog', () => {
+    assert.ok(html.includes('id="pushHistory"') && html.includes('id="pushHistoryList"'), 'history container ids in markup');
+    assert.ok(js.includes("Outlet.ref('notifyLog')"), 'module reads the notifyLog node');
+    assert.ok(/function _renderHistory/.test(js), 'renderer exists');
+    assert.ok(js.includes("'push-hist__row'"), 'row class literal so PurgeCSS keeps the style');
+    assert.ok(css.includes('.push-history') && css.includes('.push-hist__row'), 'history styles exist');
+    assert.ok(/_loadHistory\(\)/.test(js), 'history loads with the tab');
+});
+
+t('disabled send button has a visible disabled state', () => {
+    assert.ok(/\.push-actions \.btn-primary:disabled/.test(css), 'scoped disabled style for the send button');
+});
+
+t('server logs every accepted send, capped at 20 rows', () => {
+    const server = fs.readFileSync(path.join(root, 'bot-control-api/server.js'), 'utf8');
+    assert.ok(server.includes('notifyLog'), 'server writes notifyLog');
+    assert.equal((server.match(/logNotifySend\(/g) || []).length, 3, 'helper defined + called at both exit points');
+    assert.ok(server.includes('keys.length > 20'), 'prune keeps the newest 20 rows');
+    assert.ok(/historyRow\(successCount, failureCount, inboxCount, tokens\.length\)/.test(server), 'post-send row');
+    assert.ok(/historyRow\(0, 0, 0, 0\)/.test(server), 'empty-token exit still logs');
+});
+
+t('notifyLog rule: admin read only, no client write', () => {
+    const rules = JSON.parse(fs.readFileSync(path.join(root, 'database.rules.json'), 'utf8'));
+    const find = (node, key) => {
+        if (node && typeof node === 'object') {
+            if (Object.prototype.hasOwnProperty.call(node, key)) return node[key];
+            for (const v of Object.values(node)) { const hit = find(v, key); if (hit) return hit; }
+        }
+        return null;
+    };
+    const n = find(rules, 'notifyLog');
+    assert.ok(n, 'notifyLog rule exists');
+    assert.ok(String(n['.read']).includes('isSuper'), 'read gated to admins');
+    assert.equal(n['.write'], undefined, 'no client write grant (server writes via Admin SDK)');
+});
+
 console.log(failed ? `\n${failed} check(s) failed` : '\napp notifications guard ok');
 process.exit(failed ? 1 : 0);

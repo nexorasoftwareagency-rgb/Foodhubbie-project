@@ -36,6 +36,7 @@ let _loadError = false;
 let _sending = false;
 let _deviceReady = false;
 let _iconType = '';    // last type whose preview icon was rendered
+let _history = [];     // recent accepted sends, newest first (server-capped at 20)
 
 export function loadAppNotifications() {
     logger.info('APP-NOTIF', 'Loading App Notifications tab…');
@@ -43,6 +44,7 @@ export function loadAppNotifications() {
     _renderAppLink();
     _checkDevice();
     _loadPushSubscriptions();
+    _loadHistory();
     _syncUi();
 }
 
@@ -170,6 +172,78 @@ function _renderSubs() {
     }
 }
 
+/* ============ SEND HISTORY ============ */
+
+async function _loadHistory() {
+    try {
+        const snap = await get(Outlet.ref('notifyLog'));
+        const raw = snap.val() || {};
+        _history = Object.entries(raw)
+            .map(([key, h]) => ({ key, ...h }))
+            .sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0))
+            .slice(0, 20);
+        _renderHistory();
+    } catch (e) {
+        // Informational only - never block the composer on history.
+        console.error('[Push] Failed to load send history:', e);
+    }
+}
+
+function _renderHistory() {
+    const wrap = $('pushHistory');
+    const list = $('pushHistoryList');
+    if (!wrap || !list) return;
+    wrap.classList.toggle('hidden', _history.length === 0);
+    list.textContent = '';
+    _history.forEach(h => {
+        const info = TYPE_INFO[h.type] || TYPE_INFO.promo;
+        const row = document.createElement('div');
+        row.className = 'push-hist__row';
+
+        const head = document.createElement('div');
+        head.className = 'push-hist__head';
+
+        const time = document.createElement('span');
+        time.className = 'push-hist__time';
+        time.textContent = formatDate(Number(h.at) || 0);
+
+        const type = document.createElement('span');
+        type.className = 'push-hist__type';
+        type.textContent = info.label;
+
+        head.append(time, type);
+
+        if (h.test === true) {
+            const badge = document.createElement('span');
+            badge.className = 'push-hist__badge';
+            badge.textContent = 'TEST';
+            head.appendChild(badge);
+        }
+
+        const aud = document.createElement('span');
+        aud.className = 'push-hist__aud';
+        aud.textContent = h.audience === 'test' ? 'My device'
+            : h.audience === 'phone' ? (h.phone ? `One · ${h.phone}` : 'One customer')
+                : 'All subscribers';
+        head.appendChild(aud);
+
+        const res = document.createElement('span');
+        res.className = 'push-hist__res';
+        const bits = [`${Number(h.sent) || 0} sent`];
+        if (Number(h.failed)) bits.push(`${h.failed} failed`);
+        if (Number(h.inbox)) bits.push(`${h.inbox} in-app`);
+        res.textContent = bits.join(' · ');
+        head.appendChild(res);
+
+        const title = document.createElement('div');
+        title.className = 'push-hist__title';
+        title.textContent = String(h.title || '');
+
+        row.append(head, title);
+        list.appendChild(row);
+    });
+}
+
 async function _checkDevice() {
     const uid = auth.currentUser?.uid;
     _deviceReady = false;
@@ -230,6 +304,15 @@ function _isQuietHours() {
 }
 
 /**
+ * Marketing types pause at night for EVERY audience: the server runs the
+ * cap/quiet-hours check per recipient (bot-control-api notifyType = 'promo'),
+ * including single-customer sends. Only transactional order updates pass.
+ */
+function _quietBlocked(type) {
+    return type !== 'order' && _isQuietHours();
+}
+
+/**
  * Single decision table for "can this go out, and to how many".
  * @returns {{ok:boolean, count:number, reason:string, note?:string}}
  */
@@ -258,13 +341,14 @@ function _evaluate() {
         const sub = _subs.find(s => s.phone === phone);
         if (!sub) return { ok: false, count: 0, reason: 'This number has no app notifications enabled.', note: 'Only customers who allowed notifications can receive a push.' };
         if (type !== 'order' && !sub.offers) return { ok: false, count: 0, reason: 'This customer turned offers off.', note: 'Send an Order update instead, or pick another customer.' };
+        if (_quietBlocked(type)) return { ok: false, count: 0, reason: 'Offers pause 9 PM-9 AM IST.', note: 'Send after 9:00 AM - transactional Order updates are never paused.' };
         return { ok: true, count: 1, reason: '' };
     }
 
     // Broadcast - never allowed for transactional order updates.
     if (type === 'order') return { ok: false, count: 0, reason: 'Order updates go to one customer.' };
     if (offers === 0) return { ok: false, count: 0, reason: `0 of ${total} subscribers kept offers on.`, note: 'Customers can turn offers back on in the app.' };
-    if (_isQuietHours()) return { ok: false, count: 0, reason: 'Offers pause 9 PM-9 AM IST.', note: 'Send after 9:00 AM, or use an Order update for one customer.' };
+    if (_quietBlocked(type)) return { ok: false, count: 0, reason: 'Offers pause 9 PM-9 AM IST.', note: 'Send after 9:00 AM, or use an Order update for one customer.' };
     return { ok: true, count: offers, reason: '' };
 }
 
@@ -483,17 +567,23 @@ async function _sendPushNotification() {
         const sent = Number(result.sent || 0);
         const failed = Number(result.failed || 0);
         const attempted = Number(result.total || 0);
+        // The server writes the in-app inbox independently of FCM delivery, so
+        // a push no device received can still be visible to the customer.
+        const inbox = Number(result.inbox || 0);
         const skipped = aud === 'all' && !testMode ? Math.max(0, _subs.length - attempted) : 0;
 
         if (sent === 0) {
             const why = testMode
                 ? 'No push token on this device - enable notifications, then try again.'
-                : (result.message || 'No device received it. Subscribers may have notifications turned off.');
+                : (inbox > 0
+                    ? `No push delivered, but ${inbox} saved to the in-app inbox - customers will see it in the app.`
+                    : (result.message || 'No device received it. Subscribers may have notifications turned off.'));
             _showResult('warn', why);
             showToast(why, 'warning');
         } else {
             const bits = [`Sent to ${sent} device${sent === 1 ? '' : 's'}`];
             if (failed) bits.push(`${failed} failed`);
+            if (inbox > 0) bits.push(`${inbox} in-app`);
             if (skipped > 0) bits.push(`${skipped} skipped (offers off or daily limit)`);
             bits.push(_timeNow());
             _showResult('ok', bits.join(' · '));
@@ -508,6 +598,7 @@ async function _sendPushNotification() {
 
         // Dead tokens are pruned server-side, so the count may have changed.
         _loadPushSubscriptions();
+        _loadHistory();
     } catch (e) {
         console.error('[Push] Send failed:', e);
         const raw = e?.message || '';

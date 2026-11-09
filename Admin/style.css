@@ -11350,6 +11350,52 @@ body.pos-selection-mode .walkin-picker {
 }
 
 .push-actions .btn-primary { flex: 1; }
+/* Blocked sends keep the button looking live without this - the label says
+   "Send to 0 subscribers" but nothing told the eye it was unclickable. */
+.push-actions .btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Recent sends - the delivery report the result panel used to forget. */
+.push-history { margin-top: 14px; }
+.push-hist__list {
+    margin-top: 6px;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.push-hist__row {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border, #eef0f3);
+}
+.push-hist__row:last-child { border-bottom: none; }
+.push-hist__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.push-hist__time { font-size: 12px; color: var(--text-tertiary, #94a3b8); }
+.push-hist__type { font-size: 12px; font-weight: 700; color: var(--text-secondary, #475569); }
+.push-hist__badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+}
+.push-hist__aud { font-size: 12px; color: var(--text-secondary, #475569); margin-left: auto; }
+.push-hist__res { font-size: 12px; color: var(--text-tertiary, #94a3b8); }
+.push-hist__title {
+    font-size: 12px;
+    color: var(--text-secondary, #475569);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 
 /* Chips are the radio control: keep the input focusable (a11y) but invisible. */
 .promo-notifications-pane .chip--radio {

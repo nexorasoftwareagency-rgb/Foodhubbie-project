@@ -1310,6 +1310,26 @@ app.post('/api/whatsapp/templates/:bid/:oid', requireSuperOnly, async (req, res)
 });
 
 // ================================================================
+// Append-only send history for the Admin "Recent sends" list. Written with
+// the Admin SDK (bypasses rules); a failure here must never fail the send,
+// and the newest 20 rows per outlet are kept (push ids sort oldest-first).
+async function logNotifySend(bid, oid, row) {
+  try {
+    const base = admin.database().ref(`businesses/${bid}/outlets/${oid}/notifyLog`);
+    await base.push().set(row);
+    const snap = await base.once('value');
+    const keys = Object.keys(snap.val() || {}).sort();
+    if (keys.length > 20) {
+      const updates = {};
+      for (const k of keys.slice(0, keys.length - 20)) updates[k] = null;
+      await base.update(updates);
+    }
+  } catch (e) {
+    console.warn('[notify-log] write failed:', e.message);
+  }
+}
+
+// ================================================================
 // Tenant-scoped push notification endpoint (Phase 3)
 // POST /tenant-api/notify
 // Auth: requireTenantAdmin (verifies admin belongs to this outlet)
@@ -1333,6 +1353,19 @@ app.post('/tenant-api/notify', async (req, res) => {
       return res.status(400).json({ error: 'A valid phone is required for this audience' });
     }
     const messageType = String(type || 'promo').slice(0, 20);
+    const isTest = testMode === true || testMode === 'true' || data.testMode === 'true';
+    // Row written to outlets/{oid}/notifyLog after every accepted send
+    // (see logNotifySend) - the Admin tab's "Recent sends" list reads it.
+    const historyRow = (sent, failed, inbox, total) => ({
+      at: Date.now(),
+      type: messageType,
+      audience: isTest ? 'test' : (audience === 'phone' ? 'phone' : 'all'),
+      ...(cleanPhone && audience === 'phone' && !isTest ? { phone: cleanPhone } : {}),
+      title: String(title).slice(0, 100),
+      sent, failed, inbox, total,
+      test: isTest,
+      by: req.adminUid || 'unknown',
+    });
 
     const subsSnap = await admin.database()
       .ref(`businesses/${req.businessId}/outlets/${req.outlet}/pushSubscriptions`)
@@ -1351,7 +1384,7 @@ app.post('/tenant-api/notify', async (req, res) => {
       entries = entries.filter(e => !e.prefs || e.prefs.offers === true);
     }
 
-    if (testMode === true || testMode === 'true' || data.testMode === 'true') {
+    if (isTest) {
       const own = (await admin.database().ref(`admins/${req.adminUid}/fcmToken`).get()).val();
       entries = own ? [{ key: 'test', token: own, phone: null }] : [];
     }
@@ -1379,6 +1412,7 @@ app.post('/tenant-api/notify', async (req, res) => {
 
     const tokens = entries.map(e => e.token).filter(Boolean);
     if (tokens.length === 0) {
+      await logNotifySend(req.businessId, req.outlet, historyRow(0, 0, 0, 0));
       return res.json({ ok: true, sent: 0, inbox: 0, message: 'No subscribers for this outlet' });
     }
 
@@ -1389,7 +1423,7 @@ app.post('/tenant-api/notify', async (req, res) => {
     // delivery. This is what the customer sees under Promotions > Notifications.
     const phoneSet = new Set(entries.map(e => String(e.phone || '')).filter(p => /^[6-9]\d{9}$/.test(p)));
     let inboxCount = 0;
-    if (testMode !== true && testMode !== 'true' && data.testMode !== 'true') {
+    if (!isTest) {
       for (const customerPhone of phoneSet) {
         try {
             const phoneInboxRef = admin.database()
@@ -1449,6 +1483,8 @@ app.post('/tenant-api/notify', async (req, res) => {
         }
       }));
     }
+
+    await logNotifySend(req.businessId, req.outlet, historyRow(successCount, failureCount, inboxCount, tokens.length));
 
     res.json({ ok: true, sent: successCount, failed: failureCount, total: tokens.length, inbox: inboxCount });
   } catch (err) {
