@@ -1,4 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { getDatabase, ref, get, onValue, onChildAdded, onChildChanged, set, update, remove, push, runTransaction, query, orderByChild, orderByKey, equalTo, limitToLast, startAt, endAt, endBefore, serverTimestamp, child, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, setPersistence, browserLocalPersistence, browserSessionPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, EmailAuthProvider, sendPasswordResetEmail, sendEmailVerification, createUserWithEmailAndPassword, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
@@ -168,57 +169,28 @@ window.forceOutlet = (name) => {
     if (window.diagnoseDatabase) window.diagnoseDatabase();
 };
 
-export async function uploadImage(fileOrBlob, path, opts = {}) {
+export async function uploadImage(fileOrBlob, { bid, oid, type, id }) {
     if (!fileOrBlob) return null;
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(fileOrBlob);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 600;
-                let width = img.width;
-                let height = img.height;
-                if (width > MAX_WIDTH) {
-                    height = (MAX_WIDTH / width) * height;
-                    width = MAX_WIDTH;
-                }
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                // Legacy JPEG path (riders/KYC/promotions all stay on this — WhatsApp media is JPEG/PNG only).
-                const jpegFallback = () => resolve(canvas.toDataURL('image/jpeg', 0.6));
-                if (opts.webp && canvas.toBlob) {
-                    // Chrome/Edge/Firefox encode webp natively. Safari's toBlob('image/webp')
-                    // silently yields PNG instead — check the honest blob.type and fall back to
-                    // JPEG rather than uploading a bloated PNG masquerading as a photo.
-                    canvas.toBlob((blob) => {
-                        if (blob && blob.type === 'image/webp') {
-                            const fr = new FileReader();
-                            fr.onload = () => resolve(fr.result);
-                            fr.onerror = () => jpegFallback();
-                            fr.readAsDataURL(blob);
-                        } else {
-                            jpegFallback();
-                        }
-                    }, 'image/webp', 0.75);
-                } else {
-                    jpegFallback();
-                }
-            };
-            img.onerror = () => reject(new Error("Image processing failed"));
-        };
-        reader.onerror = () => reject(new Error("File reading failed"));
+    const storage = getStorage(app);
+    const fileName = fileOrBlob.name || 'original.jpg';
+    const ext = fileName.split('.').pop() || 'jpg';
+    const path = `outlets/${bid}/${oid}/${type}s/${id}/original.${ext}`;
+    const storageRef = storageRef(storage, path);
+    await uploadBytes(storageRef, fileOrBlob, {
+        contentType: fileOrBlob.type || 'image/jpeg',
+        cacheControl: 'public, max-age=31536000',
     });
+    return await getDownloadURL(storageRef);
 }
 
 export async function deleteImage(url) {
     if (!url) return;
-    if (url.includes("firebasestorage.googleapis.com")) {
-        console.log("Old storage image skipped (Storage disabled):", url);
+    try {
+        const storage = getStorage(app);
+        const storageRef = storageRef(storage, url);
+        await deleteObject(storageRef);
+    } catch (e) {
+        console.warn('[Firebase] deleteImage failed:', e.message);
     }
 }
 

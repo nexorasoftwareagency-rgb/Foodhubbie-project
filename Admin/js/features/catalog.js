@@ -121,9 +121,26 @@ export async function addCategory() {
             btn.innerHTML = '<span class="spinner-sm"></span> Processing...';
         }
 
+        // Push category first to get catId
+        const newCatRef = await push(Outlet.ref('categories'), {
+            name: name,
+            image: "",
+            order: order,
+            outlet: (window.currentOutlet || 'pizza').toLowerCase(),
+            addons: Object.keys(addons).length > 0 ? addons : null
+        });
+        const catId = newCatRef.key;
+
         if (fileInput.files.length > 0) {
             const file = fileInput.files[0];
-            imageUrl = await uploadImage(file, `categories/${Date.now()}_${file.name}`, { webp: true });
+            imageUrl = await uploadImage(file, {
+                bid: BUSINESS_ID(),
+                oid: Outlet.current,
+                type: 'category',
+                id: catId,
+            });
+            // Update category with image URL
+            await update(child(Outlet.ref('categories'), catId), { image: imageUrl });
         }
 
         const addons = {};
@@ -137,11 +154,10 @@ export async function addCategory() {
         const orderInput = document.getElementById('newCatOrder');
         const order = parseInt(orderInput?.value) || 0;
 
-        await push(Outlet.ref('categories'), {
+        // Update category with order and addons (image already set above)
+        await update(child(Outlet.ref('categories'), catId), {
             name: name,
-            image: imageUrl,
             order: order,
-            outlet: (window.currentOutlet || 'pizza').toLowerCase(),
             addons: Object.keys(addons).length > 0 ? addons : null
         });
 
@@ -340,94 +356,83 @@ export async function saveDish() {
         return showToast("Error: Current outlet context is missing. Please refresh or select an outlet first.", "error");
     }
 
-    const name = document.getElementById('dishName').value;
-    const cat = document.getElementById('dishCategory').value;
-    const basePrice = document.getElementById('dishPriceBase').value;
-    let image = document.getElementById('dishImage').value;
+    const newName = document.getElementById('dishName').value;
+    const newPrice = document.getElementById('dishPriceBase').value;
+    const newCat = document.getElementById('dishCategory').value;
+    const file = document.getElementById('dishFile').files[0];
 
     document.querySelectorAll('#dishModal .form-input').forEach(el => el.classList.remove('error', 'valid'));
-    if (!name) document.getElementById('dishName').classList.add('error');
-    else document.getElementById('dishName').classList.add('valid');
-    if (!cat) document.getElementById('dishCategory').classList.add('error');
-    else document.getElementById('dishCategory').classList.add('valid');
-    if (!name || !cat) { document.getElementById(!name ? 'dishName' : 'dishCategory')?.focus(); return; }
+    if (!newName) { document.getElementById('dishName').classList.add('error'); return; }
+    if (!newCat) { document.getElementById('dishCategory').classList.add('error'); return; }
+    if (!newPrice) { document.getElementById('dishPriceBase').classList.add('error'); return; }
 
-    const file = document.getElementById('dishFile').files[0];
-    const statusLabel = document.getElementById('uploadStatus');
-    const saveBtn = document.querySelector('#dishModal .btn-primary');
+    const saveBtn = document.getElementById('btnDishSave');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
 
     try {
         isProcessingDish = true;
-        if (saveBtn) {
-            saveBtn.disabled = true;
-            saveBtn.dataset.originalText = saveBtn.innerText;
-            saveBtn.innerHTML = '<span class="spinner-sm"></span> Saving...';
-        }
+
+        let imageUrl = document.getElementById('dishImage').value;
+
         if (file) {
-            if (statusLabel) statusLabel.classList.remove('hidden');
-            let oldImageUrl = null;
-            if (state.editingDishId) {
-                const snap = await get(Outlet.ref(`dishes/${state.editingDishId}`));
-                oldImageUrl = snap.val()?.image;
+            const bid = BUSINESS_ID();
+            const oid = Outlet.current;
+
+            // Delete old image if editing
+            if (state.editingDishId && imageUrl) {
+                await deleteImage(imageUrl);
             }
-            image = await uploadImage(file, `dishes/${Date.now()}_${file.name}`, { webp: true });
-            if (oldImageUrl && image !== oldImageUrl) {
-                await deleteImage(oldImageUrl);
+
+            // Push new dish first to get dishId
+            let dishId = state.editingDishId;
+            if (!dishId) {
+                const newRef = await push(dishesRef, {
+                    name: newName,
+                    category: newCat,
+                    price: Number(newPrice) || 0,
+                    stock: true,
+                    order: 0,
+                    outlet: (window.currentOutlet || 'pizza').toLowerCase(),
+                });
+                dishId = newRef.key;
             }
-            if (statusLabel) statusLabel.classList.add('hidden');
+
+            // Upload image to Storage
+            imageUrl = await uploadImage(file, {
+                bid,
+                oid,
+                type: 'dish',
+                id: dishId,
+            });
+
+            // Update dish with image URL
+            await update(child(dishesRef, dishId), { image: imageUrl });
         }
 
-        const sizes = {};
-        document.querySelectorAll('.size-row').forEach(row => {
-            const inputs = row.querySelectorAll('input');
-            if (inputs[0].value && inputs[1].value) {
-                sizes[inputs[0].value] = Number(inputs[1].value);
-            }
-        });
-
-        const addons = {};
-        document.querySelectorAll('.addon-row').forEach(row => {
-            const inputs = row.querySelectorAll('input');
-            if (inputs[0].value && inputs[1].value) {
-                addons[inputs[0].value] = Number(inputs[1].value);
-            }
-        });
-
-        const order = parseInt(document.getElementById('dishOrder')?.value) || 0;
-
-        const data = {
-            name,
-            category: cat,
-            price: Number(basePrice) || 0,
-            image,
-            stock: true,
-            order: order,
-            sizes: Object.keys(sizes).length > 0 ? sizes : null,
-            addons: Object.keys(addons).length > 0 ? addons : null,
-            veg: document.getElementById('dishVeg').value !== 'nonveg'
-        };
-
-        const dishesRef = Outlet.ref('dishes');
-        if (state.editingDishId) {
-            await update(child(dishesRef, state.editingDishId), data);
-            logAudit("Catalog", `Updated Dish: ${name}`, state.editingDishId);
+        if (!state.editingDishId) {
+            // Already pushed above with dishId and image
         } else {
-            const newRef = await push(dishesRef, data);
-            logAudit("Catalog", `Added New Dish: ${name}`, newRef.key);
+            const updateData = {
+                name: newName,
+                category: newCat,
+                price: Number(newPrice) || 0,
+            };
+            if (file && imageUrl) {
+                updateData.image = imageUrl;
+            }
+            await update(child(dishesRef, state.editingDishId), updateData);
         }
-
-        await mirrorToMenuBank(db, ref, set, 'dishes', data, _bankSource());
 
         hideDishModal();
         loadMenu();
     } catch (e) {
         showToast("Error: " + e.message, "error");
-        if (statusLabel) statusLabel.classList.add('hidden');
     } finally {
         isProcessingDish = false;
         if (saveBtn) {
             saveBtn.disabled = false;
-            saveBtn.innerText = saveBtn.dataset.originalText || "Save Dish";
+            saveBtn.textContent = saveBtn.dataset.originalText || "Save Dish";
         }
     }
 }
@@ -819,7 +824,15 @@ export async function saveCategoryEdits() {
     let imageUrl = cat.image;
     if (fileInput.files && fileInput.files[0]) {
         try {
-            imageUrl = await uploadImage(fileInput.files[0], `categories/${id}_${Date.now()}_${fileInput.files[0].name}`, { webp: true });
+            imageUrl = await uploadImage(fileInput.files[0], {
+                bid: BUSINESS_ID(),
+                oid: Outlet.current,
+                type: 'category',
+                id: id,
+            });
+            if (cat.image && imageUrl !== cat.image) {
+                await deleteImage(cat.image);
+            }
         } catch (e) {
             console.error('[Catalog] Image upload failed:', e);
             return showToast('Failed to upload image', 'error');
@@ -937,14 +950,8 @@ export async function runImageMigration() {
 
             async function convertUrlToDataUri(url) {
                 if (!url || !url.includes("firebasestorage.googleapis.com")) return url;
-                try {
-                    const response = await fetch(url);
-                    const blob = await response.blob();
-                    return await uploadImage(blob, "temp");
-                } catch (err) {
-                    console.error("Failed to convert image:", url, err);
-                    return url;
-                }
+                // Images are already stored in Firebase Storage; no need to convert to base64
+                return url;
             }
 
             const dishesSnap = await get(Outlet.ref('dishes'));
@@ -1758,8 +1765,39 @@ export async function showComboModal(comboId = null) {
             saveBtn.innerHTML = '<span class="spinner-sm"></span> Saving...';
             let image = combo?.image || null;
             if (draft.file) {
-                image = await uploadImage(draft.file, `combos/${Date.now()}_${draft.file.name}`, { webp: true });
-                if (combo?.image && image !== combo.image) deleteImage(combo.image).catch(err => console.warn('[Combos] Old image deletion failed:', err));
+                const bid = BUSINESS_ID();
+                const oid = Outlet.current;
+
+                // Delete old image if editing
+                if (combo?.image) await deleteImage(combo.image);
+
+                // Push new combo first to get comboId
+                let comboIdLocal = comboId;
+                if (!comboIdLocal) {
+                    const newRef = await push(Outlet.ref('combos'), {
+                        name: draft.name,
+                        items: items,
+                        discountType: draft.discountType,
+                        discountValue: parseFloat($('cbwDiscountValue').value) || 0,
+                        startAt: _parseLocalDate(draft.startAt, false),
+                        endAt: _parseLocalDate(draft.endAt, true),
+                        stock: true,
+                        order: 0,
+                        outlet: (window.currentOutlet || 'pizza').toLowerCase(),
+                    });
+                    comboIdLocal = newRef.key;
+                }
+
+                // Upload image to Storage
+                image = await uploadImage(draft.file, {
+                    bid,
+                    oid,
+                    type: 'combo',
+                    id: comboIdLocal,
+                });
+
+                // Update combo with image URL
+                await update(Outlet.ref(`combos/${comboIdLocal}`), { image: image });
             }
             const payload = {
                 name: draft.name,
@@ -1777,9 +1815,9 @@ export async function showComboModal(comboId = null) {
                 sourceOid: Outlet.current,
                 updatedAt: Date.now()
             };
-            if (comboId) {
-                await update(Outlet.ref(`combos/${comboId}`), payload);
-                logAudit('Catalog', `Updated Combo: ${draft.name}`, comboId);
+            if (comboIdLocal) {
+                await update(Outlet.ref(`combos/${comboIdLocal}`), payload);
+                logAudit('Catalog', `Updated Combo: ${draft.name}`, comboIdLocal);
                 showToast('Combo updated!', 'success');
             } else {
                 await set(push(Outlet.ref('combos')), { ...payload, createdAt: Date.now() });
