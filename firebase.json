@@ -138,7 +138,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "value": "public, max-age=0, must-revalidate"
             },
             {
               "key": "X-Frame-Options",
@@ -171,7 +171,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "value": "public, max-age=0, must-revalidate"
             }
           ]
         },
@@ -180,7 +180,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=3600"
+              "value": "public, max-age=0, must-revalidate"
             },
             {
               "key": "X-Frame-Options",
@@ -371,7 +371,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "value": "public, max-age=0, must-revalidate"
             },
             {
               "key": "X-Frame-Options",
@@ -404,7 +404,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "value": "public, max-age=0, must-revalidate"
             }
           ]
         },
@@ -413,7 +413,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=3600"
+              "value": "public, max-age=0, must-revalidate"
             },
             {
               "key": "X-Frame-Options",
@@ -519,7 +519,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "value": "public, max-age=0, must-revalidate"
             },
             {
               "key": "X-Frame-Options",
@@ -552,7 +552,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "value": "public, max-age=0, must-revalidate"
             }
           ]
         },
@@ -561,7 +561,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=3600"
+              "value": "public, max-age=0, must-revalidate"
             },
             {
               "key": "X-Frame-Options",
@@ -632,7 +632,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "value": "public, max-age=0, must-revalidate"
             },
             {
               "key": "X-Content-Type-Options",
@@ -653,7 +653,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "value": "public, max-age=0, must-revalidate"
             }
           ]
         },
@@ -662,7 +662,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=3600"
+              "value": "public, max-age=0, must-revalidate"
             },
             {
               "key": "X-Content-Type-Options",

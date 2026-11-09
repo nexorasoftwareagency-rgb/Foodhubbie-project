@@ -177,7 +177,7 @@
     </script>
 
 
-    <link rel="stylesheet" href="style.css?v=5.4.17">
+    <link rel="stylesheet" href="style.css?v=5.4.18">
 
     <link rel="stylesheet" href="mobile-overrides.css?v=5.4.13">
 
@@ -4947,115 +4947,145 @@
                 <div class="panel">
 
                     <div class="panel-header">
-
                         <div>
-
                             <h2 class="panel-title mb-0">App Notifications</h2>
-
-                            <p class="panel-subtitle mt-4">Send instant push notifications to customers who installed your restaurant's app and enabled notifications.</p>
-
+                            <p class="panel-subtitle mt-4">Push a message to customers who installed your app. Send a test to your own device first.</p>
                         </div>
-
+                        <button class="btn-text" id="btnRefreshPushSubs" type="button" title="Reload subscriber data">
+                            <i data-lucide="refresh-cw"></i> <span>Refresh</span>
+                        </button>
                     </div>
 
                     <div class="promo-notifications-pane">
-                        <div class="promo-notifications-stats mt-12">
+
+                        <div class="promo-notifications-stats">
                             <div class="stat-card">
-                                <span id="pushSubCount" class="stat-value">—</span>
+                                <span id="pushSubCount" class="stat-value">-</span>
                                 <span class="stat-label">Subscribers</span>
                             </div>
                             <div class="stat-card">
-                                <span id="pushSubUpdated" class="stat-value">—</span>
-                                <span class="stat-label">Last updated</span>
+                                <span id="pushOffersReach" class="stat-value">-</span>
+                                <span class="stat-label">Offers reachable</span>
                             </div>
-                            <div class="stat-card stat-card--warn" id="pushQuietHours" style="display:none">
-                                <span class="stat-value">🌙</span>
-                                <span class="stat-label">Quiet hours (21:00–09:00 IST)</span>
+                            <div class="stat-card">
+                                <span id="pushSubUpdated" class="stat-value stat-value--sm">-</span>
+                                <span class="stat-label">Last active</span>
                             </div>
                         </div>
 
-                        <!-- Notification type -->
+                        <div class="push-empty hidden" id="pushEmptyState">
+                            <div class="push-empty__icon"><i data-lucide="bell-ring"></i></div>
+                            <div class="push-empty__body">
+                                <strong>No app subscribers yet</strong>
+                                <p>Customers subscribe inside your app: open the link, sign in with a phone number, then allow notifications. Share the link to get your first subscriber.</p>
+                                <div class="push-empty__row">
+                                    <input type="text" id="pushAppLink" class="search-input-group" readonly aria-label="Customer app link">
+                                    <button class="btn-secondary" id="btnCopyPushAppLink" type="button"><i data-lucide="copy"></i> <span>Copy</span></button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="form-group mt-12">
-                            <label for="pushNotifType" class="text-muted-small">Notification type</label>
-                            <div class="flex-row flex-gap-8" role="radiogroup" aria-label="Notification type">
-                                <label class="chip chip--radio">
-                                    <input type="radio" name="pushNotifType" value="order" checked>
-                                    <span>Order Update</span>
+                            <label id="pushAudienceLabel">Audience</label>
+                            <div class="flex-row flex-gap-8" role="radiogroup" aria-labelledby="pushAudienceLabel">
+                                <label class="chip chip--radio push-aud" data-aud="all">
+                                    <input type="radio" name="pushAudience" value="all" checked>
+                                    <span>All subscribers</span>
                                 </label>
-                                <label class="chip chip--radio">
-                                    <input type="radio" name="pushNotifType" value="promo">
-                                    <span>Promo / Offer</span>
+                                <label class="chip chip--radio push-aud" data-aud="one">
+                                    <input type="radio" name="pushAudience" value="one">
+                                    <span>One customer</span>
                                 </label>
-                                <label class="chip chip--radio">
+                            </div>
+                            <div id="pushPhoneWrap" class="mt-8 hidden">
+                                <input type="tel" id="pushNotifPhone" class="search-input-group" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="10-digit mobile number" list="pushSubPhones" aria-label="Customer mobile number">
+                                <datalist id="pushSubPhones"></datalist>
+                                <p class="text-muted-small mt-2" id="pushPhoneHint">Start typing to pick a subscriber.</p>
+                            </div>
+                            <p class="push-reach" id="pushReachLine" aria-live="polite">Checking subscribers…</p>
+                        </div>
+
+                        <div class="form-group mt-12">
+                            <label id="pushTypeLabel">Notification type</label>
+                            <div class="flex-row flex-gap-8" role="radiogroup" aria-labelledby="pushTypeLabel">
+                                <label class="chip chip--radio push-type" data-type="promo">
+                                    <input type="radio" name="pushNotifType" value="promo" checked>
+                                    <span>Offer / Promo</span>
+                                </label>
+                                <label class="chip chip--radio push-type" data-type="loyalty">
                                     <input type="radio" name="pushNotifType" value="loyalty">
                                     <span>Loyalty</span>
                                 </label>
-                                <label class="chip chip--radio">
+                                <label class="chip chip--radio push-type" data-type="system">
                                     <input type="radio" name="pushNotifType" value="system">
-                                    <span>System</span>
+                                    <span>Store update</span>
+                                </label>
+                                <label class="chip chip--radio push-type" data-type="order">
+                                    <input type="radio" name="pushNotifType" value="order">
+                                    <span>Order update</span>
                                 </label>
                             </div>
-                            <p class="text-muted-small mt-2">Order updates go to all opted-in subscribers. Promos respect each customer's offers preference.</p>
+                            <p class="text-muted-small mt-2" id="pushTypeHint">Only customers who kept offers on. Paused 9 PM-9 AM IST, max 3 a day.</p>
                         </div>
 
-                        <!-- Title -->
                         <div class="form-group mt-12">
                             <label for="pushNotifTitle" class="text-muted-small">Title</label>
-                            <input type="text" id="pushNotifTitle" class="search-input-group" placeholder="Special Offer!" maxlength="100">
+                            <input type="text" id="pushNotifTitle" class="search-input-group" placeholder="20% off today only" maxlength="100" autocomplete="off">
                             <span class="char-count" id="pushTitleCount">0/100</span>
                         </div>
                         <div class="form-group mt-8">
                             <label for="pushNotifBody" class="text-muted-small">Message</label>
-                            <textarea id="pushNotifBody" rows="3" class="search-input-group" placeholder="20% off all pizzas today only!" maxlength="300"></textarea>
+                            <textarea id="pushNotifBody" rows="3" class="search-input-group" placeholder="Use code PIZZA20 in the app. Valid till 11 PM." maxlength="300"></textarea>
                             <span class="char-count" id="pushBodyCount">0/300</span>
                         </div>
 
-                        <!-- Test mode -->
                         <div class="form-group mt-8">
                             <label class="checkbox-label">
-                                <input type="checkbox" id="pushNotifTestMode"> <span>Test mode (send to my device only)</span>
+                                <input type="checkbox" id="pushNotifTestMode"> <span>Test mode - send only to my registered device</span>
                             </label>
+                            <p class="text-muted-small mt-2" id="pushTestHint">Checking your admin account…</p>
                         </div>
 
-                        <!-- Preview card -->
                         <div class="mt-12">
                             <label class="text-muted-small">Preview</label>
                             <div class="preview-card" id="pushPreview">
                                 <div class="preview-header">
-                                    <span class="preview-icon">🔔</span>
-                                    <span class="preview-type">Order Update</span>
+                                    <span class="preview-icon preview-icon--tile" id="pushPreviewIcon"><i data-lucide="tag"></i></span>
+                                    <span class="preview-type" id="pushPreviewType">Offer / Promo</span>
                                 </div>
-                                <div class="preview-title" id="pushPreviewTitle">Special Offer!</div>
-                                <div class="preview-body" id="pushPreviewBody">20% off all pizzas today only!</div>
+                                <div class="preview-title" id="pushPreviewTitle">20% off today only</div>
+                                <div class="preview-body" id="pushPreviewBody">Use code PIZZA20 in the app. Valid till 11 PM.</div>
                             </div>
                         </div>
 
-                        <div class="flex-row flex-gap-8 mt-12">
-                            <button class="btn-primary" id="btnSendPushNotif" disabled>
-                                <i data-lucide="send"></i> <span>Send Notification</span>
-                            </button>
-                            <button class="btn-secondary" id="btnRefreshPushSubs">
-                                <i data-lucide="refresh-cw"></i> <span>Refresh subscriber count</span>
+                        <div class="push-preflight hidden" id="pushPreflight" aria-live="polite"></div>
+
+                        <div class="flex-row flex-gap-8 mt-12 push-actions">
+                            <button class="btn-primary" id="btnSendPushNotif" type="button" disabled>
+                                <i data-lucide="send"></i> <span id="pushSendLabel">Send notification</span>
                             </button>
                         </div>
 
-                        <!-- Template presets -->
+                        <div class="push-result hidden" id="pushSendResult" role="status" aria-live="polite"></div>
+
                         <div class="mt-14">
                             <label class="text-muted-small">Quick templates</label>
                             <div class="flex-row flex-wrap flex-gap-6">
-                                <button class="chip chip--outline tpl-btn" data-tpl="order" data-title="Order Confirmed ✅" data-body="Your order #{{id}} has been confirmed and is being prepared.">Order Confirmed</button>
-                                <button class="chip chip--outline tpl-btn" data-tpl="order" data-title="Out for Delivery 🛵" data-body="Your order is out for delivery! Track it in the app.">Out for Delivery</button>
-                                <button class="chip chip--outline tpl-btn" data-tpl="order" data-title="Delivered 📦" data-body="Your order has been delivered. Enjoy your meal!">Delivered</button>
-                                <button class="chip chip--outline tpl-btn" data-tpl="promo" data-title="Special Offer 🎉" data-body="20% off all pizzas today only! Use code PIZZA20.">20% Off Pizza</button>
-                                <button class="chip chip--outline tpl-btn" data-tpl="promo" data-title="Weekend Deal 🍕" data-body="Weekend special: Buy 1 Get 1 on all burgers.">Weekend Deal</button>
-                                <button class="chip chip--outline tpl-btn" data-tpl="loyalty" data-title="Loyalty Reward 💎" data-body="You've earned a free dessert! Redeem on your next order.">Free Dessert</button>
+                                <button class="chip chip--outline tpl-btn" type="button" data-tpl="promo" data-title="20% off today only" data-body="Use code PIZZA20 in the app. Valid till 11 PM.">20% off</button>
+                                <button class="chip chip--outline tpl-btn" type="button" data-tpl="promo" data-title="Weekend combo is back" data-body="Any pizza + garlic bread + drink at 399. Order in the app.">Weekend combo</button>
+                                <button class="chip chip--outline tpl-btn" type="button" data-tpl="loyalty" data-title="Double points this weekend" data-body="Earn 2x points on every order till Sunday. Redeem straight from the app.">Double points</button>
+                                <button class="chip chip--outline tpl-btn" type="button" data-tpl="system" data-title="Closed tomorrow" data-body="We are closed tomorrow for maintenance. Back the day after, same timings.">Closed tomorrow</button>
+                                <button class="chip chip--outline tpl-btn" type="button" data-tpl="order" data-title="Your order is running late" data-body="We are about 10 minutes behind - your order is on its way.">Order delayed (1 customer)</button>
                             </div>
+                            <p class="text-muted-small mt-2">Order status updates (placed, out for delivery, delivered) are sent automatically by the bot.</p>
                         </div>
+
                     </div>
 
                 </div>
 
             </div>
+
             <!-- DISCOUNTS TAB (inside .main, after tab-promotions) -->
 
             <div id="tab-discounts" class="tab-content hidden">

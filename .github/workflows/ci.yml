@@ -38,6 +38,9 @@ jobs:
       - name: Menu sub-tabs guard (one sidebar entry, three sub-tabs)
         run: node tests/admin-menu-subtabs.check.mjs
 
+      - name: App Notifications guard (unique ids, pane nesting, payload)
+        run: node tests/app-notifications.check.mjs
+
       - name: Menu add-flow guard (new category, inline checks, live preview)
         run: node tests/admin-add-flow.browser.mjs
 

@@ -15,6 +15,7 @@
     "test:loyalty-ui": "node tests/loyalty-dashboard.check.mjs && node tests/loyalty-dashboard.browser.mjs",
     "test:supreme-ui": "node tests/supreme-ui.browser.mjs",
     "test:menu-subtabs": "node tests/admin-menu-subtabs.check.mjs",
+    "test:app-notifications": "node tests/app-notifications.check.mjs",
     "test:menu-add-flow": "node tests/admin-add-flow.browser.mjs",
     "test:menu-ui": "node tests/admin-menu-subtabs.check.mjs && node tests/admin-add-flow.browser.mjs",
     "test:notify-caps": "node tests/notify-caps.check.cjs",
