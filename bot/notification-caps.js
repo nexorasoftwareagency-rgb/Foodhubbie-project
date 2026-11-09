@@ -17,10 +17,15 @@
  */
 
 const ADMIN = require('firebase-admin');
-// Lazy: consumers require this module at their own top level, often BEFORE
-// admin.initializeApp() runs (server.js requires it at line 33, inits at 52).
-// Calling ADMIN.database() at module load crashed the control-API boot.
-function db() { return ADMIN.database(); }
+// The control-API resolves a DIFFERENT firebase-admin copy (its own
+// node_modules) than this module, so its initializeApp() never initializes
+// ours - ADMIN.database() here would throw "The default Firebase app does
+// not exist" at send time. server.js injects its database after init;
+// bot/index.js shares this module's copy, so the fallback covers it.
+// (Calling ADMIN.database() at module load was a boot crash - keep lazy.)
+let _injectedDb = null;
+function setDatabase(database) { _injectedDb = database; }
+function db() { return _injectedDb || ADMIN.database(); }
 
 // IST offset in ms: UTC + 5:30 = 19800000 ms
 const IST_OFFSET_MS = 5 * 3600000 + 30 * 60000;
@@ -105,6 +110,7 @@ module.exports = {
     checkAndConsumeCap,
     getCapRemaining,
     isQuietHours,
+    setDatabase,
     IST_OFFSET_MS,
     CAPS,
 };

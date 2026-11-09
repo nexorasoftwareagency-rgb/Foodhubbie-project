@@ -157,5 +157,22 @@ t('notification-caps loads before initializeApp (control-API boot order)', () =>
     assert.equal(r.status, 0, 'module must load with no Firebase app initialized:\n' + (r.stderr || '').slice(0, 300));
 });
 
+// server.js and notification-caps.js resolve DIFFERENT firebase-admin copies,
+// so the caps module needs the control-API's database injected after init -
+// and injected AFTER initializeApp, never before (admin.database() throws
+// "The default Firebase app does not exist" at send time).
+t('server injects its database into notification-caps after initializeApp', () => {
+    const server = fs.readFileSync(path.join(root, 'bot-control-api/server.js'), 'utf8');
+    const caps = fs.readFileSync(path.join(root, 'bot/notification-caps.js'), 'utf8');
+    assert.ok(server.includes("const { checkAndConsumeCap, setDatabase } = require('../bot/notification-caps');"), 'server imports setDatabase from the caps module');
+    const initIdx = server.indexOf('admin.initializeApp(');
+    const injectIdx = server.indexOf('setDatabase(admin.database())');
+    assert.ok(initIdx > 0, 'initializeApp present');
+    assert.ok(injectIdx > 0, 'setDatabase(admin.database()) call present');
+    assert.ok(injectIdx > initIdx, `injection must come after initializeApp (init@${initIdx}, inject@${injectIdx})`);
+    assert.ok(caps.includes('function setDatabase('), 'caps module exports setDatabase');
+    assert.ok(/return _injectedDb \|\| ADMIN\.database\(\)/.test(caps), 'db() prefers the injected instance');
+});
+
 console.log(failed ? `\n${failed} check(s) failed` : '\napp notifications guard ok');
 process.exit(failed ? 1 : 0);

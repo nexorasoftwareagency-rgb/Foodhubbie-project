@@ -30,7 +30,7 @@ const { startMetaCostPublisher } = require('./meta-cost-publisher');
 const sharp = require('sharp');
 const { getBillingDefaults } = require('../shared/billing-defaults.cjs');
 const { prunePushInbox } = require('../shared/push-inbox.cjs');
-const { checkAndConsumeCap } = require('../bot/notification-caps');
+const { checkAndConsumeCap, setDatabase } = require('../bot/notification-caps');
 
 const PORT = process.env.BOT_CONTROL_PORT || 4000;
 
@@ -53,6 +53,10 @@ admin.initializeApp({
   credential: admin.credential.applicationDefault(),
   databaseURL: process.env.FIREBASE_DATABASE_URL,
 });
+// notification-caps resolves its OWN firebase-admin copy (bot/node_modules),
+// which this initializeApp() never initializes - inject ours or every cap
+// check at send time throws "The default Firebase app does not exist".
+setDatabase(admin.database());
 
 const app = express();
 app.use(express.json());
