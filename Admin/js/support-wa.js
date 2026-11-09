@@ -13,11 +13,25 @@ import { MIN_TOPUP } from '../../shared/cost-math.js';
 
 /**
  * @param {'topup'|'connect'} kind
- * @param {{storeName?: string, amount?: string, bid?: string, oid?: string, email?: string}} [opts]
+ * @param {{storeName?: string, amount?: string, bid?: string, oid?: string,
+ *   email?: string, outletName?: string, outletNo?: string, phone?: string}} [opts]
  *   amount is the already-formatted minimum ("₹1,500" for a WhatsApp outlet).
+ *   storeName is the outlet display name (settings/Store.storeName).
+ *   outletName is the outlet display name (may differ from storeName).
+ *   outletNo is the short outlet number (e.g. "DD").
+ *   phone is the outlet WhatsApp number for customer reference.
  * @returns {string} the message body (no URL encoding)
  */
-export function supportWaText(kind = 'topup', { storeName, amount, bid, oid, email } = {}) {
+export function supportWaText(kind = 'topup', {
+    storeName,
+    amount,
+    bid,
+    oid,
+    email,
+    outletName,
+    outletNo,
+    phone,
+} = {}) {
     const name = String(storeName || '').trim() || 'my restaurant';
     const min = amount || `\u20B9${MIN_TOPUP.toLocaleString('en-IN')}`;
     const first = kind === 'connect'
@@ -26,6 +40,9 @@ export function supportWaText(kind = 'topup', { storeName, amount, bid, oid, ema
     const details = [];
     if (bid) details.push(`Business ID: ${bid}`);
     if (oid) details.push(`Outlet ID: ${oid}`);
+    if (outletNo) details.push(`Outlet No: ${outletNo}`);
+    if (outletName && outletName !== name) details.push(`Outlet Name: ${outletName}`);
+    if (phone) details.push(`Outlet Phone: ${phone}`);
     if (email) details.push(`Admin email: ${email}`);
     return details.length ? `${first}\n\n${details.join('\n')}` : first;
 }

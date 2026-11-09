@@ -510,6 +510,9 @@ export function supportWaFor(kind = 'topup', opts = {}) {
         bid: BUSINESS_ID(),
         oid: Outlet.current,
         email: (state.adminData && state.adminData.email) || '',
+        outletName: opts.outletName,
+        outletNo: opts.outletNo,
+        phone: opts.phone,
     }));
 }
 const LOCK_MSG = `Your restaurant is in <strong>setup mode</strong>. You can set up your menu, tables and settings now. To start taking orders, add a minimum wallet balance of <strong>\u20B9${MIN_TOPUP.toLocaleString('en-IN')}</strong>. Contact FoodHubbie support and we will add it once your payment is received.`;
