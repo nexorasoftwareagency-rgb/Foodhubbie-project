@@ -2120,11 +2120,10 @@ function renderActiveOffers() {
             actionsHtml = `<button type="button" class="promo-btn-copy" data-code="${codeEsc}">Copy Code</button><button type="button" class="promo-btn-apply" data-code="${codeEsc}">Apply</button>`;
         }
 
+        const variantClass = `promo-card-badge-${o.variant || 'generic'}`;
         const badgeHtml = isApplied
             ? `<span class="promo-card-badge applied">${codeEsc}</span><span class="promo-card-badge applied">Applied</span>`
             : `<span class="promo-card-badge ${variantClass}">${codeEsc}</span>`;
-
-        const variantClass = `promo-card-badge-${o.variant || 'generic'}`;
         const urgencyHtml = o.daysLeft && o.daysLeft <= 7
             ? `<span class="promo-card-urgency">${o.daysLeft} days left</span>`
             : '';
