@@ -88,6 +88,7 @@ export function render(bid, oid, tab) {
 }
 
 function renderProfile(bid, oid, biz, outlet) {
+  if (!document.getElementById('profile-content')) return; // route already changed
   const wa = outlet.whatsapp || {};
   const connected = wa.status === 'active';
   const bot = outlet.botStatus || { status: 'unknown', uptime: 0, memory: 0, history: [] };

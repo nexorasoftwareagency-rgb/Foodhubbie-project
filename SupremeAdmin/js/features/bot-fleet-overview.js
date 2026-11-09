@@ -89,6 +89,7 @@ export function render() {
 }
 
 function renderFromCache() {
+  if (!document.getElementById('fleet-grid')) return; // route already changed
   const q = (document.getElementById('fleet-search')?.value || '').trim().toLowerCase();
   const base = q ? allRows.filter((b) => b.outletName.toLowerCase().includes(q) || b.businessName.toLowerCase().includes(q)) : allRows;
   const test = { all: () => true, down: isDown, degraded: (b) => b.botStatus === 'degraded', online: (b) => b.botStatus === 'online', nodata: (b) => !isDown(b) && b.botStatus !== 'online' && b.botStatus !== 'degraded' }[chip] || (() => true);

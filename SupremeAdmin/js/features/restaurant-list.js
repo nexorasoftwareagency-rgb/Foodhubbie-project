@@ -116,6 +116,9 @@ export function render() {
 }
 
 function applyFilters() {
+  // A live snapshot can land between a route change and the unsubscribe, after
+  // the table is gone — paint nothing rather than throw.
+  if (!document.getElementById('restaurant-tbody')) return;
   const q = (document.getElementById('restaurant-search')?.value || '').trim().toLowerCase();
   const plan = document.getElementById('plan-filter')?.value || 'all';
 

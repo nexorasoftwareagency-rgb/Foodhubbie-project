@@ -86,6 +86,7 @@ export function render() {
 }
 
 function renderAll() {
+  if (!document.getElementById('pay-tbody')) return; // route already changed
   const sel = document.getElementById('pay-plan-filter');
   if (sel && sel.value !== planChip) sel.value = planChip;
   renderKpis();

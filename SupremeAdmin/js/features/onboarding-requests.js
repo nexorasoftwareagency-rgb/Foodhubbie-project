@@ -56,6 +56,7 @@ function setFilter(f) {
 }
 
 function renderAll() {
+  if (!document.getElementById('ob-kpis')) return; // route already changed
   const filtered = state.filter === 'all'
     ? state.requests
     : state.requests.filter((r) => r.status === state.filter);
