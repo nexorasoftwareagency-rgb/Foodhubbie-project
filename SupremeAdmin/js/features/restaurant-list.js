@@ -59,7 +59,7 @@ export function render() {
       </div>
       <div class="search-input-wrap">
         <svg data-lucide="search"></svg>
-        <input type="text" id="restaurant-search" placeholder="Search restaurant or outlet…" aria-label="Search restaurants" />
+        <input type="text" id="restaurant-search" placeholder="Search name, business ID or outlet ID…" aria-label="Search restaurants by name, business ID or outlet ID" />
       </div>
       <select class="text-input" id="plan-filter" aria-label="Plan">
         <option value="all">All plans</option>
@@ -125,7 +125,10 @@ function applyFilters() {
   // Tab first: Active and Disabled are different lists, not a filter chip.
   const tabRows = allRows.filter((r) => (activeTab === 'disabled' ? r.disabled === true : !r.disabled));
   let base = tabRows;
-  if (q) base = base.filter((r) => r.outletName.toLowerCase().includes(q) || r.businessName.toLowerCase().includes(q));
+  // Ids are searchable too: a support hand-off quotes Business ID + Outlet ID,
+  // and that exact pair is the profile URL — pasting either must find the outlet.
+  if (q) base = base.filter((r) => r.outletName.toLowerCase().includes(q) || r.businessName.toLowerCase().includes(q)
+    || String(r.bid || '').toLowerCase().includes(q) || String(r.oid || '').toLowerCase().includes(q));
   if (plan !== 'all') base = base.filter((r) => r.plan === plan);
 
   renderSummary(allRows, base, tabRows);

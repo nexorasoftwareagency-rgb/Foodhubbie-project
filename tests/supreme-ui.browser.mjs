@@ -58,6 +58,12 @@ try {
   await page.fill('#restaurant-search', 'biryani'); await page.waitForTimeout(300);
   assert.equal((await page.$$('#restaurant-tbody tr.row-link')).length, 3);
   ok('search narrows rows');
+  await page.fill('#restaurant-search', 'b3'); await page.waitForTimeout(300);
+  assert.equal((await page.$$('#restaurant-tbody tr.row-link')).length, 3);
+  await page.fill('#restaurant-search', 'o5'); await page.waitForTimeout(300);
+  assert.equal((await page.$$('#restaurant-tbody tr.row-link')).length, 1);
+  ok('search finds a tenant by business id / outlet id (what a support hand-off quotes)');
+  await page.fill('#restaurant-search', 'biryani'); await page.waitForTimeout(300);
   await click(page, '#restaurant-tbody tr.row-link');
   assert.match(page.url(), /#profile\/b3\//); ok('row click opens profile');
   assert.deepEqual(errors, [], 'no page errors: ' + errors.join('|'));
