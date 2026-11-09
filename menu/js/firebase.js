@@ -59,7 +59,7 @@ export function isConnected() {
 // Tenant resolution — parsed once from the URL:
 //   ?o=outletId&b=businessId
 // OUTLET = `o` query param or first path segment
-// BUSINESS_ID = `b` query param (required for new outlets)
+// BUSINESS_ID = `b` query param, or the legacy outlet map below
 // NO default outlet — bare links must not silently point to any
 // specific restaurant. Multi-business SaaS: every restaurant is
 // identified by its own ?b= (business) + ?o= (outlet) pair.
@@ -73,13 +73,18 @@ const pathParts = window.location.pathname.split('/').filter(Boolean);
 // every RTDB path, e.g. businesses/.../outlets/index.html/...).
 const pathOutlet = pathParts[0] && !pathParts[0].includes('.') && pathParts[0] !== 'index.html' ? pathParts[0] : undefined;
 export const OUTLET = _queryOutlet || pathOutlet || '';
-export const BUSINESS_ID = _queryBusiness || '';
-// True when the URL cannot identify one restaurant+outlet pair.
-// A bare link (no ?b= and no ?o=) is incomplete and shows the
-// Customer App features page instead of defaulting to any outlet.
-// ?t= table token links bypass this: initSession() resolves the outlet
-// from the token itself.
-export const LINK_INCOMPLETE = (!_queryBusiness || !_queryOutlet) && !_qs.get('t');
+// Printed table QRs from before 2026-09-22 put the outlet in the path and carry
+// no ?b=; without this fallback they read `businesses//…` → PERMISSION_DENIED,
+// which the boot blamed on the customer's connection. Links built since then
+// always carry ?b= & ?o=, so this is legacy-only. Bot twin:
+// bot/helpers/outlet-resolution.js (Node CommonJS — can't share this module).
+const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
+export const BUSINESS_ID = _queryBusiness || BUSINESS_BY_OUTLET[OUTLET] || '';
+// True when the URL cannot identify one restaurant+outlet pair: no ?b=/?o= and
+// no legacy outlet in the path to fall back on. A bare link shows the Customer
+// App features page instead of guessing a tenant. ?t= links bypass this —
+// app.js then refuses any token link that still names no tenant.
+export const LINK_INCOMPLETE = (!BUSINESS_ID || !OUTLET) && !_qs.get('t');
 
 export function outletRef(path) {
     return ref(db, `businesses/${BUSINESS_ID}/outlets/${OUTLET}/${path}`);

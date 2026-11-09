@@ -23,6 +23,9 @@ jobs:
       - name: Menu cart persistence guard
         run: node tests/menu-cart-refresh.check.cjs
 
+      - name: Legacy QR guard (outlet→business fallback + honest outdated-QR fail)
+        run: node tests/menu-legacy-qr.check.cjs
+
       - name: PIN hashing guard (PBKDF2, legacy upgrade)
         run: node tests/pin-crypto.check.mjs
 

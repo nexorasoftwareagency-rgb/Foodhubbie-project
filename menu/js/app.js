@@ -3,7 +3,7 @@
  * Wires together firebase.js, session.js, cart.js, order.js, ui.js.
  * This is the only file with top-level event listener registration.
  */
-import { outletRef, get, onValue, push, set, OUTLET, isConnected, update, runTransaction, LINK_INCOMPLETE } from './firebase.js';
+import { outletRef, get, onValue, push, set, OUTLET, BUSINESS_ID, isConnected, update, runTransaction, LINK_INCOMPLETE } from './firebase.js';
 import { initSession, ensureSession, Session, saveCheckoutContact, cleanupSession, detachSessionListeners, reattachSessionWatch, touchSession, createOrderGroup, getCurrentGroupOrders, assertOutletEnabled, assertWalletGate } from './session.js';
 import { Cart, addLine, setQty, clearCart, lineCount, subtotal as cartSubtotal, isEmpty as cartIsEmpty, restoreCart, getQRStorageKey, setCartScope } from './cart.js';
 import { placeOrder } from './order.js';
@@ -94,6 +94,21 @@ function _showIncompleteLink() {
     UI.showScreen('screenCustomerApp');
 }
 
+// The link carries a table token but names no restaurant (QRs printed before
+// 2026-09-22, which put ?t= on the root URL). There is nothing to resolve —
+// say so, instead of offering a "tap to retry" that can never succeed.
+function _showOutdatedQr() {
+    document.getElementById('loadingOverlay').style.display = 'none';
+    document.getElementById('offlineBanner').classList.remove('visible');
+    const title = document.getElementById('invalidTitle');
+    const body = document.getElementById('invalidBody');
+    const retry = document.getElementById('invalidRetry');
+    if (title) title.textContent = 'This QR code is outdated';
+    if (body) body.textContent = 'This link does not say which restaurant it belongs to, so it cannot be opened. Please ask a staff member for the current QR code.';
+    if (retry) retry.classList.add('hidden');
+    UI.showScreen('screenInvalid');
+}
+
 // Real timeout / thrown error / a later step hanging — an actual
 // connectivity problem. Shows the offline banner with a working retry.
 function _showConnectionIssue() {
@@ -115,6 +130,15 @@ async function boot() {
     if (LINK_INCOMPLETE) {
         console.warn('[Boot] Incomplete link — business id / outlet id missing.');
         _showIncompleteLink();
+        return;
+    }
+
+    // A ?t= link bypasses the check above, but one that still names no tenant
+    // would read `businesses//…` → PERMISSION_DENIED, which this function then
+    // reported as a connection problem the customer retried forever.
+    if (_tokenAttempted && (!BUSINESS_ID || !OUTLET)) {
+        console.warn('[Boot] Token link names no tenant — outdated QR.', { outlet: OUTLET, business: BUSINESS_ID });
+        _showOutdatedQr();
         return;
     }
 
