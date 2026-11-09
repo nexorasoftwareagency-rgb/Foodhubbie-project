@@ -66,10 +66,12 @@ function _wireOnce() {
     $('pushNotifTitle')?.addEventListener('input', () => {
         _updateCount('pushNotifTitle', 'pushTitleCount', 100);
         _updatePreviewText();
+        _syncUi();
     });
     $('pushNotifBody')?.addEventListener('input', () => {
         _updateCount('pushNotifBody', 'pushBodyCount', 300);
         _updatePreviewText();
+        _syncUi();
     });
 
     document.querySelectorAll('input[name="pushNotifType"]').forEach(rb => {
@@ -325,14 +327,15 @@ function _evaluate() {
     const testMode = !!$('pushNotifTestMode')?.checked;
 
     if (_sending) return { ok: false, count: 0, reason: 'Sending…' };
-    if (!_loaded) return { ok: false, count: 0, reason: 'Checking subscribers…' };
-    if (_loadError) return { ok: false, count: 0, reason: 'Subscribers could not be loaded.', note: 'Press Refresh to try again.' };
-
+    // A test send only needs the admin's own device token - never gate it on
+    // the subscriber list (a failed subscriptions read must not block a test).
     if (testMode) {
         return _deviceReady
             ? { ok: true, count: 1, reason: '' }
             : { ok: false, count: 0, reason: 'No push token on your admin account yet.', note: 'Enable notifications from the bell prompt, then reload this page.' };
     }
+    if (!_loaded) return { ok: false, count: 0, reason: 'Checking subscribers…' };
+    if (_loadError) return { ok: false, count: 0, reason: 'Subscribers could not be loaded.', note: 'Press Refresh to try again.' };
 
     if (total === 0) return { ok: false, count: 0, reason: 'No subscribers yet.', note: 'Share your app link so customers can enable notifications.' };
 
@@ -363,6 +366,9 @@ function _syncUi() {
     const aud = _currentAudience();
     const testMode = !!$('pushNotifTestMode')?.checked;
     const ev = _evaluate();
+    // A blank composer must not look ready: the button's label promises a
+    // recipient count, so gate it on content too (the send path re-checks).
+    const contentOk = !!($('pushNotifTitle')?.value || '').trim() && !!($('pushNotifBody')?.value || '').trim();
 
     $('pushPhoneWrap')?.classList.toggle('hidden', aud !== 'one');
 
@@ -402,14 +408,16 @@ function _syncUi() {
     }
 
     const btn = $('btnSendPushNotif');
-    if (btn) btn.disabled = _sending || !ev.ok;
+    if (btn) btn.disabled = _sending || !ev.ok || !contentOk;
 
     const label = $('pushSendLabel');
     if (label) {
+        const base = testMode ? 'Send test to my device'
+            : aud === 'one' ? `Send to ${_phone() || 'customer'}`
+                : `Send to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}`;
         label.textContent = _sending ? 'Sending…'
-            : testMode ? 'Send test to my device'
-                : aud === 'one' ? `Send to ${_phone() || 'customer'}`
-                    : `Send to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}`;
+            : (!ev.ok || contentOk) ? base
+                : 'Add title and message';
     }
 
     const testHint = $('pushTestHint');
@@ -499,6 +507,7 @@ function _timeNow() {
 /* ============ SEND ============ */
 
 async function _sendPushNotification() {
+    if (_sending) return; // a second tap while the confirm is open must not queue a second send
     const ev = _evaluate();
     if (!ev.ok) {
         showToast(ev.reason || 'Cannot send yet', 'warning');
@@ -550,8 +559,13 @@ async function _sendPushNotification() {
                 // 'promo', which would filter by offers consent and quiet hours
                 // even for a transactional order update.
                 type,
-                audience: aud === 'one' ? 'phone' : 'all',
-                ...(aud === 'one' ? { phone } : {}),
+                // Test mode must not carry an audience: an order-type send forces
+                // the one-customer audience, and the server rejects an empty
+                // phone before it even reaches the test-mode branch.
+                ...(testMode ? {} : {
+                    audience: aud === 'one' ? 'phone' : 'all',
+                    ...(aud === 'one' ? { phone } : {}),
+                }),
                 testMode,
                 data: {
                     testMode: testMode ? 'true' : 'false',
