@@ -51,7 +51,7 @@ let _history = [];     // recent accepted sends, newest first (server-capped at 
 export async function initPushUI() {
     logger.info('APP-NOTIF', 'Initialising push notification UI…');
     _wireOnce();
-    _renderAppLink();
+    renderAppLink();
     await checkDevice();
     await loadPushSubscriptions();
     await loadHistory();
@@ -69,7 +69,7 @@ function _wireOnce() {
     _wired = true;
 
     $('btnSendPushNotif')?.addEventListener('click', _sendPushNotification);
-    $('btnRefreshPushSubs')?.addEventListener('click', () => loadPushSubscriptions(true));
+    // Refresh subscriber count is wired from customer-app.js on #caRefreshSubs.
     $('btnCopyPushAppLink')?.addEventListener('click', _copyAppLink);
 
     $('pushNotifTitle')?.addEventListener('input', () => {
