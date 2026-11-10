@@ -397,3 +397,39 @@ test('walletGateBlocks: low/closed block, everything else opens', () => {
     assert.strictEqual(walletGateBlocks(null), null);
     assert.strictEqual(walletGateBlocks(undefined), null);
 });
+
+// Notification caps live under the tenant outlet. They used to be written to
+// `outlets/{oid}/notifyCaps/...` — a root path that exists nowhere in the
+// schema, so every counter was lost on a phantom node. The Admin SDK bypasses
+// rules, which is why nothing ever errored.
+test('notification caps are tenant-scoped, never a root outlets/ node', async () => {
+    const { setDatabase, checkAndConsumeCap, getCapRemaining } = require('../notification-caps');
+    const reads = [];
+    const writes = [];
+    const makeRef = (p) => ({
+        child: (k) => makeRef(`${p}/${k}`),
+        once: async () => { reads.push(p); return { val: () => 0 }; },
+        set: async () => { writes.push(p); },
+    });
+    setDatabase({ ref: (p) => makeRef(p) });
+
+    try {
+        // no business id -> resolve the outlet's owner (legacy/manual caller)
+        assert.strictEqual((await checkAndConsumeCap('pizza', '9876543210', 'order')).allowed, true);
+        assert.match(writes[0], /^businesses\/roshani-pizza\/outlets\/pizza\/notifyCaps\/9876543210\/order\/\d{4}-\d{2}-\d{2}$/);
+
+        // explicit tenant wins — the control API sends for ANY outlet
+        await checkAndConsumeCap('pizza', '9876543210', 'promo', 'e2e-biz-1792987605261');
+        assert.match(writes[1], /^businesses\/e2e-biz-1792987605261\/outlets\/pizza\/notifyCaps\/9876543210\/promo\//);
+
+        // reads use the same tenant path
+        assert.strictEqual(await getCapRemaining('pizza', '9876543210', 'order', 'roshani-pizza'), 50);
+        assert.match(reads[reads.length - 1], /^businesses\/roshani-pizza\/outlets\/pizza\/notifyCaps\//);
+
+        for (const p of [...writes, ...reads]) {
+            assert.ok(!p.startsWith('outlets/'), `root outlets path leaked: ${p}`);
+        }
+    } finally {
+        setDatabase(null);
+    }
+});

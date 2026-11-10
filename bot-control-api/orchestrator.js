@@ -30,8 +30,15 @@ async function pm2Has(list, name) {
 
 // Whether this outlet should run a bot. Outlets with no `whatsapp` node at all
 // are out of orchestrator scope entirely (manual/baileys provisioning owns them).
+//
+// The guard is on `whatsapp.status`, NOT on `whatsapp` existing: a template
+// status webhook writes `whatsapp/templates/*`, which creates the parent node
+// without ever touching `status`. Treating that as "ours" made desiredState()
+// false, and the stop branch then killed a worker it had itself provisioned
+// (`bot.source === 'orchestrator'`) — a live Baileys bot taken down by a
+// template approval. No status = still not ours.
 function desiredState(outlet) {
-  if (!outlet || !outlet.whatsapp) return null; // not ours — never touch
+  if (!outlet || !outlet.whatsapp || !outlet.whatsapp.status) return null;
   const shouldRun = outlet.whatsapp.status === 'active' && outlet.suspended !== true;
   return shouldRun;
 }
@@ -173,4 +180,4 @@ async function startOrchestrator({ admin, processName, nextHealthPort }) {
   console.log('[orchestrator] watching businesses/ for whatsapp.status changes');
 }
 
-module.exports = { startOrchestrator };
+module.exports = { startOrchestrator, desiredState };

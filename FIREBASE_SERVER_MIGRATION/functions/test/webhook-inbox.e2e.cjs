@@ -63,6 +63,13 @@ function secret(name) {
     type: 'text',
     text: { body: 'INBOX_PROBE_margherita' },
   };
+  // Batching proof: Meta may put several messages in one payload. The EC2
+  // server only read messages[0]; the port must deliver every one.
+  const message2 = {
+    ...message,
+    id: message.id + '_B',
+    text: { body: 'INBOX_PROBE_farmhouse' },
+  };
   const payload = {
     object: 'whatsapp_business_account',
     entry: [{
@@ -73,7 +80,7 @@ function secret(name) {
           messaging_product: 'whatsapp',
           metadata: { display_phone_number: '917485095436', phone_number_id: PHONE_ID },
           contacts: [{ profile: { name: 'Probe' }, wa_id: '919999999998' }],
-          messages: [message],
+          messages: [message, message2],
         },
       }],
     }],
@@ -89,15 +96,20 @@ function secret(name) {
   check('POST accepted', res.status === 200, `status=${res.status}`);
 
   const deadline = Date.now() + 25000;
-  while (received.length === 0 && Date.now() < deadline) await sleep(250);
+  while (received.length < 2 && Date.now() < deadline) await sleep(250);
 
-  check('transport drained the queue', received.length === 1, `upserts=${received.length}`);
-  if (received.length) {
-    const m = received[0].messages?.[0];
-    check('text preserved', m?.message?.conversation === 'INBOX_PROBE_margherita', JSON.stringify(m?.message));
-    check('remoteJid is a WhatsApp JID', m?.key?.remoteJid === '919999999998@s.whatsapp.net', m?.key?.remoteJid);
-    check('message id preserved', m?.key?.id === message.id, m?.key?.id);
-  }
+  check('transport drained the queue', received.length === 2, `upserts=${received.length}`);
+  const first = received
+    .map((u) => u.messages?.[0])
+    .find((m) => m?.message?.conversation === 'INBOX_PROBE_margherita');
+  const second = received
+    .map((u) => u.messages?.[0])
+    .find((m) => m?.message?.conversation === 'INBOX_PROBE_farmhouse');
+  check('batched message #1 preserved', !!first, JSON.stringify(received.map((u) => u.messages?.[0]?.message)));
+  check('batched message #2 preserved (EC2 dropped this)', !!second);
+  check('remoteJid is a WhatsApp JID', first?.key?.remoteJid === '919999999998@s.whatsapp.net', first?.key?.remoteJid);
+  check('message id preserved', first?.key?.id === message.id, first?.key?.id);
+  check('second message keeps its own id', second?.key?.id === message2.id, second?.key?.id);
 
   await sleep(1500);
   const left = await db.ref(`businesses/${BID}/outlets/${OID}/webhookInbox`).once('value');

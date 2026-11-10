@@ -1575,7 +1575,7 @@ async function notifyCustomerApp(orderId, order, status) {
 
         // Frequency cap: order-status pushes are transactional but still capped
         // to prevent notification storms from rapid status changes.
-        const cap = await checkAndConsumeCap(outlet, phone, 'order');
+        const cap = await checkAndConsumeCap(outlet, phone, 'order', resolveBusinessIdFor(outlet));
         if (!cap.allowed) {
             console.log(`[notify-caps] order push suppressed for ${phone}: ${cap.reason}`);
             return;
@@ -1641,7 +1641,7 @@ async function notifyTierUp(phone, newTier, oldTier, outlet, bid) {
         if (entries.length === 0) return;
 
         // Frequency cap: tier-up pushes are loyalty/marketing-adjacent.
-        const cap = await checkAndConsumeCap(outlet, phone, 'loyalty');
+        const cap = await checkAndConsumeCap(outlet, phone, 'loyalty', resolveBusinessIdFor(outlet));
         if (!cap.allowed) {
             console.log(`[notify-caps] tier-up push suppressed for ${phone}: ${cap.reason}`);
             return;

@@ -17,6 +17,7 @@
  */
 
 const ADMIN = require('firebase-admin');
+const { resolveBusinessIdFor, outletPath } = require('./helpers/outlet-resolution');
 // The control-API resolves a DIFFERENT firebase-admin copy (its own
 // node_modules) than this module, so its initializeApp() never initializes
 // ours - ADMIN.database() here would throw "The default Firebase app does
@@ -31,9 +32,17 @@ function db() { return _injectedDb || ADMIN.database(); }
 const IST_OFFSET_MS = 5 * 3600000 + 30 * 60000;
 
 /** Caps per (outlet, phone, notificationType). Stored under
- *  businesses/{bid}/outlets/{oid}/notifyCaps/{phone}/{type}/{bucket} */
-function capRef(outlet, phone, type) {
-    return db().ref(`outlets/${outlet}/notifyCaps/${phone}/${type}`);
+ *  businesses/{bid}/outlets/{oid}/notifyCaps/{phone}/{type}/{bucket}
+ *
+ *  The business id must be explicit here: this module is shared by the bot
+ *  (one tenant per process) and by bot-control-api (one process, ANY tenant).
+ *  It used to build `outlets/{oid}/notifyCaps`, a root path that exists
+ *  nowhere in the schema — every counter silently landed on a phantom node
+ *  (the Admin SDK bypasses rules, so nothing complained). With no business id
+ *  (legacy/manual caller) resolve the outlet's owner instead of guessing. */
+function capRef(outlet, phone, type, businessId) {
+    const bid = businessId || resolveBusinessIdFor(outlet);
+    return db().ref(outletPath(bid, outlet, 'notifyCaps', phone, type));
 }
 
 /** Returns the IST bucket key for a timestamp (UTC date string in IST). */
@@ -59,10 +68,12 @@ function isQuietHours(ts = Date.now()) {
 
 /**
  * Checks whether a notification of `type` may be sent to `phone` at `outlet`.
+ * `businessId` is optional only for legacy callers; pass the tenant you are
+ * actually sending for (the control API sends for ANY outlet).
  * Returns { allowed: boolean, reason?: string }.
  * On allow, also increments the counter (caller should not double-count).
  */
-async function checkAndConsumeCap(outlet, phone, type = 'order') {
+async function checkAndConsumeCap(outlet, phone, type = 'order', businessId) {
     if (!phone || !/^[6-9]\d{9}$/.test(String(phone))) {
         return { allowed: true }; // no phone → can't cap, let it through
     }
@@ -76,7 +87,7 @@ async function checkAndConsumeCap(outlet, phone, type = 'order') {
 
     const cap = CAPS[type] ?? CAPS.order;
     const bucket = istBucketKey();
-    const ref = capRef(outlet, phone, type);
+    const ref = capRef(outlet, phone, type, businessId);
 
     try {
         const snap = await ref.child(bucket).once('value');
@@ -95,12 +106,12 @@ async function checkAndConsumeCap(outlet, phone, type = 'order') {
 }
 
 /** Returns remaining quota for a (outlet, phone, type) — for UI display. */
-async function getCapRemaining(outlet, phone, type = 'order') {
+async function getCapRemaining(outlet, phone, type = 'order', businessId) {
     if (!phone || !/^[6-9]\d{9}$/.test(String(phone))) return CAPS[type] ?? CAPS.order;
     const cap = CAPS[type] ?? CAPS.order;
     const bucket = istBucketKey();
     try {
-        const snap = await capRef(outlet, phone, type).child(bucket).once('value');
+        const snap = await capRef(outlet, phone, type, businessId).child(bucket).once('value');
         const used = Number(snap.val() || 0);
         return Math.max(0, cap - used);
     } catch { return cap; }

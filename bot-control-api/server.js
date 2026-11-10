@@ -1405,7 +1405,7 @@ app.post('/tenant-api/notify', async (req, res) => {
         cappedEntries.push(entry);
         continue;
       }
-      const cap = await checkAndConsumeCap(req.outlet, phone, notifyType);
+      const cap = await checkAndConsumeCap(req.outlet, phone, notifyType, req.businessId);
       if (cap.allowed) {
         cappedEntries.push(entry);
       } else {
