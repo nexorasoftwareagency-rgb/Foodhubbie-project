@@ -24,22 +24,34 @@
 | Console | https://console.firebase.google.com/project/foodhubbie-10 |
 | Logged In As | `nexorasoftwareagency@gmail.com` |
 
-### Hosting Targets (7 sites)
+### Hosting Targets (5 live — foodhubbie.in subdomains only)
 
-| Target | Site ID | URL | Last Deployed |
-|--------|---------|-----|---------------|
-| admin | `foodhubbie-admins` | https://foodhubbie-admins.web.app | 2026-09-10 |
-| rider | `foodhubbie-riderapp` | https://foodhubbie-riderapp.web.app | 2026-09-10 |
-| menu | `foodhubbie-qrmenu` | https://foodhubbie-qrmenu.web.app | 2026-09-10 |
-| supreme | `foodhubbie-supremeadmin` | https://foodhubbie-supremeadmin.web.app | 2026-09-10 |
-| assets | `foodhubbie-assets` | https://foodhubbie-assets.web.app | 2026-09-10 |
-| website | `foodhubbie-web` | https://foodhubbie.in | 2026-09-10 |
-| delivery | `foodhubbie-delivery` | https://foodhubbie-delivery.web.app | 2026-08-12 ⚠️ STALE |
+| Target | Site ID | URL | Status |
+|--------|---------|-----|--------|
+| admin | `foodhubbie-admins` | https://app.foodhubbie.in | ✅ Live |
+| rider | `foodhubbie-riderapp` | https://rider.foodhubbie.in | ✅ Live |
+| menu | `foodhubbie-qrmenu` | https://menu.foodhubbie.in | ✅ Live |
+| supreme | `foodhubbie-supremeadmin` | https://control.foodhubbie.in | ✅ Live |
+| website | `foodhubbie-web` | https://foodhubbie.in | ✅ Live |
+| assets | `foodhubbie-assets` | (no custom domain — asset storage only) | — |
 
-### Default Hosting
-| Site | URL | Last Deploy |
-|------|-----|-------------|
-| `foodhubbie-10` | https://foodhubbie-10.web.app | 2026-08-12 |
+### Retired / Not deployed
+| Site | URL | Reason |
+|------|-----|--------|
+| delivery | `foodhubbie-delivery.web.app` | Orphan — last deploy 2026-08-12, retired |
+| default | `foodhubbie-10.web.app` | Retired — all traffic on foodhubbie.in subdomains |
+
+### Deployment rule (effective immediately)
+**Only deploy to foodhubbie.in subdomains. No web.app domains.**
+
+```bash
+# All hosting targets
+firebase deploy --only database,hosting
+
+# Specific targets
+firebase deploy --only hosting:admin,hosting:menu,hosting:rider,hosting:supreme,hosting:website
+firebase deploy --only database
+```
 
 ### Firebase CLI
 ```bash

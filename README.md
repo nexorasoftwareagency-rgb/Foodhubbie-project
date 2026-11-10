@@ -10,7 +10,7 @@ A full-stack, multi-tenant ERP platform for WhatsApp-based food ordering. Custom
 
 ## Live demo
 
-**https://foodhubbie-admins.web.app/demo** — also reachable as `https://www.foodhubbie.in/demo` (301 → apex → 302 → admin host).
+**https://app.foodhubbie.in/demo** — also reachable as `https://foodhubbie.in/demo` (302 → admin host).
 
 | | |
 |---|---|
