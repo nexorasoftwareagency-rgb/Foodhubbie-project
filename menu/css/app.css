@@ -1539,19 +1539,26 @@ body.onb-open{ overflow:hidden; }
 /* ---------- Rewards ---------- */
 .rewards-grid{ display:flex; flex-direction:column; gap:8px; margin:0 16px 10px; }
 .reward-card{
-    display:flex; align-items:center; justify-content:space-between;
-    gap:10px; background:var(--card); border:1px solid var(--border);
+    /* Grid, not flex: as a flex row the label was squeezed to ~22px and its text
+       painted under the "item"/"discount" chip. Row 1 = cost | label | type,
+       row 2 = the action button (full width, 44px-tall target). */
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-areas:"cost label type" "btn btn btn";
+    align-items:center; gap:10px;
+    background:var(--card); border:1px solid var(--border);
     border-radius:14px; padding:12px 14px;
 }
 .reward-cost{
+    grid-area:cost; white-space:nowrap;
     font-size:12px; font-weight:800; color:var(--primary);
     background:rgba(232,73,8,.08); padding:3px 8px; border-radius:8px;
 }
-.reward-label{ font-size:13px; font-weight:700; color:var(--text); min-width:0; }
-.reward-type{ font-size:12px; font-weight:700; letter-spacing:0; color:var(--text-sub); background:var(--border); padding:2px 7px; border-radius:8px; }
+.reward-label{ grid-area:label; font-size:13px; font-weight:700; color:var(--text); min-width:0; overflow-wrap:anywhere; }
+.reward-type{ grid-area:type; white-space:nowrap; font-size:12px; font-weight:700; letter-spacing:0; color:var(--text-sub); background:var(--border); padding:2px 7px; border-radius:8px; }
 .reward-btn{
-    border:none; border-radius:8px; background:var(--primary); color:#fff;
-    font-size:12px; font-weight:700; padding:7px 14px; cursor:pointer; flex-shrink:0;
+    grid-area:btn; width:100%; border:none; border-radius:8px; background:var(--primary); color:#fff;
+    font-size:13px; font-weight:700; padding:12px 14px; cursor:pointer; flex-shrink:0;
 }
 .reward-btn:hover{ filter:brightness(1.1); }
 .reward-btn:active{ transform:scale(.96); }
@@ -1751,6 +1758,14 @@ body.onb-open{ overflow:hidden; }
 }
 .promo-empty-sub{
     font-size:12px; color:var(--text-sub); margin-bottom:8px;
+}
+/* Empty states that used to have no rule at all: the title/sub sat flush against
+   the viewport edge under a centred icon. */
+.promotions-empty{
+    text-align:center; padding:24px 16px 20px; color:var(--text-sub); font-size:12.5px;
+}
+.promo-empty{
+    text-align:center; padding:24px 16px; color:var(--text-sub); font-size:12.5px;
 }
 
 /* ---------- Skeleton Loaders ---------- */
