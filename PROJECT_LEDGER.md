@@ -517,3 +517,16 @@ LEDGER CLOSE - 20261110-customer-app-p0-bugfix (Customer APP P0 bug fixes, TIER 
 - Files: Admin/js/features/app-notifications.js, Admin/sw.js.
 - Commits: de2a4df pushed to main.
 - Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
+
+LEDGER CLOSE - 20261110-customer-app-p1-push (Customer APP Push Notifications P1 enhancements, TIER 2, DONE/high)
+- Trigger: Deep research + planning on Customer APP sub-tabs; P1 = Push Notifications enhancements.
+- Enhancement 1 - Subscriber search & filter: search input (#pushSubSearch) filters subscribers by name/phone in real-time; filter chips (All/Offers On/Offers Off/Active 30d) narrow the list; match count shown below; subscriber list section hidden when 0 subscribers.
+- Enhancement 2 - Drafts: composer state (title, body, type, audience, phone, testMode) auto-saves to localStorage (key fh:pushDraft:<bid>:<oid>) on every input/change; restored on initPushUI; cleared after successful send.
+- Enhancement 3 - Templates library: custom templates modal (#pushTemplatesModal) â€” create/use/delete templates; stored in localStorage (key fh:pushTemplates:<bid>:<oid>); "Manage Templates" button (#btnManageTemplates) added to quick templates row.
+- Enhancement 4 - Keyboard shortcuts: Ctrl+Enter sends notification; Ctrl+. toggles test mode; Escape clears composer (only when not focused in an input).
+- Enhancement 5 - Undo after send: 5-second undo toast with "Undo" button; marks notifyLog entry as recalled:true + recalledAt timestamp; toast changes to "Send undone."
+- SW cache: Admin/sw.js CACHE_NAME bumped v5.12.37 â†’ v5.12.38.
+- Verify: node --check passes; deployed hosting:admin â†’ live on app.foodhubbie.in; SW v5.12.38 served; all P1 functions confirmed in deployed file via curl (_saveDraft, _loadTemplates, _wireKeyboard, _scheduleUndo, _filterSubs, btnManageTemplates, pushSubSearch, pushSubFilter).
+- Files: Admin/js/features/app-notifications.js, Admin/sw.js, Admin/index.html (search/filter section + templates button), Admin/style.css (new styles for subs section, templates button, undo button).
+- Commits: b0bd689 pushed to main.
+- Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
