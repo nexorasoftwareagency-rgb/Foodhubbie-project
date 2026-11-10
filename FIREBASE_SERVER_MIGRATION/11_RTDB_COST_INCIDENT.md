@@ -156,3 +156,88 @@ needs a real admin password. It has not been run.
 
 Until that ships, the November bill is capped but the model does not scale past
 a handful of image-heavy outlets.
+
+## 6. Second finding: the full `businesses` read on every reconnect (2026-11-10)
+
+The campaign fix and the orchestrator rewrite both landed, and the 5-minute
+spike **did not move**. `firebase database:profile --raw` kept showing a single
+`listener-listen` on `businesses` of **5,276,512 bytes** from the EC2 box
+(`3.111.39.210`), and the egress metric kept showing ~3 MB + ~2 MB every
+4-5 minutes.
+
+### How it was attributed
+
+Guessing from source was wrong twice (the orchestrator's listener and
+`status-watcher`'s fallback were both suspects and both innocent). What worked
+was per-process socket accounting on the box:
+
+```bash
+sudo ss -tnpi   # bytes_received per socket + users:(("node ...",pid=N))
+```
+
+Diffing `bytes_received` per `(pid, socket)` every 5 s named the process:
+
+```
+t=90s pid=1466878 +5.06 MB   node /var/www/foodhubbie/bot/index.js
+```
+
+pid 1466878 was `bot-e2e-biz-1792987605261-e2e-outlet-1792987605261`. Its
+cumulative receive went **30.37 MB -> 35.44 MB** while the neighbouring pizza
+bot stayed flat at 5.71 MB since boot. Two operational traps: `ss` prints
+`users:(pid=...)` on the **head** line and `bytes_received:` on the indented
+netem line (line-scanning gets neither), and a read can complete between
+samples, so new sockets must be counted on first sighting.
+
+### Root cause
+
+`bot/index.js` `startBot()` calls `initializeOutletBusinessIndex(db)` as its
+first statement, and that helper does:
+
+```js
+db.ref('businesses').once('value')   // the WHOLE tree - 5.0 MB live
+```
+
+`startBot()` is not boot-only: both disconnect handlers schedule it again
+(`index.js:2429` and `3059`). So **every Baileys reconnect re-downloaded the
+entire database tree** to rebuild a lookup table that could not have changed.
+
+The e2e worker's Baileys socket is dead and reconnects roughly every five
+minutes, which is the exact measured cadence. The pizza worker's socket is
+healthy, which is why it read once and stayed flat - the bug was invisible on
+the outlet that mattered until a worker started flapping.
+
+Cost: 5.06 MB x 12/hour x 24 = **~1.5 GB/day from one flapping worker**, and it
+**multiplies by outlet count** because every outlet's images live in the same
+tree. This was the bulk of the Rs 469 Nov 1-10 bill.
+
+### Fix (commit `1fe9870`)
+
+The reverse index maps outlet -> businessId and is immutable for the process
+lifetime, so `initializeOutletBusinessIndex()` is now idempotent: it returns
+immediately once built, and sets the flag only after a successful build so a
+failed first attempt still retries. One guard in the shared helper, not a
+guard at each of the three call sites.
+
+Verified live after deploy: the e2e worker logged `[outlet-resolution]
+Initialized reverse index with 40 outlets` **once** while printing `[TENANT]`
+**twice** (boot + one reconnect) - the reconnect path now skips the read.
+
+Guard: `bot/tests/unit.test.js` asserts repeat calls perform **zero** Firebase
+reads.
+
+### Measurement caveat (settled)
+
+`gcloud`'s `sent_bytes_count` summed across series reads ~3x higher than the
+profiler for the same window (4.7 GB/day vs ~1.5 GB/day). The bill matches the
+profiler, so quote the profiler, and check the series count before trusting a
+raw metric total.
+
+### Also removed
+
+Root's pm2 daemon (`/root/.pm2`) still ran `bot-roshani-cake-cake` (pid 132705,
+2 months old) - the worker AGENTS.md records as deleted on 2026-10-27. It had
+been deleted from *ubuntu's* pm2 only. Removed with
+`sudo pm2 delete bot-roshani-cake-cake`; there is no `pm2-root` systemd unit, so
+it cannot resurrect. It was not the egress source (0.25 MB) but it was a second
+Baileys session for a deleted tenant and a Redis client, both of which only
+invite trouble.
