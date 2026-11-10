@@ -99,23 +99,12 @@ function _switchSubTab(sub) {
 /* ============ PANE 1: APP NOTIFICATION (delegates to app-notifications.js) ============ */
 
 async function _loadNotificationPane() {
-    // app-notifications.js is a separate module; when the Customer APP tab
-    // switches to "App Notification", we dynamically import it so its own
-    // send/offers sub-tabs render inside this pane.
     try {
         const mod = await import('./app-notifications.js');
-        // app-notifications.js self-starts on import? No — it exports loadAppNotifications.
-        // But its markup (push pane) is already in the DOM under caPaneNotification.
-        // We just need to call its loader which wires the push UI.
-        if (mod.loadAppNotifications) {
-            mod.loadAppNotifications();
-        }
+        await mod.initPushUI();
     } catch (e) {
         console.error('[Customer APP] Failed to load app-notifications module:', e);
     }
-
-    // Always refresh subscriber stats when this pane shows
-    _loadPushSubscriptions(true);
 }
 
 function _renderAppLink() {
