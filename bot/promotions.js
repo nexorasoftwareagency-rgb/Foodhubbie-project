@@ -13,6 +13,12 @@ const { paceBurstSend } = require('./send-pacer');
 const outboundTracker = new OutboundTracker(db, resolvePath);
 
 const PROMO_LOG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// Campaign media is stored inline as a base64 data URI, so ONE campaign can be
+// megabytes. RTDB bills every byte it sends, and the heartbeat used to re-read
+// the whole campaigns node twice a minute (Nov 2026 bill spike: a single paused
+// 1 MB campaign cost ~3 GB/day). Never let inline media outlive its usefulness.
+const PROMO_INLINE_MEDIA_PREFIX = 'data:';
+const PROMO_MEDIA_KEEP_AFTER_PAUSE_MS = 24 * 60 * 60 * 1000;
 const PROMO_HEARTBEAT_EVERY = 10;
 const PROMO_PAUSE_EVERY = 30;
 const PROMO_PAUSE_MS = 30_000;
@@ -40,6 +46,32 @@ const TEMPLATES_WITH_STOP_FOOTER = new Set([
     'promo_cta_flash', 'promo_cta_cart', 'promo_cta_winback',
     'promo_cta_birthday', 'promo_cta_weekend', 'promo_cta_newitem',
 ]);
+
+function hasInlineMedia(c) {
+    return typeof c?.mediaUrl === 'string' && c.mediaUrl.startsWith(PROMO_INLINE_MEDIA_PREFIX);
+}
+
+/** Newest timestamp a campaign has for "when did this stop being actionable". */
+function campaignAgeMs(c) {
+    const started = Number(c?.startedAt) || Date.parse(c?.createdAt) || 0;
+    return started ? Date.now() - started : Infinity;
+}
+
+/** Drop an inline base64 media blob from a campaign that will never send it
+ *  again. Keeps the campaign record (recipients, stats, reason) intact. */
+async function stripCampaignMedia(OUTLET, db, campaignId, reason) {
+    try {
+        await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({
+            mediaUrl: null,
+            mediaStrippedAt: Date.now(),
+            mediaStripReason: reason,
+        });
+        console.log(`[Promo] Stripped inline media from ${campaignId} (${reason})`);
+    } catch (e) {
+        console.warn(`[Promo] Media strip failed for ${campaignId}: ${e.message}`);
+    }
+}
+
 
 async function sendPromotionalMessage(sock, jid, text, mediaUrl, sendStopMsg, outlet, waTemplateName) {
     // BAN-RISK: promotional sends are official-API (meta) only — Baileys bulk
@@ -522,6 +554,10 @@ async function runPromotionCampaign(sock, cmd, ctx) {
         await db.ref(resolvePath(`bot/promotions/campaigns/${campaignId}`, OUTLET)).update({
             status: 'done', completedAt: Date.now(), currentIndex: list.length, totalSent: sent, totalFailed: failed
         });
+        // A finished campaign is never resent — drop any inline base64 media.
+        if (typeof mediaUrl === 'string' && mediaUrl.startsWith(PROMO_INLINE_MEDIA_PREFIX)) {
+            await stripCampaignMedia(OUTLET, db, campaignId, 'done');
+        }
         await db.ref('logs/audit').push({
             action: 'PROMO_DONE', campaignId, sent, failed, timestamp: Date.now()
         });
@@ -571,7 +607,12 @@ async function resumeStuckPromotions(sock, ctx) {
 async function pickupScheduledPromotions(sock, ctx) {
     const { OUTLET, db } = ctx;
     try {
-        const snap = await db.ref(resolvePath(`bot/promotions/campaigns`, OUTLET)).orderByChild('runAt').endAt(Date.now()).once('value');
+        // startAt(1) is load-bearing: an orderByChild query with only endAt()
+        // ALSO returns children that lack runAt (null sorts first), which made
+        // every heartbeat download the entire campaigns node — inline media and
+        // all. runAt is a ms epoch, so 1 excludes the null bucket.
+        const snap = await db.ref(resolvePath(`bot/promotions/campaigns`, OUTLET))
+            .orderByChild('runAt').startAt(1).endAt(Date.now()).once('value');
         if (!snap.exists()) return;
         const due = snap.val();
         for (const id of Object.keys(due)) {
@@ -580,6 +621,7 @@ async function pickupScheduledPromotions(sock, ctx) {
             const late = Date.now() - (c.runAt || 0);
             if (late > PROMO_SCHEDULE_MISSED_GRACE_MS) {
                 await db.ref(resolvePath(`bot/promotions/campaigns/${id}`, OUTLET)).update({ status: 'expired', reason: 'missed-window', lateBy: late });
+                if (hasInlineMedia(c)) await stripCampaignMedia(OUTLET, db, id, 'expired');
                 continue;
             }
             await db.ref(resolvePath(`bot/promotions/campaigns/${id}`, OUTLET)).update({ status: 'running', startedAt: Date.now() });
@@ -618,15 +660,36 @@ async function expireOldPromoLogs(OUTLET, db) {
                 }
             }
         }
-        // ponytail: also clean up completed/stopped/expired campaigns older than 30 days
-        const campSnap = await db.ref(resolvePath(`bot/promotions/campaigns`, OUTLET)).once('value');
-        if (campSnap.exists()) {
-            const camps = campSnap.val();
-            const cutoff = Date.now() - PROMO_LOG_TTL_MS;
-            for (const [cid, c] of Object.entries(camps)) {
-                const terminalStatuses = ['done', 'stopped', 'expired', 'aborted'];
-                if (terminalStatuses.includes(c.status) && (c.completedAt || c.startedAt || 0) < cutoff) {
+        // Campaigns: never read the whole node here. It is the largest child of
+        // bot/ (one campaign can carry a base64 image) and this function runs on
+        // the bot heartbeat. Query each terminal status through the `status`
+        // index instead, so an idle outlet reads ~0 bytes.
+        const cutoff = Date.now() - PROMO_LOG_TTL_MS;
+        for (const status of ['done', 'stopped', 'expired', 'aborted']) {
+            const campSnap = await db.ref(resolvePath(`bot/promotions/campaigns`, OUTLET))
+                .orderByChild('status').equalTo(status).once('value');
+            if (!campSnap.exists()) continue;
+            for (const [cid, c] of Object.entries(campSnap.val())) {
+                // Inline media on a campaign that can no longer send is pure cost.
+                // stopped/aborted keep it for a day (an admin may retry); done and
+                // expired were already stripped at transition.
+                if (hasInlineMedia(c) && campaignAgeMs(c) > PROMO_MEDIA_KEEP_AFTER_PAUSE_MS) {
+                    await stripCampaignMedia(OUTLET, db, cid, status);
+                }
+                const endedAt = c.completedAt || c.stoppedAt || c.startedAt || 0;
+                if (endedAt && endedAt < cutoff) {
                     await db.ref(resolvePath(`bot/promotions/campaigns/${cid}`, OUTLET)).remove();
+                }
+            }
+        }
+        // Paused campaigns: a Baileys-blocked campaign can never send, so its
+        // inline media is dead weight once it has been sitting for a day.
+        const pausedSnap = await db.ref(resolvePath(`bot/promotions/campaigns`, OUTLET))
+            .orderByChild('status').equalTo('paused').once('value');
+        if (pausedSnap.exists()) {
+            for (const [cid, c] of Object.entries(pausedSnap.val())) {
+                if (hasInlineMedia(c) && campaignAgeMs(c) > PROMO_MEDIA_KEEP_AFTER_PAUSE_MS) {
+                    await stripCampaignMedia(OUTLET, db, cid, c.pauseReason || 'paused');
                 }
             }
         }

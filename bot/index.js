@@ -224,6 +224,11 @@ let reportInterval = null;
 let dailyReportSent = false;
 let weeklyReportSent = false;
 let monthlyReportSent = false;
+// Promo log/campaign expiry is a cleanup job, not a heartbeat job: it queries
+// campaign nodes (which can carry inline base64 media), so running it every
+// 60 s was billing gigabytes a day. Six hours is plenty for a 30-day TTL.
+let lastPromoExpiryAt = 0;
+const PROMO_EXPIRY_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const startupTime = Date.now();
 // Option B: restartEpoch — entries from previous sessions are ignored
 // instead of bulk-deleting all status:* keys (which causes duplicate messages).
@@ -2649,10 +2654,16 @@ async function sendDailyReportSafely(dateOverride = null) {
         }
 
         // 4. Promotion heartbeat: pick up scheduled campaigns whose runAt is due.
+        //    Indexed query on runAt — returns nothing when no campaign is due.
         promo.pickupScheduledPromotions(currentSock, { OUTLET, db }).catch(err => console.error("[Promo] Scheduled pickup error:", err));
 
-        // 5. Expire promotion logs older than 30 days (best-effort, every 5 min)
-        promo.expireOldPromoLogs(OUTLET, db).catch(err => console.error("[Promo] Log expiry error:", err));
+        // 5. Expire promotion logs/campaigns older than 30 days (best-effort).
+        //    NOT every heartbeat: it walks campaign nodes, and inline base64
+        //    media made that the single largest RTDB egress source we had.
+        if (Date.now() - lastPromoExpiryAt > PROMO_EXPIRY_INTERVAL_MS) {
+            lastPromoExpiryAt = Date.now();
+            promo.expireOldPromoLogs(OUTLET, db).catch(err => console.error("[Promo] Log expiry error:", err));
+        }
 
         // 60s heartbeat (was 5 min): the Admin dashboard's freshness window is
         // 90 s (Admin/js/bot-status.js), so a 5-min tick left the widget

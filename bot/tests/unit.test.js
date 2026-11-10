@@ -295,8 +295,48 @@ test('promo send never counts a cost-guard block as delivered', () => {
     assert.ok(/isJidFrozen\(jid\)\) \{ await logPromoSkip\(campaignId, phone, 'frozen'/.test(src), 'frozen recipient must be skipped, not billed');
 });
 
-// Phase 2 loyalty math (shared/loyalty-math.js) — the same formulas the bot
-// runs for earn/tender/clawback, exercised directly.
+// RTDB EGRESS: the Nov 2026 bill spike was the bot re-reading the whole promo
+// campaigns node on its 60 s heartbeat. A single campaign carries its image as
+// a base64 data URI, so the node was ~1 MB and cost ~3 GB/day. These guards keep
+// the cheap shapes: an indexed due-query, terminal-status-only sweeps, no inline
+// media on finished campaigns, and an infrequent cleanup cadence.
+test('promo heartbeat never reads the whole campaigns node', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '../promotions.js'), 'utf8');
+
+    const pickup = src.slice(src.indexOf('async function pickupScheduledPromotions'), src.indexOf('async function expireOldPromoLogs'));
+    assert.ok(pickup.includes(".orderByChild('runAt').startAt(1).endAt("), 'due query must bound runAt on both sides');
+
+    const expiry = src.slice(src.indexOf('async function expireOldPromoLogs'), src.indexOf('module.exports'));
+    assert.ok(!/resolvePath\(`bot\/promotions\/campaigns`[^)]*\)\s*\.once\('value'\)/.test(expiry),
+        'expiry sweep must not .once() the whole campaigns node');
+    assert.ok(/orderByChild\('status'\)\.equalTo\(status\)/.test(expiry), 'expiry sweep queries terminal statuses');
+    assert.ok(/stripCampaignMedia/.test(expiry), 'expiry sweep strips inline media');
+    assert.ok(/if \(typeof mediaUrl === 'string' && mediaUrl\.startsWith\(PROMO_INLINE_MEDIA_PREFIX\)\)/.test(src),
+        'a finished campaign must drop its inline media');
+
+    const index = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
+    assert.ok(/Date\.now\(\) - lastPromoExpiryAt > PROMO_EXPIRY_INTERVAL_MS/.test(index),
+        'heartbeat must gate the expiry sweep');
+    const firebase = fs.readFileSync(path.join(__dirname, '../firebase.js'), 'utf8');
+    assert.ok(/BOT_SETTINGS_TTL/.test(firebase), 'settings/Bot needs its own longer TTL');
+});
+
+// The status watcher wrote botStatus every 30 s and rebuilt its name index by
+// reading the ENTIRE businesses tree each time (~6 MB once outlets have photos).
+// It must build from outletIndex and only fall back to the full tree rarely.
+test('status watcher resolves names without a full businesses read every tick', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '../../bot-control-api/status-watcher.js'), 'utf8');
+    assert.ok(src.includes("ref('outletIndex').get()"), 'index is built from outletIndex');
+    assert.ok(/INDEX_TTL_MS/.test(src) && /FALLBACK_TTL_MS/.test(src), 'both caches exist');
+    const body = src.slice(src.indexOf('async function buildProcessNameIndex'), src.indexOf('async function outletLabel'));
+    assert.ok(!/^  const snap = await admin\.database\(\)\.ref\('businesses'\)/m.test(body),
+        'businesses must not be read unconditionally');
+});
+
 test('loyalty-math: earn base, two-stage floor, tender caps, bill split', async () => {
     const lm = await import('../../shared/loyalty-math.js');
     // R1 earn base: subtotal − discount; legacy orders fall back to total

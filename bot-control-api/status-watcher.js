@@ -48,20 +48,61 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
-async function buildProcessNameIndex(admin, processName) {
-  const snap = await admin.database().ref('businesses').get();
-  const businesses = snap.val() || {};
+const INDEX_TTL_MS = 5 * 60 * 1000;
+const FALLBACK_TTL_MS = 6 * 60 * 60 * 1000;
+let indexCache = { at: 0, map: null };
+let fallbackAt = 0;
+
+/**
+ * Registry-first name index. `outletIndex` is the canonical outlet→business map
+ * and is a few KB; the old implementation read the WHOLE `businesses` tree
+ * (~6 MB with one outlet's photos) every 30 seconds.
+ *
+ * Some outlets predate the registry (E2E tenants, the demo), and their bots are
+ * real pm2 processes, so names the registry cannot explain are resolved from the
+ * full tree at most once every six hours.
+ */
+async function buildProcessNameIndex(admin, processName, pm2Processes = []) {
+  if (indexCache.map && Date.now() - indexCache.at < INDEX_TTL_MS) return indexCache.map;
+
+  const snap = await admin.database().ref('outletIndex').get();
+  const entries = snap.val() || {};
   const index = new Map();
-  Object.entries(businesses).forEach(([bid, biz]) => {
-    Object.entries(biz.outlets || {}).forEach(([oid, outlet]) => {
-      index.set(processName(bid, oid), {
-        bid, oid,
-        restaurantName: outlet.name || 'Unnamed outlet',
-        businessName: biz.name || 'Unnamed business',
+  Object.entries(entries).forEach(([oid, entry]) => {
+    const bid = typeof entry === 'string' ? entry : entry && entry.bid;
+    if (bid) index.set(processName(bid, oid), { bid, oid });
+  });
+
+  const unmatched = pm2Processes
+    .map((p) => p.name)
+    .filter((name) => name && name.startsWith('bot-') && !index.has(name));
+  if (unmatched.length && Date.now() - fallbackAt > FALLBACK_TTL_MS) {
+    fallbackAt = Date.now();
+    const all = (await admin.database().ref('businesses').get()).val() || {};
+    Object.entries(all).forEach(([bid, biz]) => {
+      Object.keys(biz.outlets || {}).forEach((oid) => {
+        const name = processName(bid, oid);
+        if (!index.has(name)) index.set(name, { bid, oid });
       });
     });
-  });
+  }
+
+  indexCache = { at: Date.now(), map: index };
   return index;
+}
+
+/** Human labels are only needed when an alert fires — read them then, not on
+ *  every reconcile tick. */
+async function outletLabel(admin, bid, oid) {
+  try {
+    const [outlet, business] = await Promise.all([
+      admin.database().ref(`businesses/${bid}/outlets/${oid}/name`).get(),
+      admin.database().ref(`businesses/${bid}/name`).get(),
+    ]);
+    return `${outlet.val() || oid} (${business.val() || bid})`;
+  } catch {
+    return `${oid} (${bid})`;
+  }
 }
 
 async function appendHistory(admin, bid, oid, status) {
@@ -97,7 +138,7 @@ async function sendAlert(message) {
   // left out since it needs credentials this build doesn't have.
 }
 
-async function handleAlerting({ key, restaurantName, businessName, status }) {
+async function handleAlerting(admin, { key, bid, oid, status }) {
   const OFFLINE_STATUSES = new Set(['offline', 'errored']);
   const thresholdMs = (Number(process.env.ALERT_OFFLINE_MINUTES) || 5) * 60000;
 
@@ -105,7 +146,7 @@ async function handleAlerting({ key, restaurantName, businessName, status }) {
     offlineSince.delete(key);
     if (alerted.get(key)) {
       alerted.delete(key);
-      await sendAlert(`✅ ${restaurantName} (${businessName}) bot is back online.`);
+      await sendAlert(`✅ ${await outletLabel(admin, bid, oid)} bot is back online.`);
     }
     return;
   }
@@ -118,16 +159,17 @@ async function handleAlerting({ key, restaurantName, businessName, status }) {
   const downForMs = Date.now() - offlineSince.get(key);
   if (downForMs >= thresholdMs && !alerted.get(key)) {
     alerted.set(key, true);
-    await sendAlert(`🔴 ${restaurantName} (${businessName}) bot has been ${status} for ${Math.round(downForMs / 60000)}+ minutes.`);
+    await sendAlert(`🔴 ${await outletLabel(admin, bid, oid)} bot has been ${status} for ${Math.round(downForMs / 60000)}+ minutes.`);
   }
 }
 
 async function reconcile({ admin, processName, statusOf }) {
   await connectOnce();
-  const [list, index] = await Promise.all([pm2List(), buildProcessNameIndex(admin, processName)]);
+  const list = await pm2List();
+  const index = await buildProcessNameIndex(admin, processName, list);
 
   for (const [name, meta] of index) {
-    const { bid, oid, restaurantName, businessName } = meta;
+    const { bid, oid } = meta;
     const key = `${bid}/${oid}`;
     const proc = list.find((p) => p.name === name);
     const info = statusOf(proc);
@@ -146,7 +188,7 @@ async function reconcile({ admin, processName, statusOf }) {
       await appendHistory(admin, bid, oid, info.status);
     }
 
-    await handleAlerting({ key, restaurantName, businessName, status: info.status });
+    await handleAlerting(admin, { key, bid, oid, status: info.status });
   }
 }
 

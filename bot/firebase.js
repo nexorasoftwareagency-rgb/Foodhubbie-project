@@ -74,8 +74,13 @@ function billingPath(path, outlet = 'pizza') {
 const _cache = new Map();
 const DEFAULT_TTL = 30000; // 30 seconds default cache
 const SETTINGS_TTL = 300000; // 5 minutes for settings/categories
+// settings/Bot holds the status images as base64 data URIs (~1.35 MB on the
+// live outlet), so a 5-minute TTL meant ~390 MB/day of egress on its own.
+// Status images change rarely; half an hour is still responsive.
+const BOT_SETTINGS_TTL = 1800000; // 30 minutes
 
 function getTTL(path) {
+    if (path.includes('settings/Bot')) return BOT_SETTINGS_TTL;
     if (path.includes('settings') || path.includes('categories') || path.includes('dishes')) {
         return SETTINGS_TTL;
     }
