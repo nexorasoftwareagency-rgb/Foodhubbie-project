@@ -262,9 +262,19 @@ and after (the 20:02/20:03 burst is the four process restarts):
 20:07  160.7 KB
 ```
 
-Residual is **~67 KB/min = ~96 MB/day** against **~3.24 MB/min = 4.67 GB/day**
-before: a **~48x** reduction. What is left is ordinary traffic (heartbeat
-writes, admin dashboard listeners, menu reads), not a poll loop.
+Residual, measured over a clean 14-minute window (20:03-20:16, excluding the
+deploy's restart minutes, which cost ~15 MB once as four processes re-read
+their boot data): **1,564 KB / 14 min = 112 KB/min = ~161 MB/day**, against
+**3.23 MB/min = 4.65 GB/day** before - a **~29x** reduction.
+
+What is left is not a poll loop. It is the structural problem in the next
+section: `settings/Bot` alone is 1.29 MB of base64 status images and is
+re-read every 30 minutes (~62 MB/day for one outlet), `dishes` is 673 KB on a
+5-minute TTL, and ordinary heartbeat writes and dashboard listeners sit on top.
+Moving the images to Cloud Storage collapses all of it.
+
+A note on reading the 24 h total: it lags by a day, because it still contains
+the pre-fix hours. Compare minute-by-minute values, not the rolling sum.
 
 ### Third finding: the control API's index, fixed the same way (commit `98370c7`)
 
