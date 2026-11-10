@@ -4958,7 +4958,18 @@
                         </button>
                     </div>
 
-                    <div class="promo-notifications-pane">
+                    <!-- SUB-TAB NAV: Send Push | Promo Page Offers -->
+                    <div class="push-sub-tabs" role="tablist" aria-label="App Notifications sections">
+                        <button class="push-sub-tab active" type="button" role="tab" data-sub="send" id="pushSubTabSend" aria-selected="true">
+                            <i data-lucide="send"></i> <span>Send Push</span>
+                        </button>
+                        <button class="push-sub-tab" type="button" role="tab" data-sub="offers" id="pushSubTabOffers" aria-selected="false">
+                            <i data-lucide="tag"></i> <span>Promo Page Offers</span>
+                        </button>
+                    </div>
+
+                    <!-- PANE 1: Send Push (existing content) -->
+                    <div class="promo-notifications-pane push-pane push-pane--send" id="pushPaneSend">
 
                         <div class="promo-notifications-stats">
                             <div class="stat-card">
@@ -5086,6 +5097,49 @@
                             </div>
                             <p class="text-muted-small mt-2">Order status updates (placed, out for delivery, delivered) are sent automatically by the bot.</p>
                         </div>
+
+                    </div>
+
+                    <!-- PANE 2: Promo Page Offers (manage which coupons appear on the customer Promo Page) -->
+                    <div class="promo-notifications-pane push-pane push-pane--offers hidden" id="pushPaneOffers">
+
+                        <div class="panel-header mt-8">
+                            <div>
+                                <h3 class="panel-title mb-0" style="font-size:18px;">Promo Page Offers</h3>
+                                <p class="panel-subtitle mt-2">Choose which coupon discounts appear on your restaurant's Promo Page in the customer app. Only coupon-type discounts that are active and allow the website channel will show.</p>
+                            </div>
+                            <button class="btn-primary" id="btnPromoOffersNew" type="button" title="Create a new coupon discount">
+                                <i data-lucide="plus"></i> <span>New Coupon</span>
+                            </button>
+                        </div>
+
+                        <div class="promo-offers-stats" style="margin:12px 0;">
+                            <div class="stat-card">
+                                <span id="promoOffersTotal" class="stat-value">-</span>
+                                <span class="stat-label">Coupon discounts</span>
+                            </div>
+                            <div class="stat-card">
+                                <span id="promoOffersOnPage" class="stat-value">-</span>
+                                <span class="stat-label">Showing on Promo Page</span>
+                            </div>
+                            <div class="stat-card">
+                                <span id="promoOffersValid" class="stat-value">-</span>
+                                <span class="stat-label">Valid now</span>
+                            </div>
+                        </div>
+
+                        <div class="promo-offers-empty hidden" id="promoOffersEmpty">
+                            <div class="push-empty__icon"><i data-lucide="tag"></i></div>
+                            <div class="push-empty__body">
+                                <strong>No coupon discounts yet</strong>
+                                <p>Create coupon discounts in Discounts, then mark them "Show on Promo Page" so customers can see and use them in the app.</p>
+                                <button class="btn-secondary" id="btnPromoOffersEmptyNew" type="button">
+                                    <i data-lucide="plus"></i> <span>Create Coupon</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="promo-offers-list" id="promoOffersList"></div>
 
                     </div>
 

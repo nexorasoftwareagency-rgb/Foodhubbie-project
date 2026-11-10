@@ -11397,6 +11397,160 @@ body.pos-selection-mode .walkin-picker {
     white-space: nowrap;
 }
 
+/* ---- Sub-tab navigation within App Notifications ---- */
+.push-sub-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    margin-bottom: 16px;
+}
+.push-sub-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 8px;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    color: var(--text-secondary, #64748b);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+.push-sub-tab i { font-size: 16px; }
+.push-sub-tab:hover { color: var(--text-primary, #0f172a); }
+.push-sub-tab.active {
+    color: var(--primary, #E84908);
+    border-bottom-color: var(--primary, #E84908);
+    background: rgba(232, 73, 8, 0.04);
+}
+.push-sub-tab:focus-visible {
+    outline: 2px solid var(--primary, #E84908);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* ---- Promo Page Offers pane ---- */
+.push-pane { display: none; }
+.push-pane.push-pane--send { display: block; }
+
+.promo-offers-stats {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.promo-offers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg, #fff);
+}
+.promo-offer-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border, #eef0f3);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.promo-offer-row:last-child { border-bottom: none; }
+.promo-offer-row:hover { background: var(--bg-secondary, #f8fafc); }
+
+.promo-offer__badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    flex: 0 0 auto;
+}
+.promo-offer__info { flex: 1; min-width: 0; }
+.promo-offer__name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.promo-offer__code {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary, #E84908);
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+.promo-offer__meta {
+    font-size: 11px;
+    color: var(--text-tertiary, #94a3b8);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.promo-offer__status {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+.promo-offer__status.valid { background: #dcfce7; color: #166534; }
+.promo-offer__status.expired { background: #fee2e2; color: #991b1b; }
+.promo-offer__status.disabled { background: #f1f5f9; color: #64748b; }
+.promo-offer__status.not_in_window { background: #fef3c7; color: #92400e; }
+
+.promo-offer__toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex: 0 0 auto;
+}
+.promo-offer__toggle input {
+    width: 44px;
+    height: 24px;
+    appearance: none;
+    background: #cbd5e1;
+    border-radius: 999px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s;
+    outline: none;
+}
+.promo-offer__toggle input:checked { background: var(--primary, #E84908); }
+.promo-offer__toggle input:focus-visible { outline: 2px solid var(--primary, #E84908); outline-offset: 2px; border-radius: 999px; }
+
+.promo-offers-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 16px;
+    text-align: center;
+    color: var(--text-secondary, #64748b);
+}
+.promo-offers-empty .push-empty__icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: rgba(232, 73, 8, 0.1);
+    color: var(--primary, #E84908);
+    display: grid;
+    place-items: center;
+    font-size: 24px;
+}
+.promo-offers-empty strong { display: block; font-size: 15px; color: var(--text-primary, #0f172a); margin-top: 4px; }
+.promo-offers-empty p { font-size: 13px; line-height: 1.5; max-width: 320px; margin: 0; }
+
 /* Chips are the radio control: keep the input focusable (a11y) but invisible. */
 .promo-notifications-pane .chip--radio {
     position: relative;

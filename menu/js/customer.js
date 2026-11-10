@@ -13,6 +13,7 @@
 import { outletRef, get, set, push, update, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
 import * as UI from './ui.js';
 import { esc, buildInstagramUrl, buildWhatsappUrl } from './ui.js';
+import { couponStatus, discountAllowsChannel } from '../shared/discount-rules.js';
 import {
     isIOS, isStandalone, isInstalled, canShowNativeInstallPrompt, promptInstall,
     getStoredPhone, savePhone, subscribeToNotifications,
@@ -812,7 +813,28 @@ async function deleteNotification(notifId) {
 }
 
 /* ---------- Promo code apply ---------- */
-document.getElementById('btnApplyPromoCode')?.addEventListener('click', () => {
+// Look up a coupon code in the Firebase-loaded offers cache.
+// Returns the discount doc or null. Lazily loads discounts if the cache is empty.
+async function getOfferByCode(code) {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!normalized) return null;
+    if (!_offersCache || _offersCache.length === 0) {
+        try {
+            const snap = await get(outletRef('discounts'));
+            const all = snap.val() || {};
+            _offersCache = Object.entries(all)
+                .filter(([, d]) => d && d.type === 'coupon' && d.couponCode && d.enabled !== false)
+                .map(([id, d]) => ({ id, ...d }));
+            _offersFetchedAt = Date.now();
+        } catch (e) {
+            console.error('[Promo] Failed to load discounts for code check:', e);
+            _offersCache = [];
+        }
+    }
+    return _offersCache.find(d => String(d.couponCode).toUpperCase() === normalized) || null;
+}
+
+document.getElementById('btnApplyPromoCode')?.addEventListener('click', async () => {
     const input = document.getElementById('promoCodeInput');
     if (!input) return;
     const code = input.value.trim().toUpperCase();
@@ -820,10 +842,10 @@ document.getElementById('btnApplyPromoCode')?.addEventListener('click', () => {
         UI.showToast('Please enter a promo code', 'error');
         return;
     }
-    // Validate against known discount codes (client-side check; server re-verifies at checkout)
-    const knownCodes = ['WELCOME20', 'WEEKEND10', 'FESTIVE15'];
-    if (knownCodes.includes(code)) {
-        UI.showToast(`Code "${code}" applied. It will be used at checkout.`, 'success');
+    // Validate against real Firebase discounts (client-side check; server re-verifies at checkout)
+    const offer = await getOfferByCode(code);
+    if (offer && couponStatus(offer, Date.now()) === 'valid' && discountAllowsChannel(offer, 'website') && offer.promoPage === true) {
+        UI.showToast(`Code "${code}" saved. It will be used at checkout.`, 'success');
         input.value = '';
         // Store applied code in prefs for checkout to pick up
         try {
@@ -2085,7 +2107,11 @@ function renderPromoCards(store) {
 }
 
 /* ---------- Active offers (coupon codes customers can use) ---------- */
-function renderActiveOffers() {
+let _offersCache = null;
+let _offersFetchedAt = 0;
+const OFFERS_CACHE_TTL_MS = 60_000;
+
+async function renderActiveOffers() {
     const grid = document.getElementById('activeOffersGrid');
     // Static markup calls this #promoCardsEmpty; #promoCodesEmpty was only ever
     // emitted by the (inert) renderPromoCards(), so the empty state used to
@@ -2100,13 +2126,31 @@ function renderActiveOffers() {
         appliedCode = prefs.appliedPromoCode || '';
     } catch { /* ignore */ }
 
-    // In a real system this would come from the outlet's active discount campaigns.
-    // For now we show a sample set based on store settings.
-    const offers = [
-        { title: 'Welcome Offer', subtitle: 'First order discount', code: 'WELCOME20', desc: '20% off your first order', valid: 'Valid for 7 days', variant: 'welcome', emoji: '🎉', daysLeft: 7 },
-        { title: 'Weekend Special', subtitle: 'Weekend discount', code: 'WEEKEND10', desc: '10% off orders above ₹500', valid: 'Sat & Sun only', variant: 'weekend', emoji: '🍕', daysLeft: 2 },
-        { title: 'Festive Deal', subtitle: 'Seasonal offer', code: 'FESTIVE15', desc: '15% off all items', valid: 'Valid until month-end', variant: 'festive', emoji: '🎊', daysLeft: 15 },
-    ];
+    // Fetch real coupon discounts configured by the restaurant admin.
+    // Only coupon-type, enabled, valid-now, website-channel, promoPage-flagged
+    // discounts appear on the customer Promo Page.
+    const now = Date.now();
+    let offers = [];
+    if (_offersCache && (now - _offersFetchedAt) < OFFERS_CACHE_TTL_MS) {
+        offers = _offersCache;
+    } else {
+        try {
+            const snap = await get(outletRef('discounts'));
+            const all = snap.val() || {};
+            offers = Object.entries(all)
+                .filter(([, d]) => d && d.type === 'coupon' && d.couponCode && d.enabled !== false)
+                .map(([id, d]) => ({ id, ...d }))
+                .filter(d => couponStatus(d, now) === 'valid')
+                .filter(d => discountAllowsChannel(d, 'website'))
+                .filter(d => d.promoPage === true)
+                .sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
+            _offersCache = offers;
+            _offersFetchedAt = now;
+        } catch (e) {
+            console.error('[Promo] Failed to load discounts:', e);
+            offers = _offersCache || [];
+        }
+    }
 
     if (offers.length === 0) {
         grid.innerHTML = '';
@@ -2116,12 +2160,12 @@ function renderActiveOffers() {
     empty?.classList.add('hidden');
 
     const cards = offers.map(o => {
-        const isApplied = o.code === appliedCode;
-        const codeEsc = esc(o.code);
-        const titleEsc = esc(o.title);
-        const subtitleEsc = esc(o.subtitle);
-        const descEsc = esc(o.desc);
-        const validEsc = esc(o.valid);
+        const isApplied = o.couponCode === appliedCode;
+        const codeEsc = esc(o.couponCode);
+        const titleEsc = esc(o.name || o.couponCode);
+        const subtitleEsc = esc(o.subtitle || '');
+        const descEsc = esc(o.description || o.desc || '');
+        const validEsc = esc(o.valid || '');
 
         let actionsHtml;
         if (isApplied) {
@@ -2289,21 +2333,23 @@ async function renderRewardsHistory() {
     }
 }
 
-/* Promo code input keyup handler */
-document.getElementById('promoCodeInput')?.addEventListener('input', (e) => {
+/* Promo code input keyup handler — validates against real Firebase discounts */
+document.getElementById('promoCodeInput')?.addEventListener('input', async (e) => {
     const code = e.target.value.trim().toUpperCase();
-    const knownCodes = ['WELCOME20', 'WEEKEND10', 'FESTIVE15'];
     const input = document.getElementById('promoCodeInput');
+    const applyBtn = document.getElementById('btnApplyPromoCode');
     if (!code) {
         input.classList.remove('promo-input-error');
-        document.getElementById('btnApplyPromoCode')?.classList.remove('promo-input-error');
+        applyBtn?.classList.remove('promo-input-error');
         return;
     }
-    if (knownCodes.includes(code)) {
+    const offer = await getOfferByCode(code);
+    const isValid = offer && couponStatus(offer, Date.now()) === 'valid' && discountAllowsChannel(offer, 'website') && offer.promoPage === true;
+    if (isValid) {
         input.classList.remove('promo-input-error');
-        document.getElementById('btnApplyPromoCode')?.classList.remove('promo-input-error');
+        applyBtn?.classList.remove('promo-input-error');
     } else {
         input.classList.add('promo-input-error');
-        document.getElementById('btnApplyPromoCode')?.classList.add('promo-input-error');
+        applyBtn?.classList.add('promo-input-error');
     }
 });

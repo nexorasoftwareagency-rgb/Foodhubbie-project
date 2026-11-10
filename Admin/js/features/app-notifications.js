@@ -12,12 +12,13 @@
  *  - test mode -> the signed-in admin's own device token only.
  */
 
-import { db, auth, Outlet, BUSINESS_ID, ref, get } from '../firebase.js';
+import { db, auth, Outlet, BUSINESS_ID, ref, get, onValue, set, update } from '../firebase.js';
 import { showToast, showConfirm } from '../ui-utils.js';
 import { formatDate } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { logger } from '../utils/logger.js';
 import { appLink } from '../../shared/app-link.js';
+import { couponStatus, discountAllowsChannel } from '../../shared/discount-rules.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -37,6 +38,9 @@ let _sending = false;
 let _deviceReady = false;
 let _iconType = '';    // last type whose preview icon was rendered
 let _history = [];     // recent accepted sends, newest first (server-capped at 20)
+let _subTab = 'send';  // 'send' | 'offers'
+let _offers = [];      // [{ id, ...discount }] coupon discounts from Firebase
+let _offersListener = null;
 
 export function loadAppNotifications() {
     logger.info('APP-NOTIF', 'Loading App Notifications tab…');
@@ -46,11 +50,13 @@ export function loadAppNotifications() {
     _loadPushSubscriptions();
     _loadHistory();
     _syncUi();
+    _switchSubTab(_subTab);
 }
 
 export function cleanupAppNotifications() {
     // Listeners live on the persistent pane; only transient state resets here.
     _sending = false;
+    if (_offersListener) { _offersListener(); _offersListener = null; }
 }
 
 /* ============ WIRING (once) ============ */
@@ -62,6 +68,12 @@ function _wireOnce() {
     $('btnSendPushNotif')?.addEventListener('click', _sendPushNotification);
     $('btnRefreshPushSubs')?.addEventListener('click', () => _loadPushSubscriptions(true));
     $('btnCopyPushAppLink')?.addEventListener('click', _copyAppLink);
+
+    // Sub-tab switching: Send Push | Promo Page Offers
+    $('pushSubTabSend')?.addEventListener('click', () => _switchSubTab('send'));
+    $('pushSubTabOffers')?.addEventListener('click', () => _switchSubTab('offers'));
+    $('btnPromoOffersNew')?.addEventListener('click', _openDiscountsTab);
+    $('btnPromoOffersEmptyNew')?.addEventListener('click', _openDiscountsTab);
 
     $('pushNotifTitle')?.addEventListener('input', () => {
         _updateCount('pushNotifTitle', 'pushTitleCount', 100);
@@ -436,6 +448,131 @@ function _syncUi() {
     }
 }
 
+/* ============ SUB-TAB: PROMO PAGE OFFERS ============ */
+
+function _switchSubTab(sub) {
+    _subTab = sub;
+    const isOffers = sub === 'offers';
+    const sendPane = $('pushPaneSend');
+    const offersPane = $('pushPaneOffers');
+    const sendTab = $('pushSubTabSend');
+    const offersTab = $('pushSubTabOffers');
+    if (sendPane) sendPane.classList.toggle('hidden', isOffers);
+    if (offersPane) offersPane.classList.toggle('hidden', !isOffers);
+    if (sendTab) {
+        sendTab.classList.toggle('active', !isOffers);
+        sendTab.setAttribute('aria-selected', String(!isOffers));
+    }
+    if (offersTab) {
+        offersTab.classList.toggle('active', isOffers);
+        offersTab.setAttribute('aria-selected', String(isOffers));
+    }
+    if (isOffers) _loadPromoOffers();
+}
+
+async function _loadPromoOffers() {
+    const wrap = $('promoOffersList');
+    if (!wrap) return;
+    wrap.innerHTML = '<div style="padding:16px;color:var(--text-tertiary);">Loading offers…</div>';
+    if (_offersListener) { _offersListener(); _offersListener = null; }
+    try {
+        _offersListener = onValue(Outlet.ref('discounts'), (snap) => {
+            const all = snap.val() || {};
+            _offers = Object.entries(all)
+                .filter(([, d]) => d && d.type === 'coupon' && d.couponCode)
+                .map(([id, d]) => ({ id, ...d }))
+                .sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
+            _renderPromoOffers();
+        }, (err) => {
+            console.error('[Promo Offers] Read error:', err);
+            wrap.innerHTML = '<div style="padding:16px;color:var(--error);">Could not load discounts. Try refreshing.</div>';
+        });
+    } catch (e) {
+        console.error('[Promo Offers] Setup error:', e);
+        wrap.innerHTML = '<div style="padding:16px;color:var(--error);">Could not load discounts.</div>';
+    }
+}
+
+function _renderPromoOffers() {
+    const wrap = $('promoOffersList');
+    const totalEl = $('promoOffersTotal');
+    const onPageEl = $('promoOffersOnPage');
+    const validEl = $('promoOffersValid');
+    const empty = $('promoOffersEmpty');
+    if (!wrap) return;
+
+    const now = Date.now();
+    const total = _offers.length;
+    const onPage = _offers.filter(d => d.promoPage === true).length;
+    const valid = _offers.filter(d => couponStatus(d, now) === 'valid').length;
+
+    if (totalEl) totalEl.textContent = String(total);
+    if (onPageEl) onPageEl.textContent = String(onPage);
+    if (validEl) validEl.textContent = String(valid);
+
+    if (total === 0) {
+        wrap.innerHTML = '';
+        empty?.classList.remove('hidden');
+        return;
+    }
+    empty?.classList.add('hidden');
+
+    wrap.innerHTML = _offers.map(d => {
+        const status = couponStatus(d, now);
+        const showOnPage = d.promoPage === true;
+        const channelOk = discountAllowsChannel(d, 'website');
+        const statusLabel = {
+            valid: 'Valid', disabled: 'Disabled', not_started: 'Not started',
+            expired: 'Expired', not_in_window: 'Not in window'
+        }[status] || status;
+        const valueTxt = d.mode === 'percent' ? `${d.value}% off` : `₹${Number(d.value || 0)} off`;
+        const minTxt = d.minSubtotal ? ` min ₹${d.minSubtotal}` : '';
+        const globalTxt = d.globalLimit ? ` cap ${d.stats?.usedCount || 0}/${d.globalLimit}` : '';
+        return `
+            <div class="promo-offer-row" role="button" tabindex="0" aria-label="${escHtml(d.name || d.couponCode)}, ${valueTxt}, ${statusLabel}">
+                <span class="promo-offer__badge">${status === 'valid' ? '✓' : '–'}</span>
+                <div class="promo-offer__info">
+                    <div class="promo-offer__name">${escHtml(d.name || d.couponCode)}</div>
+                    <div class="promo-offer__code">${escHtml(d.couponCode)}</div>
+                    <div class="promo-offer__meta">${valueTxt}${minTxt}${globalTxt} · ${escHtml(statusLabel)}${channelOk ? '' : ' (not on website)'}</div>
+                </div>
+                <span class="promo-offer__status ${status}">${statusLabel}</span>
+                <label class="promo-offer__toggle" title="${showOnPage ? 'Hide from Promo Page' : 'Show on Promo Page'}">
+                    <input type="checkbox" ${showOnPage ? 'checked' : ''} data-id="${id}" ${!channelOk ? 'disabled' : ''}>
+                </label>
+            </div>
+        `;
+    }).join('');
+
+    // Bind toggles
+    wrap.querySelectorAll('input[type="checkbox"][data-id]').forEach(cb => {
+        const id = cb.dataset.id;
+        cb.addEventListener('change', () => _togglePromoPage(id, cb.checked));
+    });
+}
+
+function escHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function _togglePromoPage(id, showOnPage) {
+    try {
+        await update(Outlet.ref(`discounts/${id}`), { promoPage: showOnPage === true, updatedAt: Date.now() });
+        showToast(showOnPage ? 'Added to Promo Page' : 'Removed from Promo Page', 'success');
+    } catch (e) {
+        showToast('Update failed: ' + (e?.message || e), 'error');
+        const cb = document.querySelector(`input[data-id="${id}"]`);
+        if (cb) cb.checked = !showOnPage;
+    }
+}
+
+function _openDiscountsTab() {
+    const btn = document.querySelector('[data-tab="discounts"]');
+    if (btn) btn.click();
+}
+
+/* ============ SEND ============ */
 function _syncTypeChips() {
     const type = _currentType();
     const info = TYPE_INFO[type] || TYPE_INFO.promo;
