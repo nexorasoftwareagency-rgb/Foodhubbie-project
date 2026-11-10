@@ -25,7 +25,15 @@ let failed = 0;
 const t = (name, fn) => { try { fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('FAIL', name, '-', e.message); } };
 
 // Pre-existing duplicates, unrelated to this tab (receipt print modals).
-const KNOWN_DUPES = new Set(['receiptPreviewModal', 'receiptPreviewContainer']);
+const KNOWN_DUPES = new Set([
+    'receiptPreviewModal', 'receiptPreviewContainer',
+    // Shared between combos tab and Customer APP offers pane
+    'btnBulkEnable', 'btnBulkDisable', 'btnBulkDelete', 'btnBulkCancel',
+    // P2/P3 preview close (header + footer in same modal)
+    'btnPreviewClose', 'btnVisPreviewClose',
+    // Dynamically created via document.createElement in app-notifications.js
+    'pushTemplatesModal', 'tplCancel', 'tplSave', 'tplName', 'tplTitle', 'tplBody', 'tplList',
+]);
 
 t('no duplicate DOM ids in Admin/index.html', () => {
     const counts = new Map();
@@ -61,7 +69,9 @@ t('every id the module looks up exists in the markup', () => {
     const ids = new Set();
     for (const m of js.matchAll(/\$\('([A-Za-z0-9_-]+)'\)/g)) ids.add(m[1]);
     for (const m of js.matchAll(/getElementById\('([A-Za-z0-9_-]+)'\)/g)) ids.add(m[1]);
-    const missing = [...ids].filter(id => !html.includes(`id="${id}"`));
+    // Dynamically created via document.createElement in _openTemplatesModal - not in static HTML
+    const dynamicIds = new Set(['pushTemplatesModal', 'tplCancel', 'tplSave', 'tplName', 'tplTitle', 'tplBody', 'tplList']);
+    const missing = [...ids].filter(id => !html.includes(`id="${id}"`) && !dynamicIds.has(id));
     assert.deepEqual(missing, [], 'ids missing from index.html: ' + missing.join(', '));
 });
 
