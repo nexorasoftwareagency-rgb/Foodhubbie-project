@@ -254,6 +254,75 @@ export function renderCategoryPills(categories, activeId, onSelect, hasCombos = 
     });
 }
 
+/* ---------- Sort: one labelled button + bottom sheet (menu + delivery webview) ----------
+   Shared so the QR/menu page and delivery.html can never drift: each page keeps a
+   hidden #menuSortSelect as the single source of truth, calls initSort() once, and
+   re-renders from the onChange callback. The sheet markup is static in each HTML. */
+const SORT_LABELS = { popularity: 'Popularity', 'price-asc': '₹ Low to High', 'price-desc': '₹ High to Low' };
+let _sortHideTimer;
+
+export function initSort({ onChange } = {}) {
+    const sel = document.getElementById('menuSortSelect');
+    const btn = document.getElementById('btnSortMenu');
+    const sheet = document.getElementById('sortSheet');
+    const back = document.getElementById('sortSheetBackdrop');
+    if (!sel || !btn || !sheet || !back) return;
+
+    const sync = () => {
+        const text = SORT_LABELS[sel.value] || 'Popularity';
+        const lbl = document.getElementById('sortBtnLabel');
+        if (lbl) lbl.textContent = 'Sort: ' + text;
+        btn.setAttribute('aria-label', 'Sort dishes: ' + text);
+        sheet.querySelectorAll('.sort-opt').forEach(o => o.setAttribute('aria-checked', String(o.dataset.sort === sel.value)));
+    };
+
+    const close = () => {
+        if (sheet.hidden) return;
+        sheet.classList.remove('show');
+        back.classList.remove('show');
+        btn.setAttribute('aria-expanded', 'false');
+        clearTimeout(_sortHideTimer);
+        _sortHideTimer = setTimeout(() => { sheet.hidden = true; back.hidden = true; }, 230);
+        btn.focus();
+    };
+
+    const open = () => {
+        clearTimeout(_sortHideTimer);
+        sync();
+        sheet.hidden = false;
+        back.hidden = false;
+        requestAnimationFrame(() => { sheet.classList.add('show'); back.classList.add('show'); });
+        btn.setAttribute('aria-expanded', 'true');
+        sheet.querySelector('.sort-opt[aria-checked="true"]')?.focus();
+    };
+
+    sel.addEventListener('change', () => { sync(); onChange?.(sel.value); });
+    btn.addEventListener('click', open);
+    back.addEventListener('click', close);
+    document.getElementById('sortSheetClose')?.addEventListener('click', close);
+    sheet.addEventListener('click', (e) => {
+        const opt = e.target.closest('.sort-opt');
+        if (!opt) return;
+        close();
+        if (sel.value !== opt.dataset.sort) {
+            sel.value = opt.dataset.sort;
+            sel.dispatchEvent(new Event('change'));
+        }
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    // Keep Tab inside the sheet while it is open (it is aria-modal).
+    sheet.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const focusables = [...sheet.querySelectorAll('button')];
+        if (!focusables.length) return;
+        const first = focusables[0], last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+
+    sync();
+}
+
 export function renderDishList(dishes, { searchTerm, activeCategoryName }, onOpenDish) {
     const list = document.getElementById('dishListContainer');
     const title = document.getElementById('menuSectionTitle');

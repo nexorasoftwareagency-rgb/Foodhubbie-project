@@ -96,7 +96,9 @@
                 <svg class="icon" style="width:16px;height:16px;color:var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                 <input type="search" id="dishSearchInput" name="dishSearch" placeholder="Search for dishes…" autocomplete="off" aria-label="Search for dishes" enterkeyhint="search">
             </div>
-            <select id="menuSortSelect" class="form-input" style="margin-left:8px;">
+            <!-- Hidden state carrier for the Sort button below (same contract
+                 as menu/index.html): ui.js reads/writes it and fires `change`. -->
+            <select id="menuSortSelect" hidden aria-label="Sort dishes">
                 <option value="popularity">Popularity</option>
                 <option value="price-asc">Price: Low to High</option>
                 <option value="price-desc">Price: High to Low</option>
@@ -110,7 +112,16 @@
             <div id="comboOffersGrid" class="combo-offers-grid"></div>
         </div>
 
-        <div class="category-pills" id="categoryPillsRow"></div>
+        <!-- Sticky toolbar: Sort button + category pills — identical to
+             menu/index.html so both surfaces feel like one product. -->
+        <div class="menu-toolbar" id="menuToolbar">
+            <button type="button" class="sort-btn" id="btnSortMenu" aria-haspopup="dialog" aria-expanded="false" aria-label="Sort dishes: Popularity">
+                <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"/><path d="m4 7 3-3 3 3"/><path d="M17 20V4"/><path d="m14 17 3 3 3-3"/></svg>
+                <span id="sortBtnLabel">Sort: Popularity</span>
+                <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="category-pills" id="categoryPillsRow"></div>
+        </div>
 
         <div class="menu-section-title" id="menuSectionTitle">Popular Items</div>
         <div class="dish-list" id="dishListContainer"></div>
@@ -346,6 +357,27 @@
         <button id="btnLocGrant" class="loc-dialog-btn loc-dialog-btn-grant">Allow Location Access</button>
         <button id="btnLocDismiss" class="loc-dialog-btn" style="background:#f1f5f9;color:#64748b;">Not Now</button>
         <div id="locDialogStatus" class="loc-dialog-status"></div>
+    </div>
+</div>
+
+<!-- Sort bottom sheet (opened by #btnSortMenu; chrome reused from the combo sheet) -->
+<div class="sort-sheet-backdrop" id="sortSheetBackdrop" hidden></div>
+<div class="sort-sheet" id="sortSheet" role="dialog" aria-modal="true" aria-labelledby="sortSheetTitle" hidden>
+    <div class="combo-sheet-grab"></div>
+    <div class="combo-sheet-head">
+        <div class="combo-sheet-title" id="sortSheetTitle">Sort dishes</div>
+        <button type="button" class="combo-sheet-close" id="sortSheetClose" aria-label="Close sort options">✕</button>
+    </div>
+    <div role="radiogroup" aria-labelledby="sortSheetTitle">
+        <button type="button" class="sort-opt" role="radio" aria-checked="true" data-sort="popularity">Popularity
+            <svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
+        <button type="button" class="sort-opt" role="radio" aria-checked="false" data-sort="price-asc">₹ Low to High
+            <svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
+        <button type="button" class="sort-opt" role="radio" aria-checked="false" data-sort="price-desc">₹ High to Low
+            <svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
     </div>
 </div>
 

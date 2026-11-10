@@ -393,9 +393,12 @@ document.getElementById('dishSearchInput')?.addEventListener('input', (e) => {
     const val = e.target.value.trim();
     _searchTimer = setTimeout(() => renderMenuScreen(val), 150);
 });
-document.getElementById('menuSortSelect')?.addEventListener('change', (e) => {
-    M.sortKey = e.target.value;
-    renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
+// ── Sort: same labelled button + sheet as the menu page (shared in ui.js) ──
+UI.initSort({
+    onChange: (v) => {
+        M.sortKey = v;
+        renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
+    }
 });
 
 // --- Recent searches ---

@@ -1014,74 +1014,14 @@ document.getElementById('dishSearchInput')?.addEventListener('input', (e) => {
     const val = e.target.value.trim();
     _searchTimer = setTimeout(() => renderMenuScreen(val), 150);
 });
-// ── Sort: one labelled button in the sticky toolbar opens a bottom sheet ──
-// (replaced the old 3-chip row: unlabelled, read like a second category
-// strip, clipped at 360px, 34px targets.) The hidden #menuSortSelect stays
-// the single source of truth: options write it and dispatch `change`.
-const SORT_LABELS = { 'popularity': 'Popularity', 'price-asc': '₹ Low to High', 'price-desc': '₹ High to Low' };
-let _sortSheetHideTimer;
-
-function updateSortUI(sort) {
-    const text = SORT_LABELS[sort] || 'Popularity';
-    const lbl = document.getElementById('sortBtnLabel');
-    if (lbl) lbl.textContent = 'Sort: ' + text;
-    document.getElementById('btnSortMenu')?.setAttribute('aria-label', 'Sort dishes: ' + text);
-    document.querySelectorAll('#sortSheet .sort-opt').forEach(o => o.setAttribute('aria-checked', String(o.dataset.sort === sort)));
-}
-
-function openSortSheet() {
-    const sheet = document.getElementById('sortSheet');
-    const back = document.getElementById('sortSheetBackdrop');
-    if (!sheet || !back) return;
-    clearTimeout(_sortSheetHideTimer);
-    updateSortUI(M.sortKey);
-    sheet.hidden = false;
-    back.hidden = false;
-    requestAnimationFrame(() => { sheet.classList.add('show'); back.classList.add('show'); });
-    document.getElementById('btnSortMenu')?.setAttribute('aria-expanded', 'true');
-    sheet.querySelector('.sort-opt[aria-checked="true"]')?.focus();
-}
-
-function closeSortSheet() {
-    const sheet = document.getElementById('sortSheet');
-    const back = document.getElementById('sortSheetBackdrop');
-    if (!sheet || sheet.hidden) return;
-    sheet.classList.remove('show');
-    back.classList.remove('show');
-    document.getElementById('btnSortMenu')?.setAttribute('aria-expanded', 'false');
-    clearTimeout(_sortSheetHideTimer);
-    _sortSheetHideTimer = setTimeout(() => { sheet.hidden = true; back.hidden = true; }, 230);
-    document.getElementById('btnSortMenu')?.focus();
-}
-
-document.getElementById('menuSortSelect')?.addEventListener('change', (e) => {
-    M.sortKey = e.target.value;
-    updateSortUI(M.sortKey);
-    renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
-});
-document.getElementById('btnSortMenu')?.addEventListener('click', openSortSheet);
-document.getElementById('sortSheetBackdrop')?.addEventListener('click', closeSortSheet);
-document.getElementById('sortSheetClose')?.addEventListener('click', closeSortSheet);
-document.getElementById('sortSheet')?.addEventListener('click', (e) => {
-    const opt = e.target.closest('.sort-opt');
-    if (!opt) return;
-    touchSession();
-    closeSortSheet();
-    const sel = document.getElementById('menuSortSelect');
-    if (sel && sel.value !== opt.dataset.sort) {
-        sel.value = opt.dataset.sort;
-        sel.dispatchEvent(new Event('change'));
+// ── Sort: the sheet logic lives once in ui.js (shared with delivery.html) ──
+// The hidden #menuSortSelect stays the single source of truth.
+UI.initSort({
+    onChange: (v) => {
+        M.sortKey = v;
+        touchSession();
+        renderMenuScreen(document.getElementById('dishSearchInput').value.trim());
     }
-});
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSortSheet(); });
-// Keep Tab inside the sheet while it is open (it is aria-modal).
-document.getElementById('sortSheet')?.addEventListener('keydown', (e) => {
-    if (e.key !== 'Tab') return;
-    const focusables = [...e.currentTarget.querySelectorAll('button')];
-    if (!focusables.length) return;
-    const first = focusables[0], last = focusables[focusables.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 });
 
 // --- Recent searches ---
