@@ -545,3 +545,18 @@ LEDGER CLOSE - 20261110-customer-app-p2-promo-offers (Customer APP Promo Page Of
 - Files: Admin/js/features/customer-app.js, Admin/sw.js, Admin/index.html (search/filter section, bulk toolbar, quick edit panel, preview modal), Admin/style.css (selected row styling, bulk toolbar, icon buttons, preview cards).
 - Commits: 229fa6b pushed to main.
 - Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
+
+LEDGER CLOSE - 20261110-customer-app-p4-settings (Customer APP App Settings P4 enhancements, TIER 2, DONE/high)
+- Trigger: Deep research + planning on Customer APP sub-tabs; P4 = App Settings enhancements.
+- Enhancement 1 - Validation: store name required; phone/WhatsApp must be 10-digit Indian mobile; Google Review Link must be valid URL; delivery fee/min order must be non-negative numbers; GST rate 0-28%. Inline error messages with red field highlighting.
+- Enhancement 2 - Unsaved changes tracking: dirty flag set on any field input/change; Save button enables and shows "(unsaved)"; dirty indicator dot on Save button.
+- Enhancement 3 - Debounced per-field auto-save: 500ms debounce after input/change, saves only changed fields via RTDB update.
+- Enhancement 4 - Keyboard shortcut: Ctrl+S saves all settings when settings pane is visible.
+- Enhancement 5 - Beforeunload warning: prevents navigation away with unsaved changes.
+- Enhancement 6 - New sections: Business Hours (per-day open/close/closed grid for 7 days), Timezone, GST Rate (0-28%), Tax on Delivery Fee toggle, Theme Color picker, Logo URL input.
+- Enhancement 7 - Reset clears dirty state and reloads values from RTDB.
+- SW cache: Admin/sw.js CACHE_NAME bumped v5.12.40 â†’ v5.12.41.
+- Verify: node --check passes; deployed hosting:admin â†’ live on app.foodhubbie.in; SW v5.12.41 served; all P4 functions confirmed in deployed file via curl (_validateSettings, _markSettingsDirty, _debounceSaveSettings, _renderBusinessHours, _collectBusinessHours, businessHoursGrid, caSettingGSTRate, caSettingThemeColor, caSettingLogoUrl, caSettingTimezone, caSettingTaxOnDeliveryFee, beforeunload, Ctrl+S).
+- Files: Admin/js/features/customer-app.js, Admin/sw.js, Admin/index.html (business hours, timezone, GST, theme, logo sections), Admin/style.css (error styles, dirty dot, business hours grid, color input).
+- Commits: 24b93a2 pushed to main.
+- Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
