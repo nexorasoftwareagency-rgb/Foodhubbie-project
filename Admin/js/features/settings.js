@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { db, auth, Outlet, BUSINESS_ID, tenantPath, ref, get, update, set, EmailAuthProvider, reauthenticateWithCredential } from '../firebase.js';
+import { db, auth, Outlet, BUSINESS_ID, tenantPath, ref, get, update, set, EmailAuthProvider, reauthenticateWithCredential, uploadImage } from '../firebase.js';
 import { logAudit, showToast, showConfirm, getSkeletonRows, hashPin, escapeHtml } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { completeSiteRefresh } from '../pwa.js';
@@ -460,6 +460,8 @@ export async function saveStoreSettings() {
 
     try {
         // 2. Collect Data
+        // An image may still be uploading; its <img src> is the value we save.
+        if (_pendingUploads.size) await Promise.all([..._pendingUploads]);
         const storeData = {
             entityName: val('settingEntityName'),
             storeName: val('settingStoreName'),
@@ -671,6 +673,12 @@ function getSlabsFromTable() {
 
 // --- IMAGE PREVIEWS ---
 
+// Uploads land in Cloud Storage through the control API, and the preview shows
+// the FINAL https URL, because saveStoreSettings() reads the value straight back
+// out of <img src>. A blob: URL would be saved as garbage, so pending uploads are
+// awaited before saving.
+const _pendingUploads = new Set();
+
 function previewSettingsImage(inputId, previewId, hiddenId) {
     const file = document.getElementById(inputId).files[0];
     if (!file) return;
@@ -680,17 +688,23 @@ function previewSettingsImage(inputId, previewId, hiddenId) {
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const base64 = e.target.result;
-        const previewEl = document.getElementById(previewId);
-        if (previewEl) previewEl.src = base64;
-        if (hiddenId) {
-            const hiddenEl = document.getElementById(hiddenId);
-            if (hiddenEl) hiddenEl.value = base64;
-        }
-    };
-    reader.readAsDataURL(file);
+    const previewEl = document.getElementById(previewId);
+    const hiddenEl = hiddenId ? document.getElementById(hiddenId) : null;
+    if (previewEl) previewEl.src = URL.createObjectURL(file); // instant feedback
+
+    const job = uploadImage(file, { type: 'setting', id: inputId })
+        .then((url) => {
+            if (!url) throw new Error('Upload returned no URL');
+            if (previewEl) previewEl.src = url;
+            if (hiddenEl) hiddenEl.value = url;
+        })
+        .catch((e) => {
+            console.error('[Settings] Image upload failed:', e);
+            showToast(`Image upload failed — ${e.message}`, 'error');
+        })
+        .finally(() => _pendingUploads.delete(job));
+
+    _pendingUploads.add(job);
 }
 
 // --- QUICK ACTIONS ---

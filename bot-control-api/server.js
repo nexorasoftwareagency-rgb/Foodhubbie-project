@@ -28,6 +28,7 @@ const { startWalletWatcher, publishWalletGate } = require('./wallet-watch');
 const { startOrchestrator } = require('./orchestrator');
 const { startMetaCostPublisher } = require('./meta-cost-publisher');
 const sharp = require('sharp');
+const crypto = require('crypto');
 const { getBillingDefaults } = require('../shared/billing-defaults.cjs');
 const { prunePushInbox } = require('../shared/push-inbox.cjs');
 const { checkAndConsumeCap, setDatabase } = require('../bot/notification-caps');
@@ -52,6 +53,9 @@ const DASHBOARD_ORIGINS = (process.env.DASHBOARD_ORIGIN || '')
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
   databaseURL: process.env.FIREBASE_DATABASE_URL,
+  // Media bucket (batch 13). Passed here because admin.storage() throws
+  // "Bucket name not specified" without it.
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'foodhubbie-10.firebasestorage.app',
 });
 // notification-caps resolves its OWN firebase-admin copy (bot/node_modules),
 // which this initializeApp() never initializes - inject ours or every cap
@@ -59,7 +63,11 @@ admin.initializeApp({
 setDatabase(admin.database());
 
 const app = express();
-app.use(express.json());
+// Image uploads carry a base64 body far above the 100 KB default. That one
+// route mounts its own 8 MB parser, so it must not be consumed here first — a
+// body parser runs before routing, so a route-level limit alone can never win.
+const jsonBody = express.json();
+app.use((req, res, next) => (req.path === '/tenant-api/upload' ? next() : jsonBody(req, res, next)));
 
 app.use((req, res, next) => {
   const origin = req.headers.origin || '';
@@ -1310,6 +1318,83 @@ app.post('/api/whatsapp/templates/:bid/:oid', requireSuperOnly, async (req, res)
     }
     console.error('create template failed', err);
     res.status(500).json({ error: `Could not create message template — ${err.message}` });
+  }
+});
+
+// ================================================================
+// Media storage (Cloud Storage for Firebase) — batch 13
+//   POST /tenant-api/upload        { dataUrl, type, id } -> { url }
+//   POST /tenant-api/delete-image  { url }               -> { ok }
+// Auth: requireTenantAdmin is mounted on /tenant-api, so businessId/outlet
+// come from the VERIFIED token and never from the body — an admin can only
+// ever write under its own outlets/{bid}/{oid}/ prefix.
+// The bucket denies all client access (storage.rules); objects are served by
+// a per-object download token embedded in the returned URL.
+// ================================================================
+const MEDIA_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || 'foodhubbie-10.firebasestorage.app';
+const MIME_EXT = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+function mediaSeg(s) {
+  return String(s || '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
+}
+function mediaPrefix(bid, oid) {
+  return `outlets/${mediaSeg(bid)}/${mediaSeg(oid)}/`;
+}
+function mediaPublicUrl(filePath, token) {
+  return `https://firebasestorage.googleapis.com/v0/b/${MEDIA_BUCKET}/o/${encodeURIComponent(filePath)}?alt=media&token=${token}`;
+}
+function mediaPathFromUrl(url) {
+  const m = /\/o\/([^?#]+)/.exec(String(url || ''));
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
+}
+
+app.post('/tenant-api/upload', express.json({ limit: '8mb' }), async (req, res) => {
+  try {
+    const { dataUrl, type, id } = req.body || {};
+    const m = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(String(dataUrl || ''));
+    if (!m) return res.status(400).json({ error: 'dataUrl must be a base64 image data URI' });
+    if (!type || !id) return res.status(400).json({ error: 'type and id are required' });
+
+    const mime = m[1].toLowerCase();
+    const ext = MIME_EXT[mime];
+    if (!ext) return res.status(400).json({ error: `Unsupported image type ${mime}` });
+
+    const buf = Buffer.from(m[2], 'base64');
+    if (!buf.length) return res.status(400).json({ error: 'Empty image' });
+    if (buf.length > 6 * 1024 * 1024) return res.status(413).json({ error: 'Image too large (max 6 MB)' });
+
+    // Stored byte-for-byte — no re-encode, so a payment QR stays scannable and a
+    // PNG keeps its transparency. The Admin and Rider apps already cap the size.
+    const filePath = `${mediaPrefix(req.businessId, req.outlet)}${mediaSeg(type)}s/${mediaSeg(id)}/original.${ext}`;
+    const token = crypto.randomUUID();
+    await admin.storage().bucket(MEDIA_BUCKET).file(filePath).save(buf, {
+      resumable: false,
+      metadata: {
+        contentType: mime,
+        cacheControl: 'public, max-age=31536000',
+        metadata: { firebaseStorageDownloadTokens: token },
+      },
+    });
+    res.json({ ok: true, url: mediaPublicUrl(filePath, token), path: filePath, bytes: buf.length });
+  } catch (err) {
+    console.error('media upload failed', err);
+    res.status(500).json({ error: `Upload failed — ${err.message}` });
+  }
+});
+
+app.post('/tenant-api/delete-image', async (req, res) => {
+  try {
+    const filePath = mediaPathFromUrl(req.body && req.body.url);
+    if (!filePath) return res.status(400).json({ error: 'url is required' });
+    if (!filePath.startsWith(mediaPrefix(req.businessId, req.outlet))) {
+      return res.status(403).json({ error: 'Not an image of this outlet' });
+    }
+    await admin.storage().bucket(MEDIA_BUCKET).file(filePath).delete({ ignoreNotFound: true });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('media delete failed', err);
+    res.status(500).json({ error: `Delete failed — ${err.message}` });
   }
 });
 

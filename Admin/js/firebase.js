@@ -1,5 +1,4 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { getDatabase, ref, get, onValue, onChildAdded, onChildChanged, set, update, remove, push, runTransaction, query, orderByChild, orderByKey, equalTo, limitToLast, startAt, endAt, endBefore, serverTimestamp, child, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, setPersistence, browserLocalPersistence, browserSessionPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, EmailAuthProvider, sendPasswordResetEmail, sendEmailVerification, createUserWithEmailAndPassword, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
@@ -169,26 +168,63 @@ window.forceOutlet = (name) => {
     if (window.diagnoseDatabase) window.diagnoseDatabase();
 };
 
-export async function uploadImage(fileOrBlob, { bid, oid, type, id }) {
+// Media writes go through the control API, not the Storage SDK: Storage rules
+// cannot read the Realtime Database, and admin identity lives entirely in RTDB
+// (root.child('admins')), so a client write would need custom claims this
+// project never sets. The API takes bid/oid from the verified ID token.
+// ponytail: `bid`/`oid` are kept in the signature for call-site compatibility
+// but deliberately ignored — the server decides the tenant.
+async function apiBase() {
+    if (window.TUNNEL_URL) return window.TUNNEL_URL;
+    try {
+        const snap = await get(ref(db, 'config/tunnelUrl'));
+        const url = snap.val();
+        if (url) window.TUNNEL_URL = url;
+    } catch { /* fall through — callers report an honest error */ }
+    return window.TUNNEL_URL || '';
+}
+
+async function apiAuthToken() {
+    return auth.currentUser ? auth.currentUser.getIdToken() : null;
+}
+
+export async function uploadImage(fileOrBlob, { type, id } = {}) {
     if (!fileOrBlob) return null;
-    const storage = getStorage(app);
-    const fileName = fileOrBlob.name || 'original.jpg';
-    const ext = fileName.split('.').pop() || 'jpg';
-    const path = `outlets/${bid}/${oid}/${type}s/${id}/original.${ext}`;
-    const storageRef = storageRef(storage, path);
-    await uploadBytes(storageRef, fileOrBlob, {
-        contentType: fileOrBlob.type || 'image/jpeg',
-        cacheControl: 'public, max-age=31536000',
+    const token = await apiAuthToken();
+    if (!token) throw new Error('Not signed in');
+    const base = await apiBase();
+    if (!base) throw new Error('Upload service is not configured (config/tunnelUrl missing)');
+
+    const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Could not read that file'));
+        reader.readAsDataURL(fileOrBlob);
     });
-    return await getDownloadURL(storageRef);
+
+    const resp = await fetch(`${base}/tenant-api/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ dataUrl, type, id }),
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(body.error || `Upload failed (${resp.status})`);
+    return body.url;
 }
 
 export async function deleteImage(url) {
-    if (!url) return;
+    // Legacy rows still hold data: URIs — nothing to delete, and shipping them
+    // to the API would be a pointless 100 KB round-trip.
+    if (!url || !/^https:\/\//.test(url)) return;
     try {
-        const storage = getStorage(app);
-        const storageRef = storageRef(storage, url);
-        await deleteObject(storageRef);
+        const token = await apiAuthToken();
+        const base = token ? await apiBase() : '';
+        if (!base) return;
+        await fetch(`${base}/tenant-api/delete-image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ url }),
+        });
     } catch (e) {
         console.warn('[Firebase] deleteImage failed:', e.message);
     }

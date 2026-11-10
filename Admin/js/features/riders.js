@@ -397,8 +397,8 @@ export async function saveRiderAccount() {
 
     try {
         if (profileFile || aadharFile) { if (statusLabel) statusLabel.classList.remove('hidden'); }
-        if (profileFile) profilePhoto = await uploadImage(profileFile, `riders/profile_${Date.now()}`);
-        if (aadharFile) aadharPhoto = await uploadImage(aadharFile, `riders/aadhar_${Date.now()}`);
+        if (profileFile) profilePhoto = await uploadImage(profileFile, { type: 'rider', id: `profile_${Date.now()}` });
+        if (aadharFile) aadharPhoto = await uploadImage(aadharFile, { type: 'rider', id: `aadhar_${Date.now()}` });
         if (statusLabel) statusLabel.classList.add('hidden');
 
         const riderData = {

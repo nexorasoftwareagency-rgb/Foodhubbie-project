@@ -1,94 +1,35 @@
+// Foodhubbie media bucket rules
+//
+// Design: no browser ever talks to Storage directly.
+//
+//   WRITES  Admin → POST /tenant-api/upload (Firebase ID token) → control API
+//           → Admin SDK. The SDK bypasses these rules, and the tenant is taken
+//           from the verified token, so a caller can only write under its own
+//           outlets/{bid}/{oid}/ prefix.
+//   READS   Every stored object carries a `firebaseStorageDownloadTokens` value
+//           and is served from that token URL. The download endpoint honours a
+//           valid token regardless of rules, which lets us keep rider KYC
+//           photos private while dish/status images still render in <img>.
+//
+// Why not client writes + an isAdmin() rule: Firebase Storage rules cannot read
+// the Realtime Database, and admin identity lives entirely in RTDB
+// (root.child('admins').child(auth.uid)). The previous ruleset tested
+// request.auth.token.admin, a custom claim that is never set anywhere in this
+// codebase, so it could not have passed. Granting claims would add a second
+// identity system to keep in sync with `admins/*` forever.
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Helper function for admin check using custom claims
-    function isAdmin() {
-      return request.auth != null && request.auth.token.admin == true;
-    }
-
-    // Helper: Size limits in bytes
-    function maxDishImageSize() {
-      return 300 * 1024;  // 300KB
-    }
-
-    function maxRiderPhotoSize() {
-      return 300 * 1024;  // 300KB
-    }
-
-    // Helper: Restrict outlet wildcard to known outlets
-    function isOutletRestricted(userOutlet, resourceOutlet) {
-      return (request.auth != null && isAdmin()) || userOutlet == resourceOutlet;
-    }
-
-    // --------------------------------------------
-    // ADMINS: Full access for administrators
-    // --------------------------------------------
-    match /admins/{adminId}/{allPaths=**} {
-      allow read, write: if isAdmin();
-    }
-    
-    // --------------------------------------------
-    // RIDERS: Admin write, Self/Admin read, Self photo write (300KB limit)
-    // --------------------------------------------
-    match /riders/{riderId}/{allPaths=**} {
-      allow read: if request.auth != null && (isAdmin() || request.auth.uid == riderId);
-      allow write: if isAdmin();
-      allow write: if request.auth != null 
-                   && request.auth.uid == riderId
-                   && request.resource.size < maxRiderPhotoSize()
+    // Riders upload their own profile photo straight from the rider app (it is a
+    // Firebase Auth user whose uid is the rider id, so this needs no custom
+    // claims). Owner-only read; the download token stays the way it is displayed.
+    match /riders/{uid}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid
+                   && request.resource.size < 300 * 1024
                    && request.resource.contentType.matches('image/.*');
     }
-    
-    // --------------------------------------------
-    // BOT: WhatsApp order/status images (5MB limit)
-    // --------------------------------------------
-    match /bot/{allPaths=**} {
-      allow read: if isAdmin();
-      allow write: if request.auth != null 
-                   && request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
-    }
-    
-    // --------------------------------------------
-    // OUTLET DISHES: Authenticated read, admin write (300KB limit)
-    // --------------------------------------------
-    match /{outlet}/dishes/{dishId}/{allPaths=**} {
-      allow read: if request.auth != null && isOutletRestricted(request.auth.token.outlet, outlet);
-      allow write: if isAdmin() 
-                   && request.resource.size < maxDishImageSize()
-                   && request.resource.contentType.matches('image/.*');
-    }
-    
-    // --------------------------------------------
-    // OUTLET CATEGORIES: Authenticated read, admin write (300KB limit)
-    // --------------------------------------------
-    match /{outlet}/categories/{catId}/{allPaths=**} {
-      allow read: if request.auth != null && isOutletRestricted(request.auth.token.outlet, outlet);
-      allow write: if isAdmin()
-                   && request.resource.size < maxDishImageSize()
-                   && request.resource.contentType.matches('image/.*');
-    }
-    
-    // --------------------------------------------
-    // RECEIPTS: Admin read/write
-    // --------------------------------------------
-    match /receipts/{orderId}/{allPaths=**} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
-    }
-    
-    // --------------------------------------------
-    // USER PROFILES: Admin write, Self/Admin read
-    // --------------------------------------------
-    match /users/{uid}/{allPaths=**} {
-      allow read: if request.auth != null && (isAdmin() || request.auth.uid == uid);
-      allow write: if isAdmin();
-    }
 
-    // --------------------------------------------
-    // DEFAULT: Deny all other paths
-    // --------------------------------------------
     match /{allPaths=**} {
       allow read, write: if false;
     }
