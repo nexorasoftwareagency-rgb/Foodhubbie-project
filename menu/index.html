@@ -223,14 +223,18 @@
             <div id="comboOffersGrid" class="combo-offers-grid"></div>
         </div>
 
-        <!-- Sort filter chips (drive the hidden #menuSortSelect) -->
-        <div class="menu-filter-row" id="menuSortRow" role="tablist" aria-label="Sort dishes">
-            <button class="menu-filter-chip active" data-sort="popularity" type="button" role="tab" aria-selected="true" aria-controls="dishListContainer" id="tab-sort-popularity" tabindex="0">⚡ Popularity</button>
-            <button class="menu-filter-chip" data-sort="price-asc" type="button" role="tab" aria-selected="false" aria-controls="dishListContainer" id="tab-sort-price-asc" tabindex="-1">₹ Low to High</button>
-            <button class="menu-filter-chip" data-sort="price-desc" type="button" role="tab" aria-selected="false" aria-controls="dishListContainer" id="tab-sort-price-desc" tabindex="-1">₹ High to Low</button>
+        <!-- Sticky toolbar: one labelled Sort button (opens the sort sheet;
+             drives the hidden #menuSortSelect) + the category pills. Replaces
+             the old unlabelled 3-chip row, which read as a second category
+             strip and clipped at 360px. -->
+        <div class="menu-toolbar" id="menuToolbar">
+            <button type="button" class="sort-btn" id="btnSortMenu" aria-haspopup="dialog" aria-expanded="false" aria-label="Sort dishes: Popularity">
+                <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"/><path d="m4 7 3-3 3 3"/><path d="M17 20V4"/><path d="m14 17 3 3 3-3"/></svg>
+                <span id="sortBtnLabel">Sort: Popularity</span>
+                <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="category-pills" id="categoryPillsRow"></div>
         </div>
-
-        <div class="category-pills" id="categoryPillsRow"></div>
 
         <div class="menu-section-title" id="menuSectionTitle">Popular Items</div>
         <div class="dish-list" id="dishListContainer"></div>
@@ -898,6 +902,27 @@
         <div class="hamburger-footer" id="hamburgerFooter"></div>
     </div>
 
+</div>
+
+<!-- Sort bottom sheet (opened by #btnSortMenu; chrome reused from the combo sheet) -->
+<div class="sort-sheet-backdrop" id="sortSheetBackdrop" hidden></div>
+<div class="sort-sheet" id="sortSheet" role="dialog" aria-modal="true" aria-labelledby="sortSheetTitle" hidden>
+    <div class="combo-sheet-grab"></div>
+    <div class="combo-sheet-head">
+        <div class="combo-sheet-title" id="sortSheetTitle">Sort dishes</div>
+        <button type="button" class="combo-sheet-close" id="sortSheetClose" aria-label="Close sort options">✕</button>
+    </div>
+    <div role="radiogroup" aria-labelledby="sortSheetTitle">
+        <button type="button" class="sort-opt" role="radio" aria-checked="true" data-sort="popularity">Popularity
+            <svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
+        <button type="button" class="sort-opt" role="radio" aria-checked="false" data-sort="price-asc">₹ Low to High
+            <svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
+        <button type="button" class="sort-opt" role="radio" aria-checked="false" data-sort="price-desc">₹ High to Low
+            <svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
+    </div>
 </div>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
