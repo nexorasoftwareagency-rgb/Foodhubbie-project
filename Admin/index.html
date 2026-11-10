@@ -5153,6 +5153,44 @@
                             </div>
                         </div>
 
+                        <!-- P2: Search & Filter -->
+                        <div class="promo-offers-search-filter" style="margin:12px 0; display:flex; flex-direction:column; gap:8px; padding:12px 16px; background:var(--bg-secondary,#f8fafc); border:1px solid var(--border,#eef0f3); border-radius:10px;">
+                            <div class="flex-row flex-gap-8 items-center">
+                                <input type="text" id="promoOffersSearch" class="search-input-group" placeholder="Search by code, name, or value…" aria-label="Search offers">
+                                <div class="flex-row flex-gap-6">
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="all" checked> <span>All</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="on-page"> <span>On Page</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="off-page"> <span>Off Page</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="valid"> <span>Valid</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="expired"> <span>Expired</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="disabled"> <span>Disabled</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="archived"> <span>Archived</span></label>
+                                </div>
+                                <div class="flex-row flex-gap-6">
+                                    <label class="text-muted-small" style="font-size:11px;">Sort by:</label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersSort" value="updated" checked> <span>Updated</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersSort" value="name"> <span>Name</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersSort" value="value"> <span>Value</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersSort" value="expiry"> <span>Expiry</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="promoOffersSort" value="usage"> <span>Usage</span></label>
+                                </div>
+                                <span class="text-muted-small" id="promoOffersMatchCount"></span>
+                            </div>
+                        </div>
+
+                        <!-- P2: Bulk Toolbar (hidden by default) -->
+                        <div id="bulkToolbar" class="bulk-toolbar hidden" style="margin:8px 0 12px 0; padding:10px 16px; background:#fef3c7; border:1px solid var(--border,#e5e7eb); border-radius:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <span class="text-muted-small" style="font-weight:600;"><span id="bulkSelectCount">0</span> selected</span>
+                            <button class="btn-secondary btn-sm" id="btnBulkShowOnPage" type="button">Show on Page</button>
+                            <button class="btn-secondary btn-sm" id="btnBulkHideFromPage" type="button">Hide from Page</button>
+                            <button class="btn-secondary btn-sm" id="btnBulkEnable" type="button">Enable</button>
+                            <button class="btn-secondary btn-sm" id="btnBulkDisable" type="button">Disable</button>
+                            <button class="btn-secondary btn-sm" id="btnBulkArchive" type="button" style="color:var(--error,#dc2626);">Archive</button>
+                            <button class="btn-secondary btn-sm" id="btnBulkDelete" type="button" style="color:var(--error,#dc2626);">Delete</button>
+                            <button class="btn-secondary btn-sm" id="btnBulkSelectAll" type="button">Select all</button>
+                            <button class="btn-secondary btn-sm" id="btnBulkCancel" type="button">Cancel</button>
+                        </div>
+
                         <div class="promo-offers-empty hidden" id="promoOffersEmpty">
                             <div class="push-empty__icon"><i data-lucide="tag"></i></div>
                             <div class="push-empty__body">
@@ -5165,6 +5203,96 @@
                         </div>
 
                         <div class="promo-offers-list" id="promoOffersList"></div>
+
+                        <!-- P2: Quick Edit Panel -->
+                        <div id="quickEditPanel" class="quick-edit-panel hidden" style="position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center;">
+                            <div class="quick-edit-card" style="background:var(--bg,#fff); border-radius:12px; padding:24px; width:min(480px, 92vw); max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                    <h3 style="font-size:16px; margin:0;">Edit Offer</h3>
+                                    <button class="btn-close" id="btnQuickEditCancel" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">&times;</button>
+                                </div>
+                                <form id="quickEditForm" style="display:flex;flex-direction:column;gap:12px;">
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                        <div>
+                                            <label class="ca-field-label">Name</label>
+                                            <input type="text" id="qeName" class="search-input-group" placeholder="Offer name">
+                                        </div>
+                                        <div>
+                                            <label class="ca-field-label">Coupon Code</label>
+                                            <input type="text" id="qeCode" class="search-input-group" placeholder="e.g. WELCOME20">
+                                        </div>
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                        <div>
+                                            <label class="ca-field-label">Value</label>
+                                            <input type="number" id="qeValue" class="search-input-group" placeholder="e.g. 20 or 100">
+                                        </div>
+                                        <div>
+                                            <label class="ca-field-label">Mode</label>
+                                            <select id="qeMode" class="search-input-group">
+                                                <option value="percent">Percent (%)</option>
+                                                <option value="fixed">Fixed (₹)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                        <div>
+                                            <label class="ca-field-label">Min Subtotal (₹)</label>
+                                            <input type="number" id="qeMinSubtotal" class="search-input-group" placeholder="0">
+                                        </div>
+                                        <div>
+                                            <label class="ca-field-label">Max Cap (₹)</label>
+                                            <input type="number" id="qeMaxCap" class="search-input-group" placeholder="0">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="ca-field-label">Channel</label>
+                                        <select id="qeChannel" class="search-input-group">
+                                            <option value="all">All channels</option>
+                                            <option value="website">Website only</option>
+                                            <option value="table">Table only</option>
+                                            <option value="pos">POS only</option>
+                                        </select>
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                        <div>
+                                            <label class="ca-field-label">Starts At</label>
+                                            <input type="datetime-local" id="qeStartsAt" class="search-input-group">
+                                        </div>
+                                        <div>
+                                            <label class="ca-field-label">Ends At</label>
+                                            <input type="datetime-local" id="qeEndsAt" class="search-input-group">
+                                        </div>
+                                    </div>
+                                    <div class="ca-toggle-wrap" style="margin-top:8px;">
+                                        <label class="ca-toggle">
+                                            <input type="checkbox" id="qePromoPage">
+                                            <span class="ca-toggle-slider"></span>
+                                        </label>
+                                        <span style="margin-left:8px;font-size:13px;color:var(--text-secondary);">Show on Promo Page</span>
+                                    </div>
+                                    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px; border-top:1px solid var(--border,#e5e7eb); padding-top:12px;">
+                                        <button class="btn-secondary" id="btnQuickEditCancel" type="button">Cancel</button>
+                                        <button class="btn-primary" id="btnQuickEditSave" type="button">Save Changes</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- P2: Preview Modal -->
+                        <div id="promoPreviewModal" class="promo-preview-modal hidden" style="position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center;">
+                            <div class="promo-preview-card" style="background:var(--bg,#fff); border-radius:12px; padding:24px; width:min(400px, 92vw); max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3); border:1px solid var(--border,#e5e7eb);">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                    <h3 style="font-size:16px; margin:0;">Promo Page Preview</h3>
+                                    <button class="btn-close" id="btnPreviewClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">&times;</button>
+                                </div>
+                                <p class="text-muted-small mt-2" style="font-size:12px;">How your active offers appear to customers in the app.</p>
+                                <div id="promoPreviewList" style="display:flex;flex-direction:column;gap:12px;"></div>
+                                <div style="margin-top:16px; display:flex; justify-content:flex-end;">
+                                    <button class="btn-secondary" id="btnPreviewClose" type="button">Close</button>
+                                </div>
+                            </div>
+                        </div>
 
                     </div>
 

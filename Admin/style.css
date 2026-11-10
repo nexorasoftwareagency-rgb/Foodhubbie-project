@@ -12267,3 +12267,114 @@ body.setup-mode .setup-hide {
 .ca-pane--notification .push-pane { display: block; }
 .ca-pane--notification .push-pane--send { display: block; }
 .ca-pane--notification .push-pane--offers { display: none; }
+
+/* ===== P2: Promo Page Offers - Selected row styling ===== */
+.promo-offer-row.selected {
+    background: rgba(232, 73, 8, 0.08);
+    border: 2px solid var(--primary, #E84908);
+    border-radius: 8px;
+}
+.promo-offer-row.archived {
+    opacity: 0.55;
+    text-decoration: line-through;
+    filter: grayscale(0.4);
+}
+.promo-offer-row.archived.selected {
+    opacity: 0.8;
+}
+
+/* ===== P2: Bulk toolbar ===== */
+.bulk-toolbar {
+    align-items: center;
+}
+.bulk-toolbar .btn-sm {
+    font-size: 11px;
+    padding: 4px 10px;
+}
+
+/* ===== P2: Icon buttons in offer rows ===== */
+.icon-btn {
+    background: none;
+    border: none;
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary, #64748b);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.icon-btn:hover {
+    background: var(--bg-secondary, #f8fafc);
+    color: var(--text-primary, #0f172a);
+}
+.icon-btn:hover i[style*="color:var(--error"] {
+    color: var(--error, #dc2626);
+}
+
+/* ===== P2: Preview offer cards ===== */
+.preview-offer-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 10px;
+    background: var(--bg, #fff);
+}
+.preview-offer__badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    flex: 0 0 auto;
+}
+.preview-offer__name {
+    font-weight: 600;
+    color: var(--text-primary, #0f172a);
+    flex: 1;
+    min-width: 0;
+}
+.preview-offer__code {
+    font-size: 12px;
+    color: var(--text-secondary, #64748b);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    flex: 1;
+    min-width: 0;
+}
+.preview-offer__meta {
+    font-size: 12px;
+    color: var(--text-tertiary, #94a3b8);
+    flex: 1;
+    min-width: 0;
+}
+.preview-offer__btn {
+    background: var(--primary, #E84908);
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+.preview-offer__btn:hover {
+    opacity: 0.9;
+}
+
+/* ===== P2: Quick Edit / Preview panel backdrop ===== */
+.quick-edit-panel.hidden, .promo-preview-modal.hidden {
+    display: none;
+}
+
+/* ===== P2: Search/filter chips active state ===== */
+.promo-offers-search-filter .chip--radio.active {
+    background: var(--primary, #E84908);
+    color: #fff;
+}
+.promo-offers-search-filter .chip--radio.active span {
+    color: #fff;
+}
