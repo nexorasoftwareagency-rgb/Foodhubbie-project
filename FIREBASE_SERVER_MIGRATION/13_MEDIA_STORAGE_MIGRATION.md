@@ -192,4 +192,80 @@ per 10 000 (free tier: 50 000/day). Effectively **$0**.
 
 ## 7. As built
 
-_(filled in during execution)_
+### 7.1 Provisioning (the real blocker)
+
+The bucket could not simply be created: **the `firebasestorage.googleapis.com` API had
+never been enabled on `foodhubbie-10`**. That single fact explains the whole symptom set —
+no bucket, no rules deployment, `uploadImage()` failing since it shipped, all media still
+base64.
+
+Paths tried, in order:
+
+| Attempt | Result |
+|---|---|
+| GCS `buckets.insert` with the service account | `403` — "Another user owns the domain `foodhubbie-10.firebasestorage.app`" (GCS treats `*.firebasestorage.app` as a domain-verified name) |
+| Enable the API with the **service account** | `403 PERMISSION_DENIED` — an admin-SDK service account cannot enable APIs |
+| `firebase deploy --only storage` before provisioning | would fail — the CLI only GETs `projects/{id}/defaultBucket` and tells you to click "Get Started" |
+| Enable the API with the **owner's own CLI session** (`serviceusage…:enable`) | `200`, operation completed |
+| `POST firebasestorage.googleapis.com/v1alpha/projects/foodhubbie-10/defaultBucket` | `200` → bucket `foodhubbie-10.firebasestorage.app`, `ASIA-SOUTH1`, linked |
+
+No console click was required. `POST defaultBucket` needs a `location`; `{}` returns
+`400 INVALID_ARGUMENT`.
+
+### 7.2 Behaviour proven live
+
+`POST /tenant-api/upload` against the running control API on EC2, with a real Firebase ID
+token minted for a throwaway owner of the e2e outlet — **13/13**:
+
+| Check | Result |
+|---|---|
+| upload with no token | `401` |
+| upload with token | `200` + token URL |
+| path is tenant-scoped | `outlets/e2e-biz-…/e2e-outlet-…/dishes/…/original.png` |
+| token URL read anonymously | `200`, `image/png`, `cache-control: public, max-age=31536000` |
+| same object **without** the token | `403` |
+| plain GCS URL | `403` (uniform bucket-level access) |
+| non-image payload | `400` |
+| delete an image of another outlet | `403` |
+| delete own image, twice | `200`, `200` (`ignoreNotFound`) |
+| deleted object no longer served | `403` |
+
+Fixture admin (Auth user + `admins/{uid}`) deleted afterwards.
+
+### 7.3 Migration applied (pizza)
+
+36 image fields, **1.59 MB of decoded bytes** (2.12 MB of base64), 34 unique payloads
+(sha256 dedupe — the five bot status images are byte-identical and cost one object).
+
+| Node | Media bytes before (base64 as stored) | Node size after | |
+|---|---:|---:|---|
+| `settings/Bot` | 1 352 155 B | **1 404 B** | 964× smaller |
+| `dishes` | 670 078 B | **7 847 B** | 85× smaller |
+| `categories` | 74 446 B | **1 915 B** | |
+| `combos` | 30 990 B | **2 171 B** | |
+| `settings/Store` | 103 671 B | **1 078 B** | |
+
+Total media removed: **2 230 112 B** (2.13 MB of base64 → 1.59 MB of objects).
+
+- `data:image/` remaining in `settings`/`dishes`/`categories`/`combos`: **0**
+- 36 stored URLs fetched: **36 × `200`, all `image/jpeg`**
+- `paymentQR` verified byte-identical (77 083 B, JPEG magic `ffd8ff`) — no re-encode, so it
+  still scans
+
+Backup of every replaced value: `/var/www/foodhubbie/backup/media-roshani-pizza-pizza-*.json`
+(`--restore` reverts).
+
+### 7.4 Deliberate non-changes
+
+- **No bot change.** `sendImage` already takes the non-`data:` branch: it `fetch`es the
+  URL and re-encodes JPEG→PNG for Baileys thumbnails (lines 707-724), with a text fallback
+  on any failure.
+- **No menu change.** `img-src` already allows `https://*` and
+  `https://*.firebasestorage.googleapis.com`.
+- **Rider photos are not public.** Everything is deny-all and served by download token;
+  the one rule exception is `riders/{uid}/**`, where the rider app uploads its own photo
+  as a Firebase Auth user whose uid *is* the rider id — something Storage rules can verify
+  without claims.
+- **`deleteImage` on a legacy `data:` URI is a no-op** — there is no object to delete.
+- The demo tenant keeps its generated SVG data URIs (a few hundred bytes each); it copies
+  the live catalog verbatim, so dish photos now arrive as URLs.

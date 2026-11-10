@@ -1333,6 +1333,8 @@ app.post('/api/whatsapp/templates/:bid/:oid', requireSuperOnly, async (req, res)
 // ================================================================
 const MEDIA_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || 'foodhubbie-10.firebasestorage.app';
 const MIME_EXT = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+// Object paths are browsed by humans when debugging; spell them properly.
+const PLURAL = { dish: 'dishes', category: 'categories', combo: 'combos', setting: 'settings', rider: 'riders' };
 
 function mediaSeg(s) {
   return String(s || '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
@@ -1366,7 +1368,7 @@ app.post('/tenant-api/upload', express.json({ limit: '8mb' }), async (req, res) 
 
     // Stored byte-for-byte — no re-encode, so a payment QR stays scannable and a
     // PNG keeps its transparency. The Admin and Rider apps already cap the size.
-    const filePath = `${mediaPrefix(req.businessId, req.outlet)}${mediaSeg(type)}s/${mediaSeg(id)}/original.${ext}`;
+    const filePath = `${mediaPrefix(req.businessId, req.outlet)}${PLURAL[type] || `${mediaSeg(type)}s`}/${mediaSeg(id)}/original.${ext}`;
     const token = crypto.randomUUID();
     await admin.storage().bucket(MEDIA_BUCKET).file(filePath).save(buf, {
       resumable: false,
