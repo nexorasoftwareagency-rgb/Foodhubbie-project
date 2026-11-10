@@ -438,8 +438,17 @@ test('notification caps are tenant-scoped, never a root outlets/ node', async ()
         assert.strictEqual((await checkAndConsumeCap('pizza', '9876543210', 'order')).allowed, true);
         assert.match(writes[0], /^businesses\/roshani-pizza\/outlets\/pizza\/notifyCaps\/9876543210\/order\/\d{4}-\d{2}-\d{2}$/);
 
-        // explicit tenant wins — the control API sends for ANY outlet
-        await checkAndConsumeCap('pizza', '9876543210', 'promo', 'e2e-biz-1792987605261');
+        // explicit tenant wins — the control API sends for ANY outlet.
+        // Promo pushes are suppressed during IST quiet hours (21:00-09:00), so
+        // pin the clock to a fixed afternoon instant: without this the assertion
+        // fails every night and passes every morning.
+        const realNow = Date.now;
+        Date.now = () => Date.UTC(2026, 0, 15, 6, 30, 0); // 06:30 UTC = 12:00 IST
+        try {
+            await checkAndConsumeCap('pizza', '9876543210', 'promo', 'e2e-biz-1792987605261');
+        } finally {
+            Date.now = realNow;
+        }
         assert.match(writes[1], /^businesses\/e2e-biz-1792987605261\/outlets\/pizza\/notifyCaps\/9876543210\/promo\//);
 
         // reads use the same tenant path
