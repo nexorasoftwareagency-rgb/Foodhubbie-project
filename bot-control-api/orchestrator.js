@@ -17,9 +17,11 @@
  * outlets (no `whatsapp.status`) are started manually via /api/bot/provision
  * and are NEVER touched here — the two flows never fight over a worker.
  *
- * EGRESS (2026-11-10): discovery is one `businesses` read at boot; change
- * detection is per-outlet leaf listeners, never a listener on `businesses` or
- * on an outlet subtree. See the note above OUTLET_LEAVES for the measurement.
+ * EGRESS (2026-11-10, batch 14): discovery is a read of the canonical
+ * `outletIndex` registry at boot (a few KB) — the `businesses` tree is only
+ * read if that registry is empty; change detection is per-outlet leaf
+ * listeners, never a listener on `businesses` or on an outlet subtree. See the
+ * note above OUTLET_LEAVES for the measurement.
  */
 
 const { pm2, connectOnce } = require('./pm2-client');
@@ -193,13 +195,32 @@ async function startOrchestrator({ admin, processName, nextHealthPort }) {
   await connectOnce();
   const db = admin.database();
 
-  // ONE boot scan, reused for discovery and the initial reconcile. This is the
-  // only full-tree read left; it does not repeat on reconnect.
-  let businesses = {};
+  // Discovery comes from the canonical registry `outletIndex` (a few KB), not
+  // from the `businesses` tree. EGRESS (batch 14): the boot scan read the WHOLE
+  // tree — 3.06 MB on 2026-11-10, and it grows with every outlet's photos —
+  // on every restart, and bot-control-api had restarted 72 times. The tree is
+  // only read if the registry is empty (a brand-new project).
+  let discovered = [];
   try {
-    businesses = (await db.ref('businesses').get()).val() || {};
+    const idxSnap = await db.ref('outletIndex').get();
+    const idx = idxSnap.val() || {};
+    discovered = Object.entries(idx)
+      .map(([oid, entry]) => ({ bid: typeof entry === 'string' ? entry : entry && entry.bid, oid }))
+      .filter((o) => o.bid);
   } catch (err) {
-    console.error('[orchestrator] initial reconcile failed:', err.message);
+    console.error('[orchestrator] registry read failed:', err.message);
+  }
+
+  if (!discovered.length) {
+    console.warn('[orchestrator] outletIndex is empty — falling back to a full businesses scan');
+    try {
+      const businesses = (await db.ref('businesses').get()).val() || {};
+      for (const [bid, biz] of Object.entries(businesses)) {
+        for (const oid of Object.keys((biz && biz.outlets) || {})) discovered.push({ bid, oid });
+      }
+    } catch (err) {
+      console.error('[orchestrator] initial reconcile failed:', err.message);
+    }
   }
 
   const watched = new Set();
@@ -215,11 +236,13 @@ async function startOrchestrator({ admin, processName, nextHealthPort }) {
     db.ref(p.suspended).on('value', onChange);
   };
 
-  for (const [bid, biz] of Object.entries(businesses)) {
-    for (const [oid, outlet] of Object.entries((biz && biz.outlets) || {})) {
-      watchOutlet(bid, oid);
-      await handleOutletChange({ admin, processName, nextHealthPort, bid, oid, outlet });
-    }
+  for (const { bid, oid } of discovered) {
+    watchOutlet(bid, oid);
+    // The same four leaves the reconcile path uses — never the outlet subtree.
+    await handleOutletChange({
+      admin, processName, nextHealthPort, bid, oid,
+      outlet: await readOutletState(admin, bid, oid),
+    });
   }
   console.log(`[orchestrator] initial reconcile complete (${watched.size} outlets)`);
 

@@ -31,4 +31,8 @@ export { transportSwitch } from './api/transportSwitch';
 
 // RTDB Triggers (Event-Driven)
 export { onOrderStatusChange } from './triggers/onOrderStatusChange';
-export { onWalletUpdate } from './triggers/onWalletUpdate';
+// onWalletUpdate was DELETED in batch 14: it triggered on
+// `walletBilling/{bid}/{oid}/balancePaise` — the META API credit line, not the
+// restaurant wallet — and published the CUSTOMER-facing order gate from it,
+// ignoring `wallet.enforce` entirely. Its balanceHistory rows had no reader.
+// Never re-add a second writer of `walletGate`.
