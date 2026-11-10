@@ -102,6 +102,7 @@ const ASSETS_TO_CACHE = [
   './js/features/promotions.js',
   './js/features/promotions-guide.js',
   './js/features/app-notifications.js',
+  './js/features/customer-app.js',
   './assets/sounds/alert.mp3'
 ];
 
