@@ -1543,7 +1543,7 @@ const ICONS = {
     status: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
     history: '<svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>',
     promotions: '<svg viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
-    account: '<svg viewBox="0 0 24 24"><path d="M16 9c2.8 0 5 2.2 5 5s-2.2 5-5 5-5-2.2-5-5 2.2-5 5-5zM12 12c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3z"/></svg>',
+    account: '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
     help: '<svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>',
     signout: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
 };
@@ -1551,6 +1551,12 @@ const ICONS = {
 function openHamburger() {
     const badge = document.getElementById('hamburgerCartBadge');
     if (badge) badge.textContent = String(lineCount());
+    // Built once on boot — follow the live screen so the active row is right
+    // wherever the drawer is opened from (owner review item 7).
+    const activeId = document.querySelector('.screen.active')?.id || '';
+    hamburgerList.querySelectorAll('.hamburger-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.hamburgerTab === activeId);
+    });
     hamburgerOverlay.classList.add('open');
     hamburgerDrawer.classList.add('open');
     hamburgerDrawer.removeAttribute('aria-hidden');
@@ -1568,7 +1574,11 @@ function closeHamburger() {
 
 async function buildHamburgerMenu() {
     const isDirect = !!M.direct;
-    const activeTab = (typeof state !== 'undefined' && state?.currentActiveTab) || '';
+    // The live active screen is the source of truth. (The old read of
+    // `state.currentActiveTab` always fell through — no such object exists —
+    // so no row was ever marked active. The drawer is built once on boot, so
+    // openHamburger() re-syncs these classes on every open.)
+    const activeTab = document.querySelector('.screen.active')?.id || '';
 
     // Build menu HTML first — never depends on Firebase, so the drawer
     // always has content even if the brand fetch fails.
@@ -1694,6 +1704,11 @@ async function buildHamburgerMenu() {
 hamburgerBtns.forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openHamburger(); }));
 hamburgerClose?.addEventListener('click', closeHamburger);
 hamburgerOverlay?.addEventListener('click', (e) => { if (e.target === hamburgerOverlay) closeHamburger(); });
+// Escape and browser Back must release the drawer too: openHamburger locks
+// body scroll inline, so a drawer nobody can close = a page nobody can scroll
+// (owner review item 3). Both are no-ops while the drawer is shut.
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeHamburger(); });
+window.addEventListener('popstate', () => closeHamburger());
 
 // Customer App features page — "Go" button for restaurant link input
 document.getElementById('btnGoToRestaurantLink')?.addEventListener('click', () => {

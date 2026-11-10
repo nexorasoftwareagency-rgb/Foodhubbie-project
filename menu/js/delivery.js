@@ -1059,6 +1059,11 @@ const DH_ICONS = {
 function dhOpenHamburger() {
     const badge = document.getElementById('hamburgerCartBadge');
     if (badge) badge.textContent = String(lineCount());
+    // Built once on boot — follow the live screen for the active row.
+    const activeId = document.querySelector('.screen.active')?.id || '';
+    dhHamburgerList.querySelectorAll('.hamburger-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.hamburgerTab === activeId);
+    });
     dhHamburgerOverlay.classList.add('open');
     dhHamburgerDrawer.classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -1079,7 +1084,7 @@ async function dhBuildHamburgerMenu() {
     // `state` only exists on pages that load app.js — delivery.html doesn't, and
     // an unguarded read threw (swallowed by the caller's .catch), leaving the
     // drawer with zero items. Same guard as app.js.
-    const activeTab = (typeof state !== 'undefined' && state?.currentActiveTab) || '';
+    const activeTab = document.querySelector('.screen.active')?.id || '';
 
     const sections = [
         {
@@ -1157,6 +1162,9 @@ async function dhBuildHamburgerMenu() {
 dhHamburgerBtns.forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); dhOpenHamburger(); }));
 dhHamburgerClose?.addEventListener('click', dhCloseHamburger);
 dhHamburgerOverlay?.addEventListener('click', (e) => { if (e.target === dhHamburgerOverlay) dhCloseHamburger(); });
+// Same as app.js: Escape / Back must release the drawer's inline scroll lock.
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') dhCloseHamburger(); });
+window.addEventListener('popstate', () => dhCloseHamburger());
 
 dhBuildHamburgerMenu().catch(() => {});
 

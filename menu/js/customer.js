@@ -1082,6 +1082,11 @@ function renderPwaCards() {
         notifyBtn.onclick = async () => {
             if (!hasIdentity()) {
                 setPromoTab('account');
+                // The form may be collapsed behind Edit (item 4) — this flow
+                // exists to collect the number, so reopen it before focusing.
+                _acctEditing = true;
+                _acctMarkSeen();
+                renderAccount();
                 UI.showToast('Add your mobile number first.', 'error');
                 document.getElementById('acctPhone')?.focus();
                 return;
@@ -1139,6 +1144,18 @@ export function showConfirm(message, title = 'Confirm') {
     });
 }
 
+// Owner review (items 4/5): the profile form used to render open on every
+// visit. It opens itself exactly once — first visit, profile still incomplete —
+// then collapses behind "Edit" on the profile card. Pure UI state: the flag is
+// a device-local preference, not profile data.
+let _acctEditing = false;
+function _acctFormSeen() {
+    try { return localStorage.getItem('fh:acctFormSeen') === '1'; } catch (e) { return false; }
+}
+function _acctMarkSeen() {
+    try { localStorage.setItem('fh:acctFormSeen', '1'); } catch (e) { /* ignore */ }
+}
+
 function renderAccount() {
     renderTabPanels();
     const card = document.getElementById('accountProfileCard');
@@ -1150,6 +1167,22 @@ function renderAccount() {
     const initial = (name || 'G').charAt(0).toUpperCase();
     const installAvailable = !isInstalled() && (isIOS() || canShowNativeInstallPrompt());
 
+    // First visit only: the form opens once, then collapses behind Edit.
+    // (Sign-in always writes a complete profile — phone required, name defaults
+    // to "Guest" — so gating on completeness would mean it never opens at all.)
+    if (!_acctEditing && !_acctFormSeen()) _acctEditing = true;
+    if (_acctEditing) _acctMarkSeen();
+
+    // A background re-render (profile hydrate, device access, tab refresh) used
+    // to blow away the open form: focus dropped and any typed-but-unsaved text
+    // reset. Carry the live values across and restore focus to the same field.
+    const liveName = document.getElementById('acctName');
+    const livePhone = document.getElementById('acctPhone');
+    const prevFocus = _acctEditing && document.activeElement && card.contains(document.activeElement)
+        ? document.activeElement.id : '';
+    const draftName = _acctEditing && liveName ? liveName.value : null;
+    const draftPhone = _acctEditing && livePhone ? livePhone.value : null;
+
     card.innerHTML = `
         <div class="account-card">
             <div class="account-avatar" aria-hidden="true">${esc(initial)}</div>
@@ -1157,19 +1190,24 @@ function renderAccount() {
                 <div class="account-name">${esc(name || 'Add your name')}</div>
                 <div class="account-phone">${phone ? `+91 ${phone.slice(0, 5)} ${phone.slice(5)}` : 'No mobile number saved'}</div>
             </div>
+            <button type="button" class="account-edit" id="btnAcctEdit" aria-expanded="${_acctEditing}" aria-controls="acctForm">Edit</button>
         </div>
-        <div class="account-form">
+        ${_acctEditing ? `
+        <div class="account-form" id="acctForm">
             <label class="onb-label" for="acctName">Name</label>
-            <input class="onb-input" id="acctName" type="text" autocomplete="name" maxlength="60" placeholder="e.g. Rohan" value="${esc(name)}">
+            <input class="onb-input" id="acctName" type="text" autocomplete="name" maxlength="60" placeholder="e.g. Rohan" value="${esc(draftName !== null ? draftName : name)}">
             <span class="acct-input-error" id="acctNameError"></span>
             <label class="onb-label" for="acctPhone">Mobile number</label>
             <div class="onb-phone">
                 <span>+91</span>
-                <input class="onb-input" id="acctPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="98765 43210" value="${esc(phone)}">
+                <input class="onb-input" id="acctPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="98765 43210" value="${esc(draftPhone !== null ? draftPhone : phone)}">
             </div>
             <span class="acct-input-error" id="acctPhoneError"></span>
-            <button type="button" class="account-save" id="btnAcctSave">Save details</button>
-        </div>
+            <div class="acct-actions">
+                <button type="button" class="account-save" id="btnAcctSave">Save details</button>
+                <button type="button" class="account-cancel" id="btnAcctCancel">Cancel</button>
+            </div>
+        </div>` : ''}
         <div class="account-card account-prefs">
             <label class="account-toggle">
                 <span><strong>Order updates</strong><small>Confirmed, ready, out for delivery, delivered.</small></span>
@@ -1189,6 +1227,28 @@ function renderAccount() {
 
     bindAccountRatings();
     bindAccessCard();
+
+    // Restore focus lost to the rebuild above (same field, caret at the end).
+    if (prevFocus) {
+        const el = document.getElementById(prevFocus);
+        if (el && typeof el.focus === 'function') {
+            el.focus();
+            if (el.setSelectionRange && el.type !== 'number') {
+                try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* type doesn't support it */ }
+            }
+        }
+    }
+
+    document.getElementById('btnAcctEdit')?.addEventListener('click', () => {
+        _acctEditing = true;
+        _acctMarkSeen();
+        renderAccount();
+        document.getElementById('acctName')?.focus();
+    });
+    document.getElementById('btnAcctCancel')?.addEventListener('click', () => {
+        _acctEditing = false;
+        renderAccount();
+    });
 
     document.getElementById('btnAcctSave')?.addEventListener('click', async () => {
         const newName = document.getElementById('acctName')?.value || '';
@@ -1242,6 +1302,8 @@ function renderAccount() {
         UI.showToast('Details saved.', 'success');
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save details';
+        // Saved = done editing: collapse back to the view card (item 4).
+        _acctEditing = false;
         renderAccount();
     });
 
