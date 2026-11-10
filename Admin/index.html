@@ -5006,6 +5006,20 @@
                             </div>
                         </div>
 
+                        <!-- Subscriber search & filter -->
+                        <div class="push-subs-section mt-12" id="pushSubsSection">
+                            <div class="flex-row flex-gap-8 items-center">
+                                <input type="text" id="pushSubSearch" class="search-input-group" placeholder="Search subscribers by name or number…" aria-label="Search subscribers">
+                                <div class="flex-row flex-gap-6">
+                                    <label class="chip chip--radio push-sub-filter" data-filter="all"><input type="radio" name="pushSubFilter" value="all" checked> <span>All</span></label>
+                                    <label class="chip chip--radio push-sub-filter" data-filter="offers"><input type="radio" name="pushSubFilter" value="offers"> <span>Offers On</span></label>
+                                    <label class="chip chip--radio push-sub-filter" data-filter="no-offers"><input type="radio" name="pushSubFilter" value="no-offers"> <span>Offers Off</span></label>
+                                    <label class="chip chip--radio push-sub-filter" data-filter="recent"><input type="radio" name="pushSubFilter" value="recent"> <span>Active 30d</span></label>
+                                </div>
+                                <span class="text-muted-small mt-2" id="pushSubFilterCount"></span>
+                            </div>
+                        </div>
+
                         <div class="form-group mt-12">
                             <label id="pushAudienceLabel">Audience</label>
                             <div class="flex-row flex-gap-8" role="radiogroup" aria-labelledby="pushAudienceLabel">
@@ -5102,6 +5116,9 @@
                                 <button class="chip chip--outline tpl-btn" type="button" data-tpl="loyalty" data-title="Double points this weekend" data-body="Earn 2x points on every order till Sunday. Redeem straight from the app.">Double points</button>
                                 <button class="chip chip--outline tpl-btn" type="button" data-tpl="system" data-title="Closed tomorrow" data-body="We are closed tomorrow for maintenance. Back the day after, same timings.">Closed tomorrow</button>
                                 <button class="chip chip--outline tpl-btn" type="button" data-tpl="order" data-title="Your order is running late" data-body="We are about 10 minutes behind - your order is on its way.">Order delayed (1 customer)</button>
+                                <button class="chip chip--outline" type="button" id="btnManageTemplates" title="Manage custom templates">
+                                    <i data-lucide="edit-3"></i> <span>Manage Templates</span>
+                                </button>
                             </div>
                             <p class="text-muted-small mt-2">Order status updates (placed, out for delivery, delivered) are sent automatically by the bot.</p>
                         </div>

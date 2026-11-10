@@ -43,6 +43,12 @@ let _sending = false;
 let _deviceReady = false;
 let _iconType = '';    // last type whose preview icon was rendered
 let _history = [];     // recent accepted sends, newest first (server-capped at 20)
+let _searchQuery = ''; // subscriber search text
+let _subFilter = 'all'; // 'all' | 'offers' | 'no-offers' | 'recent'
+let _draftKey = '';    // localStorage key for this outlet's draft
+let _undoTimer = null; // undo-after-send timer
+let _undoEntry = null; // { key, title, body, type, audience, phone, at }
+let _templates = [];   // custom templates [{ id, name, title, body, type, createdAt, updatedAt }]
 
 /**
  * Initialise the push notification UI inside the Customer APP notification pane.
@@ -55,11 +61,15 @@ export async function initPushUI() {
     await checkDevice();
     await loadPushSubscriptions();
     await loadHistory();
+    _loadDraft();
+    _loadTemplates();
+    _wireKeyboard();
     _syncUi();
 }
 
 export function cleanupPushUI() {
     _sending = false;
+    if (_undoTimer) { clearTimeout(_undoTimer); _undoTimer = null; }
 }
 
 /* ============ WIRING (once) ============ */
@@ -76,26 +86,29 @@ function _wireOnce() {
         _updateCount('pushNotifTitle', 'pushTitleCount', 100);
         _updatePreviewText();
         _syncUi();
+        _saveDraft();
     });
     $('pushNotifBody')?.addEventListener('input', () => {
         _updateCount('pushNotifBody', 'pushBodyCount', 300);
         _updatePreviewText();
         _syncUi();
+        _saveDraft();
     });
 
     document.querySelectorAll('input[name="pushNotifType"]').forEach(rb => {
-        rb.addEventListener('change', _onTypeChange);
+        rb.addEventListener('change', () => { _onTypeChange(); _saveDraft(); });
     });
     document.querySelectorAll('input[name="pushAudience"]').forEach(rb => {
-        rb.addEventListener('change', _syncUi);
+        rb.addEventListener('change', () => { _syncUi(); _saveDraft(); });
     });
 
     $('pushNotifPhone')?.addEventListener('input', () => {
         const el = $('pushNotifPhone');
         if (el) el.value = el.value.replace(/\D/g, '').slice(0, 10);
         _syncUi();
+        _saveDraft();
     });
-    $('pushNotifTestMode')?.addEventListener('change', _syncUi);
+    $('pushNotifTestMode')?.addEventListener('change', () => { _syncUi(); _saveDraft(); });
 
     document.querySelectorAll('.tpl-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -110,6 +123,22 @@ function _wireOnce() {
             _syncUi();
         });
     });
+
+    $('btnManageTemplates')?.addEventListener('click', _openTemplatesModal);
+
+    // Subscriber search & filter
+    $('pushSubSearch')?.addEventListener('input', (e) => {
+        _searchQuery = e.target.value;
+        _renderSubscribersList();
+        _syncUi();
+    });
+    document.querySelectorAll('input[name="pushSubFilter"]').forEach(rb => {
+        rb.addEventListener('change', (e) => {
+            _subFilter = e.target.value;
+            _renderSubscribersList();
+            _syncUi();
+        });
+    });
 }
 
 function _onTypeChange() {
@@ -120,6 +149,315 @@ function _onTypeChange() {
         $('pushNotifPhone')?.focus();
     }
     _syncUi();
+}
+
+/* ============ SUBSCRIBER SEARCH & FILTER ============ */
+
+/** Filter subscribers by search text and filter chip. */
+function _filterSubs() {
+    const q = _searchQuery.toLowerCase();
+    return _subs.filter(s => {
+        const matchText = !q || String(s.name || '').toLowerCase().includes(q) || String(s.phone || '').includes(q);
+        if (!matchText) return false;
+        if (_subFilter === 'offers') return s.offers === true;
+        if (_subFilter === 'no-offers') return s.offers === false;
+        if (_subFilter === 'recent') {
+            const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+            return s.updatedAt >= thirtyDaysAgo;
+        }
+        return true;
+    });
+}
+
+/** Render the subscriber list (used by the datalist and a future list panel). */
+function _renderSubscribersList() {
+    const dl = $('pushSubPhones');
+    if (!dl) return;
+    dl.innerHTML = '';
+    const filtered = _filterSubs();
+    filtered
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .slice(0, 50)
+        .forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.phone;
+            opt.label = s.name || s.phone;
+            dl.appendChild(opt);
+        });
+}
+
+/* ============ DRAFTS (auto-save to localStorage) ============ */
+
+function _draftStorageKey() {
+    const bid = BUSINESS_ID();
+    const oid = Outlet.current;
+    return `fh:pushDraft:${bid}:${oid}`;
+}
+
+function _saveDraft() {
+    const title = $('pushNotifTitle')?.value || '';
+    const body = $('pushNotifBody')?.value || '';
+    const type = _currentType();
+    const aud = _currentAudience();
+    const phone = _phone();
+    const testMode = !!$('pushNotifTestMode')?.checked;
+    const draft = { title, body, type, audience: aud, phone, testMode, updatedAt: Date.now() };
+    try {
+        localStorage.setItem(_draftStorageKey(), JSON.stringify(draft));
+    } catch { /* localStorage unavailable - silently skip */ }
+}
+
+function _loadDraft() {
+    try {
+        const raw = localStorage.getItem(_draftStorageKey());
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        if (!d || typeof d !== 'object') return;
+        if ($('pushNotifTitle') && d.title !== undefined) $('pushNotifTitle').value = d.title;
+        if ($('pushNotifBody') && d.body !== undefined) $('pushNotifBody').value = d.body;
+        if ($('pushNotifTestMode') && d.testMode !== undefined) $('pushNotifTestMode').checked = d.testMode === true;
+        const typeRadio = document.querySelector(`input[name="pushNotifType"][value="${d.type}"]`);
+        if (typeRadio) typeRadio.checked = true;
+        const audRadio = document.querySelector(`input[name="pushAudience"][value="${d.audience || 'all'}"]`);
+        if (audRadio) audRadio.checked = true;
+        if ($('pushNotifPhone') && d.phone) $('pushNotifPhone').value = d.phone;
+        _onTypeChange();
+        _updateCount('pushNotifTitle', 'pushTitleCount', 100);
+        _updateCount('pushNotifBody', 'pushBodyCount', 300);
+        _updatePreviewText();
+        _syncUi();
+    } catch { /* corrupt draft - ignore */ }
+}
+
+function _clearDraft() {
+    try { localStorage.removeItem(_draftStorageKey()); } catch { /* ignore */ }
+}
+
+/* ============ TEMPLATES LIBRARY (localStorage + RTDB later) ============ */
+
+function _templatesStorageKey() {
+    const bid = BUSINESS_ID();
+    const oid = Outlet.current;
+    return `fh:pushTemplates:${bid}:${oid}`;
+}
+
+async function _loadTemplates() {
+    try {
+        const raw = localStorage.getItem(_templatesStorageKey());
+        if (!raw) { _templates = []; return; }
+        _templates = JSON.parse(raw);
+        if (!Array.isArray(_templates)) _templates = [];
+    } catch { _templates = []; }
+}
+
+function _saveTemplates() {
+    try {
+        localStorage.setItem(_templatesStorageKey(), JSON.stringify(_templates));
+    } catch { /* ignore */ }
+}
+
+function _insertTemplate(tmpl) {
+    if ($('pushNotifTitle')) $('pushNotifTitle').value = tmpl.title || '';
+    if ($('pushNotifBody')) $('pushNotifBody').value = tmpl.body || '';
+    const typeRadio = document.querySelector(`input[name="pushNotifType"][value="${tmpl.type || 'promo'}"]`);
+    if (typeRadio) { typeRadio.checked = true; _onTypeChange(); }
+    _updateCount('pushNotifTitle', 'pushTitleCount', 100);
+    _updateCount('pushNotifBody', 'pushBodyCount', 300);
+    _updatePreviewText();
+    _syncUi();
+}
+
+async function _saveTemplate(name, title, body, type) {
+    const now = Date.now();
+    const tmpl = {
+        id: 'tpl_' + now + '_' + Math.random().toString(36).slice(2, 7),
+        name: name || 'Untitled',
+        title: title || '',
+        body: body || '',
+        type: type || 'promo',
+        createdAt: now,
+        updatedAt: now,
+    };
+    _templates.push(tmpl);
+    _saveTemplates();
+    return tmpl;
+}
+
+async function _deleteTemplate(id) {
+    _templates = _templates.filter(t => t.id !== id);
+    _saveTemplates();
+}
+
+function _openTemplatesModal() {
+    const existing = $('pushTemplatesModal');
+    if (existing) { existing.remove(); return; }
+
+    const modal = document.createElement('div');
+    modal.id = 'pushTemplatesModal';
+    modal.className = 'dynamic-modal-overlay active';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Notification Templates');
+    modal.innerHTML = `
+        <div class="dynamic-modal-box" style="max-width:640px;">
+            <div class="dynamic-modal-header">
+                <h3 class="dynamic-modal-title">Notification Templates</h3>
+                <button class="btn-close" onclick="this.closest('.dynamic-modal-overlay').remove()">&times;</button>
+            </div>
+            <div class="dynamic-modal-body" style="padding:16px;">
+                <div class="form-group mt-8">
+                    <label class="text-muted-small">Template Name</label>
+                    <input type="text" id="tplName" class="search-input-group" placeholder="e.g. Weekend Promo">
+                </div>
+                <div class="form-group mt-8">
+                    <label class="text-muted-small">Title</label>
+                    <input type="text" id="tplTitle" class="search-input-group" placeholder="Notification title">
+                </div>
+                <div class="form-group mt-8">
+                    <label class="text-muted-small">Message</label>
+                    <textarea id="tplBody" rows="3" class="search-input-group" placeholder="Notification message"></textarea>
+                </div>
+                <div class="form-group mt-8">
+                    <label class="text-muted-small">Type</label>
+                    <div class="flex-row flex-gap-8" role="radiogroup">
+                        <label class="chip chip--radio"><input type="radio" name="tplType" value="promo" checked> Offer / Promo</label>
+                        <label class="chip chip--radio"><input type="radio" name="tplType" value="loyalty"> Loyalty</label>
+                        <label class="chip chip--radio"><input type="radio" name="tplType" value="system"> Store Update</label>
+                        <label class="chip chip--radio"><input type="radio" name="tplType" value="order"> Order Update</label>
+                    </div>
+                </div>
+                <div id="tplList" style="margin-top:16px; max-height:300px; overflow-y:auto; border:1px solid var(--border,#e5e7eb); border-radius:8px;">
+                    ${_renderTemplatesList()}
+                </div>
+            </div>
+            <div class="dynamic-modal-actions" style="display:flex; gap:8px; justify-content:flex-end;">
+                <button class="btn-secondary" id="tplCancel">Cancel</button>
+                <button class="btn-primary" id="tplSave">Save Template</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    $('tplCancel')?.addEventListener('click', () => modal.remove());
+    $('tplSave')?.addEventListener('click', () => {
+        const name = $('tplName')?.value || '';
+        const title = $('tplTitle')?.value || '';
+        const body = $('tplBody')?.value || '';
+        const type = document.querySelector('input[name="tplType"]:checked')?.value || 'promo';
+        if (!title || !body) { showToast('Title and message are required', 'warning'); return; }
+        _saveTemplate(name, title, body, type);
+        $('tplList').innerHTML = _renderTemplatesList();
+        $('tplName').value = ''; $('tplTitle').value = ''; $('tplBody').value = '';
+        showToast('Template saved', 'success');
+    });
+
+    // Delegate delete/insert clicks on template rows
+    modal.querySelectorAll('[data-tpl-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.tplAction;
+            const id = btn.dataset.tplId;
+            if (action === 'delete') { _deleteTemplate(id); $('tplList').innerHTML = _renderTemplatesList(); }
+            else if (action === 'insert') {
+                const tmpl = _templates.find(t => t.id === id);
+                if (tmpl) { _insertTemplate(tmpl); modal.remove(); }
+            }
+        });
+    });
+}
+
+function _renderTemplatesList() {
+    if (_templates.length === 0) {
+        return '<div style="padding:16px;color:var(--text-tertiary);">No custom templates yet. Create one below.</div>';
+    }
+    return _templates.map(t => `
+        <div style="padding:10px 12px; border-bottom:1px solid var(--border,#eef0f3); display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div style="flex:1; min-width:0;">
+                <div style="font-weight:600; color:var(--text-primary);">${_escHtml(t.name)}</div>
+                <div style="font-size:12px; color:var(--text-tertiary);">${_escHtml(t.title || '')}</div>
+                <div style="font-size:11px; color:var(--text-tertiary);">${t.type} • ${new Date(t.updatedAt).toLocaleDateString()}</div>
+            </div>
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+                <button class="btn-secondary" style="font-size:11px; padding:4px 8px;" data-tpl-action="insert" data-tpl-id="${t.id}">Use</button>
+                <button class="btn-secondary" style="font-size:11px; padding:4px 8px; color:var(--error);" data-tpl-action="delete" data-tpl-id="${t.id}">Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+/* ============ UNDO AFTER SEND ============ */
+
+function _scheduleUndo(entry) {
+    if (_undoTimer) { clearTimeout(_undoTimer); _undoTimer = null; }
+    _undoEntry = entry;
+    const el = $('pushSendResult');
+    if (el) {
+        el.className = 'push-result is-ok';
+        el.textContent = 'Sent. ';
+        const undoBtn = document.createElement('button');
+        undoBtn.className = 'btn-secondary btn-sm';
+        undoBtn.textContent = 'Undo';
+        undoBtn.style.marginLeft = '8px';
+        undoBtn.onclick = () => _undoSend();
+        el.appendChild(undoBtn);
+    }
+    _undoTimer = setTimeout(() => {
+        _undoTimer = null;
+        _undoEntry = null;
+        if (el) el.textContent = 'Sent.';
+    }, 5000);
+}
+
+function _undoSend() {
+    if (!_undoEntry) return;
+    if (_undoTimer) { clearTimeout(_undoTimer); _undoTimer = null; }
+    // Mark the history entry as recalled
+    const key = _undoEntry.key;
+    if (key) {
+        update(Outlet.ref(`notifyLog/${key}`), { recalled: true, recalledAt: Date.now() }).catch(() => {});
+    }
+    _undoEntry = null;
+    const el = $('pushSendResult');
+    if (el) {
+        el.className = 'push-result is-warn';
+        el.textContent = 'Send undone.';
+    }
+    showToast('Notification send undone', 'info');
+    _syncUi();
+}
+
+/* ============ KEYBOARD SHORTCUTS ============ */
+
+function _wireKeyboard() {
+    document.addEventListener('keydown', (e) => {
+        // Only handle when the notification pane is visible
+        const pane = $('caPaneNotification');
+        if (!pane || pane.classList.contains('hidden')) return;
+
+        // Ctrl+Enter -> Send
+        if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            const btn = $('btnSendPushNotif');
+            if (btn && !btn.disabled) _sendPushNotification();
+        }
+        // Ctrl+. -> Toggle test mode
+        if (e.ctrlKey && e.key === '.') {
+            e.preventDefault();
+            const cb = $('pushNotifTestMode');
+            if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
+        }
+        // Escape -> Clear composer
+        if (e.key === 'Escape' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+            const target = e.target;
+            const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+            if (!isInput) {
+                const title = $('pushNotifTitle');
+                const body = $('pushNotifBody');
+                if (title && title.value) { title.value = ''; _updateCount('pushNotifTitle', 'pushTitleCount', 100); }
+                if (body && body.value) { body.value = ''; _updateCount('pushNotifBody', 'pushBodyCount', 300); }
+                if (title || body) { _updatePreviewText(); _syncUi(); }
+            }
+        }
+    });
 }
 
 /* ============ SUBSCRIBERS ============ */
@@ -168,18 +506,35 @@ function _renderSubs() {
 
     $('pushEmptyState')?.classList.toggle('hidden', total > 0);
 
+    const filtered = _filterSubs();
     const dl = $('pushSubPhones');
     if (dl) {
         dl.innerHTML = '';
-        _subs.filter(s => s.phone)
+        filtered
             .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-            .slice(0, 25)
+            .slice(0, 50)
             .forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.phone;
                 opt.label = s.name || s.phone;
                 dl.appendChild(opt);
             });
+    }
+
+    // Show filter count if filtering
+    const countEl = $('pushSubFilterCount');
+    if (countEl) {
+        if (_searchQuery || _subFilter !== 'all') {
+            countEl.textContent = `${filtered.length} of ${total} subscriber${total === 1 ? '' : 's'} matched`;
+        } else {
+            countEl.textContent = '';
+        }
+    }
+
+    // Show/hide the subs section based on whether there are subscribers
+    const subsSection = $('pushSubsSection');
+    if (subsSection) {
+        subsSection.style.display = total > 0 ? '' : 'none';
     }
 }
 
@@ -538,7 +893,7 @@ async function _sendPushNotification() {
 
     if (!testMode && aud === 'all') {
         const ok = await showConfirm(
-            `Send "${title}" to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}? This cannot be undone.`,
+            `Send "${title}" to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}? You can undo within 5 seconds.`,
             'Send notification'
         );
         if (!ok) return;
@@ -612,6 +967,10 @@ async function _sendPushNotification() {
             bits.push(_timeNow());
             _showResult('ok', bits.join(' · '));
             showToast(`Notification sent to ${sent} device${sent === 1 ? '' : 's'}`, 'success');
+
+            // Clear draft and offer undo for 5 seconds
+            _clearDraft();
+            _scheduleUndo({ key: result.key, title, body, type, audience: aud, phone, at: Date.now() });
 
             if ($('pushNotifTitle')) $('pushNotifTitle').value = '';
             if ($('pushNotifBody')) $('pushNotifBody').value = '';

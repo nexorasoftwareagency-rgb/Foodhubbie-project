@@ -11437,6 +11437,50 @@ body.pos-selection-mode .walkin-picker {
 .push-pane { display: none; }
 .push-pane.push-pane--send { display: block; }
 
+/* ===== P1: Subscriber Search & Filter ===== */
+.push-subs-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--border, #eef0f3);
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+.push-subs-section .flex-row {
+    align-items: center;
+    gap: 8px;
+}
+.push-sub-filter {
+    font-size: 12px;
+    padding: 6px 10px;
+}
+.push-sub-filter input {
+    margin: 0;
+}
+.push-sub-filter.active {
+    background: var(--primary, #E84908);
+    color: #fff;
+}
+.push-sub-filter.active span {
+    color: #fff;
+}
+
+/* ===== P1: Templates modal button ===== */
+#btnManageTemplates {
+    font-size: 12px;
+    padding: 6px 10px;
+    gap: 6px;
+}
+
+/* ===== P1: Undo button in result panel ===== */
+.push-result .btn-sm {
+    font-size: 11px;
+    padding: 4px 8px;
+    margin-left: 8px;
+}
+
 .promo-offers-stats {
     display: flex;
     gap: 12px;
