@@ -1376,6 +1376,10 @@ async function loadCustomerData() {
     // session, which denied the reads and showed 0 points (Redeem disabled)
     // until the tab was reopened. Wait for auth instead of trusting the race.
     try { await ensureAnonAuth(); } catch (e) { /* reads below fail soft */ }
+    // The same race exists for a FIRST sign-in: syncProfile registers this
+    // device without awaiting it, so join that (memoized) registration too or
+    // orders/ratings/loyalty read as empty until the tab is reopened.
+    await ensureDeviceAccess(_profile.phone);
     try {
         await loadLoyaltyConfig();
         await loadCustomerLoyalty();
@@ -2246,6 +2250,12 @@ async function renderRewardsHistory() {
         return;
     }
     try {
+        // Device-bound read. Sign-in registers this device fire-and-forget
+        // (saveIdentity → syncProfile → ensureDeviceAccess), so the first
+        // render can beat the registration write and get a PERMISSION_DENIED
+        // that never refreshes ("Unable to load reward history." until the
+        // pane is re-entered). Join the memoized registration first.
+        await ensureDeviceAccess(_profile.phone);
         const snap = await get(outletRef(`customers/${_profile.phone}/rewards`));
         const rewards = (snap && snap.exists() && snap.val()) || {};
         const redeemed = Object.entries(rewards)
