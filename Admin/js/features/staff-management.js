@@ -715,7 +715,7 @@ function openRoleModal(key) {
         <label class="rt-chip${tabs.includes(id) ? ' on' : ''}">
             <input type="checkbox" value="${escapeHtml(id)}" ${tabs.includes(id) ? 'checked' : ''} hidden>
             <i data-lucide="check" class="icon-12"></i>
-            <span>${escapeHtml(tabLabels[id])}</span>
+            <span>${escapeHtml(tabLabels[id] || id)}</span>
         </label>
     `).join('');
     refreshIcons(document.getElementById('roleTabsList'));
