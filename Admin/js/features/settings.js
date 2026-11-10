@@ -11,23 +11,55 @@ async function initializeDefaultRoles() {
     try {
         const rolesRef = Outlet.ref('settings/roles');
         const snap = await get(rolesRef);
-        if (snap.exists()) return; // Already initialized
-
-        // Convert DEFAULT_ROLES to the format expected (key: {name, level, tabs})
-        const defaultRoles = {};
-        for (const [key, role] of Object.entries(DEFAULT_ROLES)) {
-            defaultRoles[key] = {
-                name: role.name,
-                level: role.level,
-                tabs: role.tabs
-            };
+        if (snap.exists()) {
+            // Migrate existing roles: replace legacy 'app-notifications' tab id with 'customer-app'
+            await migrateRoleTabs(rolesRef, snap.val());
+        } else {
+            // Convert DEFAULT_ROLES to the format expected (key: {name, level, tabs})
+            const defaultRoles = {};
+            for (const [key, role] of Object.entries(DEFAULT_ROLES)) {
+                defaultRoles[key] = {
+                    name: role.name,
+                    level: role.level,
+                    tabs: role.tabs
+                };
+            }
+            await set(rolesRef, defaultRoles);
+            state.roles = defaultRoles;
+            logAudit('Settings', 'Initialized default roles for Staff Management', 'Global');
         }
-        await set(rolesRef, defaultRoles);
-        state.roles = defaultRoles;
-        logAudit('Settings', 'Initialized default roles for Staff Management', 'Global');
     } catch (e) {
-        console.error('[Settings] Failed to initialize default roles:', e);
-        showToast('Staff Management is on, but default roles could not be created — check your permissions.', 'error');
+        console.error('[Settings] Failed to initialize roles:', e);
+        showToast('Staff Management is on, but roles could not be loaded — check your permissions.', 'error');
+    }
+}
+
+/**
+ * Migrates legacy 'app-notifications' tab id to 'customer-app' in all stored role
+ * tab arrays. Existing tenants created before the rename have roles that list
+ * 'app-notifications' — which no longer exists in TAB_DEFS — so staff with those
+ * roles were blocked from the Customer APP tab.
+ */
+async function migrateRoleTabs(rolesRef, roles) {
+    let changed = false;
+    const next = { ...roles };
+    for (const [key, role] of Object.entries(next)) {
+        if (!role || !Array.isArray(role.tabs)) continue;
+        const tabs = role.tabs.filter(t => t !== 'app-notifications');
+        if (!tabs.includes('customer-app')) tabs.push('customer-app');
+        if (tabs.length !== role.tabs.length || tabs.some(t => t !== role.tabs[role.tabs.indexOf(t)])) {
+            next[key] = { ...role, tabs };
+            changed = true;
+        }
+    }
+    if (changed) {
+        try {
+            await rolesRef.set(next);
+            state.roles = next;
+            logAudit('Settings', 'Migrated role tabs: app-notifications → customer-app', 'Global');
+        } catch (e) {
+            console.error('[Settings] Role tab migration failed:', e);
+        }
     }
 }
 
