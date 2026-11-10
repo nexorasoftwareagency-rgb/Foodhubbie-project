@@ -12077,3 +12077,149 @@ body.setup-mode .setup-hide {
 .mc-veg.is-nonveg { border-color:#b91c1c; }
 .mc-veg.is-nonveg::after { background:#b91c1c; }
 #dishModal .modal-grid-2col > div:first-child { align-self:start; } /* photo + preview stay at the top, level with the form */
+
+/* ================================================================
+   CUSTOMER APP TAB — sub-tabs, panes, visibility, settings
+   ================================================================ */
+
+/* Sub-tab navigation within Customer APP */
+.ca-sub-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    margin-bottom: 16px;
+}
+.ca-sub-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 8px;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    color: var(--text-secondary, #64748b);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.ca-sub-tab i { font-size: 16px; }
+.ca-sub-tab:hover { color: var(--text-primary, #0f172a); }
+.ca-sub-tab.active {
+    color: var(--primary, #E84908);
+    border-bottom-color: var(--primary, #E84908);
+    background: rgba(232, 73, 8, 0.04);
+}
+.ca-sub-tab:focus-visible {
+    outline: 2px solid var(--primary, #E84908);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Panes — only one visible at a time */
+.ca-pane { display: none; }
+.ca-pane--notification { display: block; }
+
+/* Visibility section */
+.ca-visibility-section {
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    background: var(--bg, #fff);
+}
+.ca-section-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+    margin-bottom: 10px;
+}
+.ca-visibility-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 1px solid var(--border, #eef0f3);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-secondary, #f8fafc);
+}
+
+/* Feature toggles */
+.ca-feature-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border, #eef0f3);
+}
+.ca-feature-toggle:last-child { border-bottom: none; }
+.ca-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary, #0f172a);
+}
+.ca-toggle-label strong { color: var(--text-primary, #0f172a); }
+.ca-toggle-label small { color: var(--text-tertiary, #64748b); display:block; font-size: 11px; margin-top: 1px; }
+.ca-toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex: 0 0 auto;
+}
+.ca-toggle input {
+    width: 44px;
+    height: 24px;
+    appearance: none;
+    background: #cbd5e1;
+    border-radius: 999px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s;
+    outline: none;
+    margin: 0;
+}
+.ca-toggle input:checked { background: var(--primary, #E84908); }
+.ca-toggle input:focus-visible { outline: 2px solid var(--primary, #E84908); outline-offset: 2px; border-radius: 999px; }
+.ca-toggle-slider {
+    position: absolute;
+    inset: 0;
+    cursor: inherit;
+}
+
+/* Settings */
+.ca-settings-grid {
+    gap: 16px;
+}
+.ca-settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.ca-field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary, #64748b);
+    margin-bottom: 4px;
+}
+.ca-toggle-wrap { display: flex; align-items: center; gap: 10px; }
+.ca-settings-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border, #e5e7eb);
+}
+
+/* Stats cards reuse existing .stat-card styles */
+.ca-visibility-stats .stat-card { flex: 1; min-width: 140px; }
+
+/* Ensure ca-pane inside notification sub-tab shows push content */
+.ca-pane--notification .push-pane { display: block; }
+.ca-pane--notification .push-pane--send { display: block; }
+.ca-pane--notification .push-pane--offers { display: none; }

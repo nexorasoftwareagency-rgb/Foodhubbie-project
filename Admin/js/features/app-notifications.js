@@ -1,7 +1,6 @@
 /**
- * FoodHubbie ERP | APP NOTIFICATIONS MODULE
- * Standalone top-level tab: "App Notifications"
- * Sends push notifications (FCM) to customers who installed the restaurant's app.
+ * FoodHubbie ERP | APP NOTIFICATIONS MODULE (sub-module of Customer APP)
+ * Handles push notification sending inside the Customer APP tab's "App Notification" pane.
  *
  * The rules below mirror bot-control-api /tenant-api/notify, so the screen can
  * never promise a delivery the server will refuse:
@@ -10,6 +9,10 @@
  *  - promo / loyalty / system -> marketing: only customers with offers on,
  *              suppressed 21:00-09:00 IST, max 3 per customer per IST day.
  *  - test mode -> the signed-in admin's own device token only.
+ *
+ * Note: the "Promo Page Offers" sub-tab formerly here now lives in
+ * customer-app.js (pane "offers"). This module only handles the push
+ * notification composer (send pane) when loaded from customer-app.js.
  */
 
 import { db, auth, Outlet, BUSINESS_ID, ref, get, onValue, set, update } from '../firebase.js';
