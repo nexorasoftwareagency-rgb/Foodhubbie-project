@@ -530,3 +530,18 @@ LEDGER CLOSE - 20261110-customer-app-p1-push (Customer APP Push Notifications P1
 - Files: Admin/js/features/app-notifications.js, Admin/sw.js, Admin/index.html (search/filter section + templates button), Admin/style.css (new styles for subs section, templates button, undo button).
 - Commits: b0bd689 pushed to main.
 - Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
+
+LEDGER CLOSE - 20261110-customer-app-p2-promo-offers (Customer APP Promo Page Offers P2 enhancements, TIER 2, DONE/high)
+- Trigger: Deep research + planning on Customer APP sub-tabs; P2 = Promo Page Offers enhancements.
+- Enhancement 1 - Search & filter: search input (#promoOffersSearch) filters offers by code/name/value in real-time; filter chips (All/On Page/Off Page/Valid/Expired/Disabled/Archived) narrow the list; match count shown below.
+- Enhancement 2 - Sort: radio buttons for Updated/Name/Value/Expiry/Usage.
+- Enhancement 3 - Bulk selection: checkbox per row + "Select all"/"Deselect all"; bulk toolbar appears with Show on Page / Hide from Page / Enable / Disable / Archive / Delete; matches counted.
+- Enhancement 4 - Quick edit panel (#quickEditPanel): edit name, code, value, mode (percent/fixed), min subtotal, max cap, channel (all/website/table/pos), starts at/ends at datetime, promo page toggle; saves via RTDB update.
+- Enhancement 5 - Per-offer actions: Edit, Archive/Restore, Delete, Duplicate (icon buttons in each row).
+- Enhancement 6 - Preview modal (#promoPreviewModal): shows how active offers appear on customer Promo Page with code badges, names, min order, apply button.
+- Enhancement 7 - Empty state improvements + match count indicator.
+- SW cache: Admin/sw.js CACHE_NAME bumped v5.12.38 â†’ v5.12.39.
+- Verify: node --check passes; deployed hosting:admin â†’ live on app.foodhubbie.in; SW v5.12.39 served; all P2 functions confirmed in deployed file via curl (_processOffers, _toggleSelectOffer, _bulkSetPromoPage, _openQuickEdit, _archiveOffer, _restoreOffer, _deleteOffer, _duplicateOffer, _openPreviewModal, promoOffersSearch, promoOffersFilter, promoOffersSort).
+- Files: Admin/js/features/customer-app.js, Admin/sw.js, Admin/index.html (search/filter section, bulk toolbar, quick edit panel, preview modal), Admin/style.css (selected row styling, bulk toolbar, icon buttons, preview cards).
+- Commits: 229fa6b pushed to main.
+- Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
