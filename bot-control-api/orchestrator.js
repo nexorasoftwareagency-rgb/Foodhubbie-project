@@ -1,7 +1,7 @@
 /**
  * Orchestrator — auto-start/stop a bot worker when a Meta number is linked.
  *
- * Watches `businesses/{bid}/outlets/{oid}/whatsapp.status` in Firebase. When a
+ * Watches `businesses/{bid}/outlets/{oid}/whatsapp/status` in Firebase. When a
  * number becomes `active` (Supreme Admin Embedded Signup / Path B wrote it),
  * this starts the PM2 worker `bot-{bid}-{oid}` and writes the
  * `phoneNumberIndex/{phoneNumberId}` routing entry the webhook server depends
@@ -16,6 +16,10 @@
  * Scope: this only manages outlets that have a `whatsapp` node. Baileys-only
  * outlets (no `whatsapp.status`) are started manually via /api/bot/provision
  * and are NEVER touched here — the two flows never fight over a worker.
+ *
+ * EGRESS (2026-11-10): discovery is one `businesses` read at boot; change
+ * detection is per-outlet leaf listeners, never a listener on `businesses` or
+ * on an outlet subtree. See the note above OUTLET_LEAVES for the measurement.
  */
 
 const { pm2, connectOnce } = require('./pm2-client');
@@ -121,63 +125,125 @@ async function handleOutletChange({ admin, processName, nextHealthPort, bid, oid
   }
 }
 
-async function watchOutlets({ admin, processName, nextHealthPort, bid, bizSnapRef }) {
-  const onOutlet = (snap) => {
-    handleOutletChange({ admin, processName, nextHealthPort, bid, oid: snap.key, outlet: snap.val() })
-      .catch((err) => console.error(`[orchestrator] outlet change failed for ${bid}/${snap.key}:`, err.message));
+// ---------------------------------------------------------------------------
+// EGRESS: never listen on `businesses` (or on an outlet subtree).
+//
+// The previous implementation held `.on('child_added')` on `businesses` plus
+// three listeners per business on `outlets`. RTDB sends the ENTIRE subtree to a
+// listener the moment it attaches, so every attach cost the whole 5.00 MB tree
+// (2.85 MB of it the pizza outlet — base64 `settings/Bot` images and dishes),
+// and every socket reconnect re-attached and re-downloaded all of it. Measured
+// 2026-11-10: one `listener-listen` on `businesses` = 5,274,244 bytes from the
+// EC2 box, repeating on a ~5 minute cycle — ~1.5 GB/day on its own, and it
+// multiplies by outlet count.
+//
+// The reconciler only reads four scalar fields, so it now watches those leaves
+// (a few bytes each) and reads the rest on demand.
+// ---------------------------------------------------------------------------
+const OUTLET_LEAVES = (bid, oid) => {
+  const base = `businesses/${bid}/outlets/${oid}`;
+  return {
+    status: `${base}/whatsapp/status`,
+    suspended: `${base}/suspended`,
+    phoneNumberId: `${base}/whatsapp/phoneNumberId`,
+    botSource: `${base}/bot/source`,
   };
-  bizSnapRef.child('outlets').on('child_added', onOutlet);
-  bizSnapRef.child('outlets').on('child_changed', onOutlet);
-  bizSnapRef.child('outlets').on('child_removed', (snap) => {
-    // Outlet gone = restaurant gone → its bot should stop (regardless of who
-    // started it; the manual delete API stops it too). Check pm2 first so a
-    // missing worker is a no-op, not a rejected stop.
-    pm2List()
-      .then(async (list) => {
-        if (await pm2Has(list, processName(bid, snap.key))) {
-          await stopWorker(processName, bid, snap.key);
-        }
-      })
-      .catch((err) => console.error(`[orchestrator] outlet removal failed for ${bid}/${snap.key}:`, err.message));
-  });
+};
+
+// Rebuild just enough of the outlet shape for desiredState/handleOutletChange.
+// Deliberately NOT `businesses/{bid}/outlets/{oid}` — that pulls the images.
+async function readOutletState(admin, bid, oid) {
+  const p = OUTLET_LEAVES(bid, oid);
+  const db = admin.database();
+  const [status, suspended, phoneNumberId, botSource] = await Promise.all([
+    db.ref(p.status).get(),
+    db.ref(p.suspended).get(),
+    db.ref(p.phoneNumberId).get(),
+    db.ref(p.botSource).get(),
+  ]);
+  const outlet = {};
+  if (status.exists() || phoneNumberId.exists()) {
+    outlet.whatsapp = { status: status.val(), phoneNumberId: phoneNumberId.val() };
+  }
+  if (suspended.exists()) outlet.suspended = suspended.val();
+  if (botSource.exists()) outlet.bot = { source: botSource.val() };
+  return outlet;
+}
+
+// One reconcile per outlet at a time: `whatsapp/status` and `suspended` can
+// fire together, and two concurrent pm2 list→start sequences would both see
+// "not running".
+const inFlight = new Set();
+
+async function reconcileOutlet({ admin, processName, nextHealthPort, bid, oid }) {
+  const key = `${bid}/${oid}`;
+  if (inFlight.has(key)) return;
+  inFlight.add(key);
+  try {
+    const outlet = await readOutletState(admin, bid, oid);
+    await handleOutletChange({ admin, processName, nextHealthPort, bid, oid, outlet });
+  } catch (err) {
+    console.error(`[orchestrator] outlet change failed for ${bid}/${oid}:`, err.message);
+  } finally {
+    inFlight.delete(key);
+  }
 }
 
 async function startOrchestrator({ admin, processName, nextHealthPort }) {
   await connectOnce();
-  const businessesRef = admin.database().ref('businesses');
+  const db = admin.database();
 
-  // Initial reconcile — boot/reconnect must not leave active outlets stranded.
+  // ONE boot scan, reused for discovery and the initial reconcile. This is the
+  // only full-tree read left; it does not repeat on reconnect.
+  let businesses = {};
   try {
-    const snap = await businessesRef.get();
-    const businesses = snap.val() || {};
-    for (const [bid, biz] of Object.entries(businesses)) {
-      for (const [oid, outlet] of Object.entries(biz.outlets || {})) {
-        await handleOutletChange({ admin, processName, nextHealthPort, bid, oid, outlet });
-      }
-    }
-    console.log('[orchestrator] initial reconcile complete');
+    businesses = (await db.ref('businesses').get()).val() || {};
   } catch (err) {
     console.error('[orchestrator] initial reconcile failed:', err.message);
   }
 
-  businessesRef.on('child_added', (bizSnap) => {
-    watchOutlets({ admin, processName, nextHealthPort, bid: bizSnap.key, bizSnapRef: bizSnap.ref });
+  const watched = new Set();
+  const watchOutlet = (bid, oid) => {
+    if (!bid || !oid || watched.has(`${bid}/${oid}`)) return;
+    watched.add(`${bid}/${oid}`);
+    const p = OUTLET_LEAVES(bid, oid);
+    const onChange = () => {
+      reconcileOutlet({ admin, processName, nextHealthPort, bid, oid })
+        .catch((err) => console.error(`[orchestrator] outlet change failed for ${bid}/${oid}:`, err.message));
+    };
+    db.ref(p.status).on('value', onChange);
+    db.ref(p.suspended).on('value', onChange);
+  };
+
+  for (const [bid, biz] of Object.entries(businesses)) {
+    for (const [oid, outlet] of Object.entries((biz && biz.outlets) || {})) {
+      watchOutlet(bid, oid);
+      await handleOutletChange({ admin, processName, nextHealthPort, bid, oid, outlet });
+    }
+  }
+  console.log(`[orchestrator] initial reconcile complete (${watched.size} outlets)`);
+
+  // New tenants arrive through Supreme onboarding and POST /api/bot/... —
+  // both write `outletIndex`, so this is the live discovery channel. Also
+  // covers deletion: onboarding cleanup removes the outletIndex row.
+  db.ref('outletIndex').on('child_added', (snap) => {
+    const entry = snap.val() || {};
+    const bid = entry.bid || entry.businessId;
+    if (bid) watchOutlet(bid, snap.key);
   });
-  businessesRef.on('child_removed', (bizSnap) => {
-    // Business deleted → stop its workers. The outlet removal listeners die
-    // with the snap, so stop workers for every known outlet id can't be known
-    // here — stop by scanning pm2 for the prefix instead.
-    const prefix = processName(bizSnap.key, '');
+  db.ref('outletIndex').on('child_removed', (snap) => {
+    const bid = (snap.val() || {}).bid || (snap.val() || {}).businessId;
+    if (!bid) return;
+    const oid = snap.key;
+    watched.delete(`${bid}/${oid}`);
     pm2List()
-      .then((list) => Promise.all(
-        list
-          .filter((p) => p.name && p.name.startsWith(prefix))
-          .map((p) => stopWorker(processName, bizSnap.key, p.name.slice(prefix.length)))
-      ))
-      .catch((err) => console.error(`[orchestrator] business removal cleanup failed for ${bizSnap.key}:`, err.message));
+      .then(async (list) => {
+        if (await pm2Has(list, processName(bid, oid))) await stopWorker(processName, bid, oid);
+      })
+      .catch((err) => console.error(`[orchestrator] outlet removal failed for ${bid}/${oid}:`, err.message));
   });
 
-  console.log('[orchestrator] watching businesses/ for whatsapp.status changes');
+  console.log('[orchestrator] watching outletIndex + whatsapp/status leaves');
 }
 
 module.exports = { startOrchestrator, desiredState };
