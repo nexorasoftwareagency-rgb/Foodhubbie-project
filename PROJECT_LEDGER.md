@@ -507,3 +507,13 @@ LEDGER CLOSE - 20261110-rtdb-egress (RTDB egress spike, TIER 4, DONE/high)
 - Deploy side effect accepted: the shipped bot/index.js includes the notification-caps wiring (already on main, fail-open by construction). Known follow-up: notification-caps.js capRef writes root outlets/{oid}/notifyCaps instead of the tenant outlet path.
 - Remaining structural risk (documented in FIREBASE_SERVER_MIGRATION/11_RTDB_COST_INCIDENT.md): base64 images in RTDB (settings/Bot 1.35 MB, dishes 673 KB, /businesses 6.3 MB). Per-bot cache cost is ~290 MB/day at one outlet; modelled 100 outlets means ~29 GB/day before customer traffic. tools/migrate-images-to-storage.mjs (dishes only) exists but is incomplete and unrun.
 - Confidence: HIGH - profiler before/after + node sizes + live metric + deployed boot logs.
+
+LEDGER CLOSE - 20261110-customer-app-p0-bugfix (Customer APP P0 bug fixes, TIER 2, DONE/high)
+- Trigger: Push Notifications sub-tab failed to initialize due to ReferenceError in initPushUI().
+- Fix 1: app-notifications.js initPushUI() now calls renderAppLink() (not non-existent _renderAppLink()) - was aborting entire pane init (subscriber count, reach stat, empty state, composer, send button, history all failed to load).
+- Fix 2: app-notifications.js removed dead $('btnRefreshPushSubs') wiring - that element ID does not exist; #caRefreshSubs is already wired from customer-app.js _wireOnce().
+- Fix 3: Admin/sw.js CACHE_NAME bumped v5.12.36 -> v5.12.37 so the Service Worker re-caches the fixed app-notifications.js instead of serving stale broken code.
+- Verify: node --check passes; deployed hosting:admin -> live on app.foodhubbie.in; SW v5.12.37 served; app-notifications.js contains renderAppLink() call and no btnRefreshPushSubs reference (confirmed via curl).
+- Files: Admin/js/features/app-notifications.js, Admin/sw.js.
+- Commits: de2a4df pushed to main.
+- Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
