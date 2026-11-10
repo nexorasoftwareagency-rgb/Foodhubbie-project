@@ -3,13 +3,13 @@
  *
  * Two things are protected here:
  *
- * 1. SCOPE — the stop branch is destructive: `!shouldRun && running &&
+ * 1. SCOPE â€” the stop branch is destructive: `!shouldRun && running &&
  *    bot.source === 'orchestrator'` stops a live worker. `desiredState()` must
  *    therefore return null (not false) for any outlet it does not own,
  *    including one whose `whatsapp` node exists only because a template-status
  *    webhook wrote `whatsapp/templates/*`.
  *
- * 2. EGRESS — RTDB sends the whole subtree to a listener the moment it
+ * 2. EGRESS â€” RTDB sends the whole subtree to a listener the moment it
  *    attaches. A listener on `businesses` cost 5,274,244 bytes per attach and
  *    re-attached on every socket reconnect (~1.5 GB/day at 41 outlets, and it
  *    scales with the tree). `startOrchestrator` may only listen on leaf nodes
@@ -21,9 +21,16 @@ const assert = require('assert');
 const Module = require('module');
 
 // pm2 only exists on EC2; neither the decision function nor discovery needs it.
+// The stub DOES return workers with spawn env, because that is how an outlet
+// missing from `outletIndex` is still discovered (the e2e tenant is exactly
+// that case in production: whatsapp.status 'active', bot.source
+// 'orchestrator', and no outletIndex row).
 const origLoad = Module._load;
 const pm2Stub = {
-  list: (cb) => cb(null, []),
+  list: (cb) => cb(null, [
+    { name: 'bot-roshani-pizza-pizza', pm2_env: { env: { BUSINESS_ID: 'roshani-pizza', OUTLET_ID: 'pizza' } } },
+    { name: 'bot-e2e-biz-e2e-outlet', pm2_env: { env: { BUSINESS_ID: 'e2e-biz', OUTLET_ID: 'e2e-outlet' } } },
+  ]),
   start: (opts, cb) => cb(null, {}),
   stop: (name, cb) => cb(null, {}),
   dump: (cb) => cb(null),
@@ -103,11 +110,17 @@ const seed = {
         cake: { bot: { source: 'manager' } },
       },
     },
+    // In scope but NOT in outletIndex - discovered from its pm2 worker's env.
+    'e2e-biz': {
+      outlets: {
+        'e2e-outlet': { whatsapp: { status: 'active', phoneNumberId: '999' }, bot: { source: 'orchestrator' } },
+      },
+    },
   },
 };
 
 (async () => {
-  const { admin, listened } = makeAdmin(seed);
+  const { admin, listened, read } = makeAdmin(seed);
   await startOrchestrator({ admin, processName: (bid, oid) => `bot-${bid}-${oid}`, nextHealthPort: async () => 3001 });
 
   const bad = listened.filter(({ path }) => {
@@ -127,10 +140,29 @@ const seed = {
     }
   });
 
+  // Batch 14: boot discovery used to READ the whole `businesses` tree (3.06 MB
+  // on 2026-11-10) on every restart. It now reads `outletIndex` and the ids pm2
+  // already holds in each worker's spawn env â€” so nothing under `businesses/`
+  // may be read except the four scalar leaves.
+  check('boot never reads the businesses tree, only the four leaves', () => {
+    const LEAF = /^businesses\/[^/]+\/outlets\/[^/]+\/(whatsapp\/status|whatsapp\/phoneNumberId|suspended|bot\/source)$/;
+    const wide = read.filter((p) => p.startsWith('businesses') && !LEAF.test(p));
+    assert.deepStrictEqual(wide, [], `wide read(s) under businesses/: ${wide.join(', ')}`);
+  });
+
   check('every watched outlet is reachable from outletIndex or the boot scan', () => {
     const paths = new Set(listened.map((l) => l.path));
     assert.ok(paths.has('businesses/roshani-pizza/outlets/pizza/whatsapp/status'));
     assert.ok(paths.has('businesses/roshani-cake/outlets/cake/whatsapp/status'));
+  });
+
+  // The registry is missing outlets that are still in scope (the e2e tenant in
+  // production). Discovery falls back to the ids pm2 holds in each worker's
+  // spawn env, so such an outlet keeps being reconciled.
+  check('an outlet missing from outletIndex is still discovered from its pm2 worker', () => {
+    const paths = new Set(listened.map((l) => l.path));
+    assert.ok(paths.has('businesses/e2e-biz/outlets/e2e-outlet/whatsapp/status'),
+      'the e2e-style outlet must still be reconciled');
   });
 
   // ------------------------------------------------- 3. status-watcher egress
@@ -164,6 +196,6 @@ const seed = {
     assert.ok(!watcherRead.includes('businesses'), `reads: ${watcherRead.join(', ')}`);
   });
 
-  console.log(failed ? `\n${failed} failed` : `\n${8 + 3 + 3} checks passed`);
+  console.log(failed ? `\n${failed} failed` : `\n${8 + 5 + 3} checks passed`);
   process.exit(failed ? 1 : 0);
 })();

@@ -157,16 +157,18 @@ const OUTLET_LEAVES = (bid, oid) => {
 async function readOutletState(admin, bid, oid) {
   const p = OUTLET_LEAVES(bid, oid);
   const db = admin.database();
-  const [status, suspended, phoneNumberId, botSource] = await Promise.all([
-    db.ref(p.status).get(),
-    db.ref(p.suspended).get(),
+  // `whatsapp/status` decides scope on its own (desiredState -> null without
+  // it), so ONE read dismisses an outlet that is not ours. The other three are
+  // only worth fetching for an outlet that is.
+  const status = await db.ref(p.status).get();
+  if (!status.exists()) return {};
+
+  const [phoneNumberId, suspended, botSource] = await Promise.all([
     db.ref(p.phoneNumberId).get(),
+    db.ref(p.suspended).get(),
     db.ref(p.botSource).get(),
   ]);
-  const outlet = {};
-  if (status.exists() || phoneNumberId.exists()) {
-    outlet.whatsapp = { status: status.val(), phoneNumberId: phoneNumberId.val() };
-  }
+  const outlet = { whatsapp: { status: status.val(), phoneNumberId: phoneNumberId.val() } };
   if (suspended.exists()) outlet.suspended = suspended.val();
   if (botSource.exists()) outlet.bot = { source: botSource.val() };
   return outlet;
@@ -195,28 +197,46 @@ async function startOrchestrator({ admin, processName, nextHealthPort }) {
   await connectOnce();
   const db = admin.database();
 
-  // Discovery comes from the canonical registry `outletIndex` (a few KB), not
-  // from the `businesses` tree. EGRESS (batch 14): the boot scan read the WHOLE
-  // tree — 3.06 MB on 2026-11-10, and it grows with every outlet's photos —
-  // on every restart, and bot-control-api had restarted 72 times. The tree is
-  // only read if the registry is empty (a brand-new project).
-  let discovered = [];
+  // Discovery: the canonical `outletIndex` registry PLUS the ids pm2 already
+  // holds in each worker's spawn env.
+  //
+  // EGRESS (batch 14): the boot scan read the WHOLE `businesses` tree — 3.06 MB
+  // on 2026-11-10, growing with every outlet's photos — on every restart, and
+  // bot-control-api had restarted 72 times. The Admin SDK has no `shallow()`, so
+  // a key-only scan of the tree is not available. The registry is a few KB, and
+  // a worker started by this orchestrator carries BUSINESS_ID/OUTLET_ID in its
+  // own environment, so nothing is lost.
+  //
+  // It must stay COMPLETE: `outletIndex` is missing 13 tree outlets, and one of
+  // them (the e2e tenant) is genuinely in scope — whatsapp.status 'active' AND
+  // bot.source 'orchestrator'. Reconciling from the registry alone would
+  // silently stop managing it.
+  const discovered = new Map();
+  const addOutlet = (bid, oid) => {
+    if (bid && oid) discovered.set(`${bid}/${oid}`, { bid, oid });
+  };
   try {
-    const idxSnap = await db.ref('outletIndex').get();
-    const idx = idxSnap.val() || {};
-    discovered = Object.entries(idx)
-      .map(([oid, entry]) => ({ bid: typeof entry === 'string' ? entry : entry && entry.bid, oid }))
-      .filter((o) => o.bid);
+    const idx = (await db.ref('outletIndex').get()).val() || {};
+    for (const [oid, entry] of Object.entries(idx)) {
+      addOutlet(typeof entry === 'string' ? entry : entry && entry.bid, oid);
+    }
   } catch (err) {
     console.error('[orchestrator] registry read failed:', err.message);
   }
-
-  if (!discovered.length) {
-    console.warn('[orchestrator] outletIndex is empty — falling back to a full businesses scan');
+  try {
+    for (const p of await pm2List()) {
+      const env = (p.pm2_env && p.pm2_env.env) || {};
+      if (env.BUSINESS_ID && env.OUTLET_ID) addOutlet(env.BUSINESS_ID, env.OUTLET_ID);
+    }
+  } catch (err) {
+    console.error('[orchestrator] pm2 list failed:', err.message);
+  }
+  if (!discovered.size) {
+    console.warn('[orchestrator] nothing in outletIndex or pm2 — falling back to a full businesses scan');
     try {
       const businesses = (await db.ref('businesses').get()).val() || {};
       for (const [bid, biz] of Object.entries(businesses)) {
-        for (const oid of Object.keys((biz && biz.outlets) || {})) discovered.push({ bid, oid });
+        for (const oid of Object.keys((biz && biz.outlets) || {})) addOutlet(bid, oid);
       }
     } catch (err) {
       console.error('[orchestrator] initial reconcile failed:', err.message);
@@ -236,7 +256,7 @@ async function startOrchestrator({ admin, processName, nextHealthPort }) {
     db.ref(p.suspended).on('value', onChange);
   };
 
-  for (const { bid, oid } of discovered) {
+  for (const { bid, oid } of discovered.values()) {
     watchOutlet(bid, oid);
     // The same four leaves the reconcile path uses — never the outlet subtree.
     await handleOutletChange({
