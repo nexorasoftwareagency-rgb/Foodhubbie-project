@@ -127,6 +127,47 @@ export const canAccessTab = (tabId) => {
     return false; // deny by default for unknown roles
 };
 
+/**
+ * Role-based edit permission for Customer APP sub-tabs.
+ * Levels 4/3/2 (supreme/super/owner): full edit + delete.
+ * Level 1 (manager): edit only, no delete.
+ * Level 0/-1 (cashier/waiter): view only.
+ */
+export const canEditTab = (tabId) => {
+    if (!canAccessTab(tabId)) return false;
+    if (state.adminData?.isSuper || state.adminData?.isSupreme) return true;
+    const key = (state.adminData?.role || '').toLowerCase().trim();
+    if (key === 'super admin' || key === 'supreme admin') return true;
+    const role = getRoles()[key];
+    const level = role ? role.level : -99;
+    return level >= 2; // owner+ can edit
+};
+
+/**
+ * Role-based delete permission for Customer APP sub-tabs.
+ * Only levels 4/3/2 (supreme/super/owner) can delete.
+ */
+export const canDeleteTab = (tabId) => {
+    if (!canAccessTab(tabId)) return false;
+    if (state.adminData?.isSuper || state.adminData?.isSupreme) return true;
+    const key = (state.adminData?.role || '').toLowerCase().trim();
+    if (key === 'super admin' || key === 'supreme admin') return true;
+    const role = getRoles()[key];
+    const level = role ? role.level : -99;
+    return level >= 2; // owner+ can delete
+};
+
+/**
+ * Returns a human-readable role label for display.
+ */
+export const roleLabel = () => {
+    if (state.adminData?.isSupreme) return 'Supreme Admin';
+    if (state.adminData?.isSuper) return 'Super Admin';
+    const key = (state.adminData?.role || '').toLowerCase().trim();
+    const role = getRoles()[key];
+    return role ? role.name : key;
+};
+
 // --- PHASE 3.25: DATA LOADING (extracted for clarity) ---
 export async function loadTabData(tabId) {
     switch (tabId) {

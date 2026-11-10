@@ -11,10 +11,11 @@
 import { db, auth, Outlet, BUSINESS_ID, ref, get, onValue, set, update } from '../firebase.js';
 import { showToast, showConfirm } from '../ui-utils.js';
 import { formatDate } from '../utils.js';
-import { loadLucide } from '../ui.js';
+import { loadLucide, canEditTab, canDeleteTab, roleLabel } from '../ui.js';
 import { logger } from '../utils/logger.js';
 import { appLink } from '../../shared/app-link.js';
 import { couponStatus, discountAllowsChannel } from '../../shared/discount-rules.js';
+import { logChange, loadAuditLog } from './audit-trail.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -22,6 +23,12 @@ let _wired = false;
 let _subTab = 'notification'; // 'notification' | 'offers' | 'visibility' | 'settings'
 let _offersListener = null;
 let _visibilityListener = null;
+
+// P5: Audit trail state
+let _auditLogListener = null;
+
+// P5: Keyboard shortcut state
+let _keyboardWired = false;
 
 // P2: Promo Page Offers state
 let _offersSearchQuery = '';
@@ -154,6 +161,10 @@ function _wireOnce() {
     // P3: Preview modal close
     $('btnVisPreviewClose')?.addEventListener('click', _closeVisPreview);
 
+    // P5: Audit log modal close
+    $('btnAuditLogClose')?.addEventListener('click', () => _closeModal('auditLogModal'));
+    $('btnAuditLogClose2')?.addEventListener('click', () => _closeModal('auditLogModal'));
+
     // App Settings actions
     $('btnSaveAppSettings')?.addEventListener('click', _saveAppSettings);
     $('btnSaveAppSettingsBottom')?.addEventListener('click', _saveAppSettings);
@@ -186,6 +197,35 @@ function _wireOnce() {
         }
     });
 
+    // P5: Global keyboard shortcuts across all sub-tabs
+    document.addEventListener('keydown', (e) => {
+        // Only handle when Customer APP tab is visible
+        const pane = $('caPaneSettings')?.closest('.tab-content');
+        if (!pane || pane.classList.contains('hidden')) return;
+
+        // 1-4: Switch sub-tabs
+        if (e.key >= '1' && e.key <= '4' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            const target = e.target;
+            const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+            if (isInput) return;
+            const subMap = { '1': 'notification', '2': 'offers', '3': 'visibility', '4': 'settings' };
+            const sub = subMap[e.key];
+            if (sub && canAccessTab(sub)) {
+                e.preventDefault();
+                _switchSubTab(sub);
+            }
+        }
+        // Ctrl+Shift+A: Open audit log viewer
+        if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+            e.preventDefault();
+            _openAuditLog();
+        }
+        // Escape: Close any open modal/panel
+        if (e.key === 'Escape' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+            _closeAllModals();
+        }
+    });
+
     // P4: Beforeunload warning for unsaved changes
     window.addEventListener('beforeunload', (e) => {
         if (_settingsDirty) {
@@ -193,6 +233,107 @@ function _wireOnce() {
             e.returnValue = '';
         }
     });
+}
+
+/* ============ P5: KEYBOARD SHORTCUTS & MODAL MANAGEMENT ============ */
+
+let _openModals = []; // stack of modal IDs currently open
+
+function _openModal(modalId) {
+    const modal = $(modalId);
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        _openModals.push(modalId);
+    }
+}
+
+function _closeModal(modalId) {
+    const modal = $(modalId);
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    _openModals = _openModals.filter(id => id !== modalId);
+}
+
+function _closeAllModals() {
+    _openModals.slice().forEach(id => _closeModal(id));
+}
+
+/**
+ * Open the audit log viewer modal.
+ */
+async function _openAuditLog() {
+    const modal = $('auditLogModal');
+    const wrap = $('auditLogList');
+    if (!modal || !wrap) return;
+
+    _openModal('auditLogModal');
+    wrap.innerHTML = '<div style="padding:16px;color:var(--text-tertiary);">Loading audit log…</div>';
+
+    const entries = await loadAuditLog(100);
+    if (entries.length === 0) {
+        wrap.innerHTML = '<div style="padding:24px;color:var(--text-tertiary);text-align:center;">No audit activity yet.</div>';
+    } else {
+        wrap.innerHTML = entries.map(e => {
+            const at = formatDate(e.at || 0);
+            const actionLabel = {
+                create: 'Created', update: 'Updated', delete: 'Deleted',
+                archive: 'Archived', restore: 'Restored', toggle: 'Toggled',
+                reorder: 'Reordered', feature: 'Featured', unfeature: 'Unfeatured'
+            }[e.action] || e.action;
+            return `
+                <div class="audit-row" style="padding:8px 12px;border-bottom:1px solid var(--border,#eef0f3);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:600;color:var(--text-primary);">${_escHtml(e.target)} ${actionLabel}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);">${e.targetId ? `ID: ${_escHtml(e.targetId)}` : ''}</div>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-tertiary);text-align:right;line-height:1.4;">
+                        <div>${at}</div>
+                        <div>${_escHtml(e.byName || e.by)}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+function _escHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/**
+ * Role gating helper: disable or hide edit/delete actions based on role.
+ * Call this after rendering any sub-tab content.
+ */
+function _applyRoleGating(tabId) {
+    const canEdit = canEditTab(tabId);
+    const canDelete = canDeleteTab(tabId);
+    const role = roleLabel();
+
+    // Show role badge in sub-tab header
+    const roleBadge = $('roleBadge');
+    if (roleBadge) {
+        roleBadge.textContent = `Role: ${role}`;
+        roleBadge.style.display = '';
+    }
+
+    // Disable edit controls if no edit permission
+    if (!canEdit) {
+        document.querySelectorAll('[data-action="edit"], .icon-btn[data-edit-id], [data-action="save"], .btn-primary[id*="Save"]').forEach(el => {
+            el.disabled = true;
+            el.title = `${role} cannot edit ${tabId}`;
+        });
+    }
+    // Disable delete controls if no delete permission
+    if (!canDelete) {
+        document.querySelectorAll('[data-action="delete"], [data-action="archive"], .icon-btn[data-delete-id], .icon-btn[data-archive-id]').forEach(el => {
+            el.disabled = true;
+            el.title = `${role} cannot delete ${tabId}`;
+        });
+    }
 }
 
 /* ============ SUB-TAB SWITCHING ============ */
@@ -217,6 +358,7 @@ function _switchSubTab(sub) {
     // Load sub-tab content
     if (sub === 'notification') {
         _loadNotificationPane();
+        _applyRoleGating('notification');
     } else if (sub === 'offers') {
         // Reset P2 state when entering offers tab
         _offersSearchQuery = '';
@@ -226,6 +368,7 @@ function _switchSubTab(sub) {
         const searchInput = $('promoOffersSearch');
         if (searchInput) searchInput.value = '';
         _loadPromoOffers();
+        _applyRoleGating('offers');
     } else if (sub === 'visibility') {
         // Reset P3 state when entering visibility tab
         _visSearchQuery = '';
@@ -236,6 +379,7 @@ function _switchSubTab(sub) {
         const searchInput = $('visSearch');
         if (searchInput) searchInput.value = '';
         _loadVisibility();
+        _applyRoleGating('visibility');
     } else if (sub === 'settings') {
         // Reset P4 state when entering settings tab
         _settingsDirty = false;
@@ -247,6 +391,7 @@ function _switchSubTab(sub) {
         if (saveBtnBottom) { saveBtnBottom.disabled = true; saveBtnBottom.textContent = 'Save All App Settings'; }
         _clearAllSettingsErrors();
         _loadAppSettings();
+        _applyRoleGating('settings');
     }
 }
 
@@ -457,14 +602,11 @@ function _openDiscountsTab() {
     if (btn) btn.click();
 }
 
-function _escHtml(s) {
-    if (s == null) return '';
-    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
 async function _togglePromoPage(id, showOnPage) {
     try {
+        const oldVal = { promoPage: _allOffersCache.find(d => d.id === id)?.promoPage };
         await update(Outlet.ref(`discounts/${id}`), { promoPage: showOnPage === true, updatedAt: Date.now() });
+        await logChange(showOnPage ? 'toggle' : 'toggle', 'discounts', id, oldVal, { promoPage: showOnPage === true });
         showToast(showOnPage ? 'Added to Promo Page' : 'Removed from Promo Page', 'success');
     } catch (e) {
         showToast('Update failed: ' + (e?.message || e), 'error');
@@ -562,6 +704,9 @@ async function _bulkSetPromoPage(showOnPage) {
         await Promise.all(ids.map(id =>
             update(Outlet.ref(`discounts/${id}`), { promoPage: showOnPage === true, updatedAt: Date.now() })
         ));
+        await Promise.all(ids.map(id =>
+            logChange('toggle', 'discounts', id, { promoPage: _allOffersCache.find(d => d.id === id)?.promoPage }, { promoPage: showOnPage === true })
+        ));
         showToast(`${ids.length} offer${ids.length === 1 ? '' : 's'} ${showOnPage ? 'added to' : 'removed from'} Promo Page`, 'success');
         _clearSelection();
     } catch (e) {
@@ -576,6 +721,9 @@ async function _bulkSetEnabled(enabled) {
     try {
         await Promise.all(ids.map(id =>
             update(Outlet.ref(`discounts/${id}`), { enabled: enabled, updatedAt: Date.now() })
+        ));
+        await Promise.all(ids.map(id =>
+            logChange('toggle', 'discounts', id, { enabled: _allOffersCache.find(d => d.id === id)?.enabled }, { enabled })
         ));
         showToast(`${ids.length} offer${ids.length === 1 ? '' : 's'} ${enabled ? 'enabled' : 'disabled'}`, 'success');
         _clearSelection();
@@ -594,6 +742,9 @@ async function _bulkArchive() {
         await Promise.all(ids.map(id =>
             update(Outlet.ref(`discounts/${id}`), { archived: true, updatedAt: Date.now() })
         ));
+        await Promise.all(ids.map(id =>
+            logChange('archive', 'discounts', id, { archived: _allOffersCache.find(d => d.id === id)?.archived }, { archived: true })
+        ));
         showToast(`${ids.length} offer${ids.length === 1 ? '' : 's'} archived`, 'success');
         _clearSelection();
     } catch (e) {
@@ -610,6 +761,9 @@ async function _bulkDelete() {
     try {
         await Promise.all(ids.map(id =>
             update(Outlet.ref(`discounts/${id}`), null)
+        ));
+        await Promise.all(ids.map(id =>
+            logChange('delete', 'discounts', id, _allOffersCache.find(d => d.id === id), null)
         ));
         showToast(`${ids.length} offer${ids.length === 1 ? '' : 's'} deleted`, 'success');
         _clearSelection();
@@ -664,6 +818,7 @@ async function _saveQuickEdit() {
     btn.textContent = 'Saving…';
 
     try {
+        const oldOffer = _allOffersCache.find(d => d.id === _quickEditId) || {};
         const updates = {
             name: $('qeName')?.value || undefined,
             couponCode: $('qeCode')?.value || undefined,
@@ -685,6 +840,7 @@ async function _saveQuickEdit() {
         Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k]);
 
         await update(Outlet.ref(`discounts/${_quickEditId}`), updates);
+        await logChange('update', 'discounts', _quickEditId, oldOffer, updates);
         showToast('Offer updated', 'success');
         _closeQuickEdit();
     } catch (e) {
@@ -700,7 +856,9 @@ async function _archiveOffer(id) {
     const ok = await showConfirm('Archive this offer? It will be hidden from the Promo Page.', 'Archive offer');
     if (!ok) return;
     try {
+        const oldVal = { archived: _allOffersCache.find(d => d.id === id)?.archived };
         await update(Outlet.ref(`discounts/${id}`), { archived: true, updatedAt: Date.now() });
+        await logChange('archive', 'discounts', id, oldVal, { archived: true });
         showToast('Offer archived', 'success');
     } catch (e) {
         showToast('Archive failed: ' + (e?.message || e), 'error');
@@ -710,7 +868,9 @@ async function _archiveOffer(id) {
 /** Restore an archived offer. */
 async function _restoreOffer(id) {
     try {
+        const oldVal = { archived: _allOffersCache.find(d => d.id === id)?.archived };
         await update(Outlet.ref(`discounts/${id}`), { archived: false, updatedAt: Date.now() });
+        await logChange('restore', 'discounts', id, oldVal, { archived: false });
         showToast('Offer restored', 'success');
     } catch (e) {
         showToast('Restore failed: ' + (e?.message || e), 'error');
@@ -722,7 +882,9 @@ async function _deleteOffer(id) {
     const ok = await showConfirm('Permanently delete this offer? This cannot be undone.', 'Delete offer');
     if (!ok) return;
     try {
+        const oldVal = _allOffersCache.find(d => d.id === id);
         await update(Outlet.ref(`discounts/${id}`), null);
+        await logChange('delete', 'discounts', id, oldVal, null);
         showToast('Offer deleted', 'success');
     } catch (e) {
         showToast('Delete failed: ' + (e?.message || e), 'error');
@@ -746,8 +908,9 @@ async function _duplicateOffer(id) {
             promoPage: false,
         };
         delete dupe.id;
-        const newRef = await update(Outlet.ref('discounts'), { [OfferPushKey()]: dupe });
-        // RTDB update doesn't return the key easily; use push instead
+        const newKey = OfferPushKey();
+        await update(Outlet.ref('discounts'), { [newKey]: dupe });
+        await logChange('create', 'discounts', newKey, null, dupe);
         showToast('Offer duplicated', 'success');
     } catch (e) {
         showToast('Duplicate failed: ' + (e?.message || e), 'error');
@@ -1086,7 +1249,11 @@ function _clearVisSelection() {
 async function _toggleVisItem(type, id, visible) {
     try {
         const path = type === 'dish' ? `menu/dishes/${id}` : `menu/categories/${id}`;
+        const oldVal = type === 'dish'
+            ? { visible: _allDishesCache.find(d => d.id === id)?.visible }
+            : { visible: _allCategoriesCache.find(c => c.id === id)?.visible };
         await update(Outlet.ref(path), { visible: visible === true, updatedAt: Date.now() });
+        await logChange('toggle', type === 'dish' ? 'dishes' : 'categories', id, oldVal, { visible: visible === true });
         // Refresh caches
         _loadVisibility();
     } catch (e) {
@@ -1103,6 +1270,13 @@ async function _bulkVisSetVisible(visible) {
             const [type, realId] = id.split(':');
             const path = type === 'dish' ? `menu/dishes/${realId}` : `menu/categories/${realId}`;
             return update(Outlet.ref(path), { visible: visible === true, updatedAt: Date.now() });
+        }));
+        await Promise.all(ids.map(id => {
+            const [type, realId] = id.split(':');
+            const oldVal = type === 'dish'
+                ? { visible: _allDishesCache.find(d => d.id === realId)?.visible }
+                : { visible: _allCategoriesCache.find(c => c.id === realId)?.visible };
+            return logChange('toggle', type === 'dish' ? 'dishes' : 'categories', realId, oldVal, { visible: visible === true });
         }));
         showToast(`${ids.length} item${ids.length === 1 ? '' : 's'} ${visible ? 'shown' : 'hidden'} on app`, 'success');
         _clearVisSelection();
@@ -1132,6 +1306,10 @@ async function _bulkVisSetFeatured(featured) {
             const realId = id.replace(/^dish:/, '');
             return update(Outlet.ref(`menu/dishes/${realId}`), { featured: featured === true, updatedAt: Date.now() });
         }));
+        await Promise.all(dishIds.map(id => {
+            const realId = id.replace(/^dish:/, '');
+            return logChange('feature', 'dishes', realId, { featured: _allDishesCache.find(d => d.id === realId)?.featured }, { featured: featured === true });
+        }));
         showToast(`${dishIds.length} dish${dishIds.length === 1 ? '' : 'es'} ${featured ? 'featured' : 'unfeatured'}`, 'success');
         _clearVisSelection();
     } catch (e) {
@@ -1148,6 +1326,9 @@ async function _bulkVisHideOutOfStock() {
     try {
         await Promise.all(oosDishes.map(d =>
             update(Outlet.ref(`menu/dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
+        ));
+        await Promise.all(oosDishes.map(d =>
+            logChange('toggle', 'dishes', d.id, { visible: true }, { visible: false })
         ));
         showToast(`${oosDishes.length} out-of-stock dish${oosDishes.length === 1 ? '' : 'es'} hidden`, 'success');
         _loadVisibility();
@@ -1167,6 +1348,10 @@ async function _bulkVisShowAll() {
             const [type, realId] = i.id.split(':');
             const path = type === 'dish' ? `menu/dishes/${realId}` : `menu/categories/${realId}`;
             return update(Outlet.ref(path), { visible: true, updatedAt: Date.now() });
+        }));
+        await Promise.all(hiddenItems.map(i => {
+            const [type, realId] = i.id.split(':');
+            return logChange('toggle', type === 'dish' ? 'dishes' : 'categories', realId, { visible: false }, { visible: true });
         }));
         showToast(`${hiddenItems.length} item${hiddenItems.length === 1 ? '' : 's'} shown on app`, 'success');
         _clearVisSelection();
@@ -1362,6 +1547,7 @@ async function _saveAppSettings() {
             updatedAt: Date.now()
         };
         await update(Outlet.ref('settings/Store'), store);
+        await logChange('update', 'settings/Store', 'Store', _settingsOriginal, store);
         _settingsDirty = false;
         _settingsOriginal = { ...store };
         _settingsErrors = {};
