@@ -266,6 +266,35 @@ Residual is **~67 KB/min = ~96 MB/day** against **~3.24 MB/min = 4.67 GB/day**
 before: a **~48x** reduction. What is left is ordinary traffic (heartbeat
 writes, admin dashboard listeners, menu reads), not a poll loop.
 
+### Third finding: the control API's index, fixed the same way (commit `98370c7`)
+
+`status-watcher` had the same blind spot for a different reason. Its name index
+comes from `outletIndex`, but the E2E tenants and the demo predate that
+registry, so the lookup left their pm2 processes unmatched - and an unmatched
+process triggered a `businesses` `.get()` (5 MB) once every six hours and again
+on every control-api restart. Measured boot footprint of the control API was
+**10.4 MB**: 5 MB orchestrator boot scan + 5 MB watcher fallback.
+
+pm2 stores each process's spawn env, and the orchestrator starts every worker
+with `BUSINESS_ID`/`OUTLET_ID`, so the ids were already in memory on the box:
+
+```
+  6 bot-e2e-biz-...  BUSINESS_ID=e2e-biz-1792987605261 OUTLET_ID=e2e-outlet-1792987605261
+ 35 bot-roshani-pizza-pizza  BUSINESS_ID=roshani-pizza  OUTLET_ID=pizza
+```
+
+The fallback is gone; unmatched names now log a warning instead of paying for a
+download. Guard: `bot/tests/unit.test.js` asserts `status-watcher.js` contains
+no `ref('businesses')`, and `tests/orchestrator-scope.check.cjs` proves the env
+resolution performs zero tree reads (14 checks).
+
+Remaining full-tree readers in `bot-control-api`, all deliberate and rare:
+`orchestrator.js` boot scan (once per restart, needed to enumerate every
+outlet), `server.js` `/api/bot/status-all` (ops/deploy gate only),
+`server.js` daily settlement (once a day), and `requireTenantAdmin`'s legacy
+branch (only when an admin row has no `businessId` **and** `outletIndex` has no
+entry - every current admin has one or the other).
+
 ### Measurement caveat (settled)
 
 `gcloud`'s `sent_bytes_count` summed across series reads ~3x higher than the
