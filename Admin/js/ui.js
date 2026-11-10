@@ -113,8 +113,11 @@ export const MENU_GROUP = ['menu', 'categories', 'combos'];
 const navIdFor = (tabId) => `menu-${MENU_GROUP.includes(tabId) ? 'menu' : tabId}`;
 
 export const canAccessTab = (tabId) => {
-    if (state.adminData?.isSuper) return true; // supreme/super bypass the matrix
+    if (state.adminData?.isSuper || state.adminData?.isSupreme) return true; // supreme/super bypass the matrix
     const key = (state.adminData?.role || '').toLowerCase().trim();
+    // Treat "Super Admin"/"Supreme Admin" role names as full access even when
+    // the email doesn't match the configured SUPER_ADMIN_EMAIL (isSuper=false).
+    if (key === 'super admin' || key === 'supreme admin') return true;
     const role = getRoles()[key];
     if (role) return !Array.isArray(role.tabs) || role.tabs.includes(tabId);
     if (!_roleWarned) {
