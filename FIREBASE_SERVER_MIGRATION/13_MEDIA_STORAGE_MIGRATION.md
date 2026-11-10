@@ -87,9 +87,10 @@ Admin browser ──(Firebase ID token, base64 JSON)──▶ POST /tenant-api/u
 - `requireTenantAdmin` already exists and is already mounted on `/tenant-api`.
 - Body limit: the global parser stays at the 100 KB default; the upload route is
   excluded from it and mounts `express.json({ limit: '8mb' })`.
-- Booster: `sharp` is already a control-API dependency, so the endpoint **re-encodes to
-  JPEG (max 1600 px, q82)** before storing. That normalises whatever the phone produced
-  and stops a 5 MB HEIC from becoming a 5 MB blob.
+- Stored **byte-for-byte, no re-encode**: a payment QR must stay scannable and a PNG must
+  keep its alpha channel. Size is already controlled at the source (Admin caps settings
+  images at 500 KB, the rider app compresses to 300 KB, the endpoint rejects >6 MB).
+  An earlier draft planned a Sharp JPEG re-encode; dropping it is deliberate (§7.4).
 
 ### 3.2 Reads: token URLs, deny-all rules
 
@@ -168,8 +169,9 @@ outlets/{bid}/{oid}/migrated/settings/Store/paymentQR.jpg
 
 | Check | Expected |
 |---|---|
-| Anonymous read of an object **without** a token | `403` |
+| Anonymous read of an object **without** a token | `400` (the endpoint rejects a missing/bad token; plain GCS URLs give `403`) |
 | Anonymous read **with** the token URL | `200`, `content-type: image/jpeg`, `cache-control: public, max-age=31536000` |
+| Browser `fetch()` from a dashboard origin | `200` with `access-control-allow-origin` (needs bucket CORS — §7.5) |
 | `POST /tenant-api/upload` with no token | `401` |
 | `POST /tenant-api/upload` with a token for outlet A, path for outlet B | impossible by construction (bid/oid come from the token) |
 | Admin dish image upload | dish `image` becomes `https://firebasestorage…`, `<img>` renders, menu shows it after reload |
@@ -269,3 +271,62 @@ Backup of every replaced value: `/var/www/foodhubbie/backup/media-roshani-pizza-
 - **`deleteImage` on a legacy `data:` URI is a no-op** — there is no object to delete.
 - The demo tenant keeps its generated SVG data URIs (a few hundred bytes each); it copies
   the live catalog verbatim, so dish photos now arrive as URLs.
+- **No Sharp re-encode of uploads** (the §3.1 draft proposed one). Storing the original
+  bytes keeps a payment QR scannable and a PNG's alpha intact; all three clients already
+  cap size, and the endpoint rejects >6 MB.
+- **The rider app needed no change** — `rider-app/src/lib/firebase.ts` already sets
+  `storageBucket: "foodhubbie-10.firebasestorage.app"`, so `getStorage(app)` resolves to
+  the same bucket the rules were deployed to.
+
+### 7.5 Bucket CORS (found by the live E2E)
+
+`<img src>` worked everywhere from the first upload, so the gap stayed invisible until the
+E2E tried `fetch(objectUrl)` from the dashboard: **`blocked by CORS policy`**. A `curl` with
+an `Origin` header proved it — the GET response carried no `access-control-allow-origin`,
+while the OPTIONS preflight did answer `Access-Control-Allow-Origin: *`.
+
+The Firebase Storage download endpoint returns the **bucket's** CORS config, and a new
+bucket has none. Currently nothing in the product converts an image to a Blob, but that is
+exactly the kind of latent trap that surfaces later (canvas compositing, share sheets,
+client-side PDFs), so the bucket is now configured explicitly:
+
+```
+tools/set-bucket-cors.cjs   # idempotent; prints before/after
+```
+
+- Origins: the 9 production hosts (admin, app, supreme, menu, qrmenu, rider, website ×2)
+  plus `localhost:5000/8080`.
+- Methods `GET, HEAD`; exposes `Content-Type/Length/Range/Cache-Control/ETag`; `maxAgeSeconds: 3600`.
+- **Requires the project owner's `firebase login` session** — patching bucket metadata is
+  denied to the admin-SDK service account. That is why this is a local tool, not an API route.
+
+Verified after patching: an allowed origin gets
+`access-control-allow-origin: https://foodhubbie-admins.web.app`, an unknown origin gets
+none (CORS is not a blanket `*`), and the browser `fetch()` in the E2E returned the exact
+70 bytes.
+
+### 7.6 Live browser E2E — 29/29
+
+Throwaway super admin (`admins/{uid}` + Auth user, deleted afterwards), real deployed
+hosting, Chromium via Playwright.
+
+| Part | Check | Result |
+|---|---|---|
+| 0 | deployed `/js/firebase.js` calls `/tenant-api/upload`, no `firebase-storage.js`, no `uploadBytes` | 4/4 |
+| A | 5 bot status previews + payment QR are Storage URLs and decode (`1900×1060`, `894×875`) | 6/6 |
+| A | all 22 catalog dish cards hold Storage URLs; **21/21 unique URLs serve a decodable image** | 4/4 |
+| B | `uploadImage()` → token URL under `outlets/roshani-pizza/pizza/dishes/…` | 3/3 |
+| B | stored object: `200`, `image/png`, `max-age=31536000`, **bytes identical (70)** | 4/4 |
+| B | browser `fetch()` is CORS-allowed; `deleteImage()` → object `403` afterwards | 3/3 |
+| C | public menu (delivery, no auth): 22/22 dish cards, 21 unique Storage URLs all decode, 0 console errors | 5/5 |
+| D | 0 console errors on the Admin page across A+B | 1/1 |
+
+Notes from running it:
+
+- The UI uses `loading="lazy"`, so offscreen cards report `naturalWidth: 0` by design.
+  Coverage is therefore proven twice: card `src` is a Storage URL, **and** every collected
+  URL is loaded through a throwaway `new Image()`.
+- Two dishes legitimately share one photo (21 unique URLs across 22 cards), so coverage is
+  counted per card, never per unique URL.
+- Cleanup verified afterwards: `admins/{uid}` gone, Auth user deleted, bucket holds exactly
+  the 34 migrated objects, 0 `e2e-*` leftovers, token file removed from EC2 and locally.
