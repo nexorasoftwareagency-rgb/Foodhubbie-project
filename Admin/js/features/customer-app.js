@@ -30,6 +30,16 @@ let _offersSort = 'updated'; // 'updated' | 'name' | 'value' | 'expiry' | 'usage
 let _selectedOffers = new Set(); // Set of offer ids
 let _allOffersCache = []; // cached full offer list from RTDB listener
 
+// P3: App Visibility state
+let _visSearchQuery = '';
+let _visFilter = 'all'; // 'all' | 'visible' | 'hidden' | 'out-of-stock' | 'low-stock'
+let _visSort = 'name'; // 'name' | 'price' | 'stock' | 'sortOrder'
+let _visFilterType = 'all'; // 'all' | 'dish' | 'category'
+let _selectedVis = new Set(); // Set of visibility item ids {type:id}
+let _allDishesCache = []; // cached dishes from RTDB
+let _allCategoriesCache = []; // cached categories from RTDB
+let _featuredDishIds = new Set(); // dishes marked featured
+
 /* ============ MAIN ENTRY ============ */
 
 export function loadCustomerApp() {
@@ -101,6 +111,43 @@ function _wireOnce() {
     // Visibility actions
     $('btnVisibilityRefresh')?.addEventListener('click', _loadVisibility);
 
+    // P3: Visibility search & filter
+    $('visSearch')?.addEventListener('input', (e) => {
+        _visSearchQuery = e.target.value;
+        _renderVisibilityLists();
+    });
+    document.querySelectorAll('input[name="visFilter"]').forEach(rb => {
+        rb.addEventListener('change', (e) => {
+            _visFilter = e.target.value;
+            _renderVisibilityLists();
+        });
+    });
+    document.querySelectorAll('input[name="visSort"]').forEach(rb => {
+        rb.addEventListener('change', (e) => {
+            _visSort = e.target.value;
+            _renderVisibilityLists();
+        });
+    });
+    document.querySelectorAll('input[name="visFilterType"]').forEach(rb => {
+        rb.addEventListener('change', (e) => {
+            _visFilterType = e.target.value;
+            _renderVisibilityLists();
+        });
+    });
+
+    // P3: Visibility bulk toolbar actions
+    $('btnVisBulkShow')?.addEventListener('click', () => _bulkVisSetVisible(true));
+    $('btnVisBulkHide')?.addEventListener('click', () => _bulkVisSetVisible(false));
+    $('btnVisBulkFeature')?.addEventListener('click', () => _bulkVisSetFeatured(true));
+    $('btnVisBulkUnfeature')?.addEventListener('click', () => _bulkVisSetFeatured(false));
+    $('btnVisBulkHideOOS')?.addEventListener('click', _bulkVisHideOutOfStock);
+    $('btnVisBulkShowAll')?.addEventListener('click', _bulkVisShowAll);
+    $('btnVisBulkSelectAll')?.addEventListener('click', _toggleVisSelectAll);
+    $('btnVisBulkCancel')?.addEventListener('click', _clearVisSelection);
+
+    // P3: Preview modal close
+    $('btnVisPreviewClose')?.addEventListener('click', _closeVisPreview);
+
     // App Settings actions
     $('btnSaveAppSettings')?.addEventListener('click', _saveAppSettings);
     $('btnSaveAppSettingsBottom')?.addEventListener('click', _saveAppSettings);
@@ -139,6 +186,14 @@ function _switchSubTab(sub) {
         if (searchInput) searchInput.value = '';
         _loadPromoOffers();
     } else if (sub === 'visibility') {
+        // Reset P3 state when entering visibility tab
+        _visSearchQuery = '';
+        _visFilter = 'all';
+        _visSort = 'name';
+        _visFilterType = 'all';
+        _selectedVis.clear();
+        const searchInput = $('visSearch');
+        if (searchInput) searchInput.value = '';
         _loadVisibility();
     } else if (sub === 'settings') {
         _loadAppSettings();
@@ -695,13 +750,6 @@ function _closePreview() {
 /* ============ PANE 3: APP VISIBILITY ============ */
 
 async function _loadVisibility() {
-    _loadVisibilityStats();
-    _loadVisibilityDishes();
-    _loadVisibilityCategories();
-    _loadVisibilityFeatures();
-}
-
-async function _loadVisibilityStats() {
     try {
         const [dishSnap, catSnap] = await Promise.all([
             get(Outlet.ref('menu/dishes')),
@@ -709,15 +757,35 @@ async function _loadVisibilityStats() {
         ]);
         const dishes = dishSnap.val() || {};
         const cats = catSnap.val() || {};
-        const dishList = Object.values(dishes).filter(Boolean);
-        const catList = Object.values(cats).filter(Boolean);
+        _allDishesCache = Object.entries(dishes).filter(([, d]) => d).map(([id, d]) => ({ id, ...d }));
+        _allCategoriesCache = Object.entries(cats).filter(([, c]) => c).map(([id, c]) => ({ id, ...c }));
+        _loadVisibilityStats(_allDishesCache, _allCategoriesCache);
+        _renderVisibilityLists();
+        _loadVisibilityFeatures();
+    } catch (e) {
+        console.error('[Customer APP] Visibility load error:', e);
+        $('visDishList')?.innerHTML && ($('visDishList').innerHTML = '<div style="padding:16px;color:var(--error);">Could not load dishes.</div>');
+        $('visCategoryList')?.innerHTML && ($('visCategoryList').innerHTML = '<div style="padding:16px;color:var(--error);">Could not load categories.</div>');
+    }
+}
+
+async function _loadVisibilityStats(dishes = _allDishesCache, cats = _allCategoriesCache) {
+    try {
+        const dishList = dishes.filter(Boolean);
+        const catList = cats.filter(Boolean);
         const visDishes = dishList.filter(d => d.visible !== false).length;
         const visCats = catList.filter(c => c.visible !== false).length;
+        const featuredCount = dishList.filter(d => d.featured === true).length;
+        const lowStockCount = dishList.filter(d => d.stock != null && d.stock > 0 && d.stock <= (d.lowStockThreshold || 5)).length;
+        const outOfStockCount = dishList.filter(d => d.stock == 0).length;
 
         if ($('visTotalDishes')) $('visTotalDishes').textContent = String(dishList.length);
         if ($('visVisibleDishes')) $('visVisibleDishes').textContent = String(visDishes);
         if ($('visTotalCategories')) $('visTotalCategories').textContent = String(catList.length);
         if ($('visVisibleCategories')) $('visVisibleCategories').textContent = String(visCats);
+        if ($('visFeaturedCount')) $('visFeaturedCount').textContent = String(featuredCount);
+        if ($('visLowStockCount')) $('visLowStockCount').textContent = String(lowStockCount);
+        if ($('visOutOfStockCount')) $('visOutOfStockCount').textContent = String(outOfStockCount);
 
         $('caVisEmpty')?.classList.toggle('hidden', dishList.length > 0 || catList.length > 0);
     } catch (e) {
@@ -725,71 +793,386 @@ async function _loadVisibilityStats() {
     }
 }
 
-async function _loadVisibilityDishes() {
-    const wrap = $('visDishList');
-    if (!wrap) return;
-    try {
-        const snap = await get(Outlet.ref('menu/dishes'));
-        const all = snap.val() || {};
-        const entries = Object.entries(all).filter(([, d]) => d);
-        if (entries.length === 0) {
-            wrap.innerHTML = '<div style="padding:16px;color:var(--text-tertiary);">No dishes found. Add dishes in Menu first.</div>';
-            return;
-        }
-        wrap.innerHTML = entries.map(([id, d]) => {
+/* ============ P3: VISIBILITY RENDER ============ */
+
+/** Apply search + filter + sort to visibility items. */
+function _processVisibilityItems() {
+    const q = _visSearchQuery.toLowerCase();
+    const now = Date.now();
+
+    const items = [];
+
+    // Dishes
+    if (_visFilterType === 'all' || _visFilterType === 'dish') {
+        for (const d of _allDishesCache) {
+            const matchText = !q || String(d.name || '').toLowerCase().includes(q);
+            if (!matchText) continue;
             const visible = d.visible !== false;
+            const stock = d.stock != null ? d.stock : 0;
+            const lowThreshold = d.lowStockThreshold || 5;
+            const isOOS = stock === 0;
+            const isLowStock = stock > 0 && stock <= lowThreshold;
+
+            if (_visFilter === 'visible' && !visible) continue;
+            if (_visFilter === 'hidden' && visible) continue;
+            if (_visFilter === 'out-of-stock' && !isOOS) continue;
+            if (_visFilter === 'low-stock' && !isLowStock) continue;
+
+            items.push({
+                id: `dish:${d.id}`,
+                type: 'dish',
+                name: d.name || 'Unnamed Dish',
+                visible,
+                price: d.price != null ? `₹${d.price}` : '—',
+                stock,
+                lowThreshold,
+                isOOS,
+                isLowStock,
+                featured: d.featured === true,
+                sortOrder: d.sortOrder ?? 999,
+                updatedAt: d.updatedAt || 0,
+                categoryId: d.categoryId,
+            });
+        }
+    }
+
+    // Categories
+    if (_visFilterType === 'all' || _visFilterType === 'category') {
+        for (const c of _allCategoriesCache) {
+            const matchText = !q || String(c.name || '').toLowerCase().includes(q);
+            if (!matchText) continue;
+            const visible = c.visible !== false;
+
+            if (_visFilter === 'visible' && !visible) continue;
+            if (_visFilter === 'hidden' && visible) continue;
+            // out-of-stock / low-stock don't apply to categories
+
+            // Count dishes in this category
+            const catDishCount = _allDishesCache.filter(d => d.categoryId === c.id).length;
+
+            items.push({
+                id: `category:${c.id}`,
+                type: 'category',
+                name: c.name || 'Unnamed Category',
+                visible,
+                dishCount: catDishCount,
+                sortOrder: c.sortOrder ?? 999,
+                updatedAt: c.updatedAt || 0,
+            });
+        }
+    }
+
+    // Sort
+    if (_visSort === 'name') items.sort((a, b) => String(a.name || '').localeCompare(b.name || ''));
+    else if (_visSort === 'price') items.sort((a, b) => {
+        const pa = a.price ? Number(a.price.replace(/[^0-9.]/g, '')) : 0;
+        const pb = b.price ? Number(b.price.replace(/[^0-9.]/g, '')) : 0;
+        return pb - pa;
+    });
+    else if (_visSort === 'stock') items.sort((a, b) => (b.stock ?? 0) - (a.stock ?? 0));
+    else if (_visSort === 'sortOrder') items.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+    else items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    return items;
+}
+
+function _renderVisibilityLists() {
+    const dishWrap = $('visDishList');
+    const catWrap = $('visCategoryList');
+    const bulkToolbar = $('visBulkToolbar');
+    const bulkCount = $('visBulkSelectCount');
+    const selectAllBtn = $('visBtnBulkSelectAll');
+
+    if (!dishWrap || !catWrap) return;
+
+    const items = _processVisibilityItems();
+    const dishItems = items.filter(i => i.type === 'dish');
+    const catItems = items.filter(i => i.type === 'category');
+
+    // Render dishes
+    if (dishItems.length === 0) {
+        dishWrap.innerHTML = '<div style="padding:16px;color:var(--text-tertiary);">No matching dishes.</div>';
+    } else {
+        dishWrap.innerHTML = dishItems.map(d => {
+            const visible = d.visible !== false;
+            const isSelected = _selectedVis.has(d.id);
+            const stockBadge = d.isOOS ? 'out-of-stock' : (d.isLowStock ? 'low-stock' : 'in-stock');
+            const stockText = d.isOOS ? 'Out of stock' : (d.isLowStock ? `Low (${d.stock})` : `Stock ${d.stock}`);
+            const featuredBadge = d.featured ? ' ★ Featured' : '';
             return `
-                <div class="promo-offer-row" role="button" tabindex="0">
-                    <span class="promo-offer__badge">${visible ? '✓' : '–'}</span>
-                    <div class="promo-offer__info">
-                        <div class="promo-offer__name">${_escHtml(d.name || 'Unnamed Dish')}</div>
-                        <div class="promo-offer__meta">${_escHtml(d.price != null ? `₹${d.price}` : '—')} · ${visible ? 'Visible on App' : 'Hidden from App'}</div>
+                <div class="vis-row ${isSelected ? 'selected' : ''}" data-vis-id="${d.id}">
+                    <label class="vis-row__select" style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" ${isSelected ? 'checked' : ''} data-vis-id="${d.id}" style="appearance:none;width:18px;height:18px;border:2px solid var(--border,#e5e7eb);border-radius:4px;cursor:pointer;${isSelected ? 'background:var(--primary,#E84908);border-color:var(--primary,#E84908)' : ''}">
+                    </label>
+                    <div class="vis-row__info" style="flex:1;min-width:0;cursor:pointer;">
+                        <div class="vis-row__name">${_escHtml(d.name)}${d.featured ? ' <span class="vis-row__featured">★</span>' : ''}</div>
+                        <div class="vis-row__meta">${d.price} · ${stockText}${featuredBadge}</div>
                     </div>
-                    <span class="promo-offer__status ${visible ? 'valid' : 'disabled'}">${visible ? 'Visible' : 'Hidden'}</span>
-                    <label class="promo-offer__toggle" title="${visible ? 'Hide dish from app' : 'Show dish on app'}">
-                        <input type="checkbox" ${visible ? 'checked' : ''} data-id="${id}" data-type="dish">
+                    <span class="vis-row__badge vis-row__badge--${stockBadge}" title="${stockText}">
+                        ${d.isOOS ? '●' : d.isLowStock ? '▲' : '●'}
+                    </span>
+                    <span class="vis-row__status ${visible ? 'valid' : 'disabled'}">${visible ? 'Visible' : 'Hidden'}</span>
+                    <label class="vis-row__toggle" title="${visible ? 'Hide dish from app' : 'Show dish on app'}">
+                        <input type="checkbox" ${visible ? 'checked' : ''} data-vis-id="${d.id}" data-vis-type="dish">
                     </label>
                 </div>
             `;
         }).join('');
-        _bindVisibilityToggles(wrap, 'dish');
+    }
+
+    // Render categories
+    if (catItems.length === 0) {
+        catWrap.innerHTML = '<div style="padding:16px;color:var(--text-tertiary);">No matching categories.</div>';
+    } else {
+        catWrap.innerHTML = catItems.map(c => {
+            const visible = c.visible !== false;
+            const isSelected = _selectedVis.has(c.id);
+            return `
+                <div class="vis-row ${isSelected ? 'selected' : ''}" data-vis-id="${c.id}">
+                    <label class="vis-row__select" style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" ${isSelected ? 'checked' : ''} data-vis-id="${c.id}" style="appearance:none;width:18px;height:18px;border:2px solid var(--border,#e5e7eb);border-radius:4px;cursor:pointer;${isSelected ? 'background:var(--primary,#E84908);border-color:var(--primary,#E84908)' : ''}">
+                    </label>
+                    <div class="vis-row__info" style="flex:1;min-width:0;cursor:pointer;">
+                        <div class="vis-row__name">${_escHtml(c.name)}</div>
+                        <div class="vis-row__meta">${c.dishCount} dish${c.dishCount !== 1 ? 's' : ''} · ${visible ? 'Visible on App' : 'Hidden from App'}</div>
+                    </div>
+                    <span class="vis-row__badge vis-row__badge--category">${c.dishCount}</span>
+                    <span class="vis-row__status ${visible ? 'valid' : 'disabled'}">${visible ? 'Visible' : 'Hidden'}</span>
+                    <label class="vis-row__toggle" title="${visible ? 'Hide category from app' : 'Show category on app'}">
+                        <input type="checkbox" ${visible ? 'checked' : ''} data-vis-id="${c.id}" data-vis-type="category">
+                    </label>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Update bulk toolbar
+    if (bulkToolbar) {
+        if (_selectedVis.size === 0) {
+            bulkToolbar.classList.add('hidden');
+        } else {
+            bulkToolbar.classList.remove('hidden');
+            if (bulkCount) bulkCount.textContent = String(_selectedVis.size);
+            if (selectAllBtn) {
+                const visibleCount = items.length;
+                selectAllBtn.textContent = _selectedVis.size === visibleCount && visibleCount > 0 ? 'Deselect all' : 'Select all';
+            }
+        }
+    }
+
+    // Event delegation
+    dishWrap.replaceWith(dishWrap.cloneNode(true));
+    catWrap.replaceWith(catWrap.cloneNode(true));
+    const newDishWrap = $('visDishList');
+    const newCatWrap = $('visCategoryList');
+
+    const handleVisClick = (e, wrap) => {
+        const row = e.target.closest('.vis-row');
+        if (!row) return;
+        const id = row.dataset.visId;
+        const type = row.querySelector('input[data-vis-type]')?.dataset.visType || (id.startsWith('dish:') ? 'dish' : 'category');
+
+        // Selection checkbox
+        if (e.target.matches('input[data-vis-id]') && e.target.closest('.vis-row__select')) {
+            _toggleVisSelect(id);
+            return;
+        }
+
+        // Visibility toggle checkbox
+        if (e.target.matches('input[data-vis-type]') && !e.target.closest('.vis-row__select')) {
+            const checked = e.target.checked;
+            const realId = id.replace(/^(dish|category):/, '');
+            _toggleVisItem(type, realId, checked);
+            return;
+        }
+
+        // Row click -> toggle visibility
+        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+            const realId = id.replace(/^(dish|category):/, '');
+            const currentCheckbox = row.querySelector('input[data-vis-type]');
+            const newChecked = !currentCheckbox.checked;
+            _toggleVisItem(type, realId, newChecked);
+        }
+    };
+
+    newDishWrap.addEventListener('click', (e) => handleVisClick(e, newDishWrap));
+    newCatWrap.addEventListener('click', (e) => handleVisClick(e, newCatWrap));
+
+    // Rebind visibility toggle checkboxes
+    [newDishWrap, newCatWrap].forEach(wrap => {
+        wrap.querySelectorAll('input[data-vis-type]').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const id = cb.dataset.visId;
+                const type = cb.dataset.visType;
+                const realId = id.replace(/^(dish|category):/, '');
+                _toggleVisItem(type, realId, cb.checked);
+            });
+        });
+    });
+}
+
+function _toggleVisSelect(id) {
+    if (_selectedVis.has(id)) _selectedVis.delete(id);
+    else _selectedVis.add(id);
+    _renderVisibilityLists();
+}
+
+function _toggleVisSelectAll() {
+    const items = _processVisibilityItems();
+    if (_selectedVis.size === items.length && items.length > 0) {
+        _selectedVis.clear();
+    } else {
+        items.forEach(i => _selectedVis.add(i.id));
+    }
+    _renderVisibilityLists();
+}
+
+function _clearVisSelection() {
+    _selectedVis.clear();
+    _renderVisibilityLists();
+}
+
+async function _toggleVisItem(type, id, visible) {
+    try {
+        const path = type === 'dish' ? `menu/dishes/${id}` : `menu/categories/${id}`;
+        await update(Outlet.ref(path), { visible: visible === true, updatedAt: Date.now() });
+        // Refresh caches
+        _loadVisibility();
     } catch (e) {
-        console.error('[Customer APP] Visibility dishes error:', e);
-        wrap.innerHTML = '<div style="padding:16px;color:var(--error);">Could not load dishes.</div>';
+        showToast('Update failed: ' + (e?.message || e), 'error');
+        _renderVisibilityLists();
     }
 }
 
-async function _loadVisibilityCategories() {
-    const wrap = $('visCategoryList');
-    if (!wrap) return;
+async function _bulkVisSetVisible(visible) {
+    const ids = Array.from(_selectedVis);
+    if (ids.length === 0) return;
     try {
-        const snap = await get(Outlet.ref('menu/categories'));
-        const all = snap.val() || {};
-        const entries = Object.entries(all).filter(([, c]) => c);
-        if (entries.length === 0) {
-            wrap.innerHTML = '<div style="padding:16px;color:var(--text-tertiary);">No categories found. Add categories in Menu first.</div>';
-            return;
-        }
-        wrap.innerHTML = entries.map(([id, c]) => {
-            const visible = c.visible !== false;
-            return `
-                <div class="promo-offer-row" role="button" tabindex="0">
-                    <span class="promo-offer__badge">${visible ? '✓' : '–'}</span>
-                    <div class="promo-offer__info">
-                        <div class="promo-offer__name">${_escHtml(c.name || 'Unnamed Category')}</div>
-                        <div class="promo-offer__meta">${visible ? 'Visible on App' : 'Hidden from App'}</div>
-                    </div>
-                    <span class="promo-offer__status ${visible ? 'valid' : 'disabled'}">${visible ? 'Visible' : 'Hidden'}</span>
-                    <label class="promo-offer__toggle" title="${visible ? 'Hide category from app' : 'Show category on app'}">
-                        <input type="checkbox" ${visible ? 'checked' : ''} data-id="${id}" data-type="category">
-                    </label>
-                </div>
-            `;
-        }).join('');
-        _bindVisibilityToggles(wrap, 'category');
+        await Promise.all(ids.map(id => {
+            const [type, realId] = id.split(':');
+            const path = type === 'dish' ? `menu/dishes/${realId}` : `menu/categories/${realId}`;
+            return update(Outlet.ref(path), { visible: visible === true, updatedAt: Date.now() });
+        }));
+        showToast(`${ids.length} item${ids.length === 1 ? '' : 's'} ${visible ? 'shown' : 'hidden'} on app`, 'success');
+        _clearVisSelection();
     } catch (e) {
-        console.error('[Customer APP] Visibility categories error:', e);
-        wrap.innerHTML = '<div style="padding:16px;color:var(--error);">Could not load categories.</div>';
+        showToast('Bulk update failed: ' + (e?.message || e), 'error');
+    }
+}
+
+async function _bulkVisSetFeatured(featured) {
+    const dishIds = Array.from(_selectedVis).filter(id => id.startsWith('dish:'));
+    if (dishIds.length === 0) {
+        showToast('No dishes selected to mark featured.', 'warning');
+        return;
+    }
+    // Enforce max 6 featured
+    const currentFeatured = _allDishesCache.filter(d => d.featured === true).length;
+    const toAdd = dishIds.filter(id => {
+        const realId = id.replace(/^dish:/, '');
+        return !_allDishesCache.find(d => d.id === realId)?.featured;
+    }).length;
+    if (currentFeatured + toAdd > 6) {
+        showToast('Maximum 6 featured dishes allowed.', 'warning');
+        return;
+    }
+    try {
+        await Promise.all(dishIds.map(id => {
+            const realId = id.replace(/^dish:/, '');
+            return update(Outlet.ref(`menu/dishes/${realId}`), { featured: featured === true, updatedAt: Date.now() });
+        }));
+        showToast(`${dishIds.length} dish${dishIds.length === 1 ? '' : 'es'} ${featured ? 'featured' : 'unfeatured'}`, 'success');
+        _clearVisSelection();
+    } catch (e) {
+        showToast('Feature update failed: ' + (e?.message || e), 'error');
+    }
+}
+
+async function _bulkVisHideOutOfStock() {
+    const oosDishes = _allDishesCache.filter(d => d.stock === 0 && d.visible !== false);
+    if (oosDishes.length === 0) {
+        showToast('No out-of-stock dishes to hide.', 'info');
+        return;
+    }
+    try {
+        await Promise.all(oosDishes.map(d =>
+            update(Outlet.ref(`menu/dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
+        ));
+        showToast(`${oosDishes.length} out-of-stock dish${oosDishes.length === 1 ? '' : 'es'} hidden`, 'success');
+        _loadVisibility();
+    } catch (e) {
+        showToast('Hide failed: ' + (e?.message || e), 'error');
+    }
+}
+
+async function _bulkVisShowAll() {
+    const hiddenItems = _processVisibilityItems().filter(i => !i.visible);
+    if (hiddenItems.length === 0) {
+        showToast('No hidden items to show.', 'info');
+        return;
+    }
+    try {
+        await Promise.all(hiddenItems.map(i => {
+            const [type, realId] = i.id.split(':');
+            const path = type === 'dish' ? `menu/dishes/${realId}` : `menu/categories/${realId}`;
+            return update(Outlet.ref(path), { visible: true, updatedAt: Date.now() });
+        }));
+        showToast(`${hiddenItems.length} item${hiddenItems.length === 1 ? '' : 's'} shown on app`, 'success');
+        _clearVisSelection();
+    } catch (e) {
+        showToast('Show all failed: ' + (e?.message || e), 'error');
+    }
+}
+
+/* ============ P3: VISIBILITY PREVIEW ============ */
+
+function _openVisPreview() {
+    const modal = $('visPreviewModal');
+    const wrap = $('visPreviewList');
+    if (!modal || !wrap) return;
+
+    const now = Date.now();
+    const visibleDishes = _allDishesCache.filter(d => d.visible !== false && d.featured === true);
+    const visibleCategories = _allCategoriesCache.filter(c => c.visible !== false);
+    const features = (_allDishesCache.length > 0) ? {} : {};
+
+    if (visibleDishes.length === 0 && visibleCategories.length === 0) {
+        wrap.innerHTML = '<div style="padding:24px;color:var(--text-tertiary);text-align:center;">No visible items to preview.</div>';
+    } else {
+        let html = '';
+        if (visibleCategories.length > 0) {
+            html += '<div style="font-weight:600;margin-bottom:8px;">Categories</div>';
+            html += visibleCategories.map(c => `
+                <div style="padding:8px 12px;border-bottom:1px solid var(--border,#e5e7eb);">
+                    ${_escHtml(c.name)} (${_allDishesCache.filter(d => d.categoryId === c.id && d.visible !== false).length} dishes)
+                </div>
+            `).join('');
+        }
+        if (visibleDishes.length > 0) {
+            html += '<div style="font-weight:600;margin-top:12px;margin-bottom:8px;">Featured Dishes</div>';
+            html += visibleDishes.map(d => `
+                <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border,#e5e7eb);">
+                    <span class="vis-row__badge vis-row__badge--in-stock" style="font-size:10px;">★</span>
+                    <div style="flex:1;min-width:0;">
+                        <div class="vis-row__name" style="font-size:13px;">${_escHtml(d.name)}</div>
+                        <div class="vis-row__meta" style="font-size:11px;">${d.price != null ? `₹${d.price}` : '—'}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        wrap.innerHTML = html;
+    }
+
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function _closeVisPreview() {
+    const modal = $('visPreviewModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
     }
 }
 
@@ -812,25 +1195,6 @@ async function _loadVisibilityFeatures() {
     } catch (e) {
         console.error('[Customer APP] Visibility features error:', e);
     }
-}
-
-function _bindVisibilityToggles(wrap, type) {
-    wrap.querySelectorAll('input[type="checkbox"][data-id]').forEach(cb => {
-        const id = cb.dataset.id;
-        cb.addEventListener('change', async () => {
-            try {
-                await update(Outlet.ref(`menu/${type === 'dish' ? 'dishes' : 'categories'}/${id}`), {
-                    visible: cb.checked === true,
-                    updatedAt: Date.now()
-                });
-                showToast(`${_escHtml(id)} ${cb.checked ? 'shown on' : 'hidden from'} app`, 'success');
-                _loadVisibilityStats();
-            } catch (e) {
-                showToast('Update failed: ' + (e?.message || e), 'error');
-                cb.checked = !cb.checked;
-            }
-        });
-    });
 }
 
 /* ============ PANE 4: APP SETTINGS ============ */

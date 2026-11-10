@@ -12378,3 +12378,61 @@ body.setup-mode .setup-hide {
 .promo-offers-search-filter .chip--radio.active span {
     color: #fff;
 }
+
+/* ===== P3: Visibility Search/Filter ===== */
+.vis-search-filter .chip--radio.active {
+    background: var(--primary, #E84908);
+    color: #fff;
+}
+.vis-search-filter .chip--radio.active span {
+    color: #fff;
+}
+
+/* ===== P3: Visibility Row Styling ===== */
+.vis-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border, #eef0f3);
+    background: var(--bg, #fff);
+    cursor: pointer;
+}
+.vis-row:last-child { border-bottom: none; }
+.vis-row:hover { background: var(--bg-secondary, #f8fafc); }
+.vis-row.selected {
+    background: rgba(232, 73, 8, 0.08);
+    border: 2px solid var(--primary, #E84908);
+    border-radius: 8px;
+    margin: -2px -12px;
+}
+.vis-row__select { flex: 0 0 auto; }
+.vis-row__info { flex: 1; min-width: 0; }
+.vis-row__name { font-weight: 600; color: var(--text-primary, #0f172a); }
+.vis-row__meta { font-size: 12px; color: var(--text-secondary, #64748b); }
+.vis-row__featured { color: #d97706; font-weight: 700; }
+.vis-row__badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex: 0 0 auto;
+}
+.vis-row__badge--in-stock { background: #dcfce7; color: #166534; }
+.vis-row__badge--low-stock { background: #fef3c7; color: #92400e; }
+.vis-row__badge--out-of-stock { background: #fee2e2; color: #991b1b; }
+.vis-row__badge--category { background: #e0e7ff; color: #3730a3; font-size: 11px; }
+.vis-row__status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; flex: 0 0 auto; }
+.vis-row__status.valid { background: #dcfce7; color: #166534; }
+.vis-row__status.disabled { background: #f1f5f9; color: #64748b; }
+.vis-row__toggle { flex: 0 0 auto; }
+
+/* ===== P3: Bulk Toolbar ===== */
+#visBulkToolbar.bulk-toolbar.hidden { display: none; }
+
+/* ===== P3: Preview Modal ===== */
+#visPreviewModal.hidden { display: none; }

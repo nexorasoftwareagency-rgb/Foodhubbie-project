@@ -5326,6 +5326,45 @@
                                 <span id="visVisibleCategories" class="stat-value">-</span>
                                 <span class="stat-label">Visible on App</span>
                             </div>
+                            <div class="stat-card">
+                                <span id="visFeaturedCount" class="stat-value">-</span>
+                                <span class="stat-label">Featured Dishes</span>
+                            </div>
+                            <div class="stat-card">
+                                <span id="visLowStockCount" class="stat-value">-</span>
+                                <span class="stat-label">Low Stock</span>
+                            </div>
+                            <div class="stat-card">
+                                <span id="visOutOfStockCount" class="stat-value">-</span>
+                                <span class="stat-label">Out of Stock</span>
+                            </div>
+                        </div>
+
+                        <!-- P3: Search & Filter -->
+                        <div class="vis-search-filter" style="margin:12px 0; display:flex; flex-direction:column; gap:8px; padding:12px 16px; background:var(--bg-secondary,#f8fafc); border:1px solid var(--border,#eef0f3); border-radius:10px;">
+                            <div class="flex-row flex-gap-8 items-center">
+                                <input type="text" id="visSearch" class="search-input-group" placeholder="Search dishes & categories…" aria-label="Search visibility items">
+                                <div class="flex-row flex-gap-6">
+                                    <label class="chip chip--radio"><input type="radio" name="visFilterType" value="all" checked> <span>All</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visFilterType" value="dish"> <span>Dishes</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visFilterType" value="category"> <span>Categories</span></label>
+                                </div>
+                                <div class="flex-row flex-gap-6">
+                                    <label class="chip chip--radio"><input type="radio" name="visFilter" value="all" checked> <span>All</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visFilter" value="visible"> <span>Visible</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visFilter" value="hidden"> <span>Hidden</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visFilter" value="out-of-stock"> <span>Out of Stock</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visFilter" value="low-stock"> <span>Low Stock</span></label>
+                                </div>
+                                <div class="flex-row flex-gap-6">
+                                    <label class="text-muted-small" style="font-size:11px;">Sort:</label>
+                                    <label class="chip chip--radio"><input type="radio" name="visSort" value="name" checked> <span>Name</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visSort" value="price"> <span>Price</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visSort" value="stock"> <span>Stock</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visSort" value="sortOrder"> <span>Sort Order</span></label>
+                                </div>
+                                <span class="text-muted-small" id="visMatchCount"></span>
+                            </div>
                         </div>
 
                         <div class="ca-visibility-empty hidden" id="caVisEmpty">
@@ -5334,6 +5373,19 @@
                                 <strong>No menu data yet</strong>
                                 <p>Add dishes and categories in Menu first, then control their visibility here.</p>
                             </div>
+                        </div>
+
+                        <!-- P3: Bulk Toolbar (hidden by default) -->
+                        <div id="visBulkToolbar" class="bulk-toolbar hidden" style="margin:8px 0 12px 0; padding:10px 16px; background:#fef3c7; border:1px solid var(--border,#e5e7eb); border-radius:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <span class="text-muted-small" style="font-weight:600;"><span id="visBulkSelectCount">0</span> selected</span>
+                            <button class="btn-secondary btn-sm" id="btnVisBulkShow" type="button">Show</button>
+                            <button class="btn-secondary btn-sm" id="btnVisBulkHide" type="button">Hide</button>
+                            <button class="btn-secondary btn-sm" id="btnVisBulkFeature" type="button">Feature</button>
+                            <button class="btn-secondary btn-sm" id="btnVisBulkUnfeature" type="button">Unfeature</button>
+                            <button class="btn-secondary btn-sm" id="btnVisBulkHideOOS" type="button" style="color:var(--error,#dc2626);">Hide Out of Stock</button>
+                            <button class="btn-secondary btn-sm" id="btnVisBulkShowAll" type="button">Show All</button>
+                            <button class="btn-secondary btn-sm" id="visBtnBulkSelectAll" type="button">Select all</button>
+                            <button class="btn-secondary btn-sm" id="btnVisBulkCancel" type="button">Cancel</button>
                         </div>
 
                         <div class="ca-visibility-section">
@@ -5386,6 +5438,21 @@
                             </div>
                         </div>
 
+                    </div>
+
+                    <!-- P3: Visibility Preview Modal -->
+                    <div id="visPreviewModal" class="promo-preview-modal hidden" style="position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center;">
+                        <div class="promo-preview-card" style="background:var(--bg,#fff); border-radius:12px; padding:24px; width:min(400px, 92vw); max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3); border:1px solid var(--border,#e5e7eb);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                <h3 style="font-size:16px; margin:0;">App Preview</h3>
+                                <button class="btn-close" id="btnVisPreviewClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">&times;</button>
+                            </div>
+                            <p class="text-muted-small mt-2" style="font-size:12px;">How your visible menu appears to customers in the app.</p>
+                            <div id="visPreviewList" style="display:flex;flex-direction:column;gap:12px;"></div>
+                            <div style="margin-top:16px; display:flex; justify-content:flex-end;">
+                                <button class="btn-secondary" id="btnVisPreviewClose" type="button">Close</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- PANE 4: App Settings (configuration) -->
