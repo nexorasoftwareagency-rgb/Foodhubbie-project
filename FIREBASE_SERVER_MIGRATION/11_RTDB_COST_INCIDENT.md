@@ -225,6 +225,47 @@ Initialized reverse index with 40 outlets` **once** while printing `[TENANT]`
 Guard: `bot/tests/unit.test.js` asserts repeat calls perform **zero** Firebase
 reads.
 
+### Measured before and after
+
+Per-PID `ss -tnpi` attribution on the box, same tool, same window length:
+
+| | before `1fe9870` | after `1fe9870` |
+|---|---|---|
+| e2e worker (the flapping one) | `t=90s pid=1466878 +5.06 MB` | `0.01 MB in 470 s` (2 MB/day) |
+| pizza worker | flat since boot | 0.11 MB in 470 s (20 MB/day, normal traffic) |
+| control API | 10.95 MB cumulative | 0.17 MB in 470 s (31 MB/day) |
+| **all processes, 470 s** | ~5 MB every 5 min | **0.29 MB total** |
+
+The e2e worker's cumulative receive was **35.44 MB** before the fix and
+**5.08 MB** after a fresh restart - it now pays for exactly one boot read. Its
+pointer in `startBot()` still runs on every reconnect; only the tree download
+is gone.
+
+The billing metric agrees. Minute-by-minute `sent_bytes_count` before the
+deploy, repeating every 5 minutes:
+
+```
+19:52  3.77 MB     19:58  3.76 MB
+19:53  1.37 MB     19:59  1.75 MB
+19:56  35.1 KB     20:00  191.8 KB
+19:57  35.2 KB     20:01  4.21 MB   <- deploy starts
+```
+
+and after (the 20:02/20:03 burst is the four process restarts):
+
+```
+20:02  16.66 MB   20:08  120.8 KB
+20:03   5.48 MB   20:09   62.8 KB
+20:04   41.3 KB   20:10   39.3 KB
+20:05   36.2 KB   20:11   39.1 KB
+20:06   61.7 KB   20:12   40.5 KB
+20:07  160.7 KB
+```
+
+Residual is **~67 KB/min = ~96 MB/day** against **~3.24 MB/min = 4.67 GB/day**
+before: a **~48x** reduction. What is left is ordinary traffic (heartbeat
+writes, admin dashboard listeners, menu reads), not a poll loop.
+
 ### Measurement caveat (settled)
 
 `gcloud`'s `sent_bytes_count` summed across series reads ~3x higher than the
