@@ -14,7 +14,11 @@ export { processInboundMessage } from './taskqueue/processInboundMessage';
 export { sendOutboundMessage } from './taskqueue/sendOutboundMessage';
 
 // Scheduled Functions (Cron Jobs)
-export { walletGateCheck } from './scheduled/walletGateCheck';
+// walletGateCheck was DELETED in batch 14: it read the legacy (pruned)
+// `businesses/{bid}/outlets/{oid}/billing` node, so it always believed every
+// outlet was disarmed and reopened an armed gate within a minute — while
+// bot-control-api/wallet-watch.js is the real publisher. Never re-add a second
+// writer of `walletGate`.
 export { metaCostPublisher } from './scheduled/metaCostPublisher';
 
 // Callable Functions (Admin/Client)

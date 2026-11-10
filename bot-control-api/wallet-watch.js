@@ -23,9 +23,21 @@
  * 7 MB/min at 10k orders). The mirror is dropped the moment an outlet is
  * disarmed, so no unarmed tenant costs memory.
  *
- * One pass per minute: `outletIndex` + each outlet's `walletBilling` + gate nodes
- * plus one tiny campaigns read per armed outlet. Requires Node >= 22.12 for
- * require(esm) of shared/cost-math.js.
+ * EGRESS (batch 14): `walletBilling` and `outletIndex` are held as one live
+ * listener each instead of being re-read every minute. A pass used to cost 34
+ * `.get()`s (~29 KB measured, of which the payload was only 6.5 KB — the rest
+ * was per-request framing), which was 40% of ALL remaining RTDB traffic and 5x
+ * bad at 100 outlets. Now the initial snapshot is read once and RTDB pushes only
+ * deltas, so a steady-state pass costs a handful of tiny gate reads.
+ *
+ * A failed or slow cache snapshot aborts the pass instead of publishing: an
+ * outlet is never opened because its billing could not be read. This module is
+ * the ONLY writer of `walletGate` (the Cloud Function `walletGateCheck` was
+ * deleted in batch 14 — it read the legacy pruned `outlets/{oid}/billing` node,
+ * so it always considered every outlet disarmed and reopened any armed gate
+ * within a minute).
+ *
+ * Requires Node >= 22.12 for require(esm) of shared/cost-math.js.
  * Self-check: node bot-control-api/wallet-watch.js
  * ============================================================================
  */
@@ -99,6 +111,66 @@ function release(key) {
     try { entry.ref.off('value', entry.onChange); } catch (_) { /* already gone */ }
 }
 
+// ---------------------------------------------------------------------------
+// Root caches: 'walletBilling' | 'outletIndex' -> { data, ready, ref, onChange }
+//
+// Both nodes change only when the platform writes them (a payment, a top-up,
+// an arm switch, a new outlet), so a listener costs one snapshot plus deltas
+// instead of a full re-read every minute. `ready` resolves on the first
+// snapshot; a timeout or listener error rejects it and the pass publishes
+// nothing rather than treating "unknown" as "unarmed".
+// ---------------------------------------------------------------------------
+const caches = new Map();
+
+function ensureCache(db, path) {
+    const hit = caches.get(path);
+    if (hit) return hit;
+
+    const ref = db.ref(path);
+    const entry = { data: null, ref, onChange: null };
+    let resolveFirst, rejectFirst;
+    entry.ready = new Promise((resolve, reject) => { resolveFirst = resolve; rejectFirst = reject; });
+    entry.ready.catch(() => {}); // a caller that stops awaiting must not crash the process
+
+    const timer = setTimeout(() => {
+        releaseCache(path);
+        rejectFirst(new Error(`${path} snapshot timed out`));
+    }, FIRST_SNAPSHOT_MS);
+    if (timer.unref) timer.unref();
+
+    entry.onChange = (snap) => {
+        entry.data = snap.val() || null;
+        clearTimeout(timer);
+        resolveFirst(entry);
+    };
+    caches.set(path, entry);
+    try {
+        ref.on('value', entry.onChange, (err) => {
+            clearTimeout(timer);
+            releaseCache(path);
+            rejectFirst(err || new Error(`${path} listener failed`));
+        });
+    } catch (err) {
+        clearTimeout(timer);
+        releaseCache(path);
+        rejectFirst(err);
+    }
+    return entry;
+}
+
+function releaseCache(path) {
+    const entry = caches.get(path);
+    if (!entry) return;
+    caches.delete(path);
+    try { entry.ref.off('value', entry.onChange); } catch (_) { /* already gone */ }
+}
+
+/** Billing for one outlet out of the cached root (never a per-outlet read). */
+function billingOf(entry, bid, oid) {
+    const root = entry && entry.data;
+    return (root && root[bid] && root[bid][oid]) || null;
+}
+
 /**
  * Recompute + publish one outlet. Writes only when the value actually changes,
  * so N passes a minute cost no quota. Returns the published value.
@@ -108,11 +180,11 @@ function release(key) {
 async function publishWalletGate(admin, bid, oid) {
     const base = `businesses/${bid}/outlets/${oid}`;
     const db = admin.database();
-    const [billingSnap, gateSnap] = await Promise.all([
-        db.ref(`walletBilling/${bid}/${oid}`).get(),
+    const [billingEntry, gateSnap] = await Promise.all([
+        ensureCache(db, 'walletBilling').ready,
         db.ref(`${base}/walletGate`).get(),
     ]);
-    const billing = billingSnap.val() || null;
+    const billing = billingOf(billingEntry, bid, oid);
 
     let next = '';
     let balance = null;
@@ -142,8 +214,8 @@ async function publishWalletGate(admin, bid, oid) {
 
 /** One pass over every known outlet. Never throws out of a single outlet. */
 async function pass(admin) {
-    const snap = await admin.database().ref('outletIndex').get();
-    const index = snap.val() || {};
+    const indexEntry = await ensureCache(admin.database(), 'outletIndex').ready;
+    const index = indexEntry.data || {};
     const seen = new Set();
     for (const [oid, meta] of Object.entries(index)) {
         const bid = typeof meta === 'string' ? meta : (meta && meta.bid);
@@ -214,15 +286,23 @@ if (require.main === module) {
     (async () => {
         await pass(fake.admin);
         assert.equal(fake.tree.businesses.b.outlets.o.walletGate, undefined, 'healthy armed outlet gets no gate node');
-        assert.equal(fake.count.on, 1, 'one orders listener for the armed outlet');
-        assert.equal(fake.count.onPaths.includes(ordersPath), true, 'the listener is on the armed outlet orders');
+        // two root caches (walletBilling, outletIndex) + one orders mirror
+        assert.equal(fake.count.on, 3, 'two root caches + one orders listener, nothing per-outlet');
+        assert.equal(fake.count.onPaths.includes('walletBilling'), true, 'walletBilling is held as a listener');
+        assert.equal(fake.count.onPaths.includes('outletIndex'), true, 'outletIndex is held as a listener');
+        assert.equal(fake.count.onPaths.includes(ordersPath), true, 'the orders mirror is on the armed outlet');
         assert.equal(fake.count.downloadedOrders, 1, 'orders downloaded once');
 
         const getsAfterFirst = fake.count.gets;
+        const pathsAfterFirst = fake.count.getPaths.length;
         await pass(fake.admin);
-        assert.equal(fake.count.on, 1, 'second pass does not re-attach the listener');
-        // outletIndex + (armed: billing + gate + campaigns) + (demo: billing + gate). No orders read.
-        assert.equal(fake.count.gets - getsAfterFirst, 6, 'second pass reads only the small nodes');
+        assert.equal(fake.count.on, 3, 'second pass does not re-attach any listener');
+        // Only 2 gate reads + 1 campaigns read: no walletBilling, no outletIndex, no orders.
+        assert.equal(fake.count.gets - getsAfterFirst, 3, 'second pass reads only the gate nodes + campaigns');
+        const passTwoPaths = fake.count.getPaths.slice(pathsAfterFirst).join(' ');
+        assert.equal(passTwoPaths.includes('walletBilling'), false, 'no per-outlet billing read');
+        assert.equal(passTwoPaths.includes('outletIndex'), false, 'no outletIndex read');
+        assert.equal(passTwoPaths.includes('/orders'), false, 'no orders read');
         assert.equal(fake.count.downloadedOrders, 1, 'second pass downloads no orders');
 
         // a new order arrives -> RTDB pushes it -> the next pass bills it from memory
@@ -244,15 +324,27 @@ if (require.main === module) {
 
         // disarm -> gate removed, mirror released
         fake.tree.walletBilling.b.o.wallet.enforce = false;
+        fake.push('walletBilling');
         await pass(fake.admin);
         assert.equal(fake.tree.businesses.b.outlets.o.walletGate, undefined, 'disarming removes the gate');
-        assert.equal(fake.count.listeners(), 0, 'disarming releases the orders listener');
+        assert.equal(fake.count.ordersListeners(), 0, 'disarming releases the orders listener');
+        assert.equal(fake.count.listeners(), 2, 'the two root caches stay attached (they are shared)');
 
         // demo is never watched even when someone arms it
         fake.tree.walletBilling['foodhubbie-demo'] = { demo: { wallet: { enforce: true } } };
+        fake.push('walletBilling');
         await pass(fake.admin);
         assert.equal(fake.tree.businesses['foodhubbie-demo'].outlets.demo.walletGate, undefined, 'demo never gated');
-        assert.equal(fake.count.listeners(), 0, 'demo never watched');
+        assert.equal(fake.count.ordersListeners(), 0, 'demo never watched');
+
+        // a cached billing node must actually arm the outlet back (delta, not re-read)
+        fake.tree.walletBilling.b.o.wallet.enforce = true;
+        fake.push('walletBilling');
+        await pass(fake.admin);
+        assert.equal(fake.count.ordersListeners(), 1, 're-arming from a cached delta attaches the orders mirror again');
+        const beforeFailedPass = fake.count.gets;
+        await pass(fake.admin);
+        assert.equal(fake.count.gets - beforeFailedPass, 3, 'a steady pass never re-reads billing or the index');
 
         console.log('wallet-watch OK');
         process.exit(0);
@@ -261,7 +353,11 @@ if (require.main === module) {
     /** Minimal RTDB stand-in: get / on / off / set / remove over a plain object. */
     function fakeDb(tree) {
         const listeners = [];
-        const count = { gets: 0, on: 0, onPaths: [], downloadedOrders: 0, listeners: () => listeners.length };
+        const count = {
+            gets: 0, on: 0, onPaths: [], getPaths: [], downloadedOrders: 0,
+            listeners: () => listeners.length,
+            ordersListeners: () => listeners.filter((l) => l.path.endsWith('/orders')).length,
+        };
         const getAt = (p) => p.split('/').reduce((n, k) => (n == null ? n : n[k]), tree);
         const setAt = (p, v) => {
             const ks = p.split('/');
@@ -275,7 +371,7 @@ if (require.main === module) {
             database: () => ({
                 ref(path) {
                     return {
-                        async get() { count.gets++; if (path.endsWith('/orders')) count.downloadedOrders++; return snap(getAt(path)); },
+                        async get() { count.gets++; count.getPaths.push(path); if (path.endsWith('/orders')) count.downloadedOrders++; return snap(getAt(path)); },
                         on(_evt, cb) { count.on++; count.onPaths.push(path); if (path.endsWith('/orders')) count.downloadedOrders++; listeners.push({ path, cb }); cb(snap(getAt(path))); },
                         off(_evt, cb) { const i = listeners.findIndex((l) => l.path === path && l.cb === cb); if (i >= 0) listeners.splice(i, 1); },
                         async set(v) { setAt(path, v); },
