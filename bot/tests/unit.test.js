@@ -346,16 +346,15 @@ test('promo heartbeat never reads the whole campaigns node', () => {
 
 // The status watcher wrote botStatus every 30 s and rebuilt its name index by
 // reading the ENTIRE businesses tree each time (~6 MB once outlets have photos).
-// It must build from outletIndex and only fall back to the full tree rarely.
-test('status watcher resolves names without a full businesses read every tick', () => {
+// It must build from outletIndex, and resolve the registry's blind spots (E2E
+// tenants, the demo) from the pm2 process's own spawn env - never from the tree.
+test('status watcher resolves names without ever reading the businesses tree', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(path.join(__dirname, '../../bot-control-api/status-watcher.js'), 'utf8');
     assert.ok(src.includes("ref('outletIndex').get()"), 'index is built from outletIndex');
-    assert.ok(/INDEX_TTL_MS/.test(src) && /FALLBACK_TTL_MS/.test(src), 'both caches exist');
-    const body = src.slice(src.indexOf('async function buildProcessNameIndex'), src.indexOf('async function outletLabel'));
-    assert.ok(!/^  const snap = await admin\.database\(\)\.ref\('businesses'\)/m.test(body),
-        'businesses must not be read unconditionally');
+    assert.ok(!/ref\('businesses'\)/.test(src), 'status-watcher must never read the whole businesses tree');
+    assert.ok(/pm2_env/.test(src), 'unmatched pm2 apps resolve from their spawn env');
 });
 
 // The Functions webhook cannot reach the EC2 Redis (8443 is not exposed), so

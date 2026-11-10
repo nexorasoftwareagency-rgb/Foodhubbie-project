@@ -15,9 +15,10 @@
  *
  * Resolving a PM2 process name back to {bid, oid}: rather than parsing
  * "bot-{bid}-{oid}" apart (unsafe — Firebase push IDs contain dashes, so
- * this is ambiguous to split), this builds a name→{bid,oid} index from
- * Firebase directly, using the same processName() the rest of the API
- * uses to build names in the first place. Exact-match lookup only.
+ * this is ambiguous to split), this builds a name→{bid,oid} index from the
+ * tiny `outletIndex` registry plus each pm2 process's own spawn env, using the
+ * same processName() the rest of the API uses to build names in the first
+ * place. Exact-match lookup only. It must never read the `businesses` tree.
  *
  * PM2 connection: shared with server.js's HTTP routes via pm2-client.js
  * (connect once, never disconnect mid-process) — see that file for why
@@ -49,18 +50,18 @@ function debounce(fn, ms) {
 }
 
 const INDEX_TTL_MS = 5 * 60 * 1000;
-const FALLBACK_TTL_MS = 6 * 60 * 60 * 1000;
 let indexCache = { at: 0, map: null };
-let fallbackAt = 0;
 
 /**
  * Registry-first name index. `outletIndex` is the canonical outlet→business map
  * and is a few KB; the old implementation read the WHOLE `businesses` tree
  * (~6 MB with one outlet's photos) every 30 seconds.
  *
- * Some outlets predate the registry (E2E tenants, the demo), and their bots are
- * real pm2 processes, so names the registry cannot explain are resolved from the
- * full tree at most once every six hours.
+ * Outlets that predate the registry (E2E tenants, the demo) are resolved from
+ * the pm2 process's own spawn env instead: the orchestrator starts every worker
+ * with BUSINESS_ID/OUTLET_ID, so the ids are already in memory on the box.
+ * This used to fall back to reading the full `businesses` tree once every six
+ * hours - a 5 MB download to learn something pm2 already knew.
  */
 async function buildProcessNameIndex(admin, processName, pm2Processes = []) {
   if (indexCache.map && Date.now() - indexCache.at < INDEX_TTL_MS) return indexCache.map;
@@ -73,18 +74,21 @@ async function buildProcessNameIndex(admin, processName, pm2Processes = []) {
     if (bid) index.set(processName(bid, oid), { bid, oid });
   });
 
-  const unmatched = pm2Processes
-    .map((p) => p.name)
-    .filter((name) => name && name.startsWith('bot-') && !index.has(name));
-  if (unmatched.length && Date.now() - fallbackAt > FALLBACK_TTL_MS) {
-    fallbackAt = Date.now();
-    const all = (await admin.database().ref('businesses').get()).val() || {};
-    Object.entries(all).forEach(([bid, biz]) => {
-      Object.keys(biz.outlets || {}).forEach((oid) => {
-        const name = processName(bid, oid);
-        if (!index.has(name)) index.set(name, { bid, oid });
-      });
-    });
+  const unresolved = [];
+  for (const p of pm2Processes) {
+    const name = p && p.name;
+    if (!name || !name.startsWith('bot-') || index.has(name)) continue;
+    const env = (p.pm2_env && p.pm2_env.env) || {};
+    if (env.BUSINESS_ID && env.OUTLET_ID) {
+      index.set(name, { bid: env.BUSINESS_ID, oid: env.OUTLET_ID });
+    } else {
+      unresolved.push(name);
+    }
+  }
+  if (unresolved.length) {
+    // Loud on purpose: a worker with no env ids cannot be mirrored into
+    // botStatus, and resolving it from the database is what we are avoiding.
+    console.warn(`[status-watcher] cannot map pm2 apps to outlets (no BUSINESS_ID/OUTLET_ID): ${unresolved.join(', ')}`);
   }
 
   indexCache = { at: Date.now(), map: index };
@@ -214,4 +218,4 @@ async function startStatusWatcher({ admin, processName, statusOf }) {
   console.log('status-watcher: started — writing live bot status to Firebase, alerting after', process.env.ALERT_OFFLINE_MINUTES || 5, 'min offline.');
 }
 
-module.exports = { startStatusWatcher };
+module.exports = { startStatusWatcher, buildProcessNameIndex };

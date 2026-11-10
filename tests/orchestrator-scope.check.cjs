@@ -133,6 +133,37 @@ const seed = {
     assert.ok(paths.has('businesses/roshani-cake/outlets/cake/whatsapp/status'));
   });
 
-  console.log(failed ? `\n${failed} failed` : `\n${8 + 3} checks passed`);
+  // ------------------------------------------------- 3. status-watcher egress
+  // Its name index resolves unmatched pm2 apps (E2E tenants, the demo) from the
+  // process's own spawn env. It used to read the whole `businesses` tree once
+  // every six hours to learn ids pm2 already had in memory.
+  const { buildProcessNameIndex } = require('../bot-control-api/status-watcher');
+
+  const { admin: watcherAdmin, read: watcherRead } = makeAdmin({
+    outletIndex: { pizza: { bid: 'roshani-pizza' } },
+    businesses: { 'e2e-biz': { outlets: { 'e2e-outlet': {} } } },
+  });
+
+  const pm2Processes = [
+    { name: 'bot-roshani-pizza-pizza', pm2_env: { env: {} } },
+    { name: 'bot-e2e-biz-e2e-outlet', pm2_env: { env: { BUSINESS_ID: 'e2e-biz', OUTLET_ID: 'e2e-outlet' } } },
+    { name: 'bot-no-env-legacy', pm2_env: { env: {} } },
+  ];
+
+  const index = await buildProcessNameIndex(watcherAdmin, (bid, oid) => `bot-${bid}-${oid}`, pm2Processes);
+
+  check('status-watcher: registry row resolves from outletIndex', () => {
+    assert.deepStrictEqual(index.get('bot-roshani-pizza-pizza'), { bid: 'roshani-pizza', oid: 'pizza' });
+  });
+
+  check('status-watcher: unmatched pm2 app resolves from its spawn env', () => {
+    assert.deepStrictEqual(index.get('bot-e2e-biz-e2e-outlet'), { bid: 'e2e-biz', oid: 'e2e-outlet' });
+  });
+
+  check('status-watcher: never reads the whole businesses tree', () => {
+    assert.ok(!watcherRead.includes('businesses'), `reads: ${watcherRead.join(', ')}`);
+  });
+
+  console.log(failed ? `\n${failed} failed` : `\n${8 + 3 + 3} checks passed`);
   process.exit(failed ? 1 : 0);
 })();
