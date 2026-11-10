@@ -560,3 +560,16 @@ LEDGER CLOSE - 20261110-customer-app-p4-settings (Customer APP App Settings P4 e
 - Files: Admin/js/features/customer-app.js, Admin/sw.js, Admin/index.html (business hours, timezone, GST, theme, logo sections), Admin/style.css (error styles, dirty dot, business hours grid, color input).
 - Commits: 24b93a2 pushed to main.
 - Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
+
+LEDGER CLOSE - 20261110-customer-app-p5-audit-role-keyboard (Customer APP P5 audit trail, role gating, keyboard shortcuts, TIER 2, DONE/high)
+- Trigger: Complete the Customer APP sub-tabs with audit trail, role-based access control, and keyboard shortcuts.
+- P5.1 - Audit trail module (Admin/js/features/audit-trail.js): RTDB path businesses/{bid}/outlets/{oid}/auditLog/{pushId} with shape {action, target, targetId, oldValue, newValue, by, byName, at}. Exports: logChange(), loadAuditLog(), renderAuditLog(), auditedUpdate(). Fire-and-forget writes (never blocks UI).
+- P5.2 - Role gating (Admin/js/ui.js): canEditTab() (levels 4/3/2 = full edit), canDeleteTab() (levels 4/3/2 = delete only), roleLabel() (human-readable role name). Cashier/waiter (levels 0/-1) = view only. Manager (level 1) = edit, no delete.
+- P5.3 - Keyboard shortcuts: 1-4 switch sub-tabs, Ctrl+Shift+A opens audit log modal, Escape closes all modals, Ctrl+S saves settings.
+- P5.4 - UI: role badge in sub-tab header showing current user's role; audit log viewer modal with filtered entries; disabled state on edit/delete controls when role doesn't permit.
+- P5.5 - Audit logging on all CRUD: _togglePromoPage, _bulkSetPromoPage, _bulkSetEnabled, _bulkArchive, _bulkDelete, _saveQuickEdit, _archiveOffer, _restoreOffer, _deleteOffer, _duplicateOffer, _toggleVisItem, _bulkVisSetVisible, _bulkVisSetFeatured, _bulkVisHideOutOfStock, _bulkVisShowAll, _saveAppSettings.
+- SW cache: Admin/sw.js CACHE_NAME bumped v5.12.41 â†’ v5.12.42.
+- Verify: node --check passes on customer-app.js, audit-trail.js, ui.js; deployed hosting:admin â†’ live on app.foodhubbie.in; SW v5.12.42 served; all P5 functions confirmed in deployed file via curl.
+- Files: Admin/js/features/customer-app.js, Admin/js/features/audit-trail.js (NEW), Admin/js/ui.js, Admin/sw.js, Admin/index.html (role badge, audit log modal), Admin/style.css (role badge, audit log modal styles).
+- Commits: 2e7d8ba pushed to main.
+- Confidence: HIGH - fix confirmed in deployed file via curl, SW cache version confirmed, syntax checked.
