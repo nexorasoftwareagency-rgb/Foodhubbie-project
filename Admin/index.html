@@ -5549,6 +5549,55 @@
                                 </div>
                                 <p class="text-muted-small mt-2">Customers earn and redeem points in the app.</p>
                             </div>
+
+                            <!-- P4: Business Hours -->
+                            <div class="ca-settings-section" style="grid-column: 1 / -1;">
+                                <label class="ca-field-label">Business Hours (per day)</label>
+                                <div id="businessHoursGrid" style="margin-top:8px;"></div>
+                                <p class="text-muted-small mt-2">Set opening/closing times for each day. Mark days as closed when not operating.</p>
+                            </div>
+
+                            <!-- P4: Timezone -->
+                            <div class="ca-settings-section">
+                                <label class="ca-field-label">Timezone</label>
+                                <select id="caSettingTimezone" class="search-input-group">
+                                    <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                                    <option value="Asia/Mumbai">Asia/Mumbai</option>
+                                    <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                                    <option value="Asia/Singapore">Asia/Singapore</option>
+                                    <option value="UTC">UTC</option>
+                                </select>
+                                <p class="text-muted-small mt-2">Used for business hours and scheduled notifications.</p>
+                            </div>
+
+                            <!-- P4: Tax -->
+                            <div class="ca-settings-section">
+                                <label class="ca-field-label">GST Rate (%)</label>
+                                <input type="number" id="caSettingGSTRate" class="search-input-group" placeholder="5" min="0" max="28">
+                                <p class="text-muted-small mt-2">GST rate applied to app orders.</p>
+                            </div>
+                            <div class="ca-settings-section">
+                                <div class="ca-toggle-wrap">
+                                    <label class="ca-toggle">
+                                        <input type="checkbox" id="caSettingTaxOnDeliveryFee">
+                                        <span class="ca-toggle-slider"></span>
+                                    </label>
+                                    <span style="margin-left:8px;font-size:13px;color:var(--text-secondary);">Apply GST on delivery fee</span>
+                                </div>
+                                <p class="text-muted-small mt-2">When enabled, GST is calculated on delivery fee as well.</p>
+                            </div>
+
+                            <!-- P4: Branding -->
+                            <div class="ca-settings-section">
+                                <label class="ca-field-label">Theme Color</label>
+                                <input type="color" id="caSettingThemeColor" class="search-input-group" value="#E84908">
+                                <p class="text-muted-small mt-2">Primary accent color for your app.</p>
+                            </div>
+                            <div class="ca-settings-section">
+                                <label class="ca-field-label">Logo URL</label>
+                                <input type="url" id="caSettingLogoUrl" class="search-input-group" placeholder="https://...">
+                                <p class="text-muted-small mt-2">Logo image URL shown in app header.</p>
+                            </div>
                         </div>
 
                         <div class="ca-settings-actions mt-16">

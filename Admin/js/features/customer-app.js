@@ -40,6 +40,12 @@ let _allDishesCache = []; // cached dishes from RTDB
 let _allCategoriesCache = []; // cached categories from RTDB
 let _featuredDishIds = new Set(); // dishes marked featured
 
+// P4: App Settings state
+let _settingsDirty = false; // unsaved changes flag
+let _settingsOriginal = {}; // original values for dirty detection
+let _settingsSaveTimer = null; // debounce timer for per-field save
+let _settingsErrors = {}; // field -> error message map
+
 /* ============ MAIN ENTRY ============ */
 
 export function loadCustomerApp() {
@@ -152,6 +158,41 @@ function _wireOnce() {
     $('btnSaveAppSettings')?.addEventListener('click', _saveAppSettings);
     $('btnSaveAppSettingsBottom')?.addEventListener('click', _saveAppSettings);
     $('btnResetAppSettings')?.addEventListener('click', _resetAppSettings);
+
+    // P4: App Settings - dirty tracking + debounced per-field save
+    const settingsFields = [
+        'caSettingStoreName', 'caSettingStoreAddress', 'caSettingStorePhone',
+        'caSettingWhatsAppNumber', 'caSettingGoogleReviewLink', 'caSettingWelcomeMessage',
+        'caSettingDeliveryFee', 'caSettingMinOrder',
+        'caSettingDineIn', 'caSettingDelivery', 'caSettingPickup', 'caSettingLoyalty'
+    ];
+    settingsFields.forEach(id => {
+        const el = $(id);
+        if (!el) return;
+        const event = el.type === 'checkbox' ? 'change' : 'input';
+        el.addEventListener(event, () => {
+            _markSettingsDirty(id);
+            _debounceSaveSettings();
+        });
+    });
+
+    // P4: Ctrl+S to save settings
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 's') {
+            const pane = $('caPaneSettings');
+            if (!pane || pane.classList.contains('hidden')) return;
+            e.preventDefault();
+            _saveAppSettings();
+        }
+    });
+
+    // P4: Beforeunload warning for unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+        if (_settingsDirty) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
 }
 
 /* ============ SUB-TAB SWITCHING ============ */
@@ -196,6 +237,15 @@ function _switchSubTab(sub) {
         if (searchInput) searchInput.value = '';
         _loadVisibility();
     } else if (sub === 'settings') {
+        // Reset P4 state when entering settings tab
+        _settingsDirty = false;
+        _settingsErrors = {};
+        _settingsSaveTimer = null;
+        const saveBtn = $('btnSaveAppSettings');
+        const saveBtnBottom = $('btnSaveAppSettingsBottom');
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Save Settings'; }
+        if (saveBtnBottom) { saveBtnBottom.disabled = true; saveBtnBottom.textContent = 'Save All App Settings'; }
+        _clearAllSettingsErrors();
         _loadAppSettings();
     }
 }
@@ -1205,19 +1255,43 @@ async function _loadAppSettings() {
         const store = snap.val() || {};
         const features = store.appFeatures || {};
 
+        // Store originals for dirty tracking
+        _settingsOriginal = {
+            storeName: store.storeName || '',
+            address: store.address || '',
+            phone: store.phone || '',
+            whatsappNumber: store.whatsappNumber || '',
+            googleReviewLink: store.googleReviewLink || '',
+            appWelcomeMessage: store.appWelcomeMessage || '',
+            deliveryFee: store.deliveryFee != null ? store.deliveryFee : '',
+            minOrder: store.minOrder != null ? store.minOrder : '',
+            dineInEnabled: store.dineInEnabled !== false,
+            deliveryEnabled: store.deliveryEnabled !== false,
+            pickupEnabled: store.pickupEnabled !== false,
+            loyaltyEnabled: store.loyaltyEnabled === true,
+            appFeatures: store.appFeatures || {},
+            businessHours: store.businessHours || {},
+            timezone: store.timezone || 'Asia/Kolkata',
+            gstRate: store.gstRate != null ? store.gstRate : 5,
+            taxOnDeliveryFee: store.taxOnDeliveryFee === true,
+            themeColor: store.themeColor || '#E84908',
+            logoUrl: store.logoUrl || ''
+        };
+        _settingsDirty = false;
+
         const fields = {
-            caSettingStoreName: store.storeName || '',
-            caSettingStoreAddress: store.address || '',
-            caSettingStorePhone: store.phone || '',
-            caSettingWhatsAppNumber: store.whatsappNumber || '',
-            caSettingGoogleReviewLink: store.googleReviewLink || '',
-            caSettingWelcomeMessage: store.appWelcomeMessage || '',
-            caSettingDeliveryFee: store.deliveryFee != null ? store.deliveryFee : '',
-            caSettingMinOrder: store.minOrder != null ? store.minOrder : '',
-            caSettingDineIn: store.dineInEnabled !== false,
-            caSettingDelivery: store.deliveryEnabled !== false,
-            caSettingPickup: store.pickupEnabled !== false,
-            caSettingLoyalty: store.loyaltyEnabled === true
+            caSettingStoreName: _settingsOriginal.storeName,
+            caSettingStoreAddress: _settingsOriginal.address,
+            caSettingStorePhone: _settingsOriginal.phone,
+            caSettingWhatsAppNumber: _settingsOriginal.whatsappNumber,
+            caSettingGoogleReviewLink: _settingsOriginal.googleReviewLink,
+            caSettingWelcomeMessage: _settingsOriginal.appWelcomeMessage,
+            caSettingDeliveryFee: _settingsOriginal.deliveryFee,
+            caSettingMinOrder: _settingsOriginal.minOrder,
+            caSettingDineIn: _settingsOriginal.dineInEnabled,
+            caSettingDelivery: _settingsOriginal.deliveryEnabled,
+            caSettingPickup: _settingsOriginal.pickupEnabled,
+            caSettingLoyalty: _settingsOriginal.loyaltyEnabled
         };
         Object.entries(fields).forEach(([id, val]) => {
             const el = $(id);
@@ -1225,6 +1299,24 @@ async function _loadAppSettings() {
             if (el.type === 'checkbox') el.checked = val === true;
             else el.value = val;
         });
+
+        // New P4 fields
+        $('caSettingTimezone')?.value && ($('caSettingTimezone').value = _settingsOriginal.timezone);
+        $('caSettingGSTRate')?.value && ($('caSettingGSTRate').value = String(_settingsOriginal.gstRate));
+        $('caSettingTaxOnDeliveryFee')?.checked && ($('caSettingTaxOnDeliveryFee').checked = _settingsOriginal.taxOnDeliveryFee === true);
+        $('caSettingThemeColor')?.value && ($('caSettingThemeColor').value = _settingsOriginal.themeColor);
+        $('caSettingLogoUrl')?.value && ($('caSettingLogoUrl').value = _settingsOriginal.logoUrl);
+
+        // Business hours grid
+        _renderBusinessHours(_settingsOriginal.businessHours);
+
+        // Update save button state
+        const saveBtn = $('btnSaveAppSettings');
+        const saveBtnBottom = $('btnSaveAppSettingsBottom');
+        if (saveBtn) saveBtn.disabled = true;
+        if (saveBtnBottom) saveBtnBottom.disabled = true;
+        _updateSettingsDirtyUI();
+
     } catch (e) {
         console.error('[Customer APP] Load settings error:', e);
         showToast('Could not load app settings', 'error');
@@ -1233,6 +1325,15 @@ async function _loadAppSettings() {
 
 async function _saveAppSettings() {
     try {
+        // Validate all fields first
+        const errors = _validateSettings();
+        _settingsErrors = errors;
+        _renderSettingsErrors();
+        if (Object.keys(errors).length > 0) {
+            showToast('Please fix the errors above before saving.', 'warning');
+            return;
+        }
+
         const store = {
             storeName: $('caSettingStoreName')?.value || '',
             address: $('caSettingStoreAddress')?.value || '',
@@ -1246,25 +1347,218 @@ async function _saveAppSettings() {
             deliveryEnabled: $('caSettingDelivery')?.checked === true,
             pickupEnabled: $('caSettingPickup')?.checked === true,
             loyaltyEnabled: $('caSettingLoyalty')?.checked === true,
+            appFeatures: {
+                onlineOrdering: $('caSettingDineIn')?.checked === true, // keep in sync
+                tableBooking: $('caSettingTableBooking')?.checked === true,
+                promoPage: $('caSettingPromoPage')?.checked === true,
+                loyalty: $('caSettingLoyalty')?.checked === true
+            },
+            timezone: $('caSettingTimezone')?.value || 'Asia/Kolkata',
+            gstRate: $('caSettingGSTRate')?.value ? Number($('caSettingGSTRate').value) : 5,
+            taxOnDeliveryFee: $('caSettingTaxOnDeliveryFee')?.checked === true,
+            themeColor: $('caSettingThemeColor')?.value || '#E84908',
+            logoUrl: $('caSettingLogoUrl')?.value || '',
+            businessHours: _collectBusinessHours(),
             updatedAt: Date.now()
         };
         await update(Outlet.ref('settings/Store'), store);
+        _settingsDirty = false;
+        _settingsOriginal = { ...store };
+        _settingsErrors = {};
+        _renderSettingsErrors();
+        _updateSettingsDirtyUI();
         showToast('App settings saved', 'success');
     } catch (e) {
         showToast('Save failed: ' + (e?.message || e), 'error');
     }
 }
 
+/* ============ P4: SETTINGS VALIDATION & DIRTY TRACKING ============ */
+
+function _markSettingsDirty(fieldId) {
+    _settingsDirty = true;
+    _updateSettingsDirtyUI();
+}
+
+function _debounceSaveSettings() {
+    if (_settingsSaveTimer) clearTimeout(_settingsSaveTimer);
+    _settingsSaveTimer = setTimeout(() => {
+        if (_settingsDirty) {
+            _saveAppSettings();
+        }
+    }, 500);
+}
+
+function _validateSettings() {
+    const errors = {};
+
+    // Store name - required
+    const storeName = ($('caSettingStoreName')?.value || '').trim();
+    if (!storeName) errors.caSettingStoreName = 'Store name is required';
+
+    // Phone - 10 digit Indian mobile
+    const phone = ($('caSettingStorePhone')?.value || '').replace(/\D/g, '');
+    if (phone && !/^[6-9]\d{9}$/.test(phone)) errors.caSettingStorePhone = 'Enter a valid 10-digit mobile number';
+
+    // WhatsApp - 10 digit if provided
+    const wa = ($('caSettingWhatsAppNumber')?.value || '').replace(/\D/g, '');
+    if (wa && !/^[6-9]\d{9}$/.test(wa)) errors.caSettingWhatsAppNumber = 'Enter a valid 10-digit mobile number';
+
+    // Google Review Link - valid URL if provided
+    const reviewLink = ($('caSettingGoogleReviewLink')?.value || '').trim();
+    if (reviewLink) {
+        try { new URL(reviewLink); } catch { errors.caSettingGoogleReviewLink = 'Enter a valid URL'; }
+    }
+
+    // Delivery fee - non-negative number
+    const deliveryFee = $('caSettingDeliveryFee')?.value;
+    if (deliveryFee !== '' && deliveryFee !== null) {
+        const df = Number(deliveryFee);
+        if (isNaN(df) || df < 0) errors.caSettingDeliveryFee = 'Delivery fee must be a non-negative number';
+    }
+
+    // Min order - non-negative number
+    const minOrder = $('caSettingMinOrder')?.value;
+    if (minOrder !== '' && minOrder !== null) {
+        const mo = Number(minOrder);
+        if (isNaN(mo) || mo < 0) errors.caSettingMinOrder = 'Minimum order must be a non-negative number';
+    }
+
+    // GST rate - 0 to 28
+    const gstRate = $('caSettingGSTRate')?.value;
+    if (gstRate !== '' && gstRate !== null) {
+        const gr = Number(gstRate);
+        if (isNaN(gr) || gr < 0 || gr > 28) errors.caSettingGSTRate = 'GST rate must be between 0 and 28';
+    }
+
+    return errors;
+}
+
+function _renderSettingsErrors() {
+    Object.keys(_settingsErrors).forEach(fieldId => {
+        const el = $(fieldId);
+        const errorMsg = _settingsErrors[fieldId];
+        if (!el) return;
+
+        // Remove existing error
+        const existing = el.parentElement?.querySelector('.ca-field-error');
+        if (existing) existing.remove();
+
+        // Add error styling
+        el.style.borderColor = 'var(--error, #dc2626)';
+        el.style.backgroundColor = '#fef2f2';
+
+        // Add error message
+        const errEl = document.createElement('div');
+        errEl.className = 'ca-field-error';
+        errEl.style.color = 'var(--error, #dc2626)';
+        errEl.style.fontSize = '11px';
+        errEl.style.marginTop = '2px';
+        errEl.textContent = errorMsg;
+        el.parentElement?.appendChild(errEl);
+    });
+
+    // Clear errors for fields without errors
+    document.querySelectorAll('.ca-field-error').forEach(el => {
+        const fieldId = el.previousElementSibling?.id;
+        if (fieldId && !_settingsErrors[fieldId]) {
+            el.remove();
+            const input = el.previousElementSibling;
+            if (input) {
+                input.style.borderColor = '';
+                input.style.backgroundColor = '';
+            }
+        }
+    });
+}
+
+function _clearAllSettingsErrors() {
+    document.querySelectorAll('.ca-field-error').forEach(el => el.remove());
+    document.querySelectorAll('#caSettingStoreName, #caSettingStorePhone, #caSettingWhatsAppNumber, #caSettingGoogleReviewLink, #caSettingDeliveryFee, #caSettingMinOrder, #caSettingGSTRate').forEach(el => {
+        el.style.borderColor = '';
+        el.style.backgroundColor = '';
+    });
+}
+
+function _updateSettingsDirtyUI() {
+    const saveBtn = $('btnSaveAppSettings');
+    const saveBtnBottom = $('btnSaveAppSettingsBottom');
+    if (!saveBtn || !saveBtnBottom) return;
+
+    if (_settingsDirty) {
+        saveBtn.disabled = false;
+        saveBtnBottom.disabled = false;
+        saveBtn.textContent = 'Save Settings (unsaved)';
+        saveBtnBottom.textContent = 'Save All App Settings (unsaved)';
+    } else {
+        saveBtn.disabled = true;
+        saveBtnBottom.disabled = true;
+        saveBtn.textContent = 'Save Settings';
+        saveBtnBottom.textContent = 'Save All App Settings';
+    }
+}
+
+function _renderBusinessHours(hours = {}) {
+    const grid = $('businessHoursGrid');
+    if (!grid) return;
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">';
+    days.forEach((day, i) => {
+        const dayData = hours[day] || { open: '09:00', close: '22:00', closed: false };
+        html += `
+            <div style="border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:10px;background:var(--bg,#fff);">
+                <div style="font-weight:600;font-size:13px;color:var(--text-primary);margin-bottom:6px;">${dayLabels[i]}</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <label style="font-size:11px;color:var(--text-secondary);margin-right:6px;">Open</label>
+                    <input type="time" id="bh_${day}_open" value="${dayData.open || '09:00'}" style="flex:1;font-size:12px;padding:4px;border:1px solid var(--border,#e5e7eb);border-radius:4px;">
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                    <label style="font-size:11px;color:var(--text-secondary);margin-right:6px;">Close</label>
+                    <input type="time" id="bh_${day}_close" value="${dayData.close || '22:00'}" style="flex:1;font-size:12px;padding:4px;border:1px solid var(--border,#e5e7eb);border-radius:4px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label class="ca-toggle" style="font-size:11px;">
+                        <input type="checkbox" id="bh_${day}_closed" ${dayData.closed ? 'checked' : ''}>
+                        <span class="ca-toggle-slider"></span>
+                        Closed
+                    </label>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    grid.innerHTML = html;
+    // Wire change listeners for dirty tracking
+    days.forEach(day => {
+        $('bh_' + day + '_open')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); _debounceSaveSettings(); });
+        $('bh_' + day + '_close')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); _debounceSaveSettings(); });
+        $('bh_' + day + '_closed')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); _debounceSaveSettings(); });
+    });
+}
+
+function _collectBusinessHours() {
+    const hours = {};
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    days.forEach(day => {
+        const open = $(`bh_${day}_open`)?.value || '09:00';
+        const close = $(`bh_${day}_close`)?.value || '22:00';
+        const closed = $(`bh_${day}_closed`)?.checked === false ? false : $(`bh_${day}_closed`)?.checked === true;
+        hours[day] = { open, close, closed };
+    });
+    return hours;
+}
+
 function _resetAppSettings() {
     showConfirm('Reset all app settings to defaults? This cannot be undone.', 'Reset App Settings')
         .then(ok => {
             if (!ok) return;
-            // Reset form fields to sensible defaults
-            $('caSettingStoreName')?.value && ($('caSettingStoreName').value = '');
-            $('caSettingDineIn')?.checked && ($('caSettingDineIn').checked = false);
-            $('caSettingDelivery')?.checked && ($('caSettingDelivery').checked = false);
-            $('caSettingPickup')?.checked && ($('caSettingPickup').checked = false);
-            $('caSettingLoyalty')?.checked && ($('caSettingLoyalty').checked = false);
-            showToast('Form reset. Click Save to apply defaults.', 'info');
+            _settingsDirty = false;
+            _settingsErrors = {};
+            _renderSettingsErrors();
+            _updateSettingsDirtyUI();
+            _loadAppSettings();
+            showToast('Settings reset to loaded values.', 'info');
         });
 }
+

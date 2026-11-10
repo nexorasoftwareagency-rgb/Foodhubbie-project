@@ -12436,3 +12436,50 @@ body.setup-mode .setup-hide {
 
 /* ===== P3: Preview Modal ===== */
 #visPreviewModal.hidden { display: none; }
+
+/* ===== P4: Settings Validation & Dirty State ===== */
+.ca-field-error {
+    color: var(--error, #dc2626);
+    font-size: 11px;
+    margin-top: 2px;
+}
+.ca-settings-section input:invalid,
+.ca-settings-section textarea:invalid,
+.ca-settings-section select:invalid {
+    border-color: var(--error, #dc2626);
+    background-color: #fef2f2;
+}
+.ca-settings-actions .btn-primary {
+    position: relative;
+}
+.ca-settings-actions .btn-primary::after {
+    content: '';
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 10px;
+    height: 10px;
+    background: var(--error, #dc2626);
+    border-radius: 50%;
+    border: 2px solid var(--bg, #fff);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.ca-settings-actions .btn-primary.dirty::after {
+    opacity: 1;
+}
+
+/* ===== P4: Business Hours Grid ===== */
+#businessHoursGrid {
+    margin-top: 8px;
+}
+
+/* ===== P4: Color Input ===== */
+input[type="color"] {
+    border: none;
+    background: none;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    padding: 0;
+}
