@@ -93,6 +93,27 @@ test('outlet-resolution: canonical outletIndex beats a duplicate outlet id', asy
     assert.strictEqual(helpers.resolveBusinessIdFor('e2e-outlet'), 'e2e-biz-test', 'unregistered outlets still resolve by scan');
 });
 
+test('outlet-resolution: reverse index is built at most once per process', async () => {
+    // startBot() calls the initializer at its top and startBot() re-runs on
+    // every reconnect, so a dead Baileys socket re-read the whole `businesses`
+    // tree each time (5.06 MB per ~5 min = ~1.5 GB/day live on 2026-11-10).
+    // Order-independent: whatever the first call decided, repeats must not read.
+    const fakeDb = { ref: () => ({ once: async () => ({ val: () => null }) }) };
+    await helpers.initializeOutletBusinessIndex(fakeDb);
+    const reads = [];
+    const countingDb = {
+        ref: (p) => ({
+            once: async () => {
+                reads.push(p);
+                return { val: () => null };
+            }
+        })
+    };
+    await helpers.initializeOutletBusinessIndex(countingDb);
+    await helpers.initializeOutletBusinessIndex(countingDb);
+    assert.deepStrictEqual(reads, [], 'no `businesses` re-read after the first build');
+});
+
 test('promotions: the app Offers switch wins both ways', async () => {
     const { hasPromoConsent } = require('../promotions');
     const fakeDb = (offers, consent) => ({

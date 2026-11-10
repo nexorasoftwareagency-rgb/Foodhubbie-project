@@ -25,6 +25,13 @@ const BUSINESS_BY_OUTLET = { pizza: 'roshani-pizza', cake: 'roshani-cake' };
 // In-memory reverse index for O(1) outlet -> businessId lookup
 // Populated at startup via initializeOutletBusinessIndex
 const outletToBusinessIdCache = new Map();
+// EGRESS (2026-11-10): the index maps outlet -> businessId, which does not
+// change while the process lives, but startBot() calls the initializer at its
+// top and startBot() re-runs on every reconnect. A dead Baileys socket that
+// reconnects every ~5 minutes therefore re-downloaded the WHOLE `businesses`
+// tree (5.06 MB on 2026-11-10, ~1.5 GB/day, the ₹469 RTDB bill) for a lookup
+// table it already had. Built at most once per process.
+let indexInitialized = false;
 
 function resolveBusinessId() {
     return resolveBusinessIdFor(resolveOutletId());
@@ -99,8 +106,14 @@ function resolveBusinessIdFor(outletId) {
     return DEFAULT_BUSINESS_ID;
 }
 
-/** Initialize reverse index from Firebase — call once at startup */
+/** Initialize reverse index from Firebase — call once at startup.
+ *
+ *  Idempotent on purpose: `startBot()` calls this at its top and startBot()
+ *  re-runs on every reconnect, so an unguarded version re-read the entire
+ *  `businesses` tree once per reconnect. The flag is set only after a
+ *  successful build, so a failed first attempt can still be retried. */
 async function initializeOutletBusinessIndex(db) {
+    if (indexInitialized) return;
     const [businessesSnap, indexSnap] = await Promise.all([
         db.ref('businesses').once('value'),
         db.ref('outletIndex').once('value').catch(() => null)
@@ -124,6 +137,7 @@ async function initializeOutletBusinessIndex(db) {
         }
     }
     console.log(`[outlet-resolution] Initialized reverse index with ${outletToBusinessIdCache.size} outlets`);
+    indexInitialized = true;
 }
 
 module.exports = {
