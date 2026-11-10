@@ -2,7 +2,9 @@
  * WHATSAPP BOT TRANSPORT LAYER
  * Two interchangeable transports behind the same Baileys-style `sock` interface:
  *  - 'baileys' : WhatsApp Web (real phone number, QR pairing)
- *  - 'meta'    : Meta WhatsApp Cloud API (webhook receive via Redis, send via Graph API)
+ *  - 'meta'    : Meta WhatsApp Cloud API (webhook receive via the RTDB
+ *                `webhookInbox` queue, or Redis pub/sub from the EC2
+ *                webhook-server until that is retired; send via Graph API)
  * ONLY ONE transport is active per outlet at a time. Mode is set in Firebase
  * `bot/{outlet}/transport` (Supreme Admin control) or env BOT_TRANSPORT.
  */
@@ -98,7 +100,49 @@ async function recordMetaCost(to, category) {
 function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
   const events = {};
   let subscriber;
+  let inboxRef = null;
+  let inboxHandler = null;
   let started = false;
+
+  // An entry older than this is not worth replaying: Meta retries a webhook for
+  // ~7 days, and a 6-hour-old "menu" tap has no value. Bounds queue catch-up.
+  const MAX_INBOX_AGE_MS = 30 * 60 * 1000;
+
+  /** Normalize a Cloud-API message into the Baileys upsert the bot understands.
+   *  Shared by both inbound transports (RTDB queue and Redis pub/sub). */
+  function dispatchInbound(msg) {
+    try {
+      if (!msg || !msg.from) return;
+      const isText = !!msg.text?.body;
+      const isLocation = msg.type === 'location' || !!msg.location;
+      if (!isText && !isLocation) return;
+      let message;
+      if (isLocation) {
+        const loc = msg.location || {};
+        message = {
+          locationMessage: {
+            degreesLatitude: parseFloat(loc.latitude),
+            degreesLongitude: parseFloat(loc.longitude)
+          }
+        };
+        console.log(`[META-TRANSPORT] Inbound location from ${msg.from}: ${loc.latitude},${loc.longitude}`);
+      } else {
+        message = { conversation: String(msg.text.body) };
+        console.log(`[META-TRANSPORT] Inbound from ${msg.from}: "${String(msg.text.body).slice(0, 60)}"`);
+      }
+      const upsert = {
+        type: 'notify',
+        messages: [{
+          key: { remoteJid: formatJid(msg.from), id: msg.id || `${Date.now()}`, fromMe: false },
+          message,
+          pushName: msg.pushName || ''
+        }]
+      };
+      if (events['messages.upsert']) events['messages.upsert'](upsert);
+    } catch (e) {
+      console.error('[META-TRANSPORT] Inbound processing error:', e.message);
+    }
+  }
 
   const sock = {
     ws: { isOpen: true, isClosed: false, isClosing: false },
@@ -193,50 +237,59 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
     async start() {
       if (started) return sock;
       started = true;
-      const redis = require('redis');
-      subscriber = redis.createClient({ url: redisUrl });
-      const businessId = resolveBusinessIdFor(outlet);
-      const channel = `bot-inbox:${businessId}:${outlet}`;
-      await subscriber.connect();
-      await subscriber.subscribe(channel, async (raw) => {
-        try {
-          const msg = JSON.parse(raw);
-          if (!msg || !msg.from) return;
-          const isText = !!msg.text?.body;
-          const isLocation = msg.type === 'location' || !!msg.location;
-          if (!isText && !isLocation) return;
-          let message;
-          if (isLocation) {
-            const loc = msg.location || {};
-            message = {
-              locationMessage: {
-                degreesLatitude: parseFloat(loc.latitude),
-                degreesLongitude: parseFloat(loc.longitude)
-              }
-            };
-            console.log(`[META-TRANSPORT] Inbound location on ${channel} from ${msg.from}: ${loc.latitude},${loc.longitude}`);
-          } else {
-            message = { conversation: String(msg.text.body) };
-            console.log(`[META-TRANSPORT] Inbound on ${channel} from ${msg.from}: "${String(msg.text.body).slice(0, 60)}"`);
+
+      // ---- Inbound transport 1: RTDB queue (Firebase Functions webhook) ----
+      // The function cannot reach Redis on EC2 (port 8443 is not open, and Redis
+      // has no password), so it enqueues under the outlet and this listener
+      // drains it. Admin-SDK writes bypass rules; nothing is publicly readable.
+      try {
+        inboxRef = db.ref(resolvePath('webhookInbox', outlet));
+        inboxHandler = inboxRef.on('child_added', (snap) => {
+          const entry = snap.val() || {};
+          try {
+            const age = Date.now() - Number(entry.receivedAt || 0);
+            if (entry.receivedAt && age > MAX_INBOX_AGE_MS) {
+              console.warn(`[META-TRANSPORT] Dropped stale inbox entry (${Math.round(age / 60000)} min old)`);
+              return;
+            }
+            dispatchInbound(entry.message || entry);
+          } finally {
+            snap.ref.remove().catch(() => { });
           }
-          const upsert = {
-            type: 'notify',
-            messages: [{
-              key: { remoteJid: formatJid(msg.from), id: msg.id || `${Date.now()}`, fromMe: false },
-              message,
-              pushName: msg.pushName || ''
-            }]
-          };
-          if (events['messages.upsert']) events['messages.upsert'](upsert);
+        }, (err) => console.error('[META-TRANSPORT] Inbox listener error:', err.message));
+        console.log(`[META-TRANSPORT] Listening on RTDB webhookInbox for ${outlet}`);
+      } catch (e) {
+        console.error('[META-TRANSPORT] Could not attach RTDB inbox:', e.message);
+      }
+
+      // ---- Inbound transport 2: Redis pub/sub (EC2 webhook-server, pre-cutover) ----
+      if (redisUrl) {
+        try {
+          const redis = require('redis');
+          const businessId = resolveBusinessIdFor(outlet);
+          const channel = `bot-inbox:${businessId}:${outlet}`;
+          subscriber = redis.createClient({ url: redisUrl });
+          await subscriber.connect();
+          await subscriber.subscribe(channel, async (raw) => {
+            let msg;
+            try { msg = JSON.parse(raw); } catch { return; }
+            dispatchInbound(msg);
+          });
+          console.log(`[META-TRANSPORT] Listening on Redis ${channel}`);
         } catch (e) {
-          console.error('[META-TRANSPORT] Inbound processing error:', e.message);
+          console.warn(`[META-TRANSPORT] Redis subscribe failed (RTDB inbox still active): ${e.message}`);
         }
-      });
-      console.log(`[META-TRANSPORT] Listening on Redis ${channel}`);
+      }
+
       if (events['connection.update']) events['connection.update']({ connection: 'open' });
       return sock;
     },
     async stop() {
+      if (inboxRef && inboxHandler) {
+        try { inboxRef.off('child_added', inboxHandler); } catch (_) { }
+        inboxRef = null;
+        inboxHandler = null;
+      }
       if (subscriber) { try { await subscriber.quit(); } catch (_) {} subscriber = null; }
       started = false;
     }

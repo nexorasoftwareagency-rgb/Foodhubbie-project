@@ -337,6 +337,25 @@ test('status watcher resolves names without a full businesses read every tick', 
         'businesses must not be read unconditionally');
 });
 
+// The Functions webhook cannot reach the EC2 Redis (8443 is not exposed), so
+// inbound Meta messages arrive on an RTDB queue under the outlet. The Redis
+// subscription must stay until the EC2 webhook-server is retired. Both paths
+// must feed the same dispatcher, and a drained entry must be deleted.
+test('meta transport drains the RTDB webhookInbox and still reads Redis', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '../transport.js'), 'utf8');
+
+    assert.ok(/resolvePath\('webhookInbox', outlet\)/.test(src), 'listens on the tenant webhookInbox');
+    assert.ok(/inboxRef\.on\('child_added'/.test(src), 'drains with child_added');
+    assert.ok(/snap\.ref\.remove\(\)/.test(src), 'deletes each entry after dispatch');
+    assert.ok(/MAX_INBOX_AGE_MS/.test(src), 'drops ancient backlog entries');
+    assert.ok(/subscriber\.subscribe\(channel/.test(src), 'Redis pub/sub kept for the EC2 webhook');
+
+    const start = src.slice(src.indexOf('async start()'), src.indexOf('async stop()'));
+    assert.strictEqual((start.match(/dispatchInbound\(/g) || []).length, 2, 'start() wires exactly two inbound paths');
+});
+
 test('loyalty-math: earn base, two-stage floor, tender caps, bill split', async () => {
     const lm = await import('../../shared/loyalty-math.js');
     // R1 earn base: subtotal − discount; legacy orders fall back to total

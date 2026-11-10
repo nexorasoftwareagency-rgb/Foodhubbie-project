@@ -4,6 +4,7 @@
  */
 
 import admin from 'firebase-admin';
+import { getDatabase, getDatabaseWithUrl } from 'firebase-admin/database';
 import { getSecret } from '../config/secrets';
 
 // Global admin app instance
@@ -11,47 +12,66 @@ let adminApp: admin.app.App | null = null;
 let adminDb: admin.database.Database | null = null;
 let auth: admin.auth.Auth | null = null;
 let messaging: admin.messaging.Messaging | null = null;
+// Cold starts can fan several callers in at once; share one initialization.
+let initPromise: Promise<admin.app.App> | null = null;
 
-/**
- * Initialize Firebase Admin SDK
- * Called once on cold start
- */
-export async function initializeAdmin(): Promise<admin.app.App> {
-  if (adminApp) return adminApp;
+/** FIREBASE_DATABASE_URL is bound as an env var (declared in the function's
+ *  `secrets` list), which avoids a Secret Manager round-trip per cold start. */
+async function resolveDatabaseUrl(): Promise<string | undefined> {
+  const fromEnv = (process.env.FIREBASE_DATABASE_URL || '').trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const fromSecret = (await getSecret('FIREBASE_DATABASE_URL')).trim();
+    return fromSecret || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function doInitialize(): Promise<admin.app.App> {
+  const databaseUrl = await resolveDatabaseUrl();
 
   try {
     adminApp = admin.app();
-    return adminApp;
   } catch {
-    // App doesn't exist yet, create it
+    adminApp = null; // no default app yet (local/emulator) — create one below
   }
 
-  const databaseUrl = await getSecret('FIREBASE_DATABASE_URL');
-  
-  if (!databaseUrl) {
-    // Return a mock app for build/deploy without secrets
-    adminApp = {
-      database: () => ({ ref: () => ({ once: () => Promise.resolve({ val: () => null }) }) }),
-      auth: () => ({}),
-      messaging: () => ({}),
-    } as any;
-    return adminApp as admin.app.App;
+  if (!adminApp) {
+    adminApp = admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+      ...(databaseUrl ? { databaseURL: databaseUrl } : {}),
+    });
   }
 
-  adminApp = admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    databaseURL: databaseUrl,
-  });
-
-  adminDb = adminApp.database();
+  // Cloud Functions pre-creates the default app, so taking the `admin.app()`
+  // branch is the NORMAL path — every handle must be wired here, not only on
+  // the create branch. (Bug fixed 2026-11-10: this branch returned early, so
+  // adminDb stayed null and getDB() threw on every cold start.)
+  adminDb = databaseUrl ? getDatabaseWithUrl(databaseUrl, adminApp) : getDatabase(adminApp);
   auth = adminApp.auth();
   messaging = adminApp.messaging();
 
-  // Enable offline persistence for Admin SDK (not needed but good practice)
-  // adminDb.enableLogging(false); // Set to true for debugging
-
-  console.log('[Admin] Firebase Admin SDK initialized', { databaseUrl });
+  console.log('[Admin] Firebase Admin SDK initialized', {
+    projectId: adminApp.options.projectId || process.env.GCLOUD_PROJECT,
+    databaseUrl: databaseUrl || '(from app config)',
+  });
   return adminApp;
+}
+
+/**
+ * Initialize Firebase Admin SDK
+ * Called once on cold start; safe to call concurrently.
+ */
+export function initializeAdmin(): Promise<admin.app.App> {
+  if (adminApp && adminDb) return Promise.resolve(adminApp);
+  if (!initPromise) {
+    initPromise = doInitialize().catch((err) => {
+      initPromise = null;
+      throw err;
+    });
+  }
+  return initPromise;
 }
 
 /**

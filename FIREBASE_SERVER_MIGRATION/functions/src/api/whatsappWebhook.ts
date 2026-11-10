@@ -11,47 +11,20 @@
  *       4. phoneNumberIndex/{phoneNumberId} → Redis bot-inbox:{bid}:{oid}
  *       5. coexistence (origin.type === 'business_app') → record on the outlet's whatsapp/coexistence
  *
- * NOTE: Redis is expected to be reachable (REDIS_URL, e.g. rediss://...). The webhook-server
- * was written for a co-located Redis on EC2; from GCP a TLS+AUTH bridge is required — see
- * docs/PLAN-SINGLE-WABA.md. Until the bridge exists, set SHADOW_INBOX=true to mirror every
- * routed message into RTDB at webhookShadow/{bid}/{oid}/{pushId} instead of Redis.
+ * NOTE: the bot runs on EC2. This function cannot reach its Redis (port 8443 is
+ * not exposed and Redis has no password), so it enqueues each routed message
+ * under `businesses/{bid}/outlets/{oid}/webhookInbox`; the bot's meta transport
+ * drains that queue with a child_added listener. See bot/transport.js start().
  */
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import crypto from 'crypto';
 import { initializeAdmin, getDB } from '../shared/firebase/admin';
-import { getSecret as getSecretSafe } from '../shared/config/secrets';
 
 initializeAdmin().catch(err => {
   logger.error('[Webhook] Admin init failed', { error: err.message });
 });
-
-// Shared Redis client (created lazily; functions are ephemeral so reconnect each cold start)
-let redisClient: any = null;
-let redisReady = false;
-
-async function getRedis() {
-  if (redisClient) return redisClient;
-  const url = process.env.REDIS_URL;
-  if (!url) return null;
-  try {
-    const redis = require('redis');
-    redisClient = redis.createClient({ url, tls: { rejectUnauthorized: false } });
-    redisClient.on('error', (err: any) => {
-      redisReady = false;
-      logger.error('[Webhook] Redis error', { error: err.message });
-    });
-    redisClient.on('ready', () => { redisReady = true; });
-    await redisClient.connect();
-    redisReady = true;
-    logger.info('[Webhook] Redis connected');
-    return redisClient;
-  } catch (err: any) {
-    logger.error('[Webhook] Redis connect failed', { error: err.message });
-    return null;
-  }
-}
 
 function safeCompare(a: Buffer, b: Buffer): boolean {
   if (a.length !== b.length) return false;
@@ -59,24 +32,30 @@ function safeCompare(a: Buffer, b: Buffer): boolean {
 }
 
 /**
- * Publish to the outlet's bot inbox channel — or shadow-inbox to RTDB if Redis is down.
+ * Verify Meta's X-Hub-Signature-256 header against the bytes Meta actually sent.
+ * `req.rawBody` is populated by the Functions runtime; re-serializing req.body
+ * changes key order/whitespace and fails verification on real traffic.
  */
-async function publishInbox(bid: string, oid: string, message: any, raw: string): Promise<void> {
-  const redis = await getRedis();
-  if (redis && redisReady) {
-    await redis.publish(`bot-inbox:${bid}:${oid}`, raw);
-    logger.info('[Webhook] Routed message to bot-inbox', { bid, oid, messageId: message?.id });
-    return;
-  }
-  // Shadow inbox — mirror into RTDB so nothing is silently lost while Redis is unreachable
+function signatureMatches(appSecret: string, rawBody: Buffer, header: string): boolean {
+  const provided = String(header || '').trim().replace(/^sha256=/i, '');
+  if (!/^[0-9a-f]{64}$/i.test(provided)) return false;
+  const expected = crypto.createHmac('sha256', appSecret).update(rawBody).digest();
+  return safeCompare(Buffer.from(provided, 'hex'), expected);
+}
+
+/**
+ * Enqueue onto the outlet's webhookInbox. The bot's meta transport drains it
+ * with a child_added listener and deletes each entry after dispatching, so a
+ * bot outage leaves a bounded backlog instead of dropping messages.
+ */
+async function enqueueInbox(bid: string, oid: string, message: any): Promise<void> {
   const db = getDB();
-  await db.ref(`webhookShadow/${bid}/${oid}`).push({
+  await db.ref(`businesses/${bid}/outlets/${oid}/webhookInbox`).push({
     message,
-    raw,
-    shadowedAt: Date.now(),
-    reason: 'redis_unavailable',
+    receivedAt: Date.now(),
+    source: 'meta-webhook',
   });
-  logger.warn('[Webhook] Redis unavailable — shadowed to RTDB webhookShadow', { bid, oid, messageId: message?.id });
+  logger.info('[Webhook] Queued to webhookInbox', { bid, oid, messageId: message?.id });
 }
 
 export const whatsappWebhook = onRequest({
@@ -88,7 +67,7 @@ export const whatsappWebhook = onRequest({
   maxInstances: 10,
   concurrency: 10,
   ingressSettings: 'ALLOW_ALL',
-  secrets: ['WA_VERIFY_TOKEN', 'META_APP_SECRET', 'REDIS_URL', 'FIREBASE_DATABASE_URL'],
+  secrets: ['WA_VERIFY_TOKEN', 'META_APP_SECRET', 'FIREBASE_DATABASE_URL'],
   labels: { 'critical-path': 'true' },
 }, async (req, res) => {
   // ---------- GET: webhook verification ----------
@@ -96,8 +75,13 @@ export const whatsappWebhook = onRequest({
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
-    const verifyToken = 'test-verify-token';
-    logger.info('[Webhook] WA_VERIFY_TOKEN length:', verifyToken.length);
+    const verifyToken = (process.env.WA_VERIFY_TOKEN || '').trim();
+
+    if (!verifyToken) {
+      logger.error('[Webhook] WA_VERIFY_TOKEN is not set — cannot verify Meta');
+      res.sendStatus(500);
+      return;
+    }
 
     if (mode === 'subscribe' && token === verifyToken && typeof challenge === 'string') {
       logger.info('[Webhook] Verified by Meta');
@@ -113,25 +97,22 @@ export const whatsappWebhook = onRequest({
   res.sendStatus(200);
 
   try {
-    const appSecret = process.env.META_APP_SECRET;
+    const appSecret = (process.env.META_APP_SECRET || '').trim();
     if (!appSecret) {
-      logger.error('[Webhook] META_APP_SECRET not set — dropping message (signature verification disabled in EC2 version too)');
+      logger.error('[Webhook] META_APP_SECRET not set — dropping payload');
       return;
     }
 
-    // Signature verification on the RAW body
-    const signature = String(req.headers['x-hub-signature-256'] || '');
-    const raw = JSON.stringify(req.body); // Firebase gives parsed body; webhook-server used rawBody
-    const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(raw).digest('hex');
+    // Signature verification on the RAW body (exactly what Meta signed).
+    const rawBody: Buffer = Buffer.isBuffer(req.rawBody)
+      ? req.rawBody
+      : Buffer.from(JSON.stringify(req.body), 'utf8');
+    if (!Buffer.isBuffer(req.rawBody)) {
+      logger.warn('[Webhook] req.rawBody missing — falling back to re-serialized body');
+    }
 
-    // NOTE: the EC2 webhook-server enforced timing-safe equality on the raw request body.
-    // Firebase Functions re-serializes the JSON, which may differ in key order/whitespace.
-    // For parity we accept either the exact re-serialized body OR the verification is
-    // side-effect free (worst case: Meta keeps re-sending until we pass strict verify).
-    const ok = safeCompare(Buffer.from(expected), Buffer.from(signature));
-    if (!ok) {
-      // Attempt verification against a canonicalized body before giving up
-      logger.warn('[Webhook] Signature mismatch (raw body re-serialization) — dropping', { signaturePrefix: signature.slice(0, 12) });
+    if (!signatureMatches(appSecret, rawBody, String(req.headers['x-hub-signature-256'] || ''))) {
+      logger.warn('[Webhook] Signature mismatch — dropping');
       return;
     }
 
@@ -202,8 +183,8 @@ export const whatsappWebhook = onRequest({
         .catch((err: any) => logger.warn('[COEXISTENCE] record failed', { error: err.message }));
     }
 
-    // ---------- Publish to bot inbox (Redis, or RTDB shadow fallback) ----------
-    await publishInbox(bid, oid, message, JSON.stringify(message));
+    // ---------- Enqueue for the bot (RTDB webhookInbox) ----------
+    await enqueueInbox(bid, oid, message);
   } catch (err: any) {
     logger.error('[Webhook] Processing error', { error: err.message, stack: err.stack });
   }
