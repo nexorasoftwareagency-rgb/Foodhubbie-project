@@ -1200,7 +1200,7 @@ function renderAccount() {
             <label class="onb-label" for="acctPhone">Mobile number</label>
             <div class="onb-phone">
                 <span>+91</span>
-                <input class="onb-input" id="acctPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="98765 43210" value="${esc(draftPhone !== null ? draftPhone : phone)}">
+                <input class="onb-input" id="acctPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="98765 43210" value="${esc(draftPhone !== null ? draftPhone : phone)}">
             </div>
             <span class="acct-input-error" id="acctPhoneError"></span>
             <div class="acct-actions">
