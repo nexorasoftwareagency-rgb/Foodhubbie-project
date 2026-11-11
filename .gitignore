@@ -60,8 +60,10 @@ reference/
 
 # Root screenshots
 *.png
-# ...but real app assets under menu/icons are shipped files
+# ...but real app assets under menu/icons and Admin are shipped files
 !menu/icons/*.png
+!Admin/icon-erp-logo.png
+!Admin/login-bg.png
 
 # Stray root-level copies (actual code lives in Admin/, menu/, etc.)
 /catalog.js
