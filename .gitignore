@@ -214,4 +214,7 @@ bot/outlet-resolution.js
 /loyalty-math.js
 bot/unit.test.js
 
+# One-off migration backups (media/billing dumps; never ship base64 to git).
+backup/
+
 
