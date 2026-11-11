@@ -7,8 +7,9 @@
  * Data path: businesses/{bid}/outlets/{oid}/bot/usage/{IST-date}
  *   { total, order_notification, rider_broadcast, promo, admin_alert, updatedAt }
  *
- * Chats data: businesses/{bid}/outlets/{oid}/chats/{customerId}/meta
- *   { lastTs, unread, phone, name }
+ * Chats data: businesses/{bid}/outlets/{oid}/chatMeta/{customerId}
+ *   { lastTs, unread, phone, name }  — flat mirror; never read `chats` here,
+ *   its message bodies are 96% of the bytes and only a timestamp is needed.
  * ============================================================================
  */
 
@@ -43,7 +44,10 @@ function _countConversationsToday() {
     const todayMs = todayStart.getTime();
     let count = 0;
     for (const [, thread] of Object.entries(_chatsData)) {
-        if (thread.meta?.lastTs >= todayMs) count++;
+        // chatMeta rows are flat ({ lastTs, ... }); the nested chats/{id}/meta
+        // shape is tolerated so this reader never depends on the mirror's age.
+        const ts = thread.lastTs ?? thread.meta?.lastTs;
+        if (ts >= todayMs) count++;
     }
     return count;
 }
@@ -164,7 +168,9 @@ export function mount() {
         _usageData = snap.val();
         _renderAll();
     }, () => {});
-    _chatsUnsub = onValue(Outlet.ref('chats'), (snap) => {
+    // Meta mirror only — this card needs one timestamp per thread, and reading
+    // `chats` would pull every message body (267 KB vs 9 KB) for that.
+    _chatsUnsub = onValue(Outlet.ref('chatMeta'), (snap) => {
         _chatsData = snap.val();
         _renderAll();
     }, () => {});

@@ -20,6 +20,9 @@ jobs:
       - name: Encoding guard (no mojibake / BOM / C1 controls)
         run: node tests/encoding-check.mjs
 
+      - name: Admin query-chain guard (a Reference has no orderByChild/limitToLast)
+        run: node tests/admin-query-chain.check.cjs
+
       - name: Menu cart persistence guard
         run: node tests/menu-cart-refresh.check.cjs
 

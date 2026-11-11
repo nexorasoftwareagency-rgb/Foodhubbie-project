@@ -3,19 +3,25 @@
  * ============================================================================
  * WhatsApp-style conversation viewer for customer<->bot chats.
  *
- * Data:  businesses/{bid}/outlets/{oid}/chats/{customerId}/
- *          meta/     { name, phone, lastTs, lastText, lastDir, unread }
+ * Data:  businesses/{bid}/outlets/{oid}/chatMeta/{customerId}/   <- LIST reads only this
+ *          { name, phone, lastTs, lastText, lastDir, unread }
+ *        businesses/{bid}/outlets/{oid}/chats/{customerId}/
+ *          meta/     same shape (dual-written; still read by cached older shells)
  *          messages/{msgId} { from: 'customer'|'bot', text, ts, type }
  * Written by the bot (bot/chat-log.js). This module is read-only + reply:
  * replies go through the EXISTING `bot/commands` channel
  * (action: SEND_GENERIC_MESSAGE) — no new send path (see bot/index.js:301).
+ *
+ * NEVER listen to `chats` for the thread list: a query there returns every
+ * message body with each row (measured 267 KB vs 9 KB of meta on a live outlet).
+ * Message bodies are bound for the ONE open thread in _bindThreadMessages().
  *
  * conventions: lazy-load via mod('chat'), loadChat()/cleanupChat() exported
  * (switchTab in ui.js), badge in sidebar = total unread across threads.
  * ============================================================================
  */
 
-import { Outlet, onValue, update, push, set, serverTimestamp } from '../firebase.js';
+import { Outlet, query, orderByChild, limitToLast, onValue, update, push, set, serverTimestamp } from '../firebase.js';
 import { escapeHtml } from '../utils.js';
 import { showToast } from '../ui-utils.js';
 import { loadLucide } from '../ui.js';
@@ -25,7 +31,7 @@ import { loadLucide } from '../ui.js';
 // ---------------------------------------------------------------------
 let _listener = null;
 let _listenerOutlet = null;
-let _chatData = {};              // customerId -> { meta, messages: {id: msg} }
+let _chatData = {};              // customerId -> { meta, messages: {id: msg} } (messages only for the open thread)
 let _selectedCustomerId = null;
 let _renderedThreadId = null;
 let _searchTerm = '';
@@ -33,6 +39,8 @@ let _wired = false;
 let _blockedMenusWired = false;
 let _usageUnsub = null;         // bot/usage listener
 let _usageData = null;          // today's usage snapshot
+let _threadUnsub = null;        // messages listener for the ONE open thread
+let _threadBoundId = null;
 
 function _chatRef(sub) { return Outlet.ref(`chats${sub ? '/' + sub : ''}`); }
 
@@ -141,7 +149,7 @@ function _renderThreadList() {
 
     const term = _searchTerm.trim().toLowerCase();
     const threads = Object.entries(_chatData)
-        .map(([id, t]) => ({ id, meta: t.meta || {}, hasMsgs: !!t.messages && Object.keys(t.messages).length > 0 }))
+        .map(([id, t]) => ({ id, meta: t.meta || {} }))
         .filter(t => !term || _displayName(t.id, t.meta).toLowerCase().includes(term) || String(t.meta.phone || '').includes(term))
         .sort((a, b) => (b.meta.lastTs || 0) - (a.meta.lastTs || 0));
 
@@ -249,13 +257,32 @@ function _renderThreadView() {
 // ---------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------
+// Message bodies load for the OPEN thread only. Attaching this to the thread
+// list is what used to make every Admin open cost the whole conversation
+// history — keep it scoped to one thread.
+function _bindThreadMessages(customerId) {
+    if (_threadBoundId === customerId && _threadUnsub) return;
+    if (_threadUnsub) { _threadUnsub(); _threadUnsub = null; }
+    _threadBoundId = customerId;
+    if (!customerId) return;
+    _threadUnsub = onValue(_chatRef(`${customerId}/messages`), (snap) => {
+        const row = _chatData[customerId];
+        if (!row) return;
+        row.messages = snap.val() || {};
+        if (_selectedCustomerId === customerId) _renderThreadView();
+    }, () => {});
+}
+
 async function _openThread(customerId) {
     _selectedCustomerId = customerId;
-    // Clear unread (best-effort — read marker)
+    // Clear unread (best-effort — read marker). chatMeta is the list's source of
+    // truth; chats/{id}/meta is still mirrored for cached older shells.
     if (_chatData[customerId]?.meta?.unread) {
+        update(Outlet.ref(`chatMeta/${customerId}`), { unread: 0 }).catch(() => {});
         update(_chatRef(`${customerId}/meta`), { unread: 0 }).catch(() => {});
         _chatData[customerId].meta.unread = 0;
     }
+    _bindThreadMessages(customerId);
     _renderThreadList();
     _renderThreadView();
 
@@ -357,10 +384,21 @@ export function loadChat() {
     }
     if (!_listener) {
         _listenerOutlet = outlet;
-        // Limit to 50 most recent threads by lastTs (newest first)
-        // Reduces Firebase reads from O(all threads) to O(50) = 90% cost reduction
-        _listener = onValue(_chatRef('').orderByChild('lastTs').limitToLast(50), (snap) => {
-            _chatData = snap.val() || {};
+        // The thread list reads the flat meta mirror, never the threads
+        // themselves. One row here is ~400 B with no message bodies, so this is
+        // 9.4 KB instead of 267 KB on a live outlet. Bodies load per-thread in
+        // _bindThreadMessages(). Needs .indexOn ['lastTs'] in database.rules.json.
+        // NOTE: Outlet.ref() returns a Reference, which has no .orderByChild —
+        // the previous `_chatRef('').orderByChild(...)` threw on every Chat open
+        // and left the list permanently empty. Ordering must go through query().
+        _listener = onValue(query(Outlet.ref('chatMeta'), orderByChild('lastTs'), limitToLast(50)), (snap) => {
+            const metas = snap.val() || {};
+            const next = {};
+            for (const [id, meta] of Object.entries(metas)) {
+                // Keep any messages already loaded for the open thread.
+                next[id] = { meta: meta || {}, messages: _chatData[id]?.messages };
+            }
+            _chatData = next;
             _updateBadges();
             const tab = document.getElementById('tab-chat');
             if (tab && !tab.classList.contains('hidden')) {
@@ -475,6 +513,8 @@ function _renderQR(pair) {
 export function cleanupChat() {
     _selectedCustomerId = null;
     _searchTerm = '';
+    if (_threadUnsub) { _threadUnsub(); _threadUnsub = null; }
+    _threadBoundId = null;
     _stopUsageListener();
     const app = document.getElementById('chatApp');
     if (app) app.classList.remove('chat-conv-open');

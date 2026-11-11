@@ -44,7 +44,7 @@ async function logChatMessage(o) {
             from, text: cleanText, ts, type: 'text'
         });
         // Thread meta — unread only counts customer->bot messages.
-        await db.ref(`${base}/meta`).transaction((cur) => {
+        const applied = await db.ref(`${base}/meta`).transaction((cur) => {
             const meta = cur || {};
             const next = {
                 name: name || meta.name || '',
@@ -56,6 +56,13 @@ async function logChatMessage(o) {
             };
             return next;
         });
+        // Flat meta mirror. The Admin Chat LIST reads only this node (~400 B a
+        // thread); querying `chats` instead drags every message body along —
+        // measured live at 257 KB of messages vs 9.4 KB of meta per Admin open.
+        // Written here because every customer<->bot message is what bumps it.
+        // `chats/{id}/meta` keeps being written for cached older shells.
+        const mirrored = applied && applied.snapshot ? applied.snapshot.val() : null;
+        if (mirrored) await db.ref(resolvePath(`chatMeta/${customerId}`, outlet)).set(mirrored);
     } catch (err) {
         // Best-effort — chat persistence must never break the order flow.
         console.warn(`[CHAT-LOG] write failed (best-effort): ${err.message || err}`);

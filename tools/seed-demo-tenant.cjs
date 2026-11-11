@@ -1465,7 +1465,11 @@ function buildSettings({ rnd, fx }) {
         },
         bot: {
             status: bot.status,
-            [OID]: { pair: bot.pair },
+            // The Admin Chat tab reads `bot/pair` (chat.js _checkBotStatus) and
+            // shows the "Connect Your WhatsApp Bot" overlay unless it is
+            // `connected`. This used to be written as `bot/{oid}/pair`, which
+            // nothing reads, so the public demo hid its own seeded chats.
+            pair: bot.pair,
             usage: bot.usage,
             promotions: bot.promotions,
         },
