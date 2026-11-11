@@ -27,7 +27,7 @@
  * ============================================================================
  */
 
-import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange, query, orderByChild, limitToLast } from '../firebase.js';
+import { Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove, push, runTransaction, isConnected, onConnectionChange, query, orderByChild, limitToLast, startAt } from '../firebase.js';
 import { state } from '../state.js';
 import { showToast, showConfirm, showDeleteConfirm } from '../ui-utils.js';
 import { printOrderReceipt } from './printing.js';
@@ -46,6 +46,11 @@ let _connUnsub = null;
 let _ordersListenerAttached = false;
 let _kdsTickInterval = null;
 let _policeInterval = null;
+
+// Table sessions are read through a bounded window (see _attachListeners).
+let _sessionsLoaded = false;
+let _extraSessions = {};               // sessionId -> value, for linked sessions outside the window
+const _extraSessionUnsubs = new Map(); // sessionId -> unsubscribe
 
 let _tables = {};
 let _sessions = {};
@@ -2682,9 +2687,73 @@ function _exportTablesCsv() {
 }
 
 // ---------------------------------------------------------------------
-// Firebase listeners — exactly 3 listeners total, NEVER one-per-table
-// (matches "Performance Architecture" rule in the spec)
+// Firebase listeners — core listeners only, NEVER one-per-table. The one
+// exception is a table-linked session outside the read window, which is
+// tailed individually and bounded by the floor plan (see below).
 // ---------------------------------------------------------------------
+// ponytail: the old listener downloaded EVERY table session on every write
+// (79.9 KB live and growing forever — FIREBASE_SERVER_MIGRATION/18). Only
+// sessions that can still be rendered are needed: today's (the "Revenue
+// today" KPI spans midnight) plus anything a table still points at.
+// 25h = the 24h maximum session lifetime + a recovery margin.
+const SESSION_WINDOW_MS = 25 * 60 * 60 * 1000;
+
+/** Re-apply reconciled sessions after a window snapshot replaces _sessions. */
+function _applyExtraSessions() {
+    for (const id of Object.keys(_extraSessions)) {
+        if (!_sessions[id]) _sessions[id] = _extraSessions[id];
+    }
+}
+
+/**
+ * Keep a live tail on every table-linked session the window query did not
+ * return (a bill left open past the window, or a pointer written before this
+ * tab opened). Bounded by the floor plan, never by session history.
+ */
+function _syncExtraSessions() {
+    const linked = new Set();
+    Object.values(_tables).forEach(t => { if (t?.currentSession) linked.add(t.currentSession); });
+
+    for (const [id, unsub] of _extraSessionUnsubs) {
+        if (linked.has(id)) continue;
+        try { unsub(); } catch (_) {}
+        _extraSessionUnsubs.delete(id);
+        delete _extraSessions[id];
+        delete _sessions[id];
+    }
+
+    linked.forEach((id) => {
+        if (_sessions[id] || _extraSessionUnsubs.has(id)) return;
+        const unsub = onValue(_sessRef(id), (snap) => {
+            if (snap.exists()) {
+                _extraSessions[id] = snap.val();
+                _sessions[id] = _extraSessions[id];
+            } else {
+                delete _extraSessions[id];
+                delete _sessions[id];
+            }
+            _renderAll();
+        }, (err) => {
+            console.warn('[Tables] Linked session read failed', id, err?.message || err);
+        });
+        _extraSessionUnsubs.set(id, unsub);
+    });
+}
+
+function _releaseExtraSession(id) {
+    const unsub = _extraSessionUnsubs.get(id);
+    if (!unsub) return;
+    try { unsub(); } catch (_) {}
+    _extraSessionUnsubs.delete(id);
+    delete _extraSessions[id];
+}
+
+function _releaseAllExtraSessions() {
+    for (const unsub of _extraSessionUnsubs.values()) { try { unsub(); } catch (_) {} }
+    _extraSessionUnsubs.clear();
+    _extraSessions = {};
+}
+
 function _attachListeners() {
     if (_tablesListener) { _tablesListener(); _tablesListener = null; }
     if (_sessionsListener) { _sessionsListener(); _sessionsListener = null; }
@@ -2693,6 +2762,7 @@ function _attachListeners() {
 
     _tablesListener = onValue(_tblRef(), (snap) => {
         _tables = snap.val() || {};
+        if (_sessionsLoaded) _syncExtraSessions();
         _renderAll();
     }, (err) => {
         console.error('[Tables] Read error:', err);
@@ -2700,13 +2770,30 @@ function _attachListeners() {
         if (grid) grid.innerHTML = `<div class="offline-placeholder"><i data-lucide="alert-triangle" class="icon-32"></i><h4>Permission denied</h4><p>Could not load table data.</p></div>`;
     });
 
-    _sessionsListener = onValue(_sessRef(), (snap) => {
-        _sessions = snap.val() || {};
-        _renderAll();
-    }, (err) => {
-        console.error('[Tables] Sessions read error:', err);
-        document.getElementById('tblKpiRevenue').textContent = '—';
-    });
+    // Bounded listener: only sessions that can still be shown (see
+    // SESSION_WINDOW_MS). The old whole-node listener re-downloaded the entire
+    // session history on every write and grew without limit.
+    _sessionsListener = onValue(
+        query(_sessRef(), orderByChild('openedAt'), startAt(Date.now() - SESSION_WINDOW_MS)),
+        (snap) => {
+            _sessions = snap.val() || {};
+            // The window owns whatever it returned — drop any duplicate tail.
+            Object.keys(_sessions).forEach(_releaseExtraSession);
+            _sessionsLoaded = true;
+            _applyExtraSessions();
+            _syncExtraSessions();
+            _renderAll();
+        },
+        (err) => {
+            console.error('[Tables] Sessions read error:', err);
+            // A failed query must not blank the floor: linked sessions are
+            // still readable one by one.
+            _sessionsLoaded = true;
+            _syncExtraSessions();
+            const rev = document.getElementById('tblKpiRevenue');
+            if (rev) rev.textContent = '—';
+        }
+    );
 
     // Always attach an /orders listener so KDS status updates
     // (advanceTableOrder) immediately trigger a re-render.
@@ -2755,6 +2842,8 @@ export function cleanupTables() {
     if (_connUnsub) { _connUnsub(); _connUnsub = null; }
     if (_kdsTickInterval) { clearInterval(_kdsTickInterval); _kdsTickInterval = null; }
     if (_policeInterval) { clearInterval(_policeInterval); _policeInterval = null; }
+    _releaseAllExtraSessions();
+    _sessionsLoaded = false;
     _seenRequestIds = null;
     _customerSyncedOrderIds.clear();
     _closeTableDrawer();
