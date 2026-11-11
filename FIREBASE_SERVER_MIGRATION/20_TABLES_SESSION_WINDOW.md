@@ -166,9 +166,17 @@ what the tab rendered before:
 
 ## 8. Deploy
 
-Frontend only (`hosting:admin`); `Admin/sw.js` → `v5.12.46`. `server`/EC2
-unchanged (the `server` branch is fast-forwarded to satisfy the
-`check-server-branch` invariant). Live numbers in `AGENTS.md`.
+Frontend only: `firebase deploy --only hosting:admin`, version
+`27f6963.20261111T120530Z`, `Admin/sw.js` → `v5.12.46`. `server`/EC2 unchanged
+(the `server` branch was fast-forwarded to `27f6963` to satisfy the
+`check-server-branch` invariant).
+
+Live check **11/11** (`f3-live.cjs` against `https://foodhubbie-admins.web.app/demo`):
+the deployed bundle ships `orderByChild("openedAt")` + `startAt` and no
+whole-node `onValue(ref())`; exactly one tableSessions query is issued with
+`{"i":"openedAt","sp":…}` and a 24–26 h window; the floor plan renders all 8
+demo tables; KPIs match the seed (4 sessions / 14 guests); "Revenue today"
+renders; 0 page errors, 0 console errors.
 
 ## 9. Reproduce
 
