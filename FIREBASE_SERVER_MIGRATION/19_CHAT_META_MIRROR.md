@@ -98,7 +98,24 @@ Guards: bot unit **28/28**, twins **8/8**, encoding, query-chain 142 files, rule
 
 Any other order leaves a window where the list is empty (2 before 1), stale (4 before 3), or reads a node that does not exist.
 
-## 8. Reproduce
+## 8. Deployed live (2026-11-11)
+
+Executed in that exact order:
+
+| step | result |
+|---|---|
+| `firebase deploy --only database` | rules released (the `chatMeta` block was already in HEAD via `70dac7d`) |
+| `node tools/backfill-chat-index.cjs --apply` | **27 rows / 10.0 KB** written, read-back **27/27**, re-run reports `24 already correct` (idempotent) |
+| `bash tools/server-deploy.sh` on EC2 | box `4e38e1c → 5532f63`, pm2 2/6/35 restarted, pizza bot **online, baileys**, `[TENANT] outlet=pizza business=roshani-pizza` |
+| `firebase deploy --only hosting:admin` | live version `5532f63.20261111T100628Z`, SW `v5.12.45` |
+
+**Live E2E 18/18** against `https://foodhubbie-admins.web.app/demo` — the same suite that passed locally, unmodified apart from `E2E_URL`: 3 rows from `chatMeta`, body-only markers absent from the WebSocket, per-thread load, unread cleared in both nodes, badge 3 → 1, analytics on the mirror, 0 page errors, chat-list activation **1.9 KB**, fixtures restored.
+
+**The deployed bot writes the mirror.** Ran the real `/var/www/foodhubbie/bot/chat-log.js` on the box against the demo tenant with a throwaway JID: after one customer message and one bot reply the mirror row was `{lastDir:'bot', lastText:'reply from bot', unread:1}`, byte-identical to the nested `chats/9999900001/meta`, with both messages written. Probe thread deleted; `chatMeta` back to its 3 seeded rows.
+
+**The nightly reseed would have undone bug 5b's fix**, so the cron copy was patched too: `/home/ubuntu/demo-seed/tools/seed-demo-tenant.cjs` (cron `30 21 * * *` UTC = 03:00 IST) still wrote `[OID]: { pair: bot.pair }`. Patched to `pair: bot.pair,` with backup `.bak-20261111-chatmeta` and `node --check` OK. The box copy stays a surgical patch (its `shared/*` copies are stale; a full replace would break the cron) — the repo copy is the source of truth for future reseeds.
+
+## 9. Reproduce
 
 | Script (`%TEMP%\opencode`) | Proves |
 |---|---|
@@ -108,7 +125,7 @@ Any other order leaves a window where the list is empty (2 before 1), stale (4 b
 | `debug-chat.cjs` | dumps tab state + console when a Chat render fails (this is how bug 5a was found) |
 | `check-chatmeta.cjs` | order-insensitive compare of every mirror row against its source meta |
 
-## 9. Limits (honest)
+## 10. Limits (honest)
 
 - **Chat-log writes stay best-effort**, one message at a time: a message written while the bot is down is not replayed into `chatMeta` (or `chats`). Same pre-existing behaviour, unchanged by this batch.
 - **Inbound-only history is preserved as-is**: `messages` ordering and rendering are untouched; only *when* they are downloaded changed.
