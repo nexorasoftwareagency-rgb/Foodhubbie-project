@@ -126,6 +126,16 @@ t('P1: initPushUI calls draft/template/keyboard setup', () => {
     assert.ok(appNotifJs.includes('_wireKeyboard\(\)'), 'initPushUI must call _wireKeyboard');
 });
 
+t('P1: QR code functions exist', () => {
+    assert.ok(appNotifJs.includes('function _renderQrCode'), '_renderQrCode must exist');
+    assert.ok(appNotifJs.includes('function _downloadQr'), '_downloadQr must exist');
+    assert.ok(html.includes('id="pushQrCanvas"'), 'QR canvas markup');
+    assert.ok(html.includes('id="btnDownloadQr"'), 'QR download button markup');
+    assert.ok(html.includes('id="pushEmptyQrCode"'), 'QR wrapper markup');
+    assert.ok(html.includes('qrcodejs'), 'QRCode library script loaded');
+    assert.ok(appNotifJs.includes('btnDownloadQr'), 'QR download button id exists in app-notifications.js');
+});
+
 // =====================================================================
 // PANE 2: Promo Page Offers (P2)
 // =====================================================================

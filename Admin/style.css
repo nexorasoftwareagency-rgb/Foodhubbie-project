@@ -11287,6 +11287,27 @@ body.pos-selection-mode .walkin-picker {
 .push-empty__row input { flex: 1; min-width: 0; }
 .push-empty__row .btn-secondary { flex: 0 0 auto; }
 
+.push-empty__qrcode {
+    margin-top: 12px;
+    padding: 10px;
+    background: var(--bg-primary);
+    border-radius: 10px;
+    border: 1px dashed var(--border-color);
+    text-align: center;
+}
+.push-empty__qrcode canvas {
+    width: 160px;
+    height: 160px;
+    margin: 0 auto 8px;
+    display: block;
+    background: #fff;
+    border-radius: 6px;
+}
+.push-empty__qrcode .btn-secondary {
+    font-size: 11px;
+    padding: 6px 12px;
+}
+
 .push-reach {
     display: flex;
     align-items: center;

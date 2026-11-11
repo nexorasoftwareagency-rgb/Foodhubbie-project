@@ -5004,6 +5004,10 @@
                                     <input type="text" id="pushAppLink" class="search-input-group" readonly aria-label="Customer app link">
                                     <button class="btn-secondary" id="btnCopyPushAppLink" type="button"><i data-lucide="copy"></i> <span>Copy</span></button>
                                 </div>
+                                <div class="push-empty__qrcode" id="pushEmptyQrCode">
+                                    <canvas id="pushQrCanvas" width="200" height="200"></canvas>
+                                    <button class="btn-secondary" id="btnDownloadQr" type="button"><i data-lucide="download"></i> <span>Download QR</span></button>
+                                </div>
                             </div>
                         </div>
 
@@ -8545,6 +8549,7 @@
     <script src="receipt-templates.js?v=5.4.8" defer></script>
 
     <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous" defer></script>
+    <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js" crossorigin="anonymous" defer></script>
 
     <!-- xlsx is NOT loaded here any more: it is ~270KB and only five export
          buttons need it. js/xlsx.js fetches it on first use. -->

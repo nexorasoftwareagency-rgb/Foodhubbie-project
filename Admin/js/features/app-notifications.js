@@ -81,6 +81,7 @@ function _wireOnce() {
     $('btnSendPushNotif')?.addEventListener('click', _sendPushNotification);
     // Refresh subscriber count is wired from customer-app.js on #caRefreshSubs.
     $('btnCopyPushAppLink')?.addEventListener('click', _copyAppLink);
+    $('btnDownloadQr')?.addEventListener('click', _downloadQr);
 
     $('pushNotifTitle')?.addEventListener('input', () => {
         _updateCount('pushNotifTitle', 'pushTitleCount', 100);
@@ -630,6 +631,7 @@ export function renderAppLink() {
     el.placeholder = link ? '' : 'Business or outlet id missing';
     const btn = $('btnCopyPushAppLink');
     if (btn) btn.disabled = !link;
+    _renderQrCode(link || '');
 }
 
 async function _copyAppLink() {
@@ -647,6 +649,45 @@ async function _copyAppLink() {
             showToast('Copy failed - select the link and copy manually', 'error');
         }
     }
+}
+
+function _renderQrCode(link) {
+    const canvas = $('pushQrCanvas');
+    if (!canvas || !link) return;
+    canvas.width = 200;
+    canvas.height = 200;
+    canvas.getContext('2d').clearRect(0, 0, 200, 200);
+    try {
+        new QRCode(canvas, {
+            text: link,
+            width: 200,
+            height: 200,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H,
+        });
+    } catch (e) {
+        console.warn('[Push] QRCode render failed:', e);
+    }
+}
+
+function _downloadQr() {
+    const canvas = $('pushQrCanvas');
+    const linkEl = $('pushAppLink');
+    if (!canvas || !linkEl?.value) return;
+    const link = linkEl.value;
+    canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `foodhubbie-app-qr-${BUSINESS_ID()}-${Outlet.current}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('QR code downloaded', 'success');
+    }, 'image/png');
 }
 
 /* ============ STATE HELPERS ============ */
