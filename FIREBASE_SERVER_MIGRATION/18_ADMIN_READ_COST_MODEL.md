@@ -3,7 +3,7 @@
 **Date:** 2026-11-11
 **Question:** 50 outlets, each Admin opened 10×/day with every tab visited — what does that cost, at Roshani Pizza's data scale?
 
-**Answer:** **₹0/month today.** But only because Roshani Pizza is young. Two unbounded listeners turn that same workload into **₹9,300/month at 6 months and ₹19,300/month at 12 months** of normal trading. Three fixes make it flat and permanent.
+**Answer:** **₹0/month today.** But only because Roshani Pizza is young. Two unbounded listeners turn that same workload into **₹9,300/month at 6 months and ₹19,300/month at 12 months** of normal trading. Two fixes make it flat and permanent — while a third, the obvious one, turned out to be impossible on this build (§4).
 
 ---
 
@@ -82,45 +82,58 @@ Chat growth is the sharper edge: `chat.js:362` queries `orderByChild('lastTs').l
 
 ---
 
-## 4. The three fixes (each is small, together they flatten the curve)
+## 4. Fixes — and one that looked obvious and is impossible
 
-### F1 — Client-side persistence (biggest, ~3 lines)
+### F1 — Client-side persistence: **impossible on this build** (verified, do not retry)
 
-`Admin/js/firebase.js`, before any database operation:
+The standard fix is `enableIndexedDbPersistence(db)` so repeat opens read from IndexedDB and download only deltas. **It cannot be used here.** Admin imports the Firebase SDK from the gstatic CDN, and that browser bundle contains no IndexedDB persistence code at all:
 
-```js
-import { enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-// ponytail: RTDB data survives reloads; 9 of 10 opens become delta-only.
-enableIndexedDbPersistence(db).catch((e) => {
-  if (e.code === 'failed-precondition') console.warn('[DB] persistence disabled: multiple tabs open');
-  else if (e.code === 'unimplemented') console.warn('[DB] persistence disabled: browser unsupported');
-});
-```
+| build | `indexedDB` in file | `enableIndexedDbPersistence` export |
+|---|---|---|
+| 10.7.1 ESM (the one we use) | absent | **no** |
+| 10.7.1 compat | absent | no |
+| 11.10.0 ESM / compat | absent | no |
+| 12.0.0 ESM / compat | absent | no |
 
-Effect: 9 of every 10 opens serve from IndexedDB and download only deltas — **317 MB/day → ~35 MB/day, a 9× cut**. It also delays every growth cliff by 9×, for free.
+Verified by fetching each file and searching it. `firebase-database.js` 10.7.1 (182 KB) has **zero** dynamic imports and exactly one static import (`firebase-app.js`), so there is no lazily-loaded persistence chunk either — the CDN build ships only the `persistenceKey` config plumbing.
 
-Caveat to accept: data renders from cache before the server confirms, and the multi-tab case must fall through gracefully (the `.catch` above).
+Tried in a real browser before shipping: the import throws `The requested module ... does not provide an export named 'enableIndexedDbPersistence'`, which takes the entire `firebase.js` module down — the app renders its static shell but **cannot talk to the database at all** (0 bytes over the WebSocket, 41 nav entries, no data). Reverted; app re-verified healthy (402 KB over WebSocket, sign-in and order data intact, 0 page errors on the demo tenant).
 
-### F2 — Bound `tableSessions`
+Getting persistence would mean importing the SDK from npm through a bundler instead of the CDN. `tools/build.mjs` only minifies today, so that is a build-system change (bundler, module graph, loss of CDN caching) — not worth it, because F2 below removes 96 % of the same bytes for less work.
 
-`tables.js:2703` is `onValue(_sessRef())` on the whole node. Query `orderByChild('openedAt').startAt(now - 24h)` for the live board, and read historical sessions only when a report asks. Sessions older than 24 h are not actionable on the Tables tab.
+**Do not re-add this import.** If persistence is ever wanted, bundle the SDK first.
 
-Effect: 83 KB → ~15 KB today, and **flat forever** instead of 8.1 MB at 12 months.
+### F2 — Give `chats` a meta-only mirror (96 % of the problem)
 
-### F3 — Chat list without message bodies
+Measured split across the 24 live threads:
 
-Split the list query from the thread read: keep `orderByChild('lastTs').limitToLast(50)` but have `chat.js` render from `meta` only, and attach the messages listener for the one thread the operator clicks.
+| part | bytes | note |
+|---|---|---|
+| `meta` | **9.4 KB** | 0.39 KB/thread — `lastDir`, `lastText`, `lastTs`, `name`, `phone`, `unread` |
+| `messages` | **257.1 KB** | **96 %** of all chat bytes |
 
-Effect: 267 KB → ~24 KB per open (−91 %), and message history stops being a per-open cost.
+`chat.js:362` does `onValue(chats.orderByChild('lastTs').limitToLast(50))`. RTDB queries cannot select a sub-path per child, so any query on `chats` drags `messages` along — `limitToLast(50)` bounds *threads*, not bytes.
 
-### Projected result with F1+F2+F3
+This is a data-shape change, not a query tweak: the bot already writes `chats/{id}/meta/lastText|lastTs|unread` on every message, so also mirror it to a flat `chatIndex/{customerId}` node. Admin listens to `chatIndex` for the list — the preview still works, because `lastText` lives in `meta` — and attaches the `messages` listener only for the thread an operator actually opens. Backfill once from each thread's existing `meta`.
+
+Effect: **267 KB → 9.4 KB (−96 %)**, and message history stops being a per-open cost permanently.
+
+Cost: bot write + Admin read + a backfill. The highest-value fix in the model.
+
+### F3 — Bound `tableSessions`
+
+`tables.js:2703` is `onValue(_sessRef())` on the whole node, and nothing ever deletes a session. Query the live board by `openedAt` within the last 24 h (needs `.indexOn` in `database.rules.json`), and read history only when a report asks for it.
+
+Effect: 83 KB → ~15 KB today, and **flat forever** instead of 8.1 MB at 12 months. Smaller win than F2, and a smaller change.
+
+### Projected result with F2 + F3
 
 | | per open | per month | bill |
 |---|---|---|---|
-| today | ~120 KB | 1.7 GiB | **₹0** |
-| 12 months | ~130 KB | 1.8 GiB | **₹0** |
+| today | ~290 KB | 4.1 GiB | **₹0** |
+| 12 months | ~300 KB | 4.2 GiB | **₹0** |
 
-Flat. 17 % of the free tier at any age.
+Flat at ~40 % of the free tier at any age, with no build-system change.
 
 ---
 
@@ -128,10 +141,17 @@ Flat. 17 % of the free tier at any age.
 
 - **`orders` is already correct** — `limitToLast(500)` in `orders.js:134` and `tables.js:2723` (the latter carries a comment from a previous fix). Do not "simplify" these back to bare `onValue`.
 - **A bounded query is not bounded if the child is a container.** `limitToLast(50)` on `chats` limits *threads*, not bytes. Always ask what one row weighs.
+- **The Admin SDK is CDN-loaded, and the CDN build has no IndexedDB persistence** (any version, ESM or compat). Any "just enable offline persistence" advice does not apply to this codebase. See F1.
+- Verified cold-load data point after the revert: the **demo** tenant (353 `DD-` orders, 22 dishes, 4 combos) pulls **402 KB** over the RTDB WebSocket in 48 frames — same order of magnitude as the 590 KB Roshani estimate, which is the sanity check the model needed.
 - Opening the app once and switching tabs downloads once — listeners persist across tab switches. The 10×/day model assumes 10 fresh page loads; if operators leave the tab open all day, the real number is ~10× *lower* (paid for in live delta traffic instead, which is small: 50 orders × 700 B = 35 KB/day).
 - Long-lived admin tabs poll `/version.json` every 60 s (`shared/app-update.js`) — ~480 requests/day/outlet, a few hundred KB, not a cost driver.
 - Free tiers used above: RTDB 0.3515625 GiB/day then ₹95.23/GiB; Hosting 0.3515625 GiB/day then ₹14.2845/GiB (billing account `015AD6-4B5D4F-657177`, INR).
 
 ## 6. Reproduce
 
-`node %TEMP%\opencode\admin-node-sizes.cjs` — prints every node's byte size, the all-tabs sum, per-day order growth, and the `walletBilling` size for `roshani-pizza/pizza`. Read-only.
+| Script (`%TEMP%\opencode`) | Proves |
+|---|---|
+| `admin-node-sizes.cjs` | every node's byte size, the all-tabs sum, per-day order growth, `walletBilling`. Read-only. |
+| `chat-shape.cjs` | the `meta` vs `messages` split that decimals F2 (9.4 KB vs 257.1 KB) |
+| `verify-persistence.cjs` | the failed F1 attempt — counts real RTDB WebSocket bytes across cold load, reload, and a second tab. Reusable as a general "did this reduce reads?" harness. |
+| `verify-revert.cjs` | app liveness after a revert (nav entries, sign-in, real order data, WebSocket bytes > 0, page errors) |
