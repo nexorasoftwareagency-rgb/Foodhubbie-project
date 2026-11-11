@@ -185,3 +185,16 @@ of a 5 GB bucket; the coupling would cost a support incident.
   §2 if someone later adds a data-URI parser.
 - `backup/` added to `.gitignore` (the run's backup is 1.7 MB of base64).
 
+### Egress after (no regression)
+
+`firebase database:profile --raw` (61 s window, stream aborts early — quote the
+captured timestamps only): **13.9 KB total → 13.7 KB/min → 19.2 MB/day**, versus
+12.3 KB/min after batch 14. Same floor within measurement noise.
+
+The profile is now **entirely** status plumbing: 10.0 KB of the 13.9 KB is
+`listener-broadcast` fanout of `businesses/{bid}/outlets/{oid}/bot/status` and
+`…/botStatus` (85 events / 61 s, ~110–180 B each, 1–2 listeners). No media path
+appears at all. If this is ever worth another pass, the lever is write-on-change
+for the status nodes — not the database shape.
+
+
