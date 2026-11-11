@@ -310,9 +310,9 @@ t('P4: error rendering functions exist', () => {
 
 t('P4: dirty tracking functions exist', () => {
     assert.ok(js.includes('function _markSettingsDirty'), '_markSettingsDirty must exist');
-    assert.ok(js.includes('function _debounceSaveSettings'), '_debounceSaveSettings must exist');
     assert.ok(js.includes('function _updateSettingsDirtyUI'), '_updateSettingsDirtyUI must exist');
-    assert.ok(js.includes('500'), 'debounce must be 500ms');
+    // Autosave was removed on purpose: settings save only on the Save button (see tests/customer-app.browser.mjs)
+    assert.ok(!js.includes('_debounceSaveSettings'), 'settings must not autosave while typing');
 });
 
 t('P4: beforeunload warning exists', () => {
@@ -365,10 +365,10 @@ t('P5: role badge markup exists', () => {
 
 t('P5: customer-app calls _applyRoleGating on tab switch', () => {
     assert.ok(js.includes('function _applyRoleGating'), '_applyRoleGating must exist');
-    assert.ok(js.includes("_applyRoleGating('notification'"), 'notification tab must gate roles');
-    assert.ok(js.includes("_applyRoleGating('offers'"), 'offers tab must gate roles');
-    assert.ok(js.includes("_applyRoleGating('visibility'"), 'visibility tab must gate roles');
-    assert.ok(js.includes("_applyRoleGating('settings'"), 'settings tab must gate roles');
+    // Gating is keyed on the real tab id ('customer-app'), not on sub-tab names (that made Owner/Manager view-only)
+    assert.ok(js.includes("CA_TAB_ID = 'customer-app'"), 'CA_TAB_ID must be the customer-app tab id');
+    assert.ok(!/_applyRoleGating\('(notification|offers|visibility|settings)'/.test(js), 'must not gate by sub-tab name');
+    assert.ok((js.match(/_applyRoleGating\(CA_TAB_ID\)/g) || []).length >= 4, 'every pane must apply gating');
 });
 
 t('P5: _applyRoleGating checks edit/delete permissions', () => {

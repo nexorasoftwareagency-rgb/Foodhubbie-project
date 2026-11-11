@@ -8,19 +8,22 @@
  *  - App Settings          -> store identity, contact, ordering behavior, fees
  */
 
-import { db, auth, Outlet, BUSINESS_ID, ref, get, onValue, set, update } from '../firebase.js';
+import { db, auth, Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove } from '../firebase.js';
 import { showToast, showConfirm } from '../ui-utils.js';
 import { formatDate } from '../utils.js';
-import { loadLucide, canEditTab, canDeleteTab, roleLabel } from '../ui.js';
+import { loadLucide, canEditTab, canDeleteTab, canAccessTab, roleLabel } from '../ui.js';
 import { logger } from '../utils/logger.js';
 import { appLink } from '../../shared/app-link.js';
 import { couponStatus, discountAllowsChannel } from '../../shared/discount-rules.js';
 import { logChange, loadAuditLog } from './audit-trail.js';
+import { APP_CONTROLS, liveBadge, notAppliedList, liveList } from './customer-app-status.js';
 
 const $ = (id) => document.getElementById(id);
 
 let _wired = false;
-let _subTab = 'notification'; // 'notification' | 'offers' | 'visibility' | 'settings'
+let _subTab = 'overview'; // 'overview' | 'notification' | 'offers' | 'visibility' | 'settings' | 'activity'
+const CA_TAB_ID = 'customer-app'; // role checks use the real tab id, not the sub-tab name
+const SUB_TABS = ['overview', 'notification', 'offers', 'visibility', 'settings', 'activity'];
 let _offersListener = null;
 let _visibilityListener = null;
 
@@ -58,6 +61,7 @@ let _settingsErrors = {}; // field -> error message map
 export function loadCustomerApp() {
     logger.info('CUSTOMER-APP', 'Loading Customer APP tab…');
     _wireOnce();
+    _decorateBadges();
     _renderAppLink();
     _switchSubTab(_subTab);
 }
@@ -73,11 +77,24 @@ function _wireOnce() {
     if (_wired) return;
     _wired = true;
 
-    // Sub-tab switching
-    $('caSubTabNotification')?.addEventListener('click', () => _switchSubTab('notification'));
-    $('caSubTabOffers')?.addEventListener('click', () => _switchSubTab('offers'));
-    $('caSubTabVisibility')?.addEventListener('click', () => _switchSubTab('visibility'));
-    $('caSubTabSettings')?.addEventListener('click', () => _switchSubTab('settings'));
+    // Sub-tab switching (asks before leaving unsaved App Settings)
+    SUB_TABS.forEach((sub) => {
+        $('caSubTab' + sub.charAt(0).toUpperCase() + sub.slice(1))?.addEventListener('click', () => _requestSwitch(sub));
+    });
+    // Any [data-ca-goto="offers"] link/button inside the tab jumps to that sub-tab
+    $('tab-customer-app')?.addEventListener('click', (e) => {
+        const go = e.target.closest('[data-ca-goto]');
+        if (go) { e.preventDefault(); _requestSwitch(go.dataset.caGoto); return; }
+        if (e.target.closest('[data-ca-open-menu]')) { e.preventDefault(); document.querySelector('[data-tab="menu"], #menu-menu, [data-nav="menu"]')?.click(); }
+    });
+    // Overview: link actions
+    $('caOvCopyLink')?.addEventListener('click', async () => {
+        const v = $('caOvAppLink')?.value || '';
+        if (!v) return;
+        try { await navigator.clipboard.writeText(v); showToast('App link copied', 'success'); }
+        catch { $('caOvAppLink')?.select(); showToast('Press Ctrl+C to copy the link', 'info'); }
+    });
+    $('btnActivityRefresh')?.addEventListener('click', _loadActivity);
 
     // Refresh subscriber count
     $('caRefreshSubs')?.addEventListener('click', () => _loadPushSubscriptions(true));
@@ -107,19 +124,21 @@ function _wireOnce() {
     // P2: Bulk toolbar actions
     $('btnBulkShowOnPage')?.addEventListener('click', () => _bulkSetPromoPage(true));
     $('btnBulkHideFromPage')?.addEventListener('click', () => _bulkSetPromoPage(false));
-    $('btnBulkEnable')?.addEventListener('click', () => _bulkSetEnabled(true));
-    $('btnBulkDisable')?.addEventListener('click', () => _bulkSetEnabled(false));
+    $('btnPromoBulkEnable')?.addEventListener('click', () => _bulkSetEnabled(true));
+    $('btnPromoBulkDisable')?.addEventListener('click', () => _bulkSetEnabled(false));
     $('btnBulkArchive')?.addEventListener('click', () => _bulkArchive());
-    $('btnBulkDelete')?.addEventListener('click', () => _bulkDelete());
+    $('btnPromoBulkDelete')?.addEventListener('click', () => _bulkDelete());
     $('btnBulkSelectAll')?.addEventListener('click', _toggleSelectAll);
-    $('btnBulkCancel')?.addEventListener('click', _clearSelection);
+    $('btnPromoBulkCancel')?.addEventListener('click', _clearSelection);
 
     // P2: Quick edit panel close
     $('btnQuickEditCancel')?.addEventListener('click', _closeQuickEdit);
+    $('btnQuickEditCancel2')?.addEventListener('click', _closeQuickEdit);
     $('btnQuickEditSave')?.addEventListener('click', _saveQuickEdit);
 
     // P2: Preview modal close
     $('btnPreviewClose')?.addEventListener('click', _closePreview);
+    $('btnPreviewClose2')?.addEventListener('click', _closePreview);
 
     // Visibility actions
     $('btnVisibilityRefresh')?.addEventListener('click', _loadVisibility);
@@ -160,6 +179,7 @@ function _wireOnce() {
 
     // P3: Preview modal close
     $('btnVisPreviewClose')?.addEventListener('click', _closeVisPreview);
+    $('btnVisPreviewClose2')?.addEventListener('click', _closeVisPreview);
 
     // P5: Audit log modal close
     $('btnAuditLogClose')?.addEventListener('click', () => _closeModal('auditLogModal'));
@@ -170,22 +190,13 @@ function _wireOnce() {
     $('btnSaveAppSettingsBottom')?.addEventListener('click', _saveAppSettings);
     $('btnResetAppSettings')?.addEventListener('click', _resetAppSettings);
 
-    // P4: App Settings - dirty tracking + debounced per-field save
-    const settingsFields = [
-        'caSettingStoreName', 'caSettingStoreAddress', 'caSettingStorePhone',
-        'caSettingWhatsAppNumber', 'caSettingGoogleReviewLink', 'caSettingWelcomeMessage',
-        'caSettingDeliveryFee', 'caSettingMinOrder',
-        'caSettingDineIn', 'caSettingDelivery', 'caSettingPickup', 'caSettingLoyalty'
-    ];
-    settingsFields.forEach(id => {
-        const el = $(id);
-        if (!el) return;
-        const event = el.type === 'checkbox' ? 'change' : 'input';
-        el.addEventListener(event, () => {
-            _markSettingsDirty(id);
-            _debounceSaveSettings();
-        });
-    });
+    // App Settings: ANY change inside the settings grid marks it unsaved (nothing saves until you press Save)
+    const grid = document.querySelector('#caPaneSettings .ca-settings-grid');
+    const dirtyHandler = (e) => { if (e.target.matches('input, select, textarea')) _markSettingsDirty(e.target.id); };
+    grid?.addEventListener('input', dirtyHandler);
+    grid?.addEventListener('change', dirtyHandler);
+    // App Features switches save on their own (they live in App Visibility, not in the Save bar)
+    document.querySelectorAll('.ca-feature-toggle input[type="checkbox"]').forEach((el) => el.addEventListener('change', () => _saveFeatureToggle(el)));
 
     // P4: Ctrl+S to save settings
     document.addEventListener('keydown', (e) => {
@@ -203,22 +214,21 @@ function _wireOnce() {
         const pane = $('caPaneSettings')?.closest('.tab-content');
         if (!pane || pane.classList.contains('hidden')) return;
 
-        // 1-4: Switch sub-tabs
-        if (e.key >= '1' && e.key <= '4' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        // 1-6: Switch sub-tabs
+        if (e.key >= '1' && e.key <= '6' && !e.ctrlKey && !e.altKey && !e.metaKey) {
             const target = e.target;
-            const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+            const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             if (isInput) return;
-            const subMap = { '1': 'notification', '2': 'offers', '3': 'visibility', '4': 'settings' };
-            const sub = subMap[e.key];
-            if (sub && canAccessTab(sub)) {
+            const sub = SUB_TABS[Number(e.key) - 1];
+            if (sub && canAccessTab(CA_TAB_ID)) {
                 e.preventDefault();
-                _switchSubTab(sub);
+                _requestSwitch(sub);
             }
         }
-        // Ctrl+Shift+A: Open audit log viewer
+        // Ctrl+Shift+A: open the Activity tab
         if (e.ctrlKey && e.shiftKey && e.key === 'A') {
             e.preventDefault();
-            _openAuditLog();
+            _requestSwitch('activity');
         }
         // Escape: Close any open modal/panel
         if (e.key === 'Escape' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
@@ -261,43 +271,37 @@ function _closeAllModals() {
     _openModals.slice().forEach(id => _closeModal(id));
 }
 
-/**
- * Open the audit log viewer modal.
- */
-async function _openAuditLog() {
-    const modal = $('auditLogModal');
-    const wrap = $('auditLogList');
-    if (!modal || !wrap) return;
+const AUDIT_ACTIONS = {
+    create: 'Created', update: 'Updated', delete: 'Deleted', archive: 'Archived', restore: 'Restored',
+    toggle: 'Toggled', reorder: 'Reordered', feature: 'Featured', unfeature: 'Unfeatured'
+};
+const AUDIT_TARGETS = { discounts: 'Offer', 'settings/Store': 'App settings', 'menu/dishes': 'Dish', 'menu/categories': 'Category' };
 
-    _openModal('auditLogModal');
-    wrap.innerHTML = '<div style="padding:16px;color:var(--text-tertiary);">Loading audit log…</div>';
-
-    const entries = await loadAuditLog(100);
-    if (entries.length === 0) {
-        wrap.innerHTML = '<div style="padding:24px;color:var(--text-tertiary);text-align:center;">No audit activity yet.</div>';
-    } else {
-        wrap.innerHTML = entries.map(e => {
-            const at = formatDate(e.at || 0);
-            const actionLabel = {
-                create: 'Created', update: 'Updated', delete: 'Deleted',
-                archive: 'Archived', restore: 'Restored', toggle: 'Toggled',
-                reorder: 'Reordered', feature: 'Featured', unfeature: 'Unfeatured'
-            }[e.action] || e.action;
-            return `
-                <div class="audit-row" style="padding:8px 12px;border-bottom:1px solid var(--border,#eef0f3);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-weight:600;color:var(--text-primary);">${_escHtml(e.target)} ${actionLabel}</div>
-                        <div style="font-size:12px;color:var(--text-secondary);">${e.targetId ? `ID: ${_escHtml(e.targetId)}` : ''}</div>
-                    </div>
-                    <div style="font-size:11px;color:var(--text-tertiary);text-align:right;line-height:1.4;">
-                        <div>${at}</div>
-                        <div>${_escHtml(e.byName || e.by)}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
+/** Readable list of audit entries (shared by Overview, Activity and the old pop-up). */
+function _renderAuditEntries(entries, wrap, emptyText = 'No changes recorded yet.') {
+    if (!wrap) return;
+    if (!entries.length) { wrap.innerHTML = `<div class="ca-activity__empty">${_escHtml(emptyText)}</div>`; return; }
+    wrap.innerHTML = entries.map((e) => {
+        const what = AUDIT_TARGETS[e.target] || e.target;
+        return `<div class="ca-activity__row">
+            <span class="ca-activity__dot ca-activity__dot--${_escHtml(e.action || 'update')}" aria-hidden="true"></span>
+            <div class="ca-activity__main"><strong>${_escHtml(what)} ${_escHtml(AUDIT_ACTIONS[e.action] || e.action || 'changed').toLowerCase()}</strong>
+                ${e.targetId && e.targetId !== 'Store' ? `<span class="text-muted-small">${_escHtml(e.targetId)}</span>` : ''}</div>
+            <div class="ca-activity__meta"><span>${_escHtml(e.byName || e.by || 'Someone')}</span><span>${_escHtml(formatDate(e.at || 0))}</span></div>
+        </div>`;
+    }).join('');
 }
+
+async function _loadActivity() {
+    const wrap = $('caActivityList');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="ca-activity__empty">Loading…</div>';
+    try { _renderAuditEntries(await loadAuditLog(100), wrap); }
+    catch (e) { wrap.innerHTML = '<div class="ca-activity__empty">Could not load activity. Try Refresh.</div>'; }
+}
+
+/** Old pop-up entry point (Esc / shortcuts still call it): now just opens the Activity tab. */
+async function _openAuditLog() { _requestSwitch('activity'); }
 
 function _escHtml(s) {
     if (s == null) return '';
@@ -316,7 +320,7 @@ function _applyRoleGating(tabId) {
     // Show role badge in sub-tab header
     const roleBadge = $('roleBadge');
     if (roleBadge) {
-        roleBadge.textContent = `Role: ${role}`;
+        roleBadge.textContent = canEdit ? `Role: ${role}` : `Role: ${role} (view only)`;
         roleBadge.style.display = '';
     }
 
@@ -324,21 +328,32 @@ function _applyRoleGating(tabId) {
     if (!canEdit) {
         document.querySelectorAll('[data-action="edit"], .icon-btn[data-edit-id], [data-action="save"], .btn-primary[id*="Save"]').forEach(el => {
             el.disabled = true;
-            el.title = `${role} cannot edit ${tabId}`;
+            el.title = `Your role (${role}) can view this but not change it.`;
         });
     }
     // Disable delete controls if no delete permission
     if (!canDelete) {
         document.querySelectorAll('[data-action="delete"], [data-action="archive"], .icon-btn[data-delete-id], .icon-btn[data-archive-id]').forEach(el => {
             el.disabled = true;
-            el.title = `${role} cannot delete ${tabId}`;
+            el.title = `Your role (${role}) cannot delete here.`;
         });
     }
 }
 
 /* ============ SUB-TAB SWITCHING ============ */
 
+async function _requestSwitch(sub) {
+    if (!SUB_TABS.includes(sub)) return;
+    if (_subTab === 'settings' && sub !== 'settings' && _settingsDirty) {
+        const ok = await showConfirm('You have App Settings changes that are not saved. Leave without saving?', 'Unsaved changes');
+        if (!ok) return;
+        _settingsDirty = false;
+    }
+    _switchSubTab(sub);
+}
+
 function _switchSubTab(sub) {
+    if (!SUB_TABS.includes(sub)) sub = 'overview';
     _subTab = sub;
 
     // Update tab buttons
@@ -356,9 +371,13 @@ function _switchSubTab(sub) {
     if (activePane) activePane.classList.toggle('hidden', false);
 
     // Load sub-tab content
-    if (sub === 'notification') {
+    if (sub === 'overview') {
+        _loadOverview();
+    } else if (sub === 'activity') {
+        _loadActivity();
+    } else if (sub === 'notification') {
         _loadNotificationPane();
-        _applyRoleGating('notification');
+        _applyRoleGating(CA_TAB_ID);
     } else if (sub === 'offers') {
         // Reset P2 state when entering offers tab
         _offersSearchQuery = '';
@@ -368,7 +387,7 @@ function _switchSubTab(sub) {
         const searchInput = $('promoOffersSearch');
         if (searchInput) searchInput.value = '';
         _loadPromoOffers();
-        _applyRoleGating('offers');
+        _applyRoleGating(CA_TAB_ID);
     } else if (sub === 'visibility') {
         // Reset P3 state when entering visibility tab
         _visSearchQuery = '';
@@ -379,7 +398,7 @@ function _switchSubTab(sub) {
         const searchInput = $('visSearch');
         if (searchInput) searchInput.value = '';
         _loadVisibility();
-        _applyRoleGating('visibility');
+        _applyRoleGating(CA_TAB_ID);
     } else if (sub === 'settings') {
         // Reset P4 state when entering settings tab
         _settingsDirty = false;
@@ -391,7 +410,7 @@ function _switchSubTab(sub) {
         if (saveBtnBottom) { saveBtnBottom.disabled = true; saveBtnBottom.textContent = 'Save All App Settings'; }
         _clearAllSettingsErrors();
         _loadAppSettings();
-        _applyRoleGating('settings');
+        _applyRoleGating(CA_TAB_ID);
     }
 }
 
@@ -760,7 +779,7 @@ async function _bulkDelete() {
     if (!ok) return;
     try {
         await Promise.all(ids.map(id =>
-            update(Outlet.ref(`discounts/${id}`), null)
+            remove(Outlet.ref(`discounts/${id}`))
         ));
         await Promise.all(ids.map(id =>
             logChange('delete', 'discounts', id, _allOffersCache.find(d => d.id === id), null)
@@ -883,7 +902,7 @@ async function _deleteOffer(id) {
     if (!ok) return;
     try {
         const oldVal = _allOffersCache.find(d => d.id === id);
-        await update(Outlet.ref(`discounts/${id}`), null);
+        await remove(Outlet.ref(`discounts/${id}`));
         await logChange('delete', 'discounts', id, oldVal, null);
         showToast('Offer deleted', 'success');
     } catch (e) {
@@ -1457,7 +1476,7 @@ async function _loadAppSettings() {
             appFeatures: store.appFeatures || {},
             businessHours: store.businessHours || {},
             timezone: store.timezone || 'Asia/Kolkata',
-            gstRate: store.gstRate != null ? store.gstRate : 5,
+            gstRate: store.gstRate != null ? store.gstRate : '',
             taxOnDeliveryFee: store.taxOnDeliveryFee === true,
             themeColor: store.themeColor || '#E84908',
             logoUrl: store.logoUrl || ''
@@ -1485,12 +1504,13 @@ async function _loadAppSettings() {
             else el.value = val;
         });
 
-        // New P4 fields
-        $('caSettingTimezone')?.value && ($('caSettingTimezone').value = _settingsOriginal.timezone);
-        $('caSettingGSTRate')?.value && ($('caSettingGSTRate').value = String(_settingsOriginal.gstRate));
-        $('caSettingTaxOnDeliveryFee')?.checked && ($('caSettingTaxOnDeliveryFee').checked = _settingsOriginal.taxOnDeliveryFee === true);
-        $('caSettingThemeColor')?.value && ($('caSettingThemeColor').value = _settingsOriginal.themeColor);
-        $('caSettingLogoUrl')?.value && ($('caSettingLogoUrl').value = _settingsOriginal.logoUrl);
+        // Fields added in P4. Set them always (the old code only set them when they already had a value,
+        // so a saved GST rate / logo / tax switch never showed up and the next Save wiped it).
+        if ($('caSettingTimezone')) $('caSettingTimezone').value = _settingsOriginal.timezone;
+        if ($('caSettingGSTRate')) $('caSettingGSTRate').value = String(_settingsOriginal.gstRate);
+        if ($('caSettingTaxOnDeliveryFee')) $('caSettingTaxOnDeliveryFee').checked = _settingsOriginal.taxOnDeliveryFee === true;
+        if ($('caSettingThemeColor')) $('caSettingThemeColor').value = _settingsOriginal.themeColor;
+        if ($('caSettingLogoUrl')) $('caSettingLogoUrl').value = _settingsOriginal.logoUrl;
 
         // Business hours grid
         _renderBusinessHours(_settingsOriginal.businessHours);
@@ -1519,37 +1539,38 @@ async function _saveAppSettings() {
             return;
         }
 
+        // Only the keys this tab owns. A blank number is sent as null (removes the key) because the
+        // database rejects `undefined`. appFeatures is NOT sent whole: the old code rebuilt it from
+        // inputs that do not exist and switched Promo Page / Table Booking off on every save.
+        const num = (id) => { const v = $(id)?.value; return v !== '' && v != null ? Number(v) : null; };
         const store = {
-            storeName: $('caSettingStoreName')?.value || '',
-            address: $('caSettingStoreAddress')?.value || '',
-            phone: $('caSettingStorePhone')?.value || '',
-            whatsappNumber: $('caSettingWhatsAppNumber')?.value || '',
-            googleReviewLink: $('caSettingGoogleReviewLink')?.value || '',
+            storeName: $('caSettingStoreName')?.value.trim() || '',
+            address: $('caSettingStoreAddress')?.value.trim() || '',
+            phone: $('caSettingStorePhone')?.value.trim() || '',
+            whatsappNumber: $('caSettingWhatsAppNumber')?.value.trim() || '',
+            googleReviewLink: $('caSettingGoogleReviewLink')?.value.trim() || '',
             appWelcomeMessage: $('caSettingWelcomeMessage')?.value || '',
-            deliveryFee: $('caSettingDeliveryFee')?.value ? Number($('caSettingDeliveryFee').value) : undefined,
-            minOrder: $('caSettingMinOrder')?.value ? Number($('caSettingMinOrder').value) : undefined,
+            deliveryFee: num('caSettingDeliveryFee'),
+            minOrder: num('caSettingMinOrder'),
             dineInEnabled: $('caSettingDineIn')?.checked === true,
             deliveryEnabled: $('caSettingDelivery')?.checked === true,
             pickupEnabled: $('caSettingPickup')?.checked === true,
             loyaltyEnabled: $('caSettingLoyalty')?.checked === true,
-            appFeatures: {
-                onlineOrdering: $('caSettingDineIn')?.checked === true, // keep in sync
-                tableBooking: $('caSettingTableBooking')?.checked === true,
-                promoPage: $('caSettingPromoPage')?.checked === true,
-                loyalty: $('caSettingLoyalty')?.checked === true
-            },
+            'appFeatures/loyalty': $('caSettingLoyalty')?.checked === true, // keep the two loyalty switches in step
             timezone: $('caSettingTimezone')?.value || 'Asia/Kolkata',
-            gstRate: $('caSettingGSTRate')?.value ? Number($('caSettingGSTRate').value) : 5,
+            gstRate: num('caSettingGSTRate'),
             taxOnDeliveryFee: $('caSettingTaxOnDeliveryFee')?.checked === true,
             themeColor: $('caSettingThemeColor')?.value || '#E84908',
-            logoUrl: $('caSettingLogoUrl')?.value || '',
+            logoUrl: $('caSettingLogoUrl')?.value.trim() || '',
             businessHours: _collectBusinessHours(),
             updatedAt: Date.now()
         };
         await update(Outlet.ref('settings/Store'), store);
         await logChange('update', 'settings/Store', 'Store', _settingsOriginal, store);
         _settingsDirty = false;
-        _settingsOriginal = { ...store };
+        const { 'appFeatures/loyalty': _lf, ...plain } = store;
+        _settingsOriginal = { ..._settingsOriginal, ...plain, gstRate: store.gstRate == null ? '' : store.gstRate, deliveryFee: store.deliveryFee == null ? '' : store.deliveryFee, minOrder: store.minOrder == null ? '' : store.minOrder };
+        const lf = $('visFeatureLoyalty'); if (lf) lf.checked = store['appFeatures/loyalty'];
         _settingsErrors = {};
         _renderSettingsErrors();
         _updateSettingsDirtyUI();
@@ -1564,15 +1585,6 @@ async function _saveAppSettings() {
 function _markSettingsDirty(fieldId) {
     _settingsDirty = true;
     _updateSettingsDirtyUI();
-}
-
-function _debounceSaveSettings() {
-    if (_settingsSaveTimer) clearTimeout(_settingsSaveTimer);
-    _settingsSaveTimer = setTimeout(() => {
-        if (_settingsDirty) {
-            _saveAppSettings();
-        }
-    }, 500);
 }
 
 function _validateSettings() {
@@ -1670,18 +1682,17 @@ function _updateSettingsDirtyUI() {
     const saveBtn = $('btnSaveAppSettings');
     const saveBtnBottom = $('btnSaveAppSettingsBottom');
     if (!saveBtn || !saveBtnBottom) return;
-
-    if (_settingsDirty) {
-        saveBtn.disabled = false;
-        saveBtnBottom.disabled = false;
-        saveBtn.textContent = 'Save Settings (unsaved)';
-        saveBtnBottom.textContent = 'Save All App Settings (unsaved)';
-    } else {
-        saveBtn.disabled = true;
-        saveBtnBottom.disabled = true;
-        saveBtn.textContent = 'Save Settings';
-        saveBtnBottom.textContent = 'Save All App Settings';
+    // Only toggle state. The old code replaced the button's text and wiped its icon.
+    saveBtn.disabled = !_settingsDirty;
+    saveBtnBottom.disabled = !_settingsDirty;
+    const reset = $('btnResetAppSettings');
+    if (reset) reset.disabled = !_settingsDirty;
+    const msg = $('caSettingsDirtyMsg');
+    if (msg) {
+        msg.textContent = _settingsDirty ? 'You have unsaved changes' : 'All changes saved';
+        msg.classList.toggle('is-dirty', _settingsDirty);
     }
+    $('caPaneSettings')?.classList.toggle('is-dirty', _settingsDirty);
 }
 
 function _renderBusinessHours(hours = {}) {
@@ -1717,9 +1728,9 @@ function _renderBusinessHours(hours = {}) {
     grid.innerHTML = html;
     // Wire change listeners for dirty tracking
     days.forEach(day => {
-        $('bh_' + day + '_open')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); _debounceSaveSettings(); });
-        $('bh_' + day + '_close')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); _debounceSaveSettings(); });
-        $('bh_' + day + '_closed')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); _debounceSaveSettings(); });
+        $('bh_' + day + '_open')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); });
+        $('bh_' + day + '_close')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); });
+        $('bh_' + day + '_closed')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); });
     });
 }
 
@@ -1736,15 +1747,108 @@ function _collectBusinessHours() {
 }
 
 function _resetAppSettings() {
-    showConfirm('Reset all app settings to defaults? This cannot be undone.', 'Reset App Settings')
+    // "Discard changes": put the saved values back. It does not delete anything that was saved.
+    if (!_settingsDirty) return;
+    showConfirm('Discard your unsaved changes and go back to the saved values?', 'Discard changes')
         .then(ok => {
             if (!ok) return;
             _settingsDirty = false;
             _settingsErrors = {};
             _renderSettingsErrors();
-            _updateSettingsDirtyUI();
             _loadAppSettings();
-            showToast('Settings reset to loaded values.', 'info');
+            showToast('Changes discarded.', 'info');
         });
 }
 
+
+
+/* ============ LIVE vs SAVED BADGES ============ */
+
+/** Put a "Live in app" / "Saved, not applied yet" pill next to every control that has a data-ca-key. */
+function _decorateBadges() {
+    document.querySelectorAll('#tab-customer-app [data-ca-key]').forEach((el) => {
+        if (el.querySelector('.ca-live, .ca-saved')) return;
+        el.insertAdjacentHTML('beforeend', ' ' + liveBadge(el.dataset.caKey));
+    });
+}
+
+/* ============ APP FEATURE SWITCHES (App Visibility) ============ */
+
+const FEATURE_INPUTS = {
+    visFeatureOnlineOrdering: 'onlineOrdering',
+    visFeatureTableBooking: 'tableBooking',
+    visFeaturePromoPage: 'promoPage',
+    visFeatureLoyalty: 'loyalty',
+};
+
+/** These four switches used to do nothing (no save handler). They now save to settings/Store/appFeatures. */
+async function _saveFeatureToggle(el) {
+    const key = FEATURE_INPUTS[el.id];
+    if (!key) return;
+    if (!canEditTab(CA_TAB_ID)) {
+        el.checked = !el.checked;
+        showToast('Your role can view this but not change it.', 'warning');
+        return;
+    }
+    const value = el.checked === true;
+    try {
+        const updates = { [key]: value };
+        await update(Outlet.ref('settings/Store/appFeatures'), updates);
+        if (key === 'loyalty') {
+            await update(Outlet.ref('settings/Store'), { loyaltyEnabled: value });
+            if ($('caSettingLoyalty') && !_settingsDirty) $('caSettingLoyalty').checked = value;
+        }
+        await logChange('toggle', 'settings/Store', key, { [key]: !value }, { [key]: value });
+        showToast(`${APP_CONTROLS.appFeatures.label}: ${key} ${value ? 'on' : 'off'} (saved)`, 'success');
+    } catch (e) {
+        el.checked = !value;
+        showToast('Could not save: ' + (e?.message || e), 'error');
+    }
+}
+
+/* ============ OVERVIEW (home of the Customer APP tab) ============ */
+
+async function _loadOverview() {
+    const link = appLink(BUSINESS_ID(), Outlet.current) || '';
+    if ($('caOvAppLink')) { $('caOvAppLink').value = link; $('caOvAppLink').placeholder = link ? '' : 'Business or outlet id missing'; }
+    const open = $('caOvOpenLink'); if (open) { if (link) open.href = link; open.classList.toggle('is-disabled', !link); }
+    if ($('caOvCopyLink')) $('caOvCopyLink').disabled = !link;
+
+    const safe = async (path) => { try { return (await get(Outlet.ref(path))).val() || {}; } catch { return null; } };
+    const [subsRaw, discounts, dishes, cats, store] = await Promise.all([
+        safe('pushSubscriptions'), safe('discounts'), safe('menu/dishes'), safe('menu/categories'), safe('settings/Store'),
+    ]);
+    const subs = Object.values(subsRaw || {}).filter((x) => x && String(x.phone || '').replace(/\D/g, '').slice(-10).length === 10);
+    const offersOn = subs.filter((x) => !x.prefs || x.prefs.offers === true).length;
+    const coupons = Object.entries(discounts || {}).filter(([, d]) => d && d.type === 'coupon' && d.couponCode && d.archived !== true);
+    const onPage = coupons.filter(([, d]) => d.promoPage === true);
+    const validOnPage = onPage.filter(([, d]) => couponStatus(d, Date.now()) === 'valid');
+    const dishList = Object.values(dishes || {}).filter(Boolean);
+    const dishLive = dishList.filter((d) => d.stock !== false);
+    const st = store || {};
+    const card = (tone, title, value, sub, goto) => `<button type="button" class="ca-ov-card ca-ov-card--${tone}" data-ca-goto="${goto}">
+        <span class="ca-ov-card__title">${_escHtml(title)}</span><span class="ca-ov-card__value">${value}</span><span class="ca-ov-card__sub">${_escHtml(sub)}</span></button>`;
+    if ($('caOvGrid')) $('caOvGrid').innerHTML = [
+        card(subsRaw === null ? 'warn' : 'ok', 'Customers who can get push', subsRaw === null ? '—' : subs.length, subsRaw === null ? 'Could not load' : `${offersOn} accept offers`, 'notification'),
+        card(validOnPage.length ? 'ok' : 'warn', 'Coupons on Promo Page', validOnPage.length, `${onPage.length} marked, ${coupons.length} coupons in total`, 'offers'),
+        card(dishLive.length ? 'ok' : 'warn', 'Dishes customers can order', dishLive.length, `${dishList.length - dishLive.length} out of stock · ${Object.keys(cats || {}).length} categories`, 'visibility'),
+        card(st.storeName ? 'ok' : 'warn', 'App name', _escHtml(st.storeName || 'Not set'), st.whatsappNumber ? 'WhatsApp number set' : 'No WhatsApp number', 'settings'),
+    ].join('');
+
+    const checks = [
+        [!!st.storeName, 'Store name is set', 'settings'],
+        [!!st.whatsappNumber, 'WhatsApp number is set (for the "Chat on WhatsApp" card)', 'settings'],
+        [!!st.googleReviewLink, 'Google review link is set (for the "Rate us" card)', 'settings'],
+        [dishLive.length > 0, 'At least one dish is available to order', 'visibility'],
+        [validOnPage.length > 0, 'At least one coupon is on the Promo Page', 'offers'],
+        [subs.length > 0, 'At least one customer has turned on notifications', 'notification'],
+    ];
+    if ($('caOvChecks')) $('caOvChecks').innerHTML = checks.map(([ok, label, go]) =>
+        `<li class="${ok ? 'is-ok' : 'is-todo'}"><span class="ca-ov-checks__mark" aria-hidden="true">${ok ? '✓' : '!'}</span><span>${_escHtml(label)}<span class="sr-only">${ok ? ' - done' : ' - to do'}</span></span>${ok ? '' : `<button class="btn-text" type="button" data-ca-goto="${go}">Fix</button>`}</li>`).join('');
+
+    const group = (title, list, cls) => `<div class="ca-ov-status__group"><h4>${title} <span class="ca-ov-status__n">${list.length}</span></h4><ul>${list.map((c) => `<li><span class="${cls}"></span><div><b>${_escHtml(c.label)}</b><span>${_escHtml(c.note)}</span></div></li>`).join('')}</ul></div>`;
+    if ($('caOvStatus')) $('caOvStatus').innerHTML = group('Live in the app', liveList(), 'ca-dot ca-dot--live') + group('Saved, not applied yet', notAppliedList(), 'ca-dot ca-dot--saved');
+
+    try { _renderAuditEntries((await loadAuditLog(5)) || [], $('caOvRecent'), 'No changes recorded yet.'); } catch { _renderAuditEntries([], $('caOvRecent'), 'Could not load recent changes.'); }
+    window.lucide?.createIcons?.();
+}
