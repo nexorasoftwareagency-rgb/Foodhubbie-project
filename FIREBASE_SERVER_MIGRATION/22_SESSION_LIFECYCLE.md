@@ -188,6 +188,16 @@ Frontend only: `hosting:admin` + `hosting:menu`.
 `server`/EC2 unchanged (the `server` branch is fast-forwarded to the commit only
 to satisfy the `check-server-branch` invariant).
 
+Deployed from `b5015f7` (live `version.json` stamp `b5015f7.20261112T031411Z`).
+Live check **7/7**: both `sw.js` names match; the deployed
+`Admin/js/features/tables.js` is byte-identical to the E2E-tested `Admin/dist`
+build (md5 `9AB7D35B…`, so the only reason `POLICEABLE_STATUS` is not a literal
+on the wire is minification renaming module-local identifiers); the deployed
+`menu/js/session.js` imports live and answers
+`sessionWindowMs(false) = 3 h` / `sessionWindowMs(true) = 24 h`;
+`window.__tables.policeExpiredSessions` is a function on the deployed admin, the
+tables grid renders, and both surfaces boot with 0 page/console errors.
+
 **Customer-visible change to flag to outlets:** a table that orders is no longer
 released after 2 h, and a table with no order is released after 3 h instead of
 2 h. Nothing is cancelled before its window, and served food is never cancelled
