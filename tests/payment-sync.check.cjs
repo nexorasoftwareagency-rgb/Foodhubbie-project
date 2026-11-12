@@ -60,7 +60,12 @@ const PH = '9876543210', ID = 'A100';
     assert.equal(await syncCustomerPayment({ db, resolvePath, phone: '', orderId: ID, order: { total: 1 }, outlet: 'o' }), false);
 
     // source guards: hook + merge (not replace) of the accrual mirror
-    const src = require('fs').readFileSync(require('path').join(__dirname, '../bot/index.js'), 'utf8');
+    const fs2 = require('fs'), path2 = require('path');
+    const src = fs2.readFileSync(path2.join(__dirname, '../bot/index.js'), 'utf8');
+    // Batch 23b: the finalization pipeline moved into the socket-free module so
+    // the same code can run as a Cloud Functions trigger. The money guards below
+    // follow the code to its new home; index.js keeps the wiring + WhatsApp side.
+    const finSrc = fs2.readFileSync(path2.join(__dirname, '../bot/order-finalizer.js'), 'utf8');
     assert.match(src, /paymentSync\.syncCustomerPayment/, 'child_changed hook wired');
     assert.doesNotMatch(src, /customers\/\$\{phone\}\/orders\/\$\{String\(orderId\)\}`, outlet\)\)\.set\(\{\s*orderId/, 'accrual mirror must not replace the record');
     assert.match(src, /function isWebOrderSource/, 'APP orders share web-order finalization');
@@ -71,32 +76,32 @@ const PH = '9876543210', ID = 'A100';
     assert.match(src, /if \(isCancel\) await resurrectRewardTender/, 'cancel path restores the reward before the accrual check');
     assert.match(src, /order\.source === 'APP'\s*\n?\s*\? `\$\{WEBVIEW_DELIVERY_HOST\}\/\?b=/, 'app push opens the app, not delivery.html');
     assert.match(src, /missedWebOrder/, 'web/app orders placed during bot downtime are still finalized');
-    assert.match(src, /base\.app\?\.consent\?\.offers/, 'app orders never force promotional consent on');
+    assert.match(finSrc, /base\.app\?\.consent\?\.offers/, 'app orders never force promotional consent on');
     const promo = require('fs').readFileSync(require('path').join(__dirname, '../bot/promotions.js'), 'utf8');
     assert.match(promo, /app\/consent\/offers/, 'promotions honour the app Offers switch');
     assert.match(src, /customers\/\$\{phone\}\/app\/name[\s\S]{0,200}tab=loyalty/, 'tier-up push opens the app for app customers');
 
     // server-side re-pricing: browser-written prices are rebuilt from the catalog
     assert.match(src, /const orderPricing = require\('\.\/order-pricing'\)/, 're-pricer loaded');
-    const finalize = src.slice(src.indexOf('if (shouldFinalizeWebOrder(order)) {'));
+    assert.match(src, /orderFinalizer\.finalizeWebOrder\(/, 'index.js delegates finalization to the module');
+    const finalize = finSrc.slice(finSrc.indexOf('async function finalizeWebOrder('));
     const repriceAt = finalize.indexOf('orderPricing.repriceOrder');
     const discountAt = finalize.indexOf('discountEngine.evaluateDiscount');
     assert.ok(repriceAt > -1, 'web/app orders are re-priced before anything trusts the subtotal');
     assert.ok(repriceAt < discountAt, 're-pricing runs BEFORE the discount re-validation');
     assert.match(finalize, /order\.subtotal = priced\.subtotal/, 'corrected subtotal feeds the rest of finalization');
-    const fs2 = require('fs'), path2 = require('path');
     for (const f of ['menu/js/app-checkout.js', 'menu/js/delivery-order.js']) {
         assert.match(fs2.readFileSync(path2.join(__dirname, '..', f), 'utf8'), /dishId: l\.dishId/, `${f} sends dishId so re-pricing resolves by id`);
     }
 
     // tax rates + delivery fee are the outlet's settings, never the phone's
-    assert.match(src, /async function _serverTaxRates/, 'tax rates are re-derived from the outlet settings');
-    assert.match(src, /async function _serverDeliveryFee/, 'delivery fee is re-derived from the slab table');
-    assert.strictEqual(src.match(/taxRates: await _serverTaxRates\(OUTLET\)/g)?.length, 1, 'QR dine-in totals use the server tax rates');
-    assert.match(finalize, /const serverTaxRates = await _serverTaxRates/, 'web finalization reads the server tax rates');
-    assert.match(finalize, /taxRates: serverTaxRates/, 'verified total uses the server rates, not the client taxItems');
-    assert.match(finalize, /deliveryFee: serverDeliveryFee/, 'verified total uses the server delivery fee');
-    assert.ok(finalize.indexOf('_serverTaxRates') < finalize.indexOf('discountEngine.evaluateDiscount'), 'tax/fee are resolved BEFORE the discount re-validation');
+    assert.match(finSrc, /async function serverTaxRates/, 'tax rates are re-derived from the outlet settings');
+    assert.match(finSrc, /async function serverDeliveryFee/, 'delivery fee is re-derived from the slab table');
+    assert.strictEqual(src.match(/taxRates: await orderFinalizer\.serverTaxRates\(OUTLET\)/g)?.length, 1, 'QR dine-in totals use the server tax rates');
+    assert.match(finalize, /const resolvedTaxRates = await serverTaxRates/, 'web finalization reads the server tax rates');
+    assert.match(finalize, /taxRates: resolvedTaxRates/, 'verified total uses the server rates, not the client taxItems');
+    assert.match(finalize, /deliveryFee: resolvedDeliveryFee/, 'verified total uses the server delivery fee');
+    assert.ok(finalize.indexOf('const resolvedTaxRates = await serverTaxRates') < discountAt, 'tax/fee are resolved BEFORE the discount re-validation');
     assert.match(finalize, /\.\.\.moneyFields\(money\)/, 'the verified tax breakdown is written back onto the order');
     assert.doesNotMatch(src, /_verifiedOrderTotal\(/, 'no call site left on the old client-owned verifier');
 
@@ -106,7 +111,7 @@ const PH = '9876543210', ID = 'A100';
     assert.match(engine, /async function releaseDiscountUsage/, 'discount engine can release a recorded usage');
     assert.match(engine, /module\.exports = \{[^}]*releaseDiscountUsage/, 'releaseDiscountUsage is exported');
     assert.match(finalize, /discountUsageRecorded: true/, 'finalization stamps that the usage really landed');
-    assert.ok(finalize.indexOf('discountUsageRecorded') > finalize.indexOf('recordDiscountUsage'), 'flag is written only after recordDiscountUsage');
+    assert.ok(finalize.indexOf('discountUsageRecorded: true') > finalize.indexOf('recordDiscountUsage'), 'flag is written only after recordDiscountUsage');
     const releaseAt = src.indexOf('async function releaseOrderDiscountUsage');
     assert.ok(releaseAt > -1, 'cancel path has a release helper');
     const listener = src.slice(src.indexOf('orderRef.on("child_changed"'));
@@ -115,13 +120,13 @@ const PH = '9876543210', ID = 'A100';
     assert.match(src, /order\.discountUsageRecorded !== true \|\| order\.discountUsageReversed === true/, 'only recorded, not-yet-reversed usage is given back');
 
     // stock must come back too, and only what the deduction really took
-    assert.match(src, /async function restoreOrderInventory/, 'cancel path has a stock restore helper');
+    assert.match(finSrc, /async function restoreOrderInventory/, 'cancel path has a stock restore helper');
     assert.match(finalize, /const inventoryDeducted = await deductInventoryStock/, 'finalization waits for the deduction (a cancel cannot race it)');
     assert.match(finalize, /\{ stockDeducted: true, inventoryDeducted \}/, 'finalization records exactly what was taken');
     assert.ok(listener.indexOf('restoreOrderInventory(snap.key, order)') > -1, 'child_changed calls the restore helper');
     assert.ok(listener.indexOf('restoreOrderInventory(snap.key, order)') < listener.indexOf('if (sameStatusRecently) return;'), 'restore runs BEFORE the debounce gate');
-    assert.match(src, /order\.stockDeducted !== true \|\| order\.stockRestored === true/, 'only deducted, not-yet-restored stock is given back');
-    assert.match(src, /const claim = await flagRef\.transaction/, 'restore claims the order before touching stock (at most once)');
+    assert.match(finSrc, /order\.stockDeducted !== true \|\| order\.stockRestored === true/, 'only deducted, not-yet-restored stock is given back');
+    assert.match(finSrc, /const claim = await flagRef\.transaction/, 'restore claims the order before touching stock (at most once)');
 
     // D4 wallet gate: an enforced low/closed balance stops NEW bot order links.
     // The flag is public-read and written by Admin only when enforcement is armed.
@@ -138,7 +143,7 @@ const PH = '9876543210', ID = 'A100';
     assert.ok(cta.indexOf('walletGateBlocks') < cta.indexOf('sendOrderCTA'), 'gate blocks the order CTA');
     assert.match(fs2.readFileSync(path2.join(__dirname, '../bot/utils.js'), 'utf8'), /function walletGateBlocks/, 'decision helper lives with the other bot pure utils');
     // unmatched order lines are flagged, alerted and shown - never silently accepted
-    assert.match(src, /buildPriceReview\(priced\)/, 'bot flags orders with unverified lines');
+    assert.match(finSrc, /buildPriceReview\(priced\)/, 'bot flags orders with unverified lines');
     assert.match(src, /CHECK PRICES/, 'restaurant alert mentions unverified prices');
     const adminOrders = require('fs').readFileSync(require('path').join(__dirname, '../Admin/js/features/orders.js'), 'utf8');
     assert.match(adminOrders, /function priceReviewChip/, 'Admin shows a Check prices chip');

@@ -24,6 +24,14 @@ function formatJid(phone) {
     return (clean.length >= 10) ? (clean + "@s.whatsapp.net") : null;
 }
 
+// Dine-in classification — exactly the gate notifyCustomerApp has always used
+// (proven live). sessionId alone does NOT mean dine-in: webview delivery orders
+// carry a chat sessionId. Lives here because BOTH bot/index.js (loyalty) and
+// bot/order-finalizer.js (stock restore) gate on it — one definition, no drift.
+function isDineInOrder(order) {
+    return !!order && (order.type === 'dine-in' || order.isDineIn || !!order.tableId);
+}
+
 function maskJid(jid) {
     if (!jid || !jid.includes('@')) return jid;
     const [phone, domain] = jid.split('@');
@@ -435,7 +443,7 @@ function walletGateBlocks(gate) {
 }
 
 module.exports = {
-    formatJid, maskJid, isBlockedJid,
+    formatJid, maskJid, isBlockedJid, isDineInOrder,
     formatOrderId,
     getISTDateInfo, getISTDateString, isShopOpen, randomBetween,
     calculateDistance, getFeeFromSlabs,

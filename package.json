@@ -25,6 +25,7 @@
     "test:notify-caps": "node tests/notify-caps.check.cjs",
     "test:server-branch": "node tools/check-server-branch.cjs",
     "test:functions-source": "node tests/functions-source.check.cjs",
+    "test:order-finalizer": "node tests/order-finalizer.check.cjs",
     "test:isolation": "node tests/phase5-rider-isolation.check.cjs && node tests/phase5-rules-isolation.check.cjs",
     "seo:check-domain": "node tools/check-domain-migration.cjs",
     "test:headed": "playwright test --headed",

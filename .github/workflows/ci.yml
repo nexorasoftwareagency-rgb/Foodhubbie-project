@@ -62,6 +62,9 @@ jobs:
       - name: Functions deploy-source guard (firebase.json points at the live tree)
         run: node tests/functions-source.check.cjs
 
+      - name: Order finalizer guard (socket-free, one finalization path)
+        run: node tests/order-finalizer.check.cjs
+
       - name: Supreme dense UI guard (lists, tabs, phone layout, view-only)
         run: node tests/supreme-ui.browser.mjs
 
