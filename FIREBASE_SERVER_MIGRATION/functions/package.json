@@ -18,6 +18,7 @@
     "logs:staging": "firebase functions:log --project foodhubbie-staging",
     "emulator": "firebase emulators:start --only functions,firestore,database",
     "emulator:functions": "firebase emulators:start --only functions",
+    "test:health": "npm run build && node scripts/health-selfcheck.cjs",
     "cost:check": "node scripts/cost-check.js",
     "deploy:verify": "node scripts/verify-deployment.js"
   },

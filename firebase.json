@@ -6,9 +6,9 @@
     "rules": "storage.rules"
   },
   "functions": {
-    "code": "functions",
-    "predeploy": ["npm --prefix functions run build"],
-    "runtime": "nodejs24"
+    "source": "FIREBASE_SERVER_MIGRATION/functions",
+    "predeploy": ["npm --prefix FIREBASE_SERVER_MIGRATION/functions run build"],
+    "runtime": "nodejs22"
   },
   "auth": {
     "authorizedDomains": [

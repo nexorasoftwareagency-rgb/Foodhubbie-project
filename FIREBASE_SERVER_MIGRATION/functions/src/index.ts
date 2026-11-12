@@ -20,6 +20,10 @@ export { sendOutboundMessage } from './taskqueue/sendOutboundMessage';
 // bot-control-api/wallet-watch.js is the real publisher. Never re-add a second
 // writer of `walletGate`.
 export { metaCostPublisher } from './scheduled/metaCostPublisher';
+// Batch 23a: out-of-band "box silent" alert. This is the ONLY watcher that runs
+// outside EC2 - the 2026-11-11 outage was invisible for 13 hours because every
+// signal we owned was written by the host that died.
+export { platformHealth } from './scheduled/platformHealth';
 
 // Callable Functions (Admin/Client)
 export { botControl } from './api/botControl';
