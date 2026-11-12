@@ -127,7 +127,7 @@ function _ordersForGroup(sessionId, groupId) {
 function _dineInOrders() {
     return Object.entries(_orders)
         .map(([id, o]) => ({ id, ...o }))
-        .filter(o => o.type === 'Dine-in' && o.status !== 'Delivered' && o.status !== 'Cancelled' && o.status !== 'Served' && o.status !== 'Pending')
+        .filter(o => o.type === 'Dine-in' && o.status !== 'Delivered' && o.status !== 'Cancelled' && o.status !== 'Served' && o.status !== 'Pending' && o.status !== 'Walkout')
         .sort((a, b) => _ms(b.createdAt) - _ms(a.createdAt));
 }
 
@@ -488,53 +488,62 @@ function _renderKDS() {
     setCount('ready', groups.Ready.length);
 }
 
+// Statuses the sweep may expire. `billing` (bill requested, never paid) used to
+// be skipped entirely, so such a table stayed blocked for ever.
+const POLICEABLE_STATUS = new Set(['active', 'billing']);
+
 async function _policeExpiredSessions() {
     const now = Date.now();
     for (const [id, s] of Object.entries(_sessions)) {
-        if (s.status === 'active' && s.expiresAt && now > s.expiresAt) {
-            // Re-read session from Firebase to beat the heartbeat race:
-            // customer's touchSession() may have extended expiresAt after our
-            // cached copy was written.
-            let fresh;
-            try {
-                const snap = await get(_sessRef(id));
-                fresh = snap.val();
-                if (!fresh || fresh.status !== 'active') continue;
-                if (fresh.expiresAt && now <= fresh.expiresAt) continue;
-            } catch (e) {
-                console.warn('[Police] Read failed for', id, e?.message || e);
-                continue;
-            }
-            // Collect all order IDs from the FRESH read, not the stale cache —
-            // orders attached between cache update and police run must be cancelled too
-            const orderIds = new Set([...(fresh.orders || [])]);
-            const paidOrderIds = new Set();
-            if (fresh.orderGroups) {
-                Object.values(fresh.orderGroups).forEach(g => {
-                    (g.orders || []).forEach(oid => orderIds.add(oid));
-                    if (g.status === 'paid') (g.orders || []).forEach(oid => paidOrderIds.add(oid));
-                });
-            }
-            // Cancel all pending orders so kitchen doesn't prepare phantom orders
-            orderIds.forEach(oid => {
-                if (paidOrderIds.has(oid)) return;
-                update(_ordersRef(oid), { status: 'Cancelled', cancelledReason: 'Session expired', updatedAt: now }).catch(() => {});
+        if (!POLICEABLE_STATUS.has(s.status) || !s.expiresAt || now <= s.expiresAt) continue;
+        // Re-read session from Firebase to beat the heartbeat race:
+        // customer's touchSession() may have extended expiresAt after our
+        // cached copy was written.
+        let fresh;
+        try {
+            const snap = await get(_sessRef(id));
+            fresh = snap.val();
+            if (!fresh || !POLICEABLE_STATUS.has(fresh.status)) continue;
+            if (fresh.expiresAt && now <= fresh.expiresAt) continue;
+        } catch (e) {
+            console.warn('[Police] Read failed for', id, e?.message || e);
+            continue;
+        }
+        // Collect all order IDs from the FRESH read, not the stale cache —
+        // orders attached between cache update and police run must be seen too
+        const orderIds = new Set([...(fresh.orders || [])]);
+        const paidOrderIds = new Set();
+        if (fresh.orderGroups) {
+            Object.values(fresh.orderGroups).forEach(g => {
+                (g.orders || []).forEach(oid => orderIds.add(oid));
+                if (g.status === 'paid') (g.orders || []).forEach(oid => paidOrderIds.add(oid));
             });
-            // Mark session as expired with empty orders arrays
-            const sessUpdate = { status: 'expired', expiredAt: now, orders: [] };
-            if (fresh.orderGroups) {
-                Object.keys(fresh.orderGroups).forEach(gid => { sessUpdate[`orderGroups/${gid}/orders`] = []; });
-            }
-            update(_sessRef(id), sessUpdate).catch(() => {});
-            // Free the table pointer so new scans can create fresh sessions
-            const linkedTable = Object.values(_tables).find(t => t.currentSession === id);
-            if (linkedTable) {
-                update(_tblRef(linkedTable.id), { status: 'free', currentSession: null, updatedAt: now }).catch(() => {});
-            }
-            // Auto-record walkout if there were unpaid served orders
-            if (linkedTable) {
-                checkAndRecordWalkout(linkedTable.id, id).catch(() => {});
-            }
+        }
+        // Cancel unreached orders so the kitchen does not keep phantom cards.
+        // A SERVED order is never cancelled here: the food was eaten, so an
+        // unpaid one is a debt (recorded as a walkout below), not a phantom. The
+        // old sweep cancelled everything unpaid, which silently deleted the
+        // revenue of any table that ate for longer than the session timer.
+        orderIds.forEach(oid => {
+            if (paidOrderIds.has(oid)) return;
+            const st = _orders[oid]?.status;
+            if (!st || st === 'Cancelled' || st === 'Walkout') return;
+            if (st === 'Served' || st === 'Delivered') return;
+            update(_ordersRef(oid), { status: 'Cancelled', cancelledReason: 'Session expired', updatedAt: now }).catch(() => {});
+        });
+        const linkedTable = Object.values(_tables).find(t => t.currentSession === id);
+        // Record the walkout BEFORE clearing the pointer:
+        // checkAndRecordWalkout resolves the session through the table.
+        if (linkedTable) await checkAndRecordWalkout(linkedTable.id, id).catch(() => {});
+        // Mark session as expired with empty orders arrays
+        const sessUpdate = { status: 'expired', expiredAt: now, orders: [] };
+        if (fresh.orderGroups) {
+            Object.keys(fresh.orderGroups).forEach(gid => { sessUpdate[`orderGroups/${gid}/orders`] = []; });
+        }
+        update(_sessRef(id), sessUpdate).catch(() => {});
+        // Free the table pointer so new scans can create fresh sessions
+        if (linkedTable) {
+            update(_tblRef(linkedTable.id), { status: 'free', currentSession: null, updatedAt: now }).catch(() => {});
         }
     }
 }
@@ -1696,6 +1705,38 @@ async function _bumpCustomerDiscountUsage(phone, discountId, discountSource, isV
     }
 }
 
+/**
+ * Multi-bill: the last unpaid group just got paid → close the session and free
+ * the table now. A 24h session (menu/js/session.js ORDER_WINDOW_MS) is only
+ * allowed to hold a table while money is outstanding; waiting for staff to tap
+ * Close would block the table for the rest of the day.
+ *
+ * The group just paid is overridden locally because the live listener may not
+ * have delivered its own write yet.
+ */
+async function _freeTableIfLastGroupPaid(tableId, sess, paidGroupId, now) {
+    const nonEmpty = Object.entries(sess.orderGroups || {}).filter(([, g]) => (g.orders || []).length > 0);
+    if (!nonEmpty.length) return false;
+    if (!nonEmpty.every(([gid, g]) => gid === paidGroupId || g.status === 'paid')) return false;
+    try {
+        await Outlet.multiUpdate({
+            [`tableSessions/${sess.sessionId}/status`]: 'closed',
+            [`tableSessions/${sess.sessionId}/closedAt`]: now,
+            [`tables/${tableId}/status`]: 'free',
+            [`tables/${tableId}/currentSession`]: null,
+            [`tables/${tableId}/updatedAt`]: now
+        });
+        if (_drawerTableId === tableId) _closeTableDrawer();
+        showToast('Table freed — all groups paid', 'success');
+        return true;
+    } catch (e) {
+        // The money is already recorded; a failed close must not look like a
+        // failed payment. Staff can still close the table by hand.
+        console.warn('[Tables] auto-close after final group payment failed:', e?.message || e);
+        return false;
+    }
+}
+
 export async function confirmTableBillPayment() {
     const tableId = _billTableId;
     const groupId = _billGroupId;
@@ -1761,6 +1802,7 @@ export async function confirmTableBillPayment() {
             closeTableBillReview();
             showToast(`${sess.orderGroups[groupId]?.label || 'Group'} paid — ₹${finalTotal.toLocaleString('en-IN')} via ${paymentDetails}`, 'success');
             haptic(30);
+            await _freeTableIfLastGroupPaid(tableId, sess, groupId, now);
         } catch (e) {
             showToast('Failed: ' + (e?.message || e), 'error');
         }
@@ -3131,6 +3173,9 @@ window.__tables = {
     printKOT: _printTableKOT, jumpToOrder: _jumpToOrderInOrdersTab,
     closeSession: _closeSessionForTable, cancelSession: _cancelSessionForTable,
     closeExpiredSession: _closeExpiredSession,
+    // Exposed so an operator/E2E can expire sessions without waiting for the
+    // 30 s tick — the sweep only runs while this tab is open.
+    policeExpiredSessions: _policeExpiredSessions,
     makePaymentForTable: _makePaymentForTable,
     advanceOrder: _advanceOrder,
     printSessionBill: _printSessionBill,

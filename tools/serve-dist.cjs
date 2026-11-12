@@ -20,6 +20,9 @@ const path = require('path');
 const TARGETS = {
   admin: { dir: 'Admin/dist', entry: 'index.html?demo=1' },
   supreme: { dir: 'SupremeAdmin/dist', entry: 'index.html' },
+  // Unbuilt menu source: the customer app is plain ESM served as-is, so this
+  // tests the actual files (pre-deploy) against the real Firebase backend.
+  menu: { dir: 'menu', entry: 'index.html' },
 };
 
 const MIME = {
@@ -41,7 +44,8 @@ if (!fs.existsSync(path.join(ROOT, 'index.html'))) {
   console.error(`${target.dir} has no index.html - run: node tools/build.mjs --${name}`);
   process.exit(1);
 }
-const port = Number(process.argv[3] || (name === 'admin' ? 5055 : 5056));
+const DEFAULT_PORT = { admin: 5055, supreme: 5056, menu: 5057 };
+const port = Number(process.argv[3] || DEFAULT_PORT[name]);
 
 http.createServer((req, res) => {
   const clean = decodeURIComponent(req.url.split('?')[0]);

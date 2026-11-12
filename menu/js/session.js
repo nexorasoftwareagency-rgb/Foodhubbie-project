@@ -21,6 +21,31 @@ export const Session = {
     _sessionUnsub: null,
 };
 
+// Session lifetime (owner policy 2026-11-12).
+//
+// The old flat 2h timer was wrong in both directions. `touchSession()` only
+// runs on app taps — there is no interval — so a party that ordered and then
+// ate for two hours went idle, the Admin expiry sweep ran, and every unpaid
+// order on the table was cancelled (including ones already Served) while the
+// guests were still sitting there. That silently deleted real revenue.
+//
+// So: a scan that never orders is just a browse → 3h. Once an order exists the
+// bill has to survive the whole meal → 24h, and the table is freed by payment
+// (full payment frees it atomically; the last group of a multi-bill frees it
+// too — see Admin/js/features/tables.js confirmTableBillPayment).
+export const SCAN_WINDOW_MS = 3 * 60 * 60 * 1000;      // scanned, no order yet
+export const ORDER_WINDOW_MS = 24 * 60 * 60 * 1000;    // has at least one order
+
+/** 24h once an order exists, 3h for a scan-only session. */
+export function sessionWindowMs(hasOrders) {
+    return hasOrders ? ORDER_WINDOW_MS : SCAN_WINDOW_MS;
+}
+
+/** Local mirror of "has this session ordered?" for the two extenders below. */
+function _sessionHasOrders() {
+    return Array.isArray(Session.session?.orders) && Session.session.orders.length > 0;
+}
+
 /**
  * Reads ?t=TOKEN from the URL. Returns null if absent.
  * This is the ONLY table-identifying value ever read from the URL —
@@ -142,7 +167,7 @@ async function joinOrCreateSession(table) {
                 openedAt: now,
                 closedAt: null,
                 lastActivityAt: now,
-                expiresAt: now + 7200000,
+                expiresAt: now + sessionWindowMs(false),
                 customerName: '',
                 guestCount: 1,
                 specialNote: '',
@@ -454,7 +479,8 @@ export async function attachOrderToSession(orderId, orderTotals, groupId) {
         sess.discount = (sess.discount || 0) + (orderTotals.discount || 0);
         sess.grandTotal = (sess.grandTotal || 0) + (orderTotals.total || 0);
         sess.lastActivityAt = now;
-        sess.expiresAt = now + 7200000;
+        // An order just joined the bill → the 24h window starts now.
+        sess.expiresAt = now + sessionWindowMs(true);
         // Also push the order ID into the group's orders array in the same transaction
         if (groupId) {
             if (!sess.orderGroups) sess.orderGroups = {};
@@ -482,7 +508,7 @@ export async function touchSession() {
     if (!Session.sessionId) return;
     await update(outletRef(`tableSessions/${Session.sessionId}`), {
         lastActivityAt: now,
-        expiresAt: now + 7200000
+        expiresAt: now + sessionWindowMs(_sessionHasOrders())
     });
     _lastHeartbeat = now;
 }
@@ -523,7 +549,7 @@ export async function saveCheckoutContact(name, phone, guestCount, specialNote) 
     if (!Session.sessionId) return;
     const now = Date.now();
     const cleanPhone = (phone || '').replace(/[^\d]/g, '');
-    const updates = { lastActivityAt: now, expiresAt: now + 7200000 };
+    const updates = { lastActivityAt: now, expiresAt: now + sessionWindowMs(_sessionHasOrders()) };
     if (typeof guestCount === 'number' && guestCount > 0) updates.guestCount = guestCount;
     if (specialNote) updates.specialNote = specialNote;
     await update(outletRef(`tableSessions/${Session.sessionId}`), updates);

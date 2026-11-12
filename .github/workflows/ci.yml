@@ -26,6 +26,9 @@ jobs:
       - name: Tables session-window guard (bounded tableSessions read + reconciliation)
         run: node tests/tables-session-window.check.cjs
 
+      - name: Session lifecycle guard (3h scan / 24h order / never cancel a served order)
+        run: node tests/session-lifecycle.check.cjs
+
       - name: Menu cart persistence guard
         run: node tests/menu-cart-refresh.check.cjs
 
