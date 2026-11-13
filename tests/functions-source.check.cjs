@@ -131,6 +131,18 @@ ok(/sign_in_provider != 'anonymous'/.test(String(mediaUrlRule || '')),
     'config/mediaUrl is readable by signed-in dashboards but not anonymous users',
     String(mediaUrlRule));
 
+// Deploying the client without the CSP origin is a silent failure: the browser
+// refuses the request before it leaves the page (the promo-API bug, batch 2026-11-08).
+const hosting = JSON.parse(read('firebase.json')).hosting || [];
+const adminHost = hosting.find((h) => h.target === 'admin');
+const adminCsp = (adminHost?.headers || [])
+    .flatMap((h) => h.headers || [])
+    .filter((h) => h.key === 'Content-Security-Policy')
+    .map((h) => h.value);
+ok(adminCsp.length > 0, 'the admin target still ships a CSP');
+ok(adminCsp.every((v) => /connect-src[^;]*https:\/\/us-central1-foodhubbie-10\.cloudfunctions\.net/.test(v)),
+    'every admin CSP connect-src allows the media function origin');
+
 // Client wiring: media goes to config/mediaUrl with a fallback to the control
 // API, so removing the function cannot break image saving.
 const adminFirebase = read('Admin/js/firebase.js');

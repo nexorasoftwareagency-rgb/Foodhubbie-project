@@ -78,6 +78,15 @@ host the moment `config/mediaUrl` is absent.
 RTDB `config/mediaUrl` is set to
 `https://us-central1-foodhubbie-10.cloudfunctions.net/tenantMedia`.
 
+**CSP has to allow the new origin, or nothing leaves the page.** The admin target's
+`connect-src` listed `https://api.foodhubbie.in` but not the Functions host, so the
+deployed dashboard would have blocked every upload before the request was sent —
+the exact failure the promo API hit on 2026-11-08. The origin was added to the five
+admin CSP blocks (`index.html`, `sw.js` ×2, `**/*.js`, `**/*.html`); Supreme does not
+upload images today and the other targets were left untouched. The guard now fails
+if any admin CSP block drops the origin, because this is a silent client-side
+failure that no server test can see.
+
 **The rule was the hidden half of the cutover.** `config/` only had a `tunnelUrl`
 entry, so `config/mediaUrl` was default-deny for clients; `mediaBase()` swallows
 its read error and falls back, and the cutover would have looked deployed while
@@ -106,9 +115,10 @@ tenantMedia   us-central1   512MiB   60s   concurrency 10   maxInstances 10
 `Can't determine Firebase Database URL` lines are the same preflight noise as
 23a/23c (the URL is bound at runtime through `secrets`).
 
-Deployed: `database` (the new rule) and — after the client check — `hosting:admin`
-(`mediaBase()` + `CACHE_NAME` `v5.12.48`; any Admin-served file change needs the
-bump).
+Deployed: `database` (the new rule) and `hosting:admin`
+(`mediaBase()` + `CACHE_NAME` `v5.12.48` + the CSP origin; any Admin-served file
+change needs the bump). Live version stamps:
+`167db46.20261113T024105Z`, then `102edbb.20261113T024417Z` with the CSP fix.
 
 `/health` is unauthenticated on purpose: no DB read, no bucket call, just
 `{ok, service, bucket}` so a probe can tell "function gone" from "auth broken".
@@ -165,13 +175,14 @@ own uploads do not use that fetch; the control API never did either.
 
 ## 6. Guards
 
-* `tests/functions-source.check.cjs` — **62/62**. Adds: `index.ts` exports
+* `tests/functions-source.check.cjs` — **64/64**. Adds: `index.ts` exports
   `tenantMedia`; both routes exist; the admin row comes from the *verified* uid;
   no `body.bid/businessId/outlet`; the no-outlet 403; the delete prefix check; the
   8 MB/6 MB caps; the bucket default; `resumable:false` + download token; the four
   CORS origins + the wired allowlist; the storage rules still deny all client
   access; `Admin/js/firebase.js` reads `config/mediaUrl` and both image functions
-  use `mediaBase()`; **and `database.rules.json` grants the non-anonymous read**.
+  use `mediaBase()`; **`database.rules.json` grants the non-anonymous read**; and
+  **every admin CSP block allows the Functions origin**.
 * The rest of the battery re-run clean (see §7).
 
 ## 7. Honest limits
@@ -204,7 +215,7 @@ New: `FIREBASE_SERVER_MIGRATION/functions/src/api/tenantMedia.ts`.
 Changed: `FIREBASE_SERVER_MIGRATION/functions/src/index.ts` (export),
 `Admin/js/firebase.js` (`mediaBase()` + both image calls), `Admin/sw.js`
 (`v5.12.48`), `database.rules.json` (`config/mediaUrl` read),
-`tests/functions-source.check.cjs`.
+`firebase.json` (admin CSP `connect-src`), `tests/functions-source.check.cjs`.
 
 Rollback: `firebase functions:delete tenantMedia` **and** remove
 `config/mediaUrl` — the client then falls back to `config/tunnelUrl`, exactly the
