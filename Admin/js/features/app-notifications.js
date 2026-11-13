@@ -1021,8 +1021,8 @@ async function _sendPushNotification() {
         }
 
         // Dead tokens are pruned server-side, so the count may have changed.
-        _loadPushSubscriptions();
-        _loadHistory();
+        await loadPushSubscriptions();
+        await loadHistory();
     } catch (e) {
         console.error('[Push] Send failed:', e);
         const raw = e?.message || '';

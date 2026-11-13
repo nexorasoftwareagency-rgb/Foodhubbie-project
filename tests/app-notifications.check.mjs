@@ -129,7 +129,7 @@ t('send history renders from notifyLog', () => {
     assert.ok(/function _renderHistory/.test(js), 'renderer exists');
     assert.ok(js.includes("'push-hist__row'"), 'row class literal so PurgeCSS keeps the style');
     assert.ok(css.includes('.push-history') && css.includes('.push-hist__row'), 'history styles exist');
-    assert.ok(/_loadHistory\(\)/.test(js), 'history loads with the tab');
+    assert.ok(/loadHistory\(\)/.test(js) && !/_loadHistory/.test(js), 'history loads with the tab');
 });
 
 t('disabled send button has a visible disabled state', () => {
@@ -226,6 +226,18 @@ t('a second tap while the confirm is open cannot queue a second send', () => {
 t('the subscription stat says "Last updated" (updatedAt is not an app-open signal)', () => {
     assert.ok(html.includes('>Last updated</span>'), 'honest label in the markup');
     assert.ok(!/>Last active<\/span>/.test(html), 'no overstated label');
+});
+
+// Batch 23d-2: the live send path called `_loadPushSubscriptions()` /
+// `_loadHistory()`, which do not exist (the real names have no underscore), so
+// every successful send overwrote its own result with a ReferenceError. A call
+// to an undefined name is invisible to every static bundler — pin the names.
+t('the send path refreshes through functions that exist', () => {
+    assert.ok(!/_loadPushSubscriptions|_loadHistory/.test(js), 'no call to the phantom underscored names');
+    assert.ok(/export async function loadPushSubscriptions\(/.test(js), 'loadPushSubscriptions is defined');
+    assert.ok(/export async function loadHistory\(/.test(js), 'loadHistory is defined');
+    assert.ok(/await loadPushSubscriptions\(\);\s*\n\s*await loadHistory\(\);/.test(js),
+        'the post-send refresh awaits both defined functions');
 });
 
 console.log(failed ? `\n${failed} check(s) failed` : '\napp notifications guard ok');
