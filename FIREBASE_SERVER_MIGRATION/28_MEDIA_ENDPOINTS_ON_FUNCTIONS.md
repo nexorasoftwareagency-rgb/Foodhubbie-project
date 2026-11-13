@@ -173,6 +173,37 @@ Object bytes are read from Node rather than the browser on purpose: a browser
 lists `http://localhost:5000/8080`, not this test port). `<img>` and the product's
 own uploads do not use that fetch; the control API never did either.
 
+### The same path on the deployed dashboard — 8/8
+
+Re-run with `E2E_PAGE_URL=https://app.foodhubbie.in/demo`, i.e. the real Hosting
+bundle, the real Service Worker and the real production origin (checked
+2026-11-13, after the deploy settled):
+
+* demo sign-in completes against the live backend (`demo@foodhubbie.in`,
+  `outlet:demo`, `businessId:foodhubbie-demo`) — so the upload carries a real
+  production ID token, not a localhost convenience;
+* `window.MEDIA_URL` = the Functions host (the `config/mediaUrl` read rule works
+  for a normal signed-in admin on the live origin too);
+* the POST comes **from `https://app.foodhubbie.in`**, which is exactly the CORS
+  case the function's allowlist was written for — upload 200, bytes identical,
+  delete 200, URL stops serving;
+* zero POSTs to `api.foodhubbie.in` (still down), 0 console errors;
+* no objects left under the test prefix; Auth users still **184**, no new
+  `admins` rows. The demo tenant's Storage prefix is byte-identical to before.
+
+**CSP finding, recorded rather than "fixed" here.** Firebase matches header
+globs against the request **path**, so `/demo` (and `/`) are rewrites that match
+no `**/*.html` rule: they are served **without any CSP at all**, while
+`/index.html` carries the full policy, now including the Functions origin
+(verified on the wire). That is pre-existing (the same reason `/` had no
+security headers before batch 16) and is *not* something this batch introduced:
+the CSP fix is what keeps a direct `/index.html` load working, and the guard
+fails if any admin CSP block drops the origin. Closing the path gap means adding
+a policy to `**` for the whole admin host — a security change with its own
+regression surface, deliberately left out of a media batch. The upload path
+itself does not depend on it: `/demo` had no CSP to block it, and `/index.html`
+has the origin allowed.
+
 ## 6. Guards
 
 * `tests/functions-source.check.cjs` — **64/64**. Adds: `index.ts` exports
