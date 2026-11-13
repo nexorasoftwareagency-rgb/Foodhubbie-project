@@ -448,7 +448,9 @@ async function handleSubmit(e) {
     // creates the Auth user if missing, then syncs admins/{uid} + adminLogin.
     try {
       const token = await firebase.auth().currentUser.getIdToken();
-      const res = await fetch(`${TUNNEL_URL}/api/admin/update-password`, {
+      if (window.TUNNEL_READY) await window.TUNNEL_READY;
+      const adminBase = window.ADMIN_API_URL || TUNNEL_URL;
+      const res = await fetch(`${adminBase}/api/admin/update-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bid, oid, email: adminEmail, newPassword: adminPassword }),

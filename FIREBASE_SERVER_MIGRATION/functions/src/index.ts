@@ -16,6 +16,10 @@ export { tenantMedia } from './api/tenantMedia';
 // tenant → FCM + inbox), so admin push works with the box down. Wired by
 // `config/notifyUrl`.
 export { tenantNotify } from './api/tenantNotify';
+// Batch 23d-3: Supreme's onboarding group — D2 email-verified status,
+// approve-onboarding (creates the tenant from a signup) and update-password.
+// Pure cloud (Auth admin + RTDB), no pm2/socket. Wired by `config/adminUrl`.
+export { tenantOnboarding } from './api/tenantOnboarding';
 
 // Task Queue Functions (Async Processing)
 export { processInboundMessage } from './taskqueue/processInboundMessage';

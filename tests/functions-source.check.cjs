@@ -211,5 +211,82 @@ ok(!!notifyUrlRule && /sign_in_provider != 'anonymous'/.test(String(notifyUrlRul
     'database.rules.json grants the non-anonymous read on config/notifyUrl',
     String(notifyUrlRule));
 
+// ---- Batch 23d-3: Supreme onboarding group --------------------------------
+// Same rules again: contract copied from the control API, identity from the
+// VERIFIED token, and a per-route switch that falls back to the old host.
+ok(/export\s*\{\s*tenantOnboarding\s*\}/.test(entry), 'index.ts exports tenantOnboarding');
+const onboarding = read(path.join(source, 'src', 'api', 'tenantOnboarding.ts'));
+ok(/\/api\/admin\/outlet-admin-status/.test(onboarding) && /\/api\/admin\/approve-onboarding/.test(onboarding)
+    && /\/api\/admin\/update-password/.test(onboarding), 'serves the three onboarding routes');
+ok(/supremeFromToken\(req\)/.test(onboarding), 'every route resolves the Supreme identity from the verified token');
+ok(/row\.isSuper !== true && row\.isSupport !== true/.test(httpTenant)
+    && /Not a Supreme Admin/.test(httpTenant), 'the Supreme check is isSuper || isSupport (same 403 string)');
+ok(/requireSuperRole\(who\)/.test(onboarding) && /View-only account — this action requires full Supreme Admin access\./.test(httpTenant),
+    'approve/password are refused for view-only accounts with the control API string');
+const statusSection = onboarding.slice(onboarding.indexOf('async function handleStatus'), onboarding.indexOf('async function handleApprove'));
+ok(/await supremeFromToken\(req\)/.test(statusSection) && !/requireSuperRole/.test(statusSection),
+    'the status check stays readable by view-only accounts');
+ok(/bid and oid are required/.test(onboarding), 'status validates bid and oid (400 string kept)');
+ok(/reqKey, businessName, outletName, adminEmail are required/.test(onboarding),
+    'approve validates the control API body fields (400 string kept)');
+ok(/Password must be at least 6 characters/.test(onboarding), 'password length check kept');
+ok(/Approval failed —/.test(onboarding) && /Password update failed —/.test(onboarding) && /Status check failed —/.test(onboarding),
+    'unexpected failures keep the per-route 500 prefixes');
+
+// The 2026-11-07 credential hardening is the point of this port: adopt the
+// signup account, never invent one, never store a password.
+ok(/getUser\(authUid\)/.test(onboarding) && /The admin email cannot be changed after the signup account was created\./.test(onboarding),
+    'adopts the signup authUid and refuses an email change (422 string)');
+ok(/The dashboard account recorded on this request no longer exists/.test(onboarding)
+    && /does not match the admin email/.test(onboarding), 'refuses a missing / mismatched signup account');
+ok(/No signup account on this request/.test(onboarding), 'legacy requests without a password are refused, not invented');
+ok(/Admin email \$\{adminEmail\} already exists/.test(onboarding), 'legacy duplicate-email refusal kept');
+// A negative lookahead here is a trap: `password:\s*` can backtrack to zero
+// spaces, so `(?!legacyPassword)` then compares against " legacyPassword" and
+// passes. Assert the positive instead — the only adminEmail createUser carries
+// the replayed legacy password, and the authUid branch creates nothing.
+ok(/createUser\(\{\s*email:\s*adminEmail,\s*password:\s*legacyPassword\b/.test(onboarding),
+    'the only createUser path replays a legacy password (the authUid path never sets one)');
+ok(/adminLogin: \{ email: adminEmail, updatedAt: now \}/.test(onboarding),
+    'the new outlet stores the admin EMAIL only (no password on a tenant-readable node)');
+ok(/passwordUpdatedAt: Date\.now\(\)/.test(onboarding), 'update-password stores only email + passwordUpdatedAt');
+ok(/locked: true/.test(onboarding), 'a new outlet starts locked');
+ok(/walletBilling\/\$\{bid\}\/\$\{oid\}`\]: getBillingDefaults\(\)/.test(onboarding),
+    'wallet defaults are written to the server-only root (never businesses/{bid}/billing)');
+ok(/outletIndex\/\$\{oid\}`\]: \{ bid, name: outletName, createdAt: now \}/.test(onboarding),
+    'the outletIndex pointer is written (admins/riders depend on it)');
+ok(/onboardingSecrets\/\$\{reqKey\}`\)\.set\(null\)/.test(onboarding) && /adminPassword: null/.test(onboarding),
+    'the legacy secret + inline password are burned after the Auth user exists');
+// Anchor on the object literal, not a bare word: the file's header comment also
+// mentions `locked: true` and would make a bare indexOf() compare the prose.
+const tplSpreadAt = onboarding.indexOf('...(tplDefaults || {}),');
+const lockedPropAt = onboarding.indexOf('locked: true,');
+ok(tplSpreadAt > 0 && lockedPropAt > tplSpreadAt,
+    'template defaults are spread BEFORE identity/security fields',
+    `tpl@${tplSpreadAt} locked@${lockedPropAt}`);
+ok(copyVendor.includes(`'shared/billing-defaults.cjs'`), 'vendor list ships shared/billing-defaults.cjs');
+ok(/vendor\/shared\/billing-defaults\.cjs/.test(onboarding), 'onboarding writes the vendored billing defaults');
+// The prototype is named in the header comment on purpose (it documents why it
+// is NOT this code) and index.ts still exports it for the legacy deployment, so
+// pin what matters: this module does not import or re-export it.
+ok(!/from\s+['"][^'"]*onboardingApprove/.test(onboarding) && /export const tenantOnboarding = onRequest/.test(onboarding),
+    'the older prototype function is not reused');
+
+const supremeCfg = read('SupremeAdmin/js/firebase-config.js');
+ok(/config\/adminUrl/.test(supremeCfg), 'Supreme reads config/adminUrl');
+ok(/ADMIN_API_URL = url/.test(supremeCfg) && /ADMIN_API_URL = adminUrl/.test(supremeCfg),
+    'the admin override falls back to config/tunnelUrl and wins when present');
+for (const file of ['SupremeAdmin/js/features/onboarding-requests.js',
+    'SupremeAdmin/js/features/restaurant-onboarding.js',
+    'SupremeAdmin/js/features/restaurant-profile.js']) {
+    const src = read(file);
+    ok(!/\$\{TUNNEL_URL\}\/api\/admin\//.test(src), `${file} no longer posts onboarding routes to the control API`);
+    ok(/ADMIN_API_URL/.test(src), `${file} uses the admin override`);
+}
+const adminUrlRule = dbRules?.rules?.config?.adminUrl?.['.read'];
+ok(!!adminUrlRule && /sign_in_provider != 'anonymous'/.test(String(adminUrlRule)),
+    'database.rules.json grants the non-anonymous read on config/adminUrl',
+    String(adminUrlRule));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

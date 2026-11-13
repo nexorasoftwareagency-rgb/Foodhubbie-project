@@ -43,6 +43,10 @@ const FILES = [
     // Batch 23d-2: the notify endpoint prunes the customer inbox with the same
     // module the bot and the control API use, so the cap can never drift.
     'shared/push-inbox.cjs',
+    // Batch 23d-3: onboarding writes the same billing defaults to the
+    // server-only walletBilling root as the control API; a stale copy here
+    // would silently under-provision new tenants.
+    'shared/billing-defaults.cjs',
 ];
 
 // Module-type markers. `functions/package.json` has no "type", so a .js file is
@@ -67,12 +71,17 @@ function verifyLoad() {
     const { createDiscountEngine } = require(abs('bot/discount-engine-core.js'));
     const rules = require(abs('shared/discount-rules.js'));
     const inbox = require(abs('shared/push-inbox.cjs'));
+    const billing = require(abs('shared/billing-defaults.cjs'));
 
     if (typeof finalizerMod.createOrderFinalizer !== 'function') problems.push('createOrderFinalizer is not exported');
     if (typeof finalizerMod.compareFinalization !== 'function') problems.push('compareFinalization is not exported');
     if (typeof createDiscountEngine !== 'function') problems.push('createDiscountEngine is not exported');
     if (typeof inbox.prunePushInbox !== 'function' || inbox.DEFAULT_CAP !== 50) {
         problems.push('shared/push-inbox.cjs did not load (prunePushInbox/DEFAULT_CAP)');
+    }
+    const defaults = typeof billing.getBillingDefaults === 'function' ? billing.getBillingDefaults() : null;
+    if (!defaults || defaults.mode !== 'percentage' || !defaults.messageCaps || defaults.setup?.amount !== 0) {
+        problems.push('shared/billing-defaults.cjs did not load the current defaults (percentage/messageCaps/no setup fee)');
     }
     if (typeof rules.evaluateDiscounts !== 'function') {
         problems.push('shared/discount-rules.js did not load as ESM (require(esm) needs Node >= 22.12)');

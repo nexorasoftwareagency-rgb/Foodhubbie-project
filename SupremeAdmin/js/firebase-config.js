@@ -22,6 +22,11 @@ const FIREBASE_CONFIG = {
 // it server-side). Keep in sync with /var/www/foodhubbie/.last-tunnel-url.
 let TUNNEL_URL = 'https://photos-whenever-specifics-internationally.trycloudflare.com';
 window.TUNNEL_URL = TUNNEL_URL;
+// Per-route override (batch 23d-3). The onboarding/password routes now live in
+// a Cloud Function; until `config/adminUrl` is read they fall back to the same
+// control API as everything else. WhatsApp/bot routes keep using TUNNEL_URL.
+let ADMIN_API_URL = TUNNEL_URL;
+window.ADMIN_API_URL = ADMIN_API_URL;
 
 firebase.initializeApp(FIREBASE_CONFIG);
 
@@ -33,12 +38,24 @@ firebase.initializeApp(FIREBASE_CONFIG);
 // ERR_NAME_NOT_RESOLVED. Resolve on the first signed-in state instead and keep
 // `window.TUNNEL_READY` pending until then, so features that fetch on first render
 // await it rather than racing the fallback.
-const resolveTunnelUrl = () => firebase.database().ref('config/tunnelUrl').once('value')
-  .then((snap) => {
+const resolveTunnelUrl = () => Promise.all([
+  firebase.database().ref('config/tunnelUrl').once('value'),
+  firebase.database().ref('config/adminUrl').once('value').catch(() => null),
+])
+  .then(([snap, adminSnap]) => {
     const url = snap.val();
     if (url && typeof url === 'string' && url.startsWith('https://')) {
       TUNNEL_URL = url;
       window.TUNNEL_URL = url;
+      // Only the routes that actually moved use the admin override; anything
+      // still on the control API must keep hitting TUNNEL_URL.
+      ADMIN_API_URL = url;
+      window.ADMIN_API_URL = url;
+    }
+    const adminUrl = adminSnap && adminSnap.val();
+    if (adminUrl && typeof adminUrl === 'string' && adminUrl.startsWith('https://')) {
+      ADMIN_API_URL = adminUrl;
+      window.ADMIN_API_URL = adminUrl;
     }
     return TUNNEL_URL;
   })

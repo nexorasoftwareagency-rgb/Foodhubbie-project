@@ -55,6 +55,43 @@ export async function tenantFromToken(req: any): Promise<{ bid: string; oid: str
   return { bid, oid: row.outlet, uid: decoded.uid };
 }
 
+/**
+ * `requireAuth` + `requireSuperOnly` from `bot-control-api/server.js`, unchanged:
+ * token → `admins/{uid}` → `isSuper === true || isSupport === true`; mutating
+ * routes then call `requireSuperRole`. This is the SUPREME identity, not a
+ * tenant admin — the onboarding/password routes act across tenants.
+ */
+export async function supremeFromToken(req: any): Promise<{ uid: string; role: 'super' | 'support' }> {
+  const header = String(req.headers.authorization || '');
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) throw new HttpError(401, 'Missing bearer token');
+
+  let decoded: any;
+  try {
+    decoded = await getAuth().verifyIdToken(token);
+  } catch {
+    throw new HttpError(401, 'Invalid or expired token');
+  }
+
+  let row: any;
+  try {
+    row = (await getDB().ref(`admins/${decoded.uid}`).get()).val() || {};
+  } catch {
+    throw new HttpError(500, 'Could not verify admin status');
+  }
+  if (row.isSuper !== true && row.isSupport !== true) {
+    throw new HttpError(403, 'Not a Supreme Admin');
+  }
+  return { uid: decoded.uid, role: row.isSuper === true ? 'super' : 'support' };
+}
+
+/** `requireSuperOnly`: view-only (isSupport) accounts may read but never mutate. */
+export function requireSuperRole(who: { role: 'super' | 'support' }): void {
+  if (who.role !== 'super') {
+    throw new HttpError(403, 'View-only account — this action requires full Supreme Admin access.');
+  }
+}
+
 export async function readJsonBody(req: any, maxBytes: number, tooLargeMessage: string): Promise<any> {
   const raw: Buffer | null = Buffer.isBuffer(req.rawBody) ? req.rawBody : null;
   if (raw) {

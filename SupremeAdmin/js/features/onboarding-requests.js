@@ -157,7 +157,9 @@ async function approveRequest(key) {
 
   try {
     const token = await firebase.auth().currentUser.getIdToken();
-    const res = await fetch(`${TUNNEL_URL}/api/admin/approve-onboarding`, {
+    if (window.TUNNEL_READY) await window.TUNNEL_READY;
+    const adminBase = window.ADMIN_API_URL || TUNNEL_URL;
+    const res = await fetch(`${adminBase}/api/admin/approve-onboarding`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
