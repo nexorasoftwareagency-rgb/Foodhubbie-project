@@ -98,11 +98,16 @@ ok(/export\s*\{\s*tenantMedia\s*\}/.test(entry), 'index.ts exports tenantMedia')
 const media = read(path.join(source, 'src', 'api', 'tenantMedia.ts'));
 ok(/\/tenant-api\/upload/.test(media), 'serves POST /tenant-api/upload');
 ok(/\/tenant-api\/delete-image/.test(media), 'serves POST /tenant-api/delete-image');
-ok(/admins\/\$\{decoded\.uid\}/.test(media), 'resolves the admin row from the verified token uid');
-ok(/verifyIdToken\(token\)/.test(media), 'verifies the Firebase ID token');
+// Batch 23d-2 moved the token→tenant resolution into shared/http/tenant.ts so
+// every migrated route shares ONE implementation; these three checks follow it
+// there and the media route must still call it (never resolve a tenant itself).
+const httpTenant = read(path.join(source, 'src', 'shared', 'http', 'tenant.ts'));
+ok(/export async function tenantFromToken/.test(httpTenant) && /verifyIdToken\(token\)/.test(httpTenant),
+    'verifies the Firebase ID token (shared/http/tenant.ts)');
+ok(/admins\/\$\{decoded\.uid\}/.test(httpTenant), 'resolves the admin row from the verified token uid');
+ok(/if \(!row\.outlet\) throw new HttpError\(403/.test(httpTenant), 'refuses an admin without an outlet');
+ok(/tenantFromToken\(req\)/.test(media), 'the media route resolves its tenant through the shared helper');
 ok(!/body\.(bid|businessId|outlet)\b/.test(media), 'never takes the tenant from the request body');
-ok(/body\.outlet\)?\s*throw new HttpError\(403/.test(media) || /if \(!row\.outlet\) throw new HttpError\(403/.test(media),
-    'refuses an admin without an outlet');
 ok(/mediaPrefix\(bid, oid\)/.test(media) && /startsWith\(mediaPrefix/.test(media),
     'delete is restricted to the caller’s own outlets/{bid}/{oid}/ prefix');
 ok(/MAX_BODY_BYTES = 8 \* 1024 \* 1024/.test(media) && /MAX_IMAGE_BYTES = 6 \* 1024 \* 1024/.test(media),
@@ -162,6 +167,49 @@ ok(/STALE_AFTER_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/.test(evaluate), 'stale thresho
 const selfCheck = read(path.join(source, 'scripts', 'health-selfcheck.cjs'));
 ok(/recovered/.test(selfCheck) && /repeat/.test(selfCheck) && /degraded/.test(selfCheck),
     'self-check covers recovery, hourly repeat and degraded');
+
+// Batch 23d-2: the App Notifications send route moved off EC2. Same rules as
+// 23d-1: tenant from the VERIFIED token, contract kept, and a client-side switch
+// that degrades to the control API when the function is absent.
+ok(/export\s*\{\s*tenantNotify\s*\}/.test(entry), 'index.ts exports tenantNotify');
+const notify = read(path.join(source, 'src', 'api', 'tenantNotify.ts'));
+ok(/\/tenant-api\/notify/.test(notify), 'serves POST /tenant-api/notify');
+ok(/tenantFromToken\(req\)/.test(notify), 'resolves the tenant through the verified-token helper');
+ok(!/body\.(bid|businessId|outlet)\b/.test(notify), 'never takes the tenant from the request body');
+ok(/sendEachForMulticast/.test(notify), 'sends the FCM multicast');
+ok(/pushSubscriptions/.test(notify) && /pushInbox/.test(notify) && /notifyLog/.test(notify),
+    'keeps the subscriptions / inbox / send-history contract');
+ok(/HISTORY_ROWS = 20/.test(notify), 'keeps the newest 20 history rows per outlet');
+ok(/res\.json\(\{ ok: true, sent: successCount, failed: failureCount, total: tokens\.length, inbox: inboxCount \}\)/.test(notify),
+    'response carries sent / failed / total / inbox (what the tab renders)');
+
+// The caps must not drift from the bot module they mirror.
+const capsSrc = read('bot/notification-caps.js');
+const num = (src, re) => (src.match(re) || [])[1];
+for (const [type, cap] of [['order', 50], ['loyalty', 5], ['promo', 3]]) {
+    ok(new RegExp(`${type}\\s*:\\s*${cap}\\b`).test(capsSrc) && new RegExp(`${type}\\s*:\\s*${cap}\\b`).test(notify),
+        `daily cap for ${type} is ${cap} on both sides`);
+}
+ok(/IST_OFFSET_MS\s*=\s*5\s*\*\s*3600000\s*\+\s*30\s*\*?\s*60000/.test(capsSrc)
+    && /IST_OFFSET_MS\s*=\s*5\s*\*\s*3600000\s*\+\s*30\s*\*?\s*60000/.test(notify),
+    'IST offset identical to bot/notification-caps.js');
+ok(/h\s*>=\s*21\s*\|\|\s*h\s*<\s*9/.test(capsSrc) && /h\s*>=\s*21\s*\|\|\s*h\s*<\s*9/.test(notify),
+    'quiet hours (21:00-09:00 IST) identical to bot/notification-caps.js');
+
+// Inbox pruning uses the same module as the bot and the control API.
+ok(copyVendor.includes(`'shared/push-inbox.cjs'`), 'vendor list ships shared/push-inbox.cjs');
+ok(/vendor\/shared\/push-inbox\.cjs/.test(notify), 'the notify endpoint prunes with the vendored module');
+
+// Client + rules wiring, mirroring the media cutover.
+const appNotif = read('Admin/js/features/app-notifications.js');
+ok(/config\/notifyUrl/.test(appNotif), 'the dashboard reads config/notifyUrl');
+ok(/NOTIFY_URL/.test(appNotif) && /TUNNEL_URL/.test(appNotif)
+    && appNotif.indexOf('config/notifyUrl') < appNotif.indexOf('config/tunnelUrl'),
+    'notifyUrl wins over tunnelUrl, which stays as the fallback');
+const notifyUrlRule = dbRules?.rules?.config?.notifyUrl?.['.read'];
+ok(!!notifyUrlRule && /sign_in_provider != 'anonymous'/.test(String(notifyUrlRule)),
+    'database.rules.json grants the non-anonymous read on config/notifyUrl',
+    String(notifyUrlRule));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

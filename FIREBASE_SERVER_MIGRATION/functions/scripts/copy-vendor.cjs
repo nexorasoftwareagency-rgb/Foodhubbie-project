@@ -40,6 +40,9 @@ const FILES = [
     'shared/loyalty-math.js',
     'shared/discount-rules.js',
     'shared/geo/geo.js',
+    // Batch 23d-2: the notify endpoint prunes the customer inbox with the same
+    // module the bot and the control API use, so the cap can never drift.
+    'shared/push-inbox.cjs',
 ];
 
 // Module-type markers. `functions/package.json` has no "type", so a .js file is
@@ -63,10 +66,14 @@ function verifyLoad() {
     const finalizerMod = require(abs('bot/order-finalizer.js'));
     const { createDiscountEngine } = require(abs('bot/discount-engine-core.js'));
     const rules = require(abs('shared/discount-rules.js'));
+    const inbox = require(abs('shared/push-inbox.cjs'));
 
     if (typeof finalizerMod.createOrderFinalizer !== 'function') problems.push('createOrderFinalizer is not exported');
     if (typeof finalizerMod.compareFinalization !== 'function') problems.push('compareFinalization is not exported');
     if (typeof createDiscountEngine !== 'function') problems.push('createDiscountEngine is not exported');
+    if (typeof inbox.prunePushInbox !== 'function' || inbox.DEFAULT_CAP !== 50) {
+        problems.push('shared/push-inbox.cjs did not load (prunePushInbox/DEFAULT_CAP)');
+    }
     if (typeof rules.evaluateDiscounts !== 'function') {
         problems.push('shared/discount-rules.js did not load as ESM (require(esm) needs Node >= 22.12)');
     }

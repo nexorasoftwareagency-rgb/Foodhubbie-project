@@ -12,6 +12,10 @@ export { whatsappWebhook } from './api/whatsappWebhook';
 // valuable to move first — every dish/category/combo/status image save goes
 // through them, and they need no pm2 or socket. Wired by `config/mediaUrl`.
 export { tenantMedia } from './api/tenantMedia';
+// Batch 23d-2: the App Notifications send route. Pure cloud (verified token →
+// tenant → FCM + inbox), so admin push works with the box down. Wired by
+// `config/notifyUrl`.
+export { tenantNotify } from './api/tenantNotify';
 
 // Task Queue Functions (Async Processing)
 export { processInboundMessage } from './taskqueue/processInboundMessage';

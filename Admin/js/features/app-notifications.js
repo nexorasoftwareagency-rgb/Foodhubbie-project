@@ -1046,7 +1046,21 @@ function _getAdminAuthToken() {
 }
 
 // ponytail: single consumer - cache on window; promote to shared config when a second caller appears
+//
+// Batch 23d-2: the send route now lives on Cloud Functions (`tenantNotify`).
+// `config/notifyUrl` is the switch; when it is absent (or the function is
+// deleted) the dashboard falls back to the control API on `config/tunnelUrl`,
+// exactly as before.
 async function _notifyBase() {
+    if (window.NOTIFY_URL) return window.NOTIFY_URL;
+    try {
+        const snap = await get(ref(db, 'config/notifyUrl'));
+        const url = snap.val();
+        if (url) {
+            window.NOTIFY_URL = url;
+            return url;
+        }
+    } catch { /* fall through to the legacy control API */ }
     if (window.TUNNEL_URL) return window.TUNNEL_URL;
     try {
         const snap = await get(ref(db, 'config/tunnelUrl'));

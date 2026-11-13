@@ -174,7 +174,11 @@ t('notification-caps loads before initializeApp (control-API boot order)', () =>
 t('server injects its database into notification-caps after initializeApp', () => {
     const server = fs.readFileSync(path.join(root, 'bot-control-api/server.js'), 'utf8');
     const caps = fs.readFileSync(path.join(root, 'bot/notification-caps.js'), 'utf8');
-    assert.ok(server.includes("const { checkAndConsumeCap, setDatabase } = require('../bot/notification-caps');"), 'server imports setDatabase from the caps module');
+    // The destructured names may grow (batch caps added CAPS/istBucketKey);
+    // what must never change is that this file imports setDatabase from the
+    // caps module — the whole point of the injection.
+    assert.match(server, /const \{[^}]*\bsetDatabase\b[^}]*\} = require\(['"]\.\.\/bot\/notification-caps['"]\);/,
+        'server imports setDatabase from the caps module');
     const initIdx = server.indexOf('admin.initializeApp(');
     const injectIdx = server.indexOf('setDatabase(admin.database())');
     assert.ok(initIdx > 0, 'initializeApp present');

@@ -6,6 +6,9 @@
       },
       "mediaUrl": {
         ".read": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous'"
+      },
+      "notifyUrl": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous'"
       }
     },
     "admins": {

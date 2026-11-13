@@ -27,7 +27,8 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import crypto from 'crypto';
-import { initializeAdmin, getDB, getAuth, getAdminApp } from '../shared/firebase/admin';
+import { initializeAdmin, getAdminApp } from '../shared/firebase/admin';
+import { HttpError, readJsonBody as readJsonBodyShared, routeOf as routeOfShared, tenantFromToken } from '../shared/http/tenant';
 
 const MEDIA_BUCKET = (process.env.FIREBASE_STORAGE_BUCKET || 'foodhubbie-10.firebasestorage.app').trim();
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
@@ -64,14 +65,6 @@ const DASHBOARD_ORIGINS: Array<string | RegExp> = [
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
 ];
 
-class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
 function mediaSeg(s: any): string {
   return String(s || '').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
 }
@@ -94,88 +87,10 @@ function mediaPathFromUrl(url: any): string | null {
   }
 }
 
-/**
- * `requireTenantAdmin`, unchanged in behaviour: token → `admins/{uid}` → outlet →
- * business (stored value first, then the canonical `outletIndex`, then the legacy
- * full-tree scan) → the outlet must really exist under that business.
- */
-async function tenantFromToken(req: any): Promise<{ bid: string; oid: string; uid: string }> {
-  const header = String(req.headers.authorization || '');
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) throw new HttpError(401, 'Missing bearer token');
-
-  let decoded: any;
-  try {
-    decoded = await getAuth().verifyIdToken(token);
-  } catch {
-    throw new HttpError(401, 'Invalid or expired token');
-  }
-
-  const db = getDB();
-  const row = (await db.ref(`admins/${decoded.uid}`).get()).val() || {};
-  if (!row.outlet) throw new HttpError(403, 'Admin not linked to any outlet');
-
-  let bid: string | null = row.businessId || null;
-  if (!bid) {
-    const idx = (await db.ref(`outletIndex/${row.outlet}`).get()).val();
-    bid = (idx && idx.bid) || null;
-    if (!bid) {
-      // ponytail: legacy rows only (super admins / staff created before
-      // `businessId` was stamped). Remove once no such admin can exist.
-      const bizs = (await db.ref('businesses').get()).val() || {};
-      bid = Object.keys(bizs).find((b) => bizs[b]?.outlets?.[row.outlet]) || null;
-    }
-  }
-  if (!bid) throw new HttpError(403, 'Admin not linked to any outlet');
-
-  const outletSnap = await db.ref(`businesses/${bid}/outlets/${row.outlet}`).get();
-  if (!outletSnap.exists()) throw new HttpError(403, 'Outlet not found for this business');
-
-  return { bid, oid: row.outlet, uid: decoded.uid };
-}
-
-async function readJsonBody(req: any): Promise<any> {
-  const raw: Buffer | null = Buffer.isBuffer(req.rawBody) ? req.rawBody : null;
-  if (raw) {
-    if (raw.length > MAX_BODY_BYTES) throw new HttpError(413, 'Payload too large (max 8 MB)');
-    if (!raw.length) return {};
-    try {
-      return JSON.parse(raw.toString('utf8'));
-    } catch {
-      throw new HttpError(400, 'Body must be JSON');
-    }
-  }
-  if (req.body && typeof req.body === 'object') return req.body;
-
-  // Last resort: drain the stream with the same hard cap.
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of req) {
-    total += (chunk as Buffer).length;
-    if (total > MAX_BODY_BYTES) throw new HttpError(413, 'Payload too large (max 8 MB)');
-    chunks.push(chunk as Buffer);
-  }
-  if (!total) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } catch {
-    throw new HttpError(400, 'Body must be JSON');
-  }
-}
-
-/** Path of the request, relative to this function (accepts a raw function URL). */
-function routeOf(req: any): string {
-  let path = String(req.path || '');
-  if (!path) {
-    try {
-      path = new URL(String(req.url || '/'), 'https://local').pathname;
-    } catch {
-      path = '/';
-    }
-  }
-  path = path.replace(/^\/+tenantMedia(?=\/|$)/, '').replace(/\/+$/, '');
-  return path || '/';
-}
+/** Media-local wrappers: same caps and messages the control API used. */
+const readJsonBody = (req: any) =>
+  readJsonBodyShared(req, MAX_BODY_BYTES, 'Payload too large (max 8 MB)');
+const routeOf = (req: any) => routeOfShared(req, 'tenantMedia');
 
 async function handleUpload(req: any, res: any): Promise<void> {
   const { bid, oid } = await tenantFromToken(req);
