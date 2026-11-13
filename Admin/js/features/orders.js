@@ -42,22 +42,18 @@ export const STATUS_SEQUENCES = {
     'Pickup': ["Placed", "Confirmed", "Ready", "Served"],
     'Default': ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Arrived at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Delivered"]
 };
-const LIVE_STATUSES = ["Placed", "Confirmed", "Ready", "Arriving at Restaurant", "Picked Up", "Out for Delivery", "Reached Drop Location", "Dispatched"];
-
 // Order callback storage for safe detachment
 let _ordersUnsub = null;
 let _ordersChildUnsub = null;
 let _ordersChangedUnsub = null;
-let _liveOrdersUnsub = null;
 
 export function initRealtimeListeners() {
     if (_ordersUnsub) { _ordersUnsub(); _ordersUnsub = null; }
     if (_ordersChildUnsub) { _ordersChildUnsub(); _ordersChildUnsub = null; }
     if (_ordersChangedUnsub) { _ordersChangedUnsub(); _ordersChangedUnsub = null; }
-    if (_liveOrdersUnsub) { _liveOrdersUnsub(); _liveOrdersUnsub = null; }
 
     // Show skeleton while data loads
-    ['ordersTable','ordersTableFull','liveOrdersTable','payDataTableBody'].forEach(id => {
+    ['ordersTable','ordersTableFull','payDataTableBody'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = getSkeletonRows(5, 7);
     });
@@ -142,7 +138,7 @@ export function initRealtimeListeners() {
     }, err => {
         console.error("[Orders] Firebase Read Error:", err);
         showToast("Error loading orders: " + err.message, "error");
-        ['liveOrdersTable','ordersTable','ordersTableFull'].forEach(id => {
+        ['ordersTable','ordersTableFull'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><i data-lucide="alert-circle"></i><p>Failed to load</p><span>Check Firebase rules or network connection</span></div></td></tr>';
         });
@@ -175,7 +171,6 @@ export function cleanupOrders() {
     if (_ordersUnsub) { _ordersUnsub(); _ordersUnsub = null; }
     if (_ordersChildUnsub) { _ordersChildUnsub(); _ordersChildUnsub = null; }
     if (_ordersChangedUnsub) { _ordersChangedUnsub(); _ordersChangedUnsub = null; }
-    if (_liveOrdersUnsub) { _liveOrdersUnsub(); _liveOrdersUnsub = null; }
 }
 
 /**
@@ -370,7 +365,7 @@ function renderStatusDropdownCore(currentStatus, type, orderId, order) {
  * for one frame — settle-flagging until ack if that ever shows in practice.
  */
 function optimisticApply(id, fields) {
-    const copies = [state.ordersMap.get(id), state.liveOrdersMap.get(id),
+    const copies = [state.ordersMap.get(id),
         state.ordersPageData.find(o => o.id === id)].filter(Boolean);
     const prev = copies.map(o => ({ o, snap: { ...o } }));
     copies.forEach(o => Object.assign(o, fields));
@@ -392,11 +387,10 @@ export async function renderOrders(snap) {
     const containers = {
         'dashboard': document.getElementById('ordersTable'),
         'orders': document.getElementById('ordersTableFull'),
-        'live': document.getElementById('liveOrdersTable'),
         'payments': document.getElementById('payDataTableBody')
     };
 
-    console.log(`[Orders] Rendering started for tab: ${activeTab}. Snap: ${snap ? 'Yes' : 'No'}. LiveMap: ${state.liveOrdersMap.size}`);
+    console.log(`[Orders] Rendering started for tab: ${activeTab}. Snap: ${snap ? 'Yes' : 'No'}. Map: ${state.ordersMap.size}`);
 
     // Update global maps
     if (snap) {
@@ -438,18 +432,10 @@ export async function renderOrders(snap) {
     if (activeTab === 'orders') {
         // Use paginated data for orders tab (now live-merged)
         ordersToProcess = state.ordersPageData;
-    } else if (activeTab === 'live') {
-        // Populate liveOrdersMap from ordersMap (filtered for live statuses)
-        const _liveList = LIVE_STATUSES;
-        state.liveOrdersMap.clear();
-        state.ordersMap.forEach((o, key) => {
-            if (_liveList.some(s => s.toLowerCase() === (o.status || '').toLowerCase()) ||
-                (o.status === 'Served' && o.paymentStatus !== 'Paid' && !o.paidAt)) {
-                state.liveOrdersMap.set(key, o);
-            }
-        });
-        ordersToProcess = Array.from(state.liveOrdersMap.entries()).map(([id, o]) => ({ id, ...o }));
     } else {
+        // Kitchen tab (id 'live') shows the KDS, so its orders feed nothing
+        // here — ordersMap is still handed over and the row loop returns
+        // immediately for it.
         ordersToProcess = Array.from(state.ordersMap.entries()).map(([id, o]) => ({ id, ...o }));
     }
 
@@ -504,7 +490,6 @@ export async function renderOrders(snap) {
     const fragments = {
         'dashboard': document.createDocumentFragment(),
         'orders': document.createDocumentFragment(),
-        'live': document.createDocumentFragment(),
         'payments': document.createDocumentFragment()
     };
 
@@ -530,37 +515,14 @@ export async function renderOrders(snap) {
         await loadLucide();
         window.lucide.createIcons();
     }
-    
-    // Empty state for live tab
-    const _liveStatusList = LIVE_STATUSES;
-    if (activeTab === 'live' && sortedOrders.filter(o => {
-        const status = (o.status || "Unknown").trim();
-        return _liveStatusList.some(s => s.toLowerCase() === status.toLowerCase()) ||
-            (status === 'Served' && o.paymentStatus !== 'Paid' && !o.paidAt);
-    }).length === 0 && containers['live']) {
-        containers['live'].innerHTML = '<tr><td colspan="7" class="empty-state-cell"><div class="empty-state"><i data-lucide="activity"></i><p>No live orders</p><span>Active orders will appear here</span></div></td></tr>';
-        await loadLucide();
-        window.lucide.createIcons();
-    }
 
-    let liveCount = 0;
     sortedOrders.forEach(o => {
+        // Kitchen tab (id 'live') shows the KDS — the live-orders table it used
+        // to render into was removed (e4f0b0b), so no table rows are built.
+        if (activeTab === 'live') return;
         const id = o.id;
         let items = _normalizeItems(o);
         o.normalizedItems = items;
-
-        const status = (o.status || "Unknown").trim();
-        const isLive = ['Placed', 'Confirmed', 'Ready'].includes(status) ||
-            (status === 'Served' && o.paymentStatus !== 'Paid' && !o.paidAt);
-        
-        if (isLive) liveCount++;
-
-        // Filter for Live Tab: Only show live orders
-        if (activeTab === 'live') {
-            if (!isLive) {
-                return;
-            }
-        }
 
         const tr = document.createElement('tr');
         tr.id = `row-${id}`;
@@ -635,59 +597,6 @@ export async function renderOrders(snap) {
                     <div class="action-group-v4">
                         ${renderStatusDropdown(o.status || 'Placed', o.type || 'Online', id, o)}
                         <button data-action="printReceiptById" data-id="${o.orderId || id}" class="btn-action-v4" title="Print Receipt" aria-label="Print Receipt">
-                            <i data-lucide="printer"></i>
-                        </button>
-                    </div>
-                </td>
-            `;
-        } else if (activeTab === 'live') {
-            const itemSummary = items.length > 0 ? `${items.length} Items` : "No Items";
-            const onlineRiders = (state.ridersList || []).filter(r => isRiderFresh(r));
-            const riderOptions = onlineRiders.map(r => `
-                <option value="${r.id}" ${o.riderId === r.id ? 'selected' : ''}>${escapeHtml(r.name)}</option>
-            `).join('');
-
-            tr.innerHTML = `
-
-                <td data-label="Order">
-                    <div class="identity-chip-v4">
-                        <div class="kpi-icon-box" style="width:32px; height:32px; font-size:14px;">
-                            <i data-lucide="zap"></i>
-                        </div>
-                        <div class="identity-info-v4">
-                            <span class="name">#${safeOrderId}</span>
-                            <span class="sub">${escapeHtml((o.outlet || 'pizza').toUpperCase())}</span>
-                        </div>
-                    </div>
-                </td>
-                <td data-label="Customer">
-                    <div class="identity-info-v4">
-                        <span class="name">${safeCustomerName}</span>
-                        <span class="sub">${escapeHtml(o.phone || 'Guest')}</span>
-                    </div>
-                </td>
-                <td data-label="Kitchen">
-                    <div class="flex-col">
-                        <span class="font-600 fs-13">${itemSummary}</span>
-                        <span class="text-muted-small">${escapeHtml(o.type)}</span>
-                    </div>
-                </td>
-                <td data-label="Total">
-                    <span class="font-bold color-primary">₹${escapeHtml(o.total || '0')}</span>
-                </td>
-                <td data-label="Status">
-                    <span class="status ${safeStatusClass}">${safeStatus}</span>
-                </td>
-                <td data-label="Rider">
-                    <select data-action="assignRider" data-id="${id}" class="status-select-mini" ${(o.type === 'Dine-in' || o.type === 'Pickup') ? 'disabled' : ''}>
-                        <option value="">Assign</option>
-                        ${riderOptions}
-                    </select>
-                </td>
-                <td data-label="Actions">
-                    <div class="action-group-v4">
-                        ${renderStatusDropdown(o.status || 'Placed', o.type || 'Online', id, o)}
-                        <button data-action="printReceiptById" data-id="${o.orderId || id}" class="btn-action-v4" aria-label="Print Receipt">
                             <i data-lucide="printer"></i>
                         </button>
                     </div>
@@ -810,23 +719,22 @@ export async function renderOrders(snap) {
 /**
  * Update the live badge (#badge-live / #badge-live-mobile) from the full
  * orders map, refreshed on every realtime child_added / child_changed so the
- * badge never drifts from the KDS-visible orders. Hoisted to module scope so
+ * badge matches the KDS exactly: DINE-IN orders the kitchen can still act on
+ * (Placed / Confirmed / Ready). The KDS never shows other types or Served
+ * orders, so they must not inflate this count. Hoisted to module scope so
  * onChildAdded / onChildChanged can call it without a ReferenceError.
  */
 function updateLiveBadge() {
     const liveBadge = document.getElementById('badge-live');
     const liveBadgeMobile = document.getElementById('badge-live-mobile');
     if (!liveBadge && !liveBadgeMobile) return;
-    // Count orders with KDS-visible statuses: Placed, Confirmed, Ready
-    // (Served with unpaid also counts - same as renderOrders logic)
+    // KDS-visible only: Dine-in with a status the kitchen can still act on.
     let count = 0;
     state.ordersMap.forEach(o => {
         if (!o) return;
+        if ((o.type || '').trim() !== 'Dine-in') return;
         const status = (o.status || '').trim();
-        if (status === 'Placed' || status === 'Confirmed' || status === 'Ready' ||
-            (status === 'Served' && o.paymentStatus !== 'Paid' && !o.paidAt)) {
-            count++;
-        }
+        if (status === 'Placed' || status === 'Confirmed' || status === 'Ready') count++;
     });
     [liveBadge, liveBadgeMobile].forEach(el => {
         if (!el) return;
@@ -1042,7 +950,7 @@ export async function updateStatus(id, status) {
 
     logger.info('ORDERS', `updateStatus requested: ${id} → ${status}`);
 
-    const order = state.ordersMap.get(id) || (state.liveOrdersMap.get(id));
+    const order = state.ordersMap.get(id);
     if (!order) {
         logger.warn('ORDERS', `Order not found: ${id}`);
         return;
@@ -1083,7 +991,7 @@ export async function updateStatus(id, status) {
 
     // Enforce Rider Assignment for Out for Delivery
     if (status === "Out for Delivery") {
-        const orderCheck = state.ordersMap.get(id) || state.liveOrdersMap.get(id); // Defensive lookup (both maps)
+        const orderCheck = state.ordersMap.get(id);
         if (!orderCheck) {
             showToast("⚠️ Order data not found. Refreshing...", "error");
             renderOrders(state.lastOrdersSnap);
@@ -1157,7 +1065,11 @@ export async function updateStatus(id, status) {
 
         if (lat && lng) {
             try {
-                const outletKey = (order.outlet || 'pizza').toLowerCase();
+                // Fall back to the CURRENT tenant, never a hardcoded outlet id:
+                // a legacy order without `outlet` belongs to whichever outlet
+                // this admin is signed into, or its fee math would read
+                // another tenant's delivery settings.
+                const outletKey = (order.outlet || Outlet.current).toLowerCase();
                 const delSnap = await get(tenantRef(outletKey, 'settings/Delivery'));
                 const storeSnap = await get(tenantRef(outletKey, 'settings/Store'));
                 const delSettings = delSnap.val() || {};
@@ -1228,7 +1140,7 @@ export async function assignRider(id, riderId) {
         const rider = riderSnap.val();
         if (!rider) throw new Error("Rider not found");
 
-        const order = state.ordersMap.get(id) || state.liveOrdersMap.get(id);
+        const order = state.ordersMap.get(id);
         if (!order) {
             logger.warn('ORDERS', `Order data not found: ${id}`);
             showToast("⚠️ Order data not found. Please refresh.", "error");
@@ -1442,7 +1354,7 @@ function renderDrawerContext(order, orderType) {
 
 export async function openOrderDrawer(id) {
     logger.info('ORDERS', `Opening order drawer: ${id}`);
-    const order = state.ordersMap.get(id) || state.liveOrdersMap.get(id);
+    const order = state.ordersMap.get(id);
     if (!order) {
         logger.warn('ORDERS', `Order not found: ${id}`);
         showToast("Order not found. It may have been removed.", "error");

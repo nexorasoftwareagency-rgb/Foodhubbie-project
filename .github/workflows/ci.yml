@@ -29,6 +29,9 @@ jobs:
       - name: Session lifecycle guard (3h scan / 24h order / never cancel a served order)
         run: node tests/session-lifecycle.check.cjs
 
+      - name: KDS guard (badge parity, KOT correctness, phantom Preparing, dead refs)
+        run: node tests/kds-check.mjs
+
       - name: Menu cart persistence guard
         run: node tests/menu-cart-refresh.check.cjs
 

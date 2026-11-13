@@ -11,6 +11,7 @@
     "test:query-chain": "node tests/admin-query-chain.check.cjs",
     "test:tables-window": "node tests/tables-session-window.check.cjs",
     "test:session-lifecycle": "node tests/session-lifecycle.check.cjs",
+    "test:kds": "node tests/kds-check.mjs",
     "test:menu-cart": "node tests/menu-cart-refresh.check.cjs",
     "test:menu-legacy-qr": "node tests/menu-legacy-qr.check.cjs",
     "test:pin": "node tests/pin-crypto.check.mjs",

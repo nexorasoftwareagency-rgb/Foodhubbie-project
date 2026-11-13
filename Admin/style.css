@@ -9255,44 +9255,17 @@ body.pos-selection-mode .walkin-picker {
 .kds-count { background: rgba(0,0,0,.08); padding: 1px 7px; border-radius: 8px; font-size: 10px; }
 .kds-column-body { padding: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 80px; max-height: 320px; overflow-y: auto; }
 .kds-empty { text-align: center; padding: 16px 8px; }
-.kds-card { background: #fff; border: 1px solid var(--border-color, #e2e8f0); border-radius: 10px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-.kds-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.kds-card-table { font-size: 12px; font-weight: 800; color: var(--text-primary, #0f172a); }
-.kds-card-group { font-weight: 600; color: var(--accent, #E84908); font-size: 11px; }
-.kds-card-id { font-size: 10px; color: var(--text-tertiary, #94a3b8); }
-.kds-item-line { font-size: 12px; color: var(--text-secondary, #64748b); line-height: 1.5; }
-.kds-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border-color, #e2e8f0); }
-.kds-elapsed { font-size: 12px; font-weight: 800; color: var(--text-secondary, #64748b); font-family: 'Courier New', monospace; }
-.kds-time-label { font-size: 10px; color: var(--text-tertiary, #94a3b8); }
-.kds-card-warn { border-color: rgba(245,158,11,.5); }
-.kds-card-warn .kds-elapsed { color: #b45309; }
-.kds-card-urgent { border-color: rgba(239,68,68,.5); background: rgba(239,68,68,.04); }
-.kds-card-urgent .kds-elapsed { color: #991b1b; }
-.kds-card-urgent .kds-card-footer { animation: kdsUrgentPulse 1.4s ease-in-out infinite; }
-@keyframes kdsUrgentPulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
-@media (prefers-reduced-motion: reduce) { .kds-card-urgent .kds-card-footer { animation: none; } }
-.kds-card-actions { display:flex;gap:6px;margin-top:8px; }
-.kds-btn { flex:1;padding:6px 10px;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;transition:transform .12s,box-shadow .12s; }
-.kds-btn:active { transform:scale(.96); }
-.kds-btn-accept { background:#22c55e;color:#fff; }
-.kds-btn-accept:hover { background:#16a34a; }
-.kds-btn-ready { background:#f59e0b;color:#fff; }
-.kds-btn-ready:hover { background:#d97706; }
-.kds-btn-serve { background:#3b82f6;color:#fff; }
-.kds-btn-serve:hover { background:#2563eb; }
 
 /* ---------- Kitchen Grid (vertical list inside KDS column) ---------- */
 .kitchen-grid { display:grid; grid-template-columns:1fr; gap:12px; }
 
-.kitchen-card { background:#fff; border:1px solid var(--border-color, #e2e8f0); border-radius:12px; padding:12px; box-shadow:0 2px 6px rgba(0,0,0,.06); display:flex; flex-direction:column; min-height:180px; transition:border-color .2s, box-shadow .2s, background .2s; }
+.kitchen-card { background:#fff; border:1px solid var(--border-color, #e2e8f0); border-radius:12px; padding:12px; box-shadow:0 2px 6px rgba(0,0,0,.06); display:flex; flex-direction:column; min-height:180px; cursor:pointer; transition:border-color .2s, box-shadow .2s, background .2s; }
 .kitchen-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.08); }
 
 .kitchen-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--border-color, #e2e8f0); }
 .kitchen-order-id { font-size:14px; font-weight:800; color:var(--text-primary, #0f172a); font-family:'Courier New', monospace; }
 .source-badge { font-size:10px; font-weight:800; padding:2px 8px; border-radius:6px; text-transform:uppercase; letter-spacing:.03em; }
-.source-online { background:rgba(59,130,246,.12); color:#1d4ed8; }
 .source-dinein { background:rgba(232,73,8,.12); color:#c23b0f; }
-.source-pos { background:rgba(139,92,246,.12); color:#7c3aed; }
 
 .kitchen-card-items { flex:1; display:flex; flex-direction:column; gap:4px; margin-bottom:8px; min-height:60px; }
 .kitchen-item-line { font-size:12px; color:var(--text-secondary, #64748b); line-height:1.4; font-weight:500; }
@@ -9448,7 +9421,6 @@ body.pos-selection-mode .walkin-picker {
 }
 [data-theme="dark"] .drawer-order-block { background: var(--neutral-200, #2A2A2A); border-color: var(--border-color, rgba(255,255,255,.1)); }
 [data-theme="dark"] .table-drawer-content { background: var(--neutral-100, #1E1E1E); }
-[data-theme="dark"] .kds-card { background: var(--neutral-200, #2A2A2A); }
 [data-theme="dark"] .table-qr-preview-wrap { background: #fff; }
 
 /* --- Settings page utility classes --- */

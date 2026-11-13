@@ -388,19 +388,12 @@ function _kdsItemLines(o) {
     }).join('');
 }
 
-/** Source badge for kitchen card */
+/** Source badge for kitchen card — `_dineInOrders` only passes Dine-in
+ *  orders, so the badge is always the table number. */
 function _sourceBadge(o) {
-    const isOnline = o.type === 'Online' || o.source === 'webview_delivery';
-    const isDineIn = o.type === 'Dine-in' || o.source === 'QR';
-    const isPOS = o.type === 'Walk-in' || o.source === 'POS';
-    if (isOnline) return '<span class="source-badge source-online">ONLINE</span>';
-    if (isDineIn) {
-        const t = _tables[o.tableId];
-        const tNum = t ? escapeHtml(t.number) : (o.table || '--');
-        return `<span class="source-badge source-dinein">TABLE ${tNum}</span>`;
-    }
-    if (isPOS) return '<span class="source-badge source-pos">POS</span>';
-    return '<span class="source-badge">—</span>';
+    const t = _tables[o.tableId];
+    const tNum = t ? escapeHtml(t.number) : (o.table || '--');
+    return `<span class="source-badge source-dinein">TABLE ${tNum}</span>`;
 }
 
 /** Kitchen card for an order — rectangular box with items + one-click action */
@@ -418,7 +411,7 @@ function _kitchenCard(o) {
         actionBtn = `<button class="kitchen-btn kitchen-btn-confirm" data-action="advanceTableOrder" data-id="${escapeHtml(o.id)}" data-next="Confirmed">
             <i data-lucide="check" class="icon-14"></i> MARK CONFIRM
         </button>`;
-    } else if (st === 'Confirmed' || st === 'Preparing') {
+    } else if (st === 'Confirmed') {
         actionBtn = `<button class="kitchen-btn kitchen-btn-preparing" data-action="advanceTableOrder" data-id="${escapeHtml(o.id)}" data-next="Ready">
             <i data-lucide="chef-hat" class="icon-14"></i> MARK READY
         </button>`;
@@ -432,8 +425,12 @@ function _kitchenCard(o) {
     const mins = Math.floor((Date.now() - _ms(o.createdAt)) / 60000);
     const urgentCls = mins >= 15 ? 'kitchen-card-urgent' : (mins >= 8 ? 'kitchen-card-warn' : '');
 
+    // Card body opens the table drawer (details + cancel path). The advance
+    // button inside carries its own data-action, so closest() resolves it
+    // first; clicking anywhere else routes to openTableDrawerByOrder —
+    // handled by tables.js inside #tab-tables and by main.js elsewhere.
     return `
-    <div class="kitchen-card ${urgentCls}" data-order-id="${escapeHtml(o.id)}" data-status="${st}">
+    <div class="kitchen-card ${urgentCls}" data-action="openTableDrawerByOrder" data-order-id="${escapeHtml(o.id)}" data-status="${st}" title="Open table details">
         <div class="kitchen-card-header">
             <span class="kitchen-order-id">#${orderId}</span>
             ${sourceHtml}
@@ -456,19 +453,16 @@ function _renderKDS() {
     const readyCols = document.querySelectorAll('[data-kds-col="ready"]');
     if (!newCols.length) return;
 
-    // Get all active orders, prioritize: Online first, then by createdAt desc (newest first)
-    const allOrders = _dineInOrders().sort((a, b) => {
-        const aOnline = a.type === 'Online' || a.source === 'webview_delivery';
-        const bOnline = b.type === 'Online' || b.source === 'webview_delivery';
-        if (aOnline !== bOnline) return aOnline ? -1 : 1; // Online first
-        return _ms(b.createdAt) - _ms(a.createdAt); // Newest first
-    });
+    // Get all active dine-in orders, newest first (newest at the top of the
+    // column). `_dineInOrders` already filters to Dine-in, so there is no
+    // Online priority to apply here.
+    const allOrders = _dineInOrders().sort((a, b) => _ms(b.createdAt) - _ms(a.createdAt));
 
     const groups = { New: [], Confirmed: [], Ready: [] };
     allOrders.forEach(o => {
         const st = o.status || 'Placed';
         if (st === 'Placed') groups.New.push(o);
-        else if (st === 'Confirmed' || st === 'Preparing') groups.Confirmed.push(o);
+        else if (st === 'Confirmed') groups.Confirmed.push(o);
         else if (st === 'Ready') groups.Ready.push(o);
     });
 
@@ -581,7 +575,7 @@ function _orderActionButtons(o) {
                 </button>
                 <button class="btn-text text-danger btn-small" data-action="advanceTableOrder" data-id="${id}" data-next="Cancelled">Cancel</button>`;
     }
-    if (o.status === 'Confirmed' || o.status === 'Preparing') {
+    if (o.status === 'Confirmed') {
         return `<button class="btn-action-orange btn-small" data-action="advanceTableOrder" data-id="${id}" data-next="Ready">
                     <i data-lucide="chef-hat" class="icon-12"></i> Mark Ready
                 </button>
@@ -2192,7 +2186,6 @@ async function _advanceOrder(orderId, nextStatus) {
         const valid = {
             'Placed': ['Confirmed', 'Cancelled'],
             'Confirmed': ['Ready', 'Cancelled'],
-            'Preparing': ['Ready', 'Cancelled'],
             'Ready': ['Served', 'Cancelled'],
             'Served': [], 'Delivered': [], 'Cancelled': []
         };
@@ -2269,16 +2262,28 @@ function _printTableKOT(tableId) {
     const t = _tables[tableId];
     const sess = _sessionForTable(tableId);
     if (!t || !sess) { showToast('No active session to print', 'warning'); return; }
-    const orders = _ordersForSession(sess.sessionId || t.currentSession);
-    const grouped = {};
+    // Only live kitchen work prints: a Cancelled order's dishes must never
+    // reach the kitchen (bills already filter the same way — _printBillForGroup).
+    const orders = _ordersForSession(sess.sessionId || t.currentSession).filter(o => o.status !== 'Cancelled');
+    // Aggregate identical lines (name + size + addons) across the session's
+    // orders — the ticket carries the same detail the KDS card shows.
+    const grouped = new Map();
     orders.forEach(o => Object.values(o.items || {}).forEach(it => {
         const name = it.name || 'Item';
-        grouped[name] = (grouped[name] || 0) + (it.qty || 1);
+        const size = it.size && it.size !== 'Regular' ? ` (${it.size})` : '';
+        const addons = Array.isArray(it.addons) && it.addons.length ? ` + ${it.addons.join(', ')}` : (it.addon ? ` + ${it.addon}` : '');
+        const key = `${name}${size}${addons}`;
+        const entry = grouped.get(key) || { label: key, qty: 0 };
+        entry.qty += (it.qty || 1);
+        grouped.set(key, entry);
     }));
-    const itemRows = Object.entries(grouped).map(([name, qty]) =>
-        `<div class="kot-item-row"><span>${qty} ×</span><span>${escapeHtml(name)}</span></div>`
+    const itemRows = [...grouped.values()].map(g =>
+        `<div class="kot-item-row"><span>${g.qty} ×</span><span>${escapeHtml(g.label)}</span></div>`
     ).join('');
+    if (!itemRows) { showToast('No live items to print', 'warning'); return; }
     const w = window.open('', '_blank', 'width=380,height=600');
+    // A popup blocker returns null — writing to it would throw uncaught.
+    if (!w) { showToast('Popup blocked — allow popups for this site to print the KOT', 'error'); return; }
     w.document.write(`<html><head><title>KOT — Table ${escapeHtml(t.number)}</title><style>
         body{font-family:'Courier New',monospace;padding:16px;width:280px;}
         h2{text-align:center;margin-bottom:2px;font-size:18px;}
@@ -2289,7 +2294,7 @@ function _printTableKOT(tableId) {
         </style></head><body>
         <h2>KOT — TABLE ${escapeHtml(t.number)}</h2>
         <div class="sub">${new Date().toLocaleString('en-IN')} · Session ${escapeHtml(sess.sessionId || '')}</div>
-        ${itemRows || '<p>No items</p>'}
+        ${itemRows}
         <div class="foot">Kitchen Copy</div>
         <script>window.onload=function(){window.print();};</script></body></html>`);
     w.document.close();

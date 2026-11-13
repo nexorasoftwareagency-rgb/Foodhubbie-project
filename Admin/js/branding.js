@@ -23,7 +23,6 @@ export function clearStateForOutletSwitch() {
     state.categories = [];
     state.allWalkinDishes = [];
     state.ordersMap.clear();
-    state.liveOrdersMap.clear();
     state.lastOrdersSnap = null;
     state.lastDishesSnap = null;
     state.ridersList = [];
