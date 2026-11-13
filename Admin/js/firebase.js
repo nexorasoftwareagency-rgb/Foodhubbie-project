@@ -184,6 +184,19 @@ async function apiBase() {
     return window.TUNNEL_URL || '';
 }
 
+// Media writes have their own base so they can live on Cloud Functions (batch
+// 23d-1) while the rest of the control API is still on EC2. Missing config =
+// fall back to the old host, so deleting the function breaks nothing.
+async function mediaBase() {
+    if (window.MEDIA_URL) return window.MEDIA_URL;
+    try {
+        const snap = await get(ref(db, 'config/mediaUrl'));
+        const url = snap.val();
+        if (url) window.MEDIA_URL = url;
+    } catch { /* fall through to the control API */ }
+    return window.MEDIA_URL || apiBase();
+}
+
 async function apiAuthToken() {
     return auth.currentUser ? auth.currentUser.getIdToken() : null;
 }
@@ -192,8 +205,8 @@ export async function uploadImage(fileOrBlob, { type, id } = {}) {
     if (!fileOrBlob) return null;
     const token = await apiAuthToken();
     if (!token) throw new Error('Not signed in');
-    const base = await apiBase();
-    if (!base) throw new Error('Upload service is not configured (config/tunnelUrl missing)');
+    const base = await mediaBase();
+    if (!base) throw new Error('Upload service is not configured (config/mediaUrl missing)');
 
     const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -218,7 +231,7 @@ export async function deleteImage(url) {
     if (!url || !/^https:\/\//.test(url)) return;
     try {
         const token = await apiAuthToken();
-        const base = token ? await apiBase() : '';
+        const base = token ? await mediaBase() : '';
         if (!base) return;
         await fetch(`${base}/tenant-api/delete-image`, {
             method: 'POST',

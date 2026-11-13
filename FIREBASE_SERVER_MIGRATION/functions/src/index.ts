@@ -8,6 +8,10 @@
 
 // HTTPS Functions (Public Endpoints)
 export { whatsappWebhook } from './api/whatsappWebhook';
+// Batch 23d-1: the first control-API routes to leave EC2. Uploads were the most
+// valuable to move first — every dish/category/combo/status image save goes
+// through them, and they need no pm2 or socket. Wired by `config/mediaUrl`.
+export { tenantMedia } from './api/tenantMedia';
 
 // Task Queue Functions (Async Processing)
 export { processInboundMessage } from './taskqueue/processInboundMessage';

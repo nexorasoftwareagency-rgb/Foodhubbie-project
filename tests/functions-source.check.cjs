@@ -91,6 +91,57 @@ ok(/WEB_SOURCES = \['webview_delivery', 'APP'\]/.test(shadowTrigger), 'only brow
 ok(/secrets: \['FIREBASE_DATABASE_URL'\]/.test(shadowTrigger), 'both triggers bind FIREBASE_DATABASE_URL');
 ok(/require\(path\.join\(VENDOR/.test(shadowTrigger), 'the trigger loads the vendored copy of the bot module (no re-implementation)');
 
+// Batch 23d-1: media endpoints (upload / delete-image) moved off EC2.
+// The tenant must come from the VERIFIED token, never the body — otherwise an
+// admin could write (or delete) another outlet's images.
+ok(/export\s*\{\s*tenantMedia\s*\}/.test(entry), 'index.ts exports tenantMedia');
+const media = read(path.join(source, 'src', 'api', 'tenantMedia.ts'));
+ok(/\/tenant-api\/upload/.test(media), 'serves POST /tenant-api/upload');
+ok(/\/tenant-api\/delete-image/.test(media), 'serves POST /tenant-api/delete-image');
+ok(/admins\/\$\{decoded\.uid\}/.test(media), 'resolves the admin row from the verified token uid');
+ok(/verifyIdToken\(token\)/.test(media), 'verifies the Firebase ID token');
+ok(!/body\.(bid|businessId|outlet)\b/.test(media), 'never takes the tenant from the request body');
+ok(/body\.outlet\)?\s*throw new HttpError\(403/.test(media) || /if \(!row\.outlet\) throw new HttpError\(403/.test(media),
+    'refuses an admin without an outlet');
+ok(/mediaPrefix\(bid, oid\)/.test(media) && /startsWith\(mediaPrefix/.test(media),
+    'delete is restricted to the caller’s own outlets/{bid}/{oid}/ prefix');
+ok(/MAX_BODY_BYTES = 8 \* 1024 \* 1024/.test(media) && /MAX_IMAGE_BYTES = 6 \* 1024 \* 1024/.test(media),
+    'keeps the 8 MB body / 6 MB image caps of the control API');
+ok(/foodhubbie-10\.firebasestorage\.app/.test(media), 'defaults to the live media bucket');
+ok(/resumable: false/.test(media) && /firebaseStorageDownloadTokens/.test(media),
+    'stores byte-for-byte with a per-object download token (no re-encode)');
+for (const origin of ['https://foodhubbie-admins.web.app', 'https://foodhubbie-supremeadmin.web.app',
+    'https://app.foodhubbie.in', 'https://control.foodhubbie.in']) {
+    ok(media.includes(`'${origin}'`), `CORS allows ${origin}`);
+}
+ok(/cors: DASHBOARD_ORIGINS/.test(media), 'wires the allowlist into the function (preflight handled by the runtime)');
+
+// The bucket rules must keep denying every client write — the endpoint is the
+// only writer, and it takes the tenant from the token.
+const storageRules = read('storage.rules');
+ok(/allow read, write: if false/.test(storageRules), 'storage rules still deny all client access by default');
+
+// The dashboard reads config/mediaUrl itself; without a rule the read is denied,
+// mediaBase() silently falls back to the control API, and the cutover looks done
+// while every upload still goes to the old host.
+const dbRules = JSON.parse(read('database.rules.json'));
+const mediaUrlRule = dbRules?.rules?.config?.mediaUrl?.['.read'];
+ok(!!mediaUrlRule, 'database.rules.json grants read on config/mediaUrl');
+ok(/sign_in_provider != 'anonymous'/.test(String(mediaUrlRule || '')),
+    'config/mediaUrl is readable by signed-in dashboards but not anonymous users',
+    String(mediaUrlRule));
+
+// Client wiring: media goes to config/mediaUrl with a fallback to the control
+// API, so removing the function cannot break image saving.
+const adminFirebase = read('Admin/js/firebase.js');
+ok(/config\/mediaUrl/.test(adminFirebase), 'the dashboard reads config/mediaUrl');
+ok(/export async function uploadImage/.test(adminFirebase)
+    && /await mediaBase\(\)/.test(adminFirebase.slice(adminFirebase.indexOf('export async function uploadImage'))),
+    'uploadImage posts to the media base');
+ok(/export async function deleteImage/.test(adminFirebase)
+    && /await mediaBase\(\)/.test(adminFirebase.slice(adminFirebase.indexOf('export async function deleteImage'))),
+    'deleteImage posts to the media base');
+
 const evaluate = read(path.join(source, 'src', 'shared', 'health', 'evaluate.ts'));
 ok(!/from 'firebase/.test(evaluate) && !/require\('firebase/.test(evaluate), 'evaluate.ts stays dependency-free (self-check runs it from lib/)');
 ok(/STALE_AFTER_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/.test(evaluate), 'stale threshold is 5 minutes');
