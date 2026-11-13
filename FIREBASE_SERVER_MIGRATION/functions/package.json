@@ -4,8 +4,10 @@
   "description": "Foodhubbie Firebase Functions 2nd Gen - Meta WhatsApp Cloud API Backend",
   "main": "lib/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/copy-vendor.cjs && tsc",
     "build:watch": "tsc -w",
+    "vendor": "node scripts/copy-vendor.cjs",
+    "check:vendor": "node scripts/copy-vendor.cjs --check",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "test": "jest --coverage",

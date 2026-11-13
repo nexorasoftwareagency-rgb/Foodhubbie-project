@@ -35,6 +35,14 @@ export { transportSwitch } from './api/transportSwitch';
 
 // RTDB Triggers (Event-Driven)
 export { onOrderStatusChange } from './triggers/onOrderStatusChange';
+// Batch 23c: runs the bot's own web/app order finalizer in DRY-RUN against live
+// orders and compares its verdict with what the bot actually produced. It never
+// writes to an order, a stock count, a reward or a billing row — only to
+// `migrationShadow/orderFinalizer/...`. See the file header for the two stages.
+export {
+  onWebOrderPlacedShadow,
+  onWebOrderFinalizedShadow,
+} from './triggers/orderFinalizerShadow';
 // onWalletUpdate was DELETED in batch 14: it triggered on
 // `walletBilling/{bid}/{oid}/balancePaise` — the META API credit line, not the
 // restaurant wallet — and published the CUSTOMER-facing order gate from it,

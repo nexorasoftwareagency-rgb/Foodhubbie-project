@@ -175,7 +175,8 @@ function createOrderFinalizer(deps) {
     // amount PAYABLE (totalDue), never the taxable value, so tax is untouched.
     // A skipped/failed validation always errs toward FULL payment — never a
     // free discount the bot couldn't check.
-    async function verifyRewardTender(orderId, order, outlet) {
+    async function verifyRewardTender(orderId, order, outlet, opts = {}) {
+        const dryRun = !!(opts && opts.dryRun);
         try {
             const claim = order && order.rewardCode;
             if (!claim || !claim.key || !claim.code) return null;
@@ -223,16 +224,6 @@ function createOrderFinalizer(deps) {
             // validated read so only a genuinely inactive code aborts. A concurrent
             // burn between read and commit fails the CAS and retries with fresh
             // data, so the replay guard stays airtight.
-            const now = Date.now();
-            const burn = await rewardRef.transaction((cur) => {
-                const node = cur || reward;
-                if (!node || node.status !== 'active') return undefined;
-                return { ...node, status: 'used', usedAt: now, usedOnOrder: String(orderId) };
-            });
-            if (!burn.committed) {
-                console.warn(`[LoyaltyTender] ${orderId}: code already used — tender ignored.`);
-                return null;
-            }
             const tenderRs = loyaltyMath.round2(tenderPaise / 100);
             const totalDue = loyaltyMath.round2(Math.max(0, total - tenderRs));
             const tenderRecord = {
@@ -244,6 +235,21 @@ function createOrderFinalizer(deps) {
                 amountPaise: tenderPaise,
                 amount: tenderRs
             };
+            // Shadow mode (batch 23c): report what WOULD be honoured, burn
+            // nothing, write nothing. The comparison target is the bot's own
+            // loyaltyTender on the finalized order.
+            if (dryRun) return tenderRecord;
+
+            const now = Date.now();
+            const burn = await rewardRef.transaction((cur) => {
+                const node = cur || reward;
+                if (!node || node.status !== 'active') return undefined;
+                return { ...node, status: 'used', usedAt: now, usedOnOrder: String(orderId) };
+            });
+            if (!burn.committed) {
+                console.warn(`[LoyaltyTender] ${orderId}: code already used — tender ignored.`);
+                return null;
+            }
             await updateData(`orders/${orderId}`, { loyaltyTender: tenderRecord, totalDue }, oid);
             Object.assign(order, { loyaltyTender: tenderRecord, totalDue });
             console.log(`[LoyaltyTender] ${orderId}: -₹${tenderRs} tender (${tenderRecord.points} pts, ${tenderRecord.label}) → payable ₹${totalDue}`);
@@ -258,7 +264,10 @@ function createOrderFinalizer(deps) {
     // name, and returns what was ACTUALLY taken per inventory id
     // ({ [invId]: qtyClampedByStock }) so a later cancel can give exactly that
     // back — a line for more than the shelf holds only ever took what existed.
-    async function deductInventoryStock(sock, items, outlet = defaultOutlet) {
+    // `dryRun` (batch 23c shadow mode) computes the same map from the same
+    // snapshot and writes nothing — no stock movement, no low-stock alert.
+    async function deductInventoryStock(sock, items, outlet = defaultOutlet, opts = {}) {
+        const dryRun = !!(opts && opts.dryRun);
         const deducted = {};
         if (!items || !Array.isArray(items) || items.length === 0) return deducted;
         try {
@@ -289,14 +298,19 @@ function createOrderFinalizer(deps) {
                 const newStock = Math.max(0, before - qty);
                 const threshold = data.threshold || 0;
 
-                await inventoryRef.child(id).update({
-                    stock: newStock,
-                    updatedAt: new Date().toISOString()
-                });
+                if (!dryRun) {
+                    await inventoryRef.child(id).update({
+                        stock: newStock,
+                        updatedAt: new Date().toISOString()
+                    });
+                }
                 const taken = Math.max(0, before - newStock);
                 if (taken > 0) deducted[id] = taken;
 
-                if (newStock <= threshold && notifyPhone && sock) {
+                // `typeof` guard: a caller that injects a socket-shaped stub (the
+                // shadow harness, a partial transport) must not turn a stock write
+                // into a logged failure just because the alert cannot be sent.
+                if (!dryRun && newStock <= threshold && notifyPhone && sock && typeof sock.sendMessage === 'function') {
                     const alertMsg = `⚠️ *LOW STOCK ALERT* ⚠️\n━━━━━━━━━━━━━━━━━━━━\n` +
                         `📦 Item: *${data.name}*\n` +
                         `📉 Current Stock: *${newStock}*\n` +
@@ -361,14 +375,20 @@ function createOrderFinalizer(deps) {
      * @returns {Promise<object>} a compact record of what the server decided, so
      *   a shadow run (batch 23c) can compare without diffing the whole order.
      */
-    async function finalizeWebOrder({ orderId, order, sock = null }) {
+    async function finalizeWebOrder({ orderId, order, sock = null, dryRun = false }) {
+        const shadow = !!dryRun;
         const outlet = (order && order.outlet) || defaultOutlet;
         const result = {
             orderId,
             outlet,
             ok: false,
+            dryRun: shadow,
             priceChanged: false,
+            subtotal: null,
             discount: null,
+            discountId: null,
+            deliveryFee: null,
+            taxItems: null,
             total: null,
             tax: null,
             taxName: null,
@@ -402,12 +422,12 @@ function createOrderFinalizer(deps) {
                     // (an item removed from the menu mid-order is legitimate), but
                     // it is never silently accepted.
                     const review = orderPricing.buildPriceReview(priced);
-                    await updateData(`orders/${orderId}`, { priceReview: review }, outlet).catch(() => {});
+                    if (!shadow) await updateData(`orders/${orderId}`, { priceReview: review }, outlet).catch(() => {});
                     order.priceReview = review;
                 }
                 if (priced.changed) {
                     console.warn(`[WebOrder] Price correction on ${orderId}: client subtotal ₹${order.subtotal} (${(order.items || []).length} lines), catalog ₹${priced.subtotal}.`);
-                    await updateData(`orders/${orderId}`, { items: priced.items, subtotal: priced.subtotal }, outlet);
+                    if (!shadow) await updateData(`orders/${orderId}`, { items: priced.items, subtotal: priced.subtotal }, outlet);
                     order.items = priced.items;
                     order.subtotal = priced.subtotal;
                     result.priceChanged = true;
@@ -484,7 +504,7 @@ function createOrderFinalizer(deps) {
                     total: correctedTotal,
                     ...moneyFields(money)
                 };
-                await updateData(`orders/${orderId}`, correction, outlet);
+                await (shadow ? Promise.resolve() : updateData(`orders/${orderId}`, correction, outlet));
                 Object.assign(order, correction); // keep everything below consistent with the verified truth
             } catch (discErr) {
                 console.error("[WebOrder] Discount re-validation failed:", discErr);
@@ -500,10 +520,14 @@ function createOrderFinalizer(deps) {
                     deliveryFee: resolvedDeliveryFee,
                 });
                 const correction = { discount: 0, discountId: null, discountLabel: null, discountSource: null, discountMode: null, discountValue: 0, discountGlobalLimit: 0, total: safe.total, ...moneyFields(safe) };
-                await updateData(`orders/${orderId}`, correction, outlet).catch(() => {});
+                if (!shadow) await updateData(`orders/${orderId}`, correction, outlet).catch(() => {});
                 Object.assign(order, correction);
             }
+            result.subtotal = Number(order.subtotal) || 0;
             result.discount = Number(order.discount) || 0;
+            result.discountId = order.discountId || null;
+            result.deliveryFee = Number(order.deliveryFee) || 0;
+            result.taxItems = Array.isArray(order.taxItems) ? order.taxItems : null;
             result.total = Number(order.total) || 0;
             result.tax = order.tax == null ? null : Number(order.tax);
             result.taxName = order.taxName || null;
@@ -511,21 +535,21 @@ function createOrderFinalizer(deps) {
             // R2: honor a claimed loyalty reward code as tender against
             // the VERIFIED total (burns the code server-side, writes
             // loyaltyTender + totalDue for the invoice/admin views).
-            result.tender = await verifyRewardTender(orderId, order, outlet);
+            result.tender = await verifyRewardTender(orderId, order, outlet, { dryRun: shadow });
 
             // Keep exactly what was taken: a cancel returns only this
             // map, never a guess from the item names (a line for more
             // than the shelf held only ever took what existed).
             // `stockDeducted` stays the finalization marker either way
             // — clearing it would let the order be finalized twice.
-            const inventoryDeducted = await deductInventoryStock(sock, order.items, outlet)
+            const inventoryDeducted = await deductInventoryStock(sock, order.items, outlet, { dryRun: shadow })
                 .catch(e => { console.error("[WebOrder] Stock deduction failed:", e); return {}; });
-            await updateData(`orders/${orderId}`, { stockDeducted: true, inventoryDeducted }, outlet);
+            if (!shadow) await updateData(`orders/${orderId}`, { stockDeducted: true, inventoryDeducted }, outlet);
             result.inventoryDeducted = inventoryDeducted;
 
-            if (notify) notify(sock, orderId, order, "NEW").catch(() => {});
+            if (!shadow && notify) notify(sock, orderId, order, "NEW").catch(() => {});
 
-            if (order.phone) {
+            if (!shadow && order.phone) {
                 const cleanPhone = String(order.phone).replace(/\D/g, "").slice(-10);
                 const jid = formatJid(order.phone);
                 saveUserProfile(jid, {
@@ -567,7 +591,7 @@ function createOrderFinalizer(deps) {
                 }).catch(() => {});
             }
 
-            if (order.discount > 0 && order.discountId) {
+            if (!shadow && order.discount > 0 && order.discountId) {
                 const recorded = await discountEngine.recordDiscountUsage({
                     OUTLET: outlet,
                     discountId: order.discountId,
@@ -604,4 +628,73 @@ function createOrderFinalizer(deps) {
     };
 }
 
-module.exports = { createOrderFinalizer };
+/**
+ * Compare a shadow (dry-run) verdict with the order the live bot finalized.
+ * Pure — no deps, no I/O. Used by the batch-23c RTDB trigger to prove the
+ * Functions-side module reaches the same numbers before it is given authority.
+ *
+ * Money compares at paisa precision (0.005 tolerance) because both sides are
+ * rounded to 2dp; stock compares the clamped quantity map exactly.
+ *
+ * @param {object} shadow  the record returned by finalizeWebOrder({dryRun:true})
+ * @param {object} actual  the finalized order node (as the bot left it)
+ * @returns {{matched: boolean, diffs: Array<{field: string, shadow: any, actual: any}>}}
+ */
+function compareFinalization(shadow, actual) {
+    const diffs = [];
+    const add = (field, want, got) => diffs.push({
+        field,
+        shadow: want === undefined ? null : want,
+        actual: got === undefined ? null : got,
+    });
+    if (!shadow || !actual) {
+        add('record', shadow ? 'present' : 'missing', actual ? 'present' : 'missing');
+        return { matched: false, diffs };
+    }
+    const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+    const money = (v) => Math.round(n(v) * 100) / 100;
+    const sameMoney = (a, b) => Math.abs(money(a) - money(b)) < 0.005;
+    const taxItems = (list) => (Array.isArray(list)
+        ? list.map(t => ({ name: (t && t.name) || '', rate: n(t && t.rate), amount: money(t && t.amount) }))
+        : null);
+    const sameTaxItems = (a, b) => JSON.stringify(taxItems(a)) === JSON.stringify(taxItems(b));
+    const stockMap = (m) => {
+        const out = {};
+        if (m && typeof m === 'object') {
+            for (const k of Object.keys(m).sort()) {
+                const q = Math.round(n(m[k]));
+                if (q !== 0) out[k] = q;
+            }
+        }
+        return out;
+    };
+
+    if (!sameMoney(shadow.subtotal, actual.subtotal)) add('subtotal', money(shadow.subtotal), money(actual.subtotal));
+    if (!sameMoney(shadow.discount, actual.discount)) add('discount', money(shadow.discount), money(actual.discount));
+    const wantDiscountId = n(shadow.discount) > 0 ? (shadow.discountId || null) : null;
+    const gotDiscountId = n(actual.discount) > 0 ? (actual.discountId || null) : null;
+    if (wantDiscountId !== gotDiscountId) add('discountId', wantDiscountId, gotDiscountId);
+    if (!sameMoney(shadow.deliveryFee, actual.deliveryFee)) add('deliveryFee', money(shadow.deliveryFee), money(actual.deliveryFee));
+    if (!sameMoney(shadow.total, actual.total)) add('total', money(shadow.total), money(actual.total));
+    if (shadow.tax == null ? actual.tax != null : !sameMoney(shadow.tax, actual.tax)) {
+        add('tax', shadow.tax == null ? null : money(shadow.tax), actual.tax == null ? null : money(actual.tax));
+    }
+    if (!sameTaxItems(shadow.taxItems, actual.taxItems)) add('taxItems', taxItems(shadow.taxItems), taxItems(actual.taxItems));
+
+    const wantStock = stockMap(shadow.inventoryDeducted);
+    const gotStock = stockMap(actual.inventoryDeducted);
+    if (JSON.stringify(wantStock) !== JSON.stringify(gotStock)) add('inventoryDeducted', wantStock, gotStock);
+
+    const wantTender = n(shadow.tender && shadow.tender.amountPaise);
+    const gotTender = n(actual.loyaltyTender && actual.loyaltyTender.amountPaise);
+    if (wantTender !== gotTender) add('loyaltyTender.amountPaise', wantTender, gotTender);
+
+    const wantRecorded = n(shadow.discount) > 0 && !!shadow.discountId;
+    if (!!actual.discountUsageRecorded !== wantRecorded) {
+        add('discountUsageRecorded', wantRecorded, !!actual.discountUsageRecorded);
+    }
+
+    return { matched: diffs.length === 0, diffs };
+}
+
+module.exports = { createOrderFinalizer, compareFinalization };

@@ -40,6 +40,7 @@ ok(!!(pkg.dependencies && pkg.dependencies['firebase-functions']), 'source depen
 ok(!(pkg.dependencies && pkg.dependencies.sharp), 'source has no sharp (that belongs to the abandoned functions/ tree)');
 ok(String((pkg.engines && pkg.engines.node) || '') === '22', 'runs on Node 22 (deployed runtime)', String(pkg.engines && pkg.engines.node));
 
+
 // The legacy plain-JS tree must exist but must NOT be the deploy source.
 const legacy = path.join(ROOT, 'functions', 'index.js');
 ok(fs.existsSync(legacy), 'legacy functions/ tree still present (left in place, not deployed)');
@@ -58,6 +59,37 @@ ok(/fcmTokenInvalidAt/.test(health), 'platformHealth marks dead tokens (same con
 ok(!/ref\(\s*'businesses'\s*\)/.test(health), 'platformHealth does not read the businesses tree');
 ok(!/ref\(`businesses\/\$\{[^}]+\}\/outlets\/\$\{[^}]+\}\/botStatus`\s*\)\.once/.test(health),
     'platformHealth reads only botStatus leaves, not the node with its history');
+
+
+// Batch 23c export + wiring: the web/app order finalizer runs in the Functions
+// bundle in SHADOW mode (dry run, compare with the bot's own order).
+ok(/export\s*\{\s*onWebOrderPlacedShadow,/.test(entry) && /onWebOrderFinalizedShadow/.test(entry),
+    'index.ts exports both order-finalizer shadow triggers');
+ok(/node scripts\/copy-vendor\.cjs/.test(String(pkg.scripts && pkg.scripts.build)),
+    'the build copies the bot modules into lib/vendor before tsc compiles');
+
+const copyVendor = read(path.join(source, 'scripts', 'copy-vendor.cjs'));
+for (const rel of [
+    'bot/order-finalizer.js', 'bot/utils.js', 'bot/order-pricing.js', 'bot/discount-engine-core.js',
+    'shared/money-math.js', 'shared/loyalty-math.js', 'shared/discount-rules.js', 'shared/geo/geo.js',
+]) {
+    ok(copyVendor.includes(`'${rel}'`), `vendor list ships ${rel}`);
+}
+ok(/shared\/package\.json': \{ type: 'module' \}/.test(copyVendor),
+    'the ESM shared math gets a {type:module} marker (CJS package would fall back to legacy math)');
+ok(/function verifyLoad\(\)/.test(copyVendor) && /tax math fell back/.test(copyVendor),
+    'the build proves the vendored tree loads with the shared math, not just that bytes were copied');
+
+const shadowTrigger = read(path.join(source, 'src', 'triggers', 'orderFinalizerShadow.ts'));
+ok(/onValueCreated\(/.test(shadowTrigger), 'the placed stage triggers on order creation');
+ok(/orders\/\{orderId\}\/stockDeducted/.test(shadowTrigger), 'the finalize stage triggers on the stockDeducted flag, not the whole order');
+ok(/dryRun: true/.test(shadowTrigger), 'the shadow run is a DRY RUN');
+ok(!/dryRun: false/.test(shadowTrigger), 'nothing in the trigger opts out of dry run');
+ok(/compareFinalization\(/.test(shadowTrigger), 'the finalize stage compares the stored verdict with the bot order');
+ok(/migrationFlags\/orderFinalizerShadow\/enabled/.test(shadowTrigger), 'a kill switch can stop both triggers');
+ok(/WEB_SOURCES = \['webview_delivery', 'APP'\]/.test(shadowTrigger), 'only browser-written orders are observed');
+ok(/secrets: \['FIREBASE_DATABASE_URL'\]/.test(shadowTrigger), 'both triggers bind FIREBASE_DATABASE_URL');
+ok(/require\(path\.join\(VENDOR/.test(shadowTrigger), 'the trigger loads the vendored copy of the bot module (no re-implementation)');
 
 const evaluate = read(path.join(source, 'src', 'shared', 'health', 'evaluate.ts'));
 ok(!/from 'firebase/.test(evaluate) && !/require\('firebase/.test(evaluate), 'evaluate.ts stays dependency-free (self-check runs it from lib/)');

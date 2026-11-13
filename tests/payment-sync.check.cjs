@@ -107,9 +107,12 @@ const PH = '9876543210', ID = 'A100';
 
     // discount usage must be reversible when the sale falls through: a global
     // limit or a first-order one-shot cannot stay consumed by a cancelled order
-    const engine = fs2.readFileSync(path2.join(__dirname, '../bot/discount-engine.js'), 'utf8');
+    const engine = fs2.readFileSync(path2.join(__dirname, '../bot/discount-engine-core.js'), 'utf8');
     assert.match(engine, /async function releaseDiscountUsage/, 'discount engine can release a recorded usage');
-    assert.match(engine, /module\.exports = \{[^}]*releaseDiscountUsage/, 'releaseDiscountUsage is exported');
+    assert.match(engine, /return \{ evaluateDiscount, validateCouponCode, recordDiscountUsage, releaseDiscountUsage, discountAmount \}/, 'releaseDiscountUsage is exported');
+    const engineShim = fs2.readFileSync(path2.join(__dirname, '../bot/discount-engine.js'), 'utf8');
+    assert.match(engineShim, /createDiscountEngine\(\{ db, getData, resolvePath \}\)/, 'the bot builds the shared core from its own Firebase instance');
+    assert.match(engineShim, /\.\.\.createDiscountEngine/, 'the shim keeps every existing call site working');
     assert.match(finalize, /discountUsageRecorded: true/, 'finalization stamps that the usage really landed');
     assert.ok(finalize.indexOf('discountUsageRecorded: true') > finalize.indexOf('recordDiscountUsage'), 'flag is written only after recordDiscountUsage');
     const releaseAt = src.indexOf('async function releaseOrderDiscountUsage');
