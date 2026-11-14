@@ -370,5 +370,76 @@ ok(/schedule: '\*\/2 \* \* \* \*'/.test(watcher) && /maxInstances: 1/.test(watch
     'scheduled every 2 min, single instance, database URL secret');
 ok(/await initializeAdmin\(\)/.test(watcher), 'the handler awaits Admin init before the first read');
 
+// ---- Batch 23e: push relay ------------------------------------------------
+const relayRel = path.join(source, 'src', 'triggers', 'pushRelay.ts');
+const relay = fs.existsSync(path.join(ROOT, relayRel)) ? read(relayRel) : '';
+ok(/export\s*\{[\s\S]*onOrderPushAdmin[\s\S]*onOrderPushCustomer[\s\S]*onLoyaltyTierUp[\s\S]*\}\s*from '\.\/triggers\/pushRelay'/.test(entry),
+    'index.ts exports the three relay triggers');
+ok(/onValueCreated\(/.test(relay) && /onValueWritten\(/.test(relay),
+    'admin alert on creation, customer/tier triggers on writes');
+ok(/orders\/\{orderId\}\/status/.test(relay),
+    'the customer trigger listens on the status leaf (a payment mirror cannot invoke it)');
+ok(/orders\/\{orderId\}'/.test(relay), 'the admin trigger listens on the order node');
+// The switch must be explicit: a read failure has to mean "bot keeps sending",
+// never "both send".
+ok(/RELAY_FLAG = 'config\/pushRelay\/enabled'/.test(relay) && /snap\.val\(\) === true/.test(relay),
+    'only an explicit config/pushRelay/enabled === true enables the relay');
+ok((relay.match(/if \(!\(await relayEnabled\(\)\)\) return;/g) || []).length === 3,
+    'all three triggers are no-ops unless the relay is explicitly on');
+// The demo reseed writes ~353 orders/night and the admin filter matches every
+// isSuper, so a missing skip would page the owner's real device 353 times.
+ok(/DEMO_BUSINESS_ID = 'foodhubbie-demo'/.test(relay)
+    && (relay.match(/bid === DEMO_BUSINESS_ID/g) || []).length === 3,
+    'the demo tenant is hard-skipped in all three triggers');
+
+// 1. admin alert parity
+ok(/child\('_fcmSent'\)/.test(relay) && /\.transaction\(/.test(relay),
+    'the admin alert claims the bot\'s own _fcmSent flag by transaction');
+ok(/data: \{ orderId, outlet, type: 'new_order', title, body, image \}/.test(relay)
+    && !/notification:/.test(relay),
+    'admin push is data-only with the fields Admin/sw.js reads');
+ok(/isSuper === true/.test(relay) && /isSupreme === true/.test(relay) && /!a\.outlet/.test(relay),
+    'admin audience = super/supreme/legacy plus the order\'s own outlet');
+ok(/fcmTokenInvalidAt/.test(relay) && /fcmToken`\)\.remove\(\)/.test(relay),
+    'dead admin tokens are pruned and the failure stamp is cleared on success');
+
+// 2. customer status parity
+ok(/statusAfter === statusBefore/.test(relay) && /event\.data\.before\.exists\(\)/.test(relay),
+    'only creation or a real status change pushes');
+ok(/isDineInOrder\(order\)/.test(relay) && /type === 'dine-in'/.test(relay) && /tableId/.test(relay),
+    'dine-in / table orders never get a customer push');
+ok(relay.indexOf("inboxRef.once('value')).exists()") > -1
+    && relay.indexOf("inboxRef.once('value')).exists()") < relay.indexOf("checkAndConsumeCap(bid, oid, phone, 'order')"),
+    'the inbox dedupe is checked before a transactional cap slot is spent');
+ok(/\?b=\$\{bid\}&o=\$\{oid\}&tab=orders/.test(relay)
+    && /delivery\.html\?b=\$\{bid\}&o=\$\{oid\}/.test(relay),
+    'APP customers land in the app Orders tab, WhatsApp links on delivery.html');
+ok(/orderUpdates !== false/.test(relay), 'order-status pushes respect prefs.orderUpdates');
+ok(/prunePushInbox\(/.test(relay) && /vendor\/shared\/push-inbox\.cjs/.test(relay),
+    'inboxes are pruned with the shared module (same 50-row cap)');
+ok(/type: 'order'/.test(relay) && /status: statusAfter/.test(relay),
+    'the inbox row carries the type/status the customer app renders');
+
+// 3. tier-up parity
+ok(/TIER_RANK\[newTier\] > TIER_RANK\[oldTier\]/.test(relay),
+    'only a real promotion pushes (a clawback downgrade is silent)');
+ok(/tier_\$\{newTier\}_\$\{stamp\}/.test(relay) && /Number\(after\.tierReachedAt\)/.test(relay),
+    'the tier-up inbox key derives from tierReachedAt (replay-safe)');
+ok(/type: 'loyalty'/.test(relay) && /checkAndConsumeCap\(bid, oid, phone, 'loyalty'\)/.test(relay),
+    'tier-up uses the loyalty push type and the loyalty cap');
+
+// The bot side of the switch: both senders must stand down, and the bot must
+// NOT claim _fcmSent when it delegated (that would mute the trigger).
+const botSrc = read('bot/index.js');
+ok(/async function isPushRelayEnabled\(\)/.test(botSrc) && /config\/pushRelay\/enabled/.test(botSrc)
+    && /snap\.val\(\) === true/.test(botSrc),
+    'the bot reads the same flag and only true disables it');
+ok(/if \(await isPushRelayEnabled\(\)\) return 'relay'/.test(botSrc),
+    'sendFCMToAdmins stands down and reports "relay"');
+ok(/result !== 'relay'/.test(botSrc),
+    'the bot claims _fcmSent only when it actually sent');
+ok((botSrc.match(/if \(await isPushRelayEnabled\(\)\) return;/g) || []).length >= 2,
+    'notifyCustomerApp and notifyTierUp stand down too');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

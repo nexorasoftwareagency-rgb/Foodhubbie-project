@@ -897,8 +897,26 @@ function isDeadPushCode(code) {
     return DEAD_PUSH_CODES.has(code || '');
 }
 
+// Batch 23e — one switch for the push relay. The three senders below are
+// mirrored by Cloud Functions triggers; `config/pushRelay/enabled === true` means
+// the Functions own them and this bot must stay silent. Every other state
+// (absent, false, unreadable) means the bot keeps sending exactly as before, so
+// the relay can never be enabled on one side only by accident.
+async function isPushRelayEnabled() {
+    try {
+        const snap = await db.ref('config/pushRelay/enabled').once('value');
+        return snap.val() === true;
+    } catch {
+        return false;
+    }
+}
+
 async function sendFCMToAdmins(orderId, order) {
     try {
+        // Batch 23e: the cloud relay owns admin alerts while the flag is on.
+        // Return a marker so initFCMWatcher does NOT claim `_fcmSent` — the
+        // trigger must still be able to send for this order.
+        if (await isPushRelayEnabled()) return 'relay';
         const outlet = order.outlet || resolveOutletId() || 'outlet';
         const snap = await db.ref('admins').once('value');
         const admins = snap.val();
@@ -1476,6 +1494,8 @@ async function notifyCustomerApp(orderId, order, status) {
     // (called from the order listeners) so dine-in orders — which early-
     // return below because they have no push identity — still earn points.
     try {
+        // Batch 23e: the cloud relay sends this while the flag is on.
+        if (await isPushRelayEnabled()) return;
         if (!order || order.type === 'dine-in' || order.isDineIn || order.tableId) return;
         const statusLower = String(status || order.status || '').toLowerCase();
         const copy = appStatusCopy(statusLower, order);
@@ -1553,6 +1573,8 @@ async function notifyCustomerApp(orderId, order, status) {
 // Best-effort only — a failed push must never break the accrual.
 async function notifyTierUp(phone, newTier, oldTier, outlet, bid) {
     try {
+        // Batch 23e: the cloud relay sends this while the flag is on.
+        if (await isPushRelayEnabled()) return;
         const label = newTier === 'gold' ? 'Gold' : newTier === 'silver' ? 'Silver' : '';
         if (!label || !/^[6-9]\d{9}$/.test(String(phone))) return;
         const subsSnap = await db.ref(resolvePath('pushSubscriptions', outlet)).once('value').catch(() => null);
@@ -2968,14 +2990,17 @@ function initFCMWatcher() {
   // resolvePath('orders') uses the bot's own outlet from process.env.OUTLET
   const ordersRef = db.ref(resolvePath('orders'));
 
-  ordersRef.on('child_added', (snap) => {
+  ordersRef.on('child_added', async (snap) => {
     const order = snap.val() || {};
     orderState.set(snap.key, { riderId: order.riderId, status: order.status });
     if (order._fcmSent) return;
     const createdAt = new Date(order.createdAt).getTime();
     if (Date.now() - createdAt > ONE_MIN_MS) return; // skip old orders on restart
-    sendFCMToAdmins(snap.key, order).catch(() => {});
-    snap.ref.child('_fcmSent').set(true).catch(() => {});
+    // Batch 23e: `'relay'` means the cloud trigger owns this alert. Claiming
+    // `_fcmSent` here would make the trigger skip it — so only claim when this
+    // bot actually sent (or tried to).
+    const result = await sendFCMToAdmins(snap.key, order).catch(() => {});
+    if (result !== 'relay') snap.ref.child('_fcmSent').set(true).catch(() => {});
   });
 
   // Rider push on assignment / key status change (this bot only handles its own outlet)

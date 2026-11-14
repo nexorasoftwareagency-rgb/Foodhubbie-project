@@ -61,6 +61,16 @@ export {
   onWebOrderPlacedShadow,
   onWebOrderFinalizedShadow,
 } from './triggers/orderFinalizerShadow';
+// Batch 23e: the three push paths that only existed inside the EC2 bot — new
+// order -> admin devices, order status -> customer inbox + FCM, loyalty tier up
+// -> customer inbox + FCM. Pure Admin SDK + FCM. `config/pushRelay/enabled`
+// is the ONE switch: while it is not `true` every trigger is a no-op and the
+// bot keeps sending, so this deploy alone changes no behaviour.
+export {
+  onOrderPushAdmin,
+  onOrderPushCustomer,
+  onLoyaltyTierUp,
+} from './triggers/pushRelay';
 // onWalletUpdate was DELETED in batch 14: it triggered on
 // `walletBilling/{bid}/{oid}/balancePaise` — the META API credit line, not the
 // restaurant wallet — and published the CUSTOMER-facing order gate from it,
