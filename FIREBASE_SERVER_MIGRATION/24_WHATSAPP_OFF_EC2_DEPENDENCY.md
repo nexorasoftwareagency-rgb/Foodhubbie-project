@@ -121,6 +121,13 @@ The plan above is being executed while the box is down. Status:
 | 23d-2 | `POST /tenant-api/notify` | `29_NOTIFY_ON_FUNCTIONS.md` |
 | 23d-3 | `POST /api/admin/approve-onboarding`, `GET /api/admin/outlet-admin-status`, `POST /api/admin/update-password` | `30_ONBOARDING_ON_FUNCTIONS.md` |
 | 23d-4 | website signup auto-approval + 72 h unverified cleanup (scheduled) | `31_ONBOARDING_WATCHER.md` |
+| 23e | `sendFCMToAdmins`, `notifyCustomerApp`, `notifyTierUp` as RTDB triggers behind one kill flag | `33_PUSH_RELAY.md` |
+
+Batch 23e (2026-11-14) finished the notification surface: **no push depends on
+the box any more**. What still does is order *finalization* and loyalty earn
+(the engine is extracted in 23b and mirrored by 23c's shadow triggers, but
+nothing writes yet — the flip is a money change and stays its own batch), rider
+pushes, the WhatsApp surface itself, `wallet-watch`, and the two cron jobs.
 
 **Decision: the `/api/whatsapp/*` read routes (accounts, numbers, quota,
 templates) stay on EC2 and are not ported in 23d.** Not a scope cut — there is
