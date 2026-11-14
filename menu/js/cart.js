@@ -86,7 +86,7 @@ export function restoreCart(key) {
  * Add a line to the cart and persist using the provided key.
  */
 export function addLine(line, key) {
-    const lineId = `${line.dishId}_${line.size}_${(line.addons || []).join('-')}_${Date.now()}`;
+    const lineId = `${line.dishId}_${line.size}_${(line.addons || []).join('-')}_${Date.now()}`.replace(/[^A-Za-z0-9_-]/g, '_') + Math.random().toString(36).slice(2, 6);
     const unitPrice = typeof line.unitPrice === 'number' ? line.unitPrice : 0;
     const qty = typeof line.qty === 'number' && line.qty > 0 ? line.qty : 1;
     Cart.lines[lineId] = { ...line, unitPrice, qty };

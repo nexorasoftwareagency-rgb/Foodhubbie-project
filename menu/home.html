@@ -679,7 +679,7 @@
     const hhList = document.getElementById('hamburgerList');
     const hhFooter = document.getElementById('hamburgerFooter');
     const hhBtns = document.querySelectorAll('.hamburger-btn');
-    const hhClose = document.getElementById('btnHamburgerClose');
+    const hhCloseBtn = document.getElementById('btnHamburgerClose');
 
     function hhOpen() { hhOverlay.classList.add('open'); hhDrawer.classList.add('open'); document.body.style.overflow = 'hidden'; }
     function hhClose() { hhOverlay.classList.remove('open'); hhDrawer.classList.remove('open'); document.body.style.overflow = ''; }
@@ -719,7 +719,7 @@
     });
 
     hhBtns.forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); hhOpen(); }));
-    hhClose?.addEventListener('click', hhClose);
+    hhCloseBtn?.addEventListener('click', hhClose);
     hhOverlay?.addEventListener('click', (e) => { if (e.target === hhOverlay) hhClose(); });
   </script>
 </body>

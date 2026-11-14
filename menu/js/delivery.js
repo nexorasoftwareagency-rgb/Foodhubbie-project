@@ -240,9 +240,9 @@ function _renderComboOffers() {
         const comboDishIds = new Set(d.entries.map(e => e.dish.id));
         const crossSell = M.dishes.filter(d => !comboDishIds.has(d.id) && d.price && d.price <= 150).slice(0, 2).map(d => ({ id: d.id, name: d.name, price: (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) || 0 }));
         return `
-            <div class="combo-card" data-combo-id="${c.id}">
+            <div class="combo-card" data-combo-id="${esc(c.id)}">
                 <div class="combo-card-img">
-                    <div class="combo-img-frame">${c.image ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+                    <div class="combo-img-frame">${c.image ? `<img src="${esc(c.image)}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
                     <div class="combo-img-scrim"></div>
                     <span class="combo-img-off">${d.disc}</span>
                     <span class="${_comboVegMark(c)}" aria-label="${_comboVegMark(c) === 'combo-veg' ? 'Veg' : 'Non-Veg'}"></span>

@@ -332,7 +332,7 @@ export function renderDishList(dishes, { searchTerm, activeCategoryName }, onOpe
 
     if (dishes.length === 0) {
         list.textContent = '';
-        list.insertAdjacentHTML('beforeend', `<div class="empty-cart" role="status" aria-live="polite">${searchTerm ? `No dishes found for "${searchTerm}"` : 'No dishes in this category'}</div>`);
+        list.insertAdjacentHTML('beforeend', `<div class="empty-cart" role="status" aria-live="polite">${searchTerm ? `No dishes found for "${esc(searchTerm)}"` : 'No dishes in this category'}</div>`);
         return;
     }
     list.textContent = '';
@@ -468,9 +468,9 @@ export function renderCartList(lines, { onStep }) {
                 <div class="cart-item-variant">${esc(l.size)}${(l.addons || []).length ? ' · ' + esc((l.addons || []).join(', ')) : ''}</div>
             </div>
             <div class="qty-stepper" role="group" aria-label="Quantity for ${esc(l.name)}">
-                <button class="qty-btn" data-step="-1" aria-label="Decrease quantity" aria-controls="qty-${id}">−</button>
-                <span class="qty-val" id="qty-${id}" aria-live="polite">${l.qty}</span>
-                <button class="qty-btn" data-step="1" aria-label="Increase quantity" aria-controls="qty-${id}">+</button>
+                <button class="qty-btn" data-step="-1" aria-label="Decrease quantity" aria-controls="qty-${esc(id)}">−</button>
+                <span class="qty-val" id="qty-${esc(id)}" aria-live="polite">${l.qty}</span>
+                <button class="qty-btn" data-step="1" aria-label="Increase quantity" aria-controls="qty-${esc(id)}">+</button>
             </div>
             <span class="cart-item-price">${fmtMoney(l.unitPrice * l.qty)}</span>
         </div>`).join('');
@@ -906,7 +906,7 @@ export function renderPromotionsLinks(store) {
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2h-3a5 5 0 0 0-5 5v3H6v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>' },
         { key: 'whatsapp', title: 'Chat on WhatsApp', sub: 'Questions or feedback? Message us', url: buildWhatsappUrl(s.whatsappNumber, s.storeName), cls: 'promo-link-whatsapp',
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3.5A11 11 0 0 0 2.1 17.6L1 23l5.5-1.4A11 11 0 1 0 20.5 3.5zM12 20.9a9 9 0 0 1-4.6-1.3l-.3-.2-3.4.9.9-3.3-.2-.3A9 9 0 1 1 12 20.9z"/></svg>' }
-    ].filter(l => l.url);
+    ].filter(l => /^https?:\/\//i.test(String(l.url || '')));
 
     if (links.length === 0) {
         wrap.innerHTML = `<div class="promotions-empty">The restaurant hasn't added any links yet. Check back soon!</div>`;
@@ -973,7 +973,7 @@ export function resetDiscountInput() {
 }
 
 /* ---- Combo detail bottom sheet (Zomato-style) ---- */
-export function showComboSheet({ name, discLabel, saving, price, rows, crossSell = [] }, onAdd) {
+export function showComboSheet({ name, discLabel, saving, price, rows, crossSell = [] }, onAdd, onCrossSell) {
     hideComboSheet();
     document.querySelectorAll('#comboSheetBackdrop, #comboSheet').forEach(el => el.remove());
     const back = document.createElement('div');
@@ -985,7 +985,7 @@ export function showComboSheet({ name, discLabel, saving, price, rows, crossSell
     if (crossSell.length) {
         crossSellHtml = '<div class="cbw-sec-title" style="margin-top:14px;">Also add</div>';
         crossSellHtml += crossSell.map(c => `
-            <div class="combo-cross-sell" data-cross-sell-id="${c.id}">
+            <div class="combo-cross-sell" data-cross-sell-id="${esc(c.id)}">
                 ${c.image ? `<img src="${esc(c.image)}" class="combo-cross-sell-img" alt="${esc(c.name)}">` : `<div class="cbw-img-empty" style="width:48px;height:48px;border-radius:8px;background:var(--neutral-200,#e2e8f0);display:flex;align-items:center;justify-content:center;color:var(--neutral-400,#94a3b8);">🍽</div>`}
                 <div class="combo-cross-sell-info">
                     <div class="combo-cross-sell-name">${esc(c.name)}</div>
@@ -1015,17 +1015,7 @@ export function showComboSheet({ name, discLabel, saving, price, rows, crossSell
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const dishId = btn.closest('.combo-cross-sell').dataset.crossSellId;
-            const dish = M.dishes.find(d => d.id === dishId);
-            if (dish) {
-                addLine({
-                    dishId: dish.id, name: dish.name, img: dish.image || '',
-                    size: 'Regular', addons: [], instructions: '',
-                    qty: 1, unitPrice: _dishPrice(dish)
-                });
-                clearDiscountIfCartChanged();
-                UI.showToast(`${dish.name} added to cart`, 'success');
-                hideComboSheet();
-            }
+            if (typeof onCrossSell === 'function') { onCrossSell(dishId); hideComboSheet(); }
         });
     });
     document.addEventListener('keydown', function escClose(e){ if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escClose); }});

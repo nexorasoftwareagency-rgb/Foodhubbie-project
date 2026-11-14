@@ -894,7 +894,11 @@ function bindInboxClicks() {
             if (orderId) {
                 window.dispatchEvent(new CustomEvent('fh:open-order', { detail: { orderId } }));
             } else if (url) {
-                window.location.href = url;
+                // only same-origin https links; anything else (javascript:, other sites) is ignored
+                try {
+                    const u = new URL(url, window.location.href);
+                    if (u.origin === window.location.origin && /^https?:$/.test(u.protocol)) window.location.href = u.href;
+                } catch { /* ignore bad url */ }
             }
         });
     });
@@ -913,7 +917,7 @@ function bindInboxClicks() {
     if (deleteAllBtn) {
         deleteAllBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
-            const confirmed = await showConfirm('Delete all notifications? This cannot be undone.', 'Clear notifications');
+            const confirmed = await showConfirm('Delete all notifications? This cannot be undone.', 'Clear notifications', 'Delete all');
             if (!confirmed) return;
             const ids = _inbox.map(i => i.id);
             for (const id of ids) {
@@ -1121,7 +1125,7 @@ window.addEventListener('appinstalled', () => {
 });
 
 let _confirmOverlay = null;
-export function showConfirm(message, title = 'Confirm') {
+export function showConfirm(message, title = 'Confirm', okLabel = 'Confirm') {
     return new Promise((resolve) => {
         if (_confirmOverlay) _confirmOverlay.remove();
         const overlay = document.createElement('div');
@@ -1130,7 +1134,7 @@ export function showConfirm(message, title = 'Confirm') {
         const box = document.createElement('div');
         box.style.cssText = 'background:var(--card,#fff);color:var(--text,#0f172a);border:1px solid var(--border,#e2e8f0);border-radius:14px;padding:20px;min-width:280px;max-width:90vw;box-shadow:0 20px 40px rgba(15,23,42,.2);';
         overlay.appendChild(box);
-        box.innerHTML = `<h3 style="margin:0 0 8px;font-size:15px;font-weight:800;">${esc(title)}</h3><p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:var(--text-sub,#64748b);">${esc(message)}</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="fh-confirm-cancel" style="padding:8px 16px;border-radius:10px;border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text,#0f172a);font-weight:700;cursor:pointer;">Cancel</button><button class="fh-confirm-ok" style="padding:8px 16px;border-radius:10px;border:none;background:var(--primary,#E84908);color:#fff;font-weight:700;cursor:pointer;">Forget everything</button></div>`;
+        box.innerHTML = `<h3 style="margin:0 0 8px;font-size:15px;font-weight:800;">${esc(title)}</h3><p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:var(--text-sub,#64748b);">${esc(message)}</p><div style="display:flex;gap:8px;justify-content:flex-end;"><button class="fh-confirm-cancel" style="padding:8px 16px;border-radius:10px;border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text,#0f172a);font-weight:700;cursor:pointer;">Cancel</button><button class="fh-confirm-ok" style="padding:8px 16px;border-radius:10px;border:none;background:var(--primary,#E84908);color:#fff;font-weight:700;cursor:pointer;">${esc(okLabel)}</button></div>`;
         document.body.appendChild(overlay);
         _confirmOverlay = overlay;
         const cleanup = (val) => {
@@ -1262,7 +1266,8 @@ function renderAccount() {
                 'and rank to the new number on this device. Any orders already placed ' +
                 'under your old number will stay at that number on the restaurant side. ' +
                 'Make sure you can receive messages on the new number before continuing.',
-                'Change phone number?'
+                'Change phone number?',
+                'Change number'
             );
             if (!confirmed) return;
         }
@@ -1375,10 +1380,11 @@ function renderAccount() {
         const confirmed = await showConfirm(
             'This will permanently delete from this device: your name and phone number, ' +
             'your notification settings, your order history, your loyalty points and rank, ' +
-            'and the link between this phone and your number. Orders placed at restaurants ' +
+            'and this device\'s saved link to your number. Orders placed at restaurants ' +
             'will remain in their records, but you will no longer see them here. ' +
             'This cannot be undone.',
-            'Forget me on this device'
+            'Forget me on this device',
+            'Forget everything'
         );
         if (!confirmed) return;
         const clearBtn = document.getElementById('btnAcctClear');
@@ -1823,8 +1829,9 @@ function bindAccountRatings() {
             if (pts < reward.cost) { UI.showToast('Not enough points.', 'error'); return; }
 
             const confirmed = await showConfirm(
-                `Spend ${reward.cost} points for "${esc(reward.label)}"?`,
-                'Redeem reward'
+                `Spend ${reward.cost} points for "${reward.label}"?`,
+                'Redeem reward',
+                'Redeem'
             );
             if (!confirmed) return;
 
@@ -2184,7 +2191,7 @@ async function renderActiveOffers() {
     // Read currently applied code from prefs
     let appliedCode = '';
     try {
-        const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || {});
+        const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
         appliedCode = prefs.appliedPromoCode || '';
     } catch { /* ignore */ }
 
@@ -2250,7 +2257,7 @@ async function renderActiveOffers() {
         const valueRs = o.cost ? (o.cost * redeemValuePaise / 100).toFixed(2) : '';
 
         return `<div class="promo-card ${isApplied ? 'promo-card--applied' : ''}" role="button" tabindex="0" aria-label="${titleEsc}, ${descEsc}">
-            <span class="promo-card-icon">${o.emoji || '🎁'}</span>
+            <span class="promo-card-icon">${esc(o.emoji || '🎁')}</span>
             <div class="promo-card-body">
                 <div class="promo-card-top">${badgeHtml}</div>
                 <div class="promo-card-title">${titleEsc}</div>
@@ -2333,7 +2340,7 @@ async function renderActiveOffers() {
                 }
                 // Clear applied code from prefs
                 try {
-                    const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || {});
+                    const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
                     prefs.appliedPromoCode = '';
                     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
                 } catch { /* ignore */ }

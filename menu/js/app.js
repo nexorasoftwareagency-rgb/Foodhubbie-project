@@ -250,7 +250,7 @@ async function boot() {
             const welcomeEl = document.getElementById('screenWelcome');
             const img = new Image();
             img.onload = () => {
-                welcomeEl.style.backgroundImage = `url('${bgSnap.val()}')`;
+                welcomeEl.style.backgroundImage = `url("${encodeURI(String(bgSnap.val())).replace(/"/g, '%22')}")`;
                 welcomeEl.classList.add('has-photo');
             };
             img.src = bgSnap.val();
@@ -700,8 +700,14 @@ async function loadMenu() {
     const [catSnap, dishSnap, comboSnap] = await Promise.all([
         get(outletRef('categories')), get(outletRef('dishes')), get(outletRef('combos'))
     ]);
-    M.categories = Object.entries(catSnap.val() || {}).map(([id, c]) => ({ id, ...c }));
-    M.dishes = Object.entries(dishSnap.val() || {}).filter(([, d]) => d.stock !== false).map(([id, d]) => ({ id, ...d }));
+    // Admin > Customer APP > App Visibility writes `visible:false` to hide a category or dish.
+    const allCats = Object.entries(catSnap.val() || {}).map(([id, c]) => ({ id, ...c }));
+    const hiddenCats = allCats.filter(c => c.visible === false);
+    const hiddenCatKeys = new Set(hiddenCats.flatMap(c => [c.id, c.name].filter(Boolean)));
+    M.categories = allCats.filter(c => c.visible !== false);
+    M.dishes = Object.entries(dishSnap.val() || {})
+        .filter(([, d]) => d && d.stock !== false && d.visible !== false && !hiddenCatKeys.has(d.category))
+        .map(([id, d]) => ({ id, ...d }));
     const now = Date.now();
     M.combos = Object.entries(comboSnap.val() || {})
         .filter(([, c]) => isComboActive(c, now) && _comboVisibleForCustomer(c))
@@ -799,7 +805,7 @@ function _renderComboOffers() {
         return `
         <div class="combo-card" data-combo-id="${c.id}" tabindex="0" role="button" aria-label="${esc(c.name)} - ${d.disc} - ${UI.fmtMoney(d.comboPrice)}">
             <div class="combo-card-img">
-                <div class="combo-img-frame">${c.image && /^(https?:|data:image\/)/.test(c.image) ? `<img src="${c.image}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
+                <div class="combo-img-frame">${c.image && /^(https?:|data:image\/)/.test(c.image) ? `<img src="${esc(c.image)}" alt="${esc(c.name)}">` : `<div class="combo-placeholder">🏷️</div>`}</div>
                 <div class="combo-img-scrim"></div>
                 <span class="combo-img-off">${d.disc}</span>
                 <span class="${_comboVegMark(c)}" aria-label="${_comboVegMark(c) === 'combo-veg' ? 'Veg' : 'Non-Veg'}"></span>
@@ -858,7 +864,14 @@ function _renderComboOffers() {
             price: cd.comboPrice,
             rows: cd.entries.map((e, i) => ({ name: e.dish.name, qty: e.qty, unitPrice: cd.prices[i] })),
             crossSell
-        }, () => _addComboToCart(combo.id));
+        }, () => _addComboToCart(combo.id), (dishId) => {
+            const dish = M.dishes.find(x => x.id === dishId);
+            if (!dish) return;
+            const p = dish.price != null ? dish.price : (dish.sizes ? Object.values(dish.sizes)[0] : 0);
+            addLine({ dishId: dish.id, name: dish.name, img: dish.image || '', size: 'Regular', addons: [], instructions: '', qty: 1, unitPrice: Number(p) || 0 });
+            clearDiscountIfCartChanged();
+            UI.showToast(`${dish.name} added to cart`);
+        });
         });
 
     // Keyboard navigation for combo cards
@@ -937,7 +950,7 @@ async function _addComboToCart(comboId) {
             UI.showToast('Combo limit reached — no more available');
             return;
         }
-        const ref = Outlet.ref(`combos/${combo.id}/currentRedemptions`);
+        const ref = outletRef(`combos/${combo.id}/currentRedemptions`);
         const result = await runTransaction(ref, (val) => {
             const next = (val || 0) + 1;
             if (next > maxRedemptions) return null;
@@ -952,7 +965,7 @@ async function _addComboToCart(comboId) {
     const perCustomerLimit = combo.perCustomerLimit || 0;
     if (perCustomerLimit > 0) {
         const customerId = Session.sessionId || Session.tableId || 'default';
-        const ref = Outlet.ref(`combos/${combo.id}/redemptionsByCustomer/${customerId}`);
+        const ref = outletRef(`combos/${combo.id}/redemptionsByCustomer/${customerId}`);
         const result = await runTransaction(ref, (val) => {
             const next = (val || 0) + 1;
             if (next > perCustomerLimit) return null;
@@ -967,7 +980,7 @@ async function _addComboToCart(comboId) {
     const perDayLimit = combo.perDayLimit || 0;
     if (perDayLimit > 0) {
         const today = new Date().toISOString().slice(0, 10);
-        const ref = Outlet.ref(`combos/${combo.id}/redemptionsByDay/${today}`);
+        const ref = outletRef(`combos/${combo.id}/redemptionsByDay/${today}`);
         const result = await runTransaction(ref, (val) => {
             const next = (val || 0) + 1;
             if (next > perDayLimit) return null;
@@ -1685,7 +1698,7 @@ async function buildHamburgerMenu() {
             } else if (action === 'help-contact') {
                 UI.showToast('Opening WhatsApp…', 'info');
             } else if (action === 'sign-out') {
-                clearWalkinCart({ confirm: false });
+                clearCart(M.direct ? undefined : getQRStorageKey(Session.sessionId));
                 UI.showScreen('screenWelcome');
                 UI.showToast('Signed out', 'info');
             }
