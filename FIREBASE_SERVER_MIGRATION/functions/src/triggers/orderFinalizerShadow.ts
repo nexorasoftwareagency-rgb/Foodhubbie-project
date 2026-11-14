@@ -34,19 +34,17 @@ import * as path from 'path';
 import { onValueCreated, onValueWritten } from 'firebase-functions/v2/database';
 import { logger } from 'firebase-functions/v2';
 import { initializeAdmin, getDB } from '../shared/firebase/admin';
+import { makeOrderFinalizer, WEB_ORDER_SOURCES } from '../shared/order-finalizer/factory';
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 const VENDOR = path.join(__dirname, '../vendor');
-const { createOrderFinalizer, compareFinalization } = require(path.join(VENDOR, 'bot/order-finalizer.js'));
-const { createDiscountEngine } = require(path.join(VENDOR, 'bot/discount-engine-core.js'));
-const orderPricing = require(path.join(VENDOR, 'bot/order-pricing.js'));
+const { compareFinalization } = require(path.join(VENDOR, 'bot/order-finalizer.js'));
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 initializeAdmin().catch((err: Error) => {
   logger.error('[OrderFinalizerShadow] Admin init failed', { error: err.message });
 });
 
-const WEB_SOURCES = ['webview_delivery', 'APP'];
 const FLAG_PATH = 'migrationFlags/orderFinalizerShadow/enabled';
 const SHADOW_ROOT = 'migrationShadow/orderFinalizer';
 
@@ -64,54 +62,6 @@ async function shadowEnabled(): Promise<boolean> {
   }
   flagCache = { at: Date.now(), enabled };
   return enabled;
-}
-
-/** Matches `stripUndefined` in bot/firebase.js — RTDB rejects undefined values. */
-function stripUndefined(value: any): any {
-  if (value === undefined) return null;
-  if (value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map(stripUndefined);
-  const out: Record<string, any> = {};
-  for (const [k, v] of Object.entries(value)) out[k] = v === undefined ? null : stripUndefined(v);
-  return out;
-}
-
-/**
- * Build the finalizer the way `bot/index.js` does, but with the tenant pinned by
- * the event path instead of the bot's outlet→business index: the e2e business
- * has an outlet literally named `pizza`, so `resolvePath` must never guess.
- */
-function makeFinalizer(bid: string, oid: string) {
-  const db = getDB();
-  const resolvePath = (p: string) =>
-    (String(p).startsWith('businesses/') ? String(p) : `businesses/${bid}/outlets/${oid}/${p}`);
-  const getData = async (p: string) => {
-    const snap = await db.ref(resolvePath(p)).once('value');
-    return snap.val();
-  };
-  const updateData = async (p: string, data: any) => {
-    await db.ref(resolvePath(p)).update(stripUndefined(data));
-  };
-  const saveUserProfile = async (jid: string, data: any) => {
-    const clean = String(jid).replace(/[^0-9]/g, '');
-    await updateData(`profiles/${clean}`, data);
-  };
-  // The bot's `getLoyaltyConfig` only adds defaults for fields the tender math
-  // does not read (earn rate, tiers), so the raw node is equivalent here —
-  // `computeTenderPaise` owns the only defaults that matter (100 paise/point).
-  const getLoyaltyConfig = async () => (await getData('loyalty/config')) || {};
-  const discountEngine = createDiscountEngine({ db, getData, resolvePath });
-  return createOrderFinalizer({
-    db,
-    getData,
-    updateData,
-    resolvePath,
-    saveUserProfile,
-    getLoyaltyConfig,
-    discountEngine,
-    orderPricing,
-    defaultOutlet: oid,
-  });
 }
 
 /** Compact shape written to the shadow node — enough to audit a mismatch. */
@@ -146,7 +96,7 @@ export const onWebOrderPlacedShadow = onValueCreated(
     const { bid, oid, orderId } = event.params;
     const order = event.data.val();
     if (!order || typeof order !== 'object') return;
-    if (!WEB_SOURCES.includes(String(order.source || ''))) return;
+    if (!WEB_ORDER_SOURCES.includes(String(order.source || ''))) return;
     if (!(await shadowEnabled())) return;
 
     const rowRef = getDB().ref(`${SHADOW_ROOT}/${bid}/${oid}/${orderId}`);
@@ -165,7 +115,7 @@ export const onWebOrderPlacedShadow = onValueCreated(
     }
 
     try {
-      const finalizer = makeFinalizer(bid, oid);
+      const finalizer = makeOrderFinalizer(bid, oid).finalizer;
       const verdict = await finalizer.finalizeWebOrder({
         orderId,
         order: { ...order, outlet: oid },

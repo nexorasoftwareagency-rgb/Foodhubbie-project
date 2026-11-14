@@ -122,12 +122,18 @@ The plan above is being executed while the box is down. Status:
 | 23d-3 | `POST /api/admin/approve-onboarding`, `GET /api/admin/outlet-admin-status`, `POST /api/admin/update-password` | `30_ONBOARDING_ON_FUNCTIONS.md` |
 | 23d-4 | website signup auto-approval + 72 h unverified cleanup (scheduled) | `31_ONBOARDING_WATCHER.md` |
 | 23e | `sendFCMToAdmins`, `notifyCustomerApp`, `notifyTierUp` as RTDB triggers behind one kill flag | `33_PUSH_RELAY.md` |
+| 23f | **the real** web/app order finalizer + cancel compensations (reward, discount usage, stock) | `34_ORDER_FINALIZER.md` |
 
 Batch 23e (2026-11-14) finished the notification surface: **no push depends on
-the box any more**. What still does is order *finalization* and loyalty earn
-(the engine is extracted in 23b and mirrored by 23c's shadow triggers, but
-nothing writes yet — the flip is a money change and stays its own batch), rider
-pushes, the WhatsApp surface itself, `wallet-watch`, and the two cron jobs.
+the box any more**. Batch 23f then gave the extracted finalizer authority, so
+**no browser-written order depends on it either**: re-pricing, GST + delivery-fee
+re-derivation, discount re-validation, reward burn, stock and the cancel-side
+compensations all run in the cloud behind `config/orderFinalizer/enabled === true`
+(one shared `finalizeClaim` lock keeps the bot from ever double-running it).
+What still does depend on the box: loyalty earn/clawback (`processLoyalty`,
+batch 23g), the socket-only WhatsApp surface, `wallet-watch`, rider assignment
+pushes, the daily settlement and the two cron jobs (demo reseed, onboarding
+fallback in `server.js`).
 
 **Decision: the `/api/whatsapp/*` read routes (accounts, numbers, quota,
 templates) stay on EC2 and are not ported in 23d.** Not a scope cut — there is

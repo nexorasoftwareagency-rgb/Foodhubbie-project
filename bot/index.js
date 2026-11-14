@@ -911,6 +911,25 @@ async function isPushRelayEnabled() {
     }
 }
 
+// Batch 23f: `config/orderFinalizer/enabled === true` means Cloud Functions
+// finalizes browser-written orders (re-price, discount, tender, stock) and the
+// bot must stand down. Only an explicit `true` disables the bot, so a failed
+// read always leaves today's behaviour in place. 30 s in-process cache: this is
+// read on every order event, and both writers share one claim inside
+// bot/order-finalizer.js, so a flip cannot double-finalize either way.
+let _finalizerRelayCache = { at: 0, on: false };
+async function isOrderFinalizerRelayEnabled() {
+    if (Date.now() - _finalizerRelayCache.at < 30000) return _finalizerRelayCache.on;
+    try {
+        const snap = await db.ref('config/orderFinalizer/enabled').once('value');
+        _finalizerRelayCache = { at: Date.now(), on: snap.val() === true };
+        return _finalizerRelayCache.on;
+    } catch {
+        _finalizerRelayCache = { at: Date.now(), on: false }; // unreadable = bot owns it
+        return false;
+    }
+}
+
 async function sendFCMToAdmins(orderId, order) {
     try {
         // Batch 23e: the cloud relay owns admin alerts while the flag is on.
@@ -1475,6 +1494,24 @@ async function releaseOrderDiscountUsage(orderId, order) {
             discountSource: order.discountSource
         });
     } catch (e) { console.error('[Discounts] releaseOrderDiscountUsage error:', e.message); }
+}
+
+// Batch 23f: while Cloud Functions owns finalization the bot no longer receives
+// the finalizer's `notify` callback, but the restaurant's WhatsApp "NEW ORDER"
+// alert stays a socket job. `_adminWaNotified` is the durable at-most-once
+// claim (same shape as `_fcmSent`) so a restart or a later status event cannot
+// text the owner twice.
+async function alertAdminFinalizedWebOrder(orderId, order) {
+    try {
+        if (!order || !isWebOrderSource(order)) return;
+        if (order.stockDeducted !== true) return;   // finalization not finished yet
+        if (!currentSock || isSocketDead(currentSock)) return;
+        const claimRef = db.ref(resolvePath(`orders/${orderId}/_adminWaNotified`, order.outlet || OUTLET));
+        const seed = ((await claimRef.once('value').catch(() => null)) || {}).val();
+        const claim = await claimRef.transaction((cur) => ((cur || seed) ? undefined : true)).catch(() => null);
+        if (!claim || !claim.committed) return;
+        await notifyAdmin(currentSock, orderId, order, 'NEW');
+    } catch (e) { console.error('[WebOrder] admin WhatsApp alert error:', e.message); }
 }
 
 // Single loyalty entry point from the order listeners. Runs independent of
@@ -2463,8 +2500,12 @@ async function sendDailyReportSafely(dateOverride = null) {
         const _recentChildChanged = new Map(); // orderId -> { status, ts }
         const CHILD_CHANGED_DEBOUNCE_MS = 2000;
 
-        orderRef.on("child_changed", (snap) => {
+        orderRef.on("child_changed", async (snap) => {
             const order = snap.val();
+            // Batch 23f: while Cloud Functions owns finalization it also owns
+            // the cancel-side compensations (discount release, stock restore),
+            // so the bot must not run them a second time. One cached flag read.
+            const finalizerRelay = order ? await isOrderFinalizerRelayEnabled() : false;
             // Loyalty runs BEFORE the debounce gate: settlement and void
             // events can carry the same order.status as the previous event
             // (paymentStatus-only flips), and the debounce must never eat an
@@ -2473,10 +2514,15 @@ async function sendDailyReportSafely(dateOverride = null) {
             if (order) processLoyalty(snap.key, order).catch(e => console.error("[LOYALTY] processLoyalty error:", e.message));
             // Same "before the debounce" rule: a cancel/refund must free the
             // discount it consumed (idempotent per order).
-            if (order) releaseOrderDiscountUsage(snap.key, order).catch(e => console.error("[Discounts] release error:", e.message));
+            if (order && !finalizerRelay) releaseOrderDiscountUsage(snap.key, order).catch(e => console.error("[Discounts] release error:", e.message));
             // And put back the stock that order took — same "before the
             // debounce" rule, same at-most-once claim (bot/order-finalizer.js).
-            if (order && orderFinalizer) orderFinalizer.restoreOrderInventory(snap.key, order).catch(e => console.error("[INVENTORY] restore error:", e.message));
+            if (order && orderFinalizer && !finalizerRelay) orderFinalizer.restoreOrderInventory(snap.key, order).catch(e => console.error("[INVENTORY] restore error:", e.message));
+            // The restaurant's WhatsApp "NEW ORDER" text is socket-only, so it
+            // stays in the bot even when the cloud finalized the order. It
+            // fires on the flip that proves finalization finished, so the
+            // alert carries the corrected total, never the customer's claim.
+            if (order && finalizerRelay) alertAdminFinalizedWebOrder(snap.key, order).catch(() => {});
             // Restaurant-app orders: every status goes to the customer in the app
             // (push + inbox) whether or not WhatsApp is connected. Deduped per status.
             if (order && order.source === 'APP') notifyCustomerApp(snap.key, order, order.status).catch(() => {});
@@ -2525,6 +2571,8 @@ async function sendDailyReportSafely(dateOverride = null) {
             // call in the finalizer (notifyAdmin, the low-stock alert) guards
             // itself; the pipeline itself is socket-free (batch 23b).
             const isWebviewFinalize = shouldFinalizeWebOrder(order);
+            // Batch 23f: is Cloud Functions the finalizer right now?
+            const finalizerRelay = isWebviewFinalize ? await isOrderFinalizerRelayEnabled() : false;
             if (!currentSock && !isWebviewFinalize) return;
 
         // Only handle "new" orders if they were created after the bot started
@@ -2551,10 +2599,15 @@ async function sendDailyReportSafely(dateOverride = null) {
             // code, deduct stock, mirror the customer profile, record discount
             // usage. Sock-dependent pieces (the WhatsApp alert) self-guard, so a
             // dead socket never swallows a tender or stock movement.
-            if (shouldFinalizeWebOrder(order) && orderFinalizer) {
-                await orderFinalizer.finalizeWebOrder({ orderId: snap.key, order, sock: currentSock });
-            } else if (shouldFinalizeWebOrder(order)) {
+            if (shouldFinalizeWebOrder(order) && orderFinalizer && !finalizerRelay) {
+                await orderFinalizer.finalizeWebOrder({ orderId: snap.key, order, sock: currentSock, owner: 'bot' });
+            } else if (shouldFinalizeWebOrder(order) && !finalizerRelay) {
                 console.error(`[WebOrder] ${snap.key} not finalized: order-finalizer module failed to load`);
+            }
+            // Cloud owns finalization. The WhatsApp admin alert cannot move
+            // (socket-only), so send it here once the finalized order is visible.
+            if (isNewOrder && finalizerRelay && order.stockDeducted === true) {
+                alertAdminFinalizedWebOrder(snap.key, order).catch(() => {});
             }
         }
         // Restaurant-app order just placed: tell the customer in the app too.

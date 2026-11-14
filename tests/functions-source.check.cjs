@@ -87,7 +87,8 @@ ok(/dryRun: true/.test(shadowTrigger), 'the shadow run is a DRY RUN');
 ok(!/dryRun: false/.test(shadowTrigger), 'nothing in the trigger opts out of dry run');
 ok(/compareFinalization\(/.test(shadowTrigger), 'the finalize stage compares the stored verdict with the bot order');
 ok(/migrationFlags\/orderFinalizerShadow\/enabled/.test(shadowTrigger), 'a kill switch can stop both triggers');
-ok(/WEB_SOURCES = \['webview_delivery', 'APP'\]/.test(shadowTrigger), 'only browser-written orders are observed');
+ok(/WEB_ORDER_SOURCES\.includes\(String\(order\.source \|\| ''\)\)/.test(shadowTrigger) && /from '\.\.\/shared\/order-finalizer\/factory'/.test(shadowTrigger),
+    'only browser-written orders are observed (one shared source list)');
 ok(/secrets: \['FIREBASE_DATABASE_URL'\]/.test(shadowTrigger), 'both triggers bind FIREBASE_DATABASE_URL');
 ok(/require\(path\.join\(VENDOR/.test(shadowTrigger), 'the trigger loads the vendored copy of the bot module (no re-implementation)');
 
@@ -440,6 +441,58 @@ ok(/result !== 'relay'/.test(botSrc),
     'the bot claims _fcmSent only when it actually sent');
 ok((botSrc.match(/if \(await isPushRelayEnabled\(\)\) return;/g) || []).length >= 2,
     'notifyCustomerApp and notifyTierUp stand down too');
+
+// ---- Batch 23f: real order finalizer + cancel compensations -----------------
+const finalizerRelPath = path.join(source, 'src', 'triggers', 'orderFinalizer.ts');
+const finalizerTrigger = fs.existsSync(path.join(ROOT, finalizerRelPath)) ? read(finalizerRelPath) : '';
+ok(/export\s*\{[\s\S]*onWebOrderPlaced[\s\S]*onOrderCancelledCompensate[\s\S]*\}\s*from '\.\/triggers\/orderFinalizer'/.test(entry),
+    'index.ts exports the real finalizer + compensation triggers');
+ok(/onValueCreated\(/.test(finalizerTrigger) && /onValueWritten\(/.test(finalizerTrigger),
+    'creation runs finalization, a status write runs compensation');
+ok(/orders\/\{orderId\}\/status/.test(finalizerTrigger),
+    'the compensation trigger listens on the status leaf, not the whole order');
+ok(/FINALIZER_FLAG = 'config\/orderFinalizer\/enabled'/.test(finalizerTrigger)
+    && /snap\.val\(\) === true/.test(finalizerTrigger),
+    'only an explicit config/orderFinalizer/enabled === true enables the cloud finalizer');
+ok((finalizerTrigger.match(/if \(!\(await finalizerEnabled\(\)\)\) return;/g) || []).length === 2,
+    'both triggers are no-ops unless the flag is explicitly on');
+ok(/DEMO_BUSINESS_ID = 'foodhubbie-demo'/.test(finalizerTrigger)
+    && (finalizerTrigger.match(/bid === DEMO_BUSINESS_ID/g) || []).length === 2,
+    'the public demo sandbox is hard-skipped in both triggers');
+ok(/WEB_ORDER_SOURCES\.includes\(String\(order\.source \|\| ''\)\)/.test(finalizerTrigger),
+    'only browser-written sources (webview_delivery / APP) are finalized');
+ok(/String\(order\.status \|\| ''\) !== 'Placed'/.test(finalizerTrigger)
+    && /order\.stockDeducted === true/.test(finalizerTrigger),
+    'the cloud uses the same live-order gates as shouldFinalizeWebOrder');
+ok(/owner: 'cloud'/.test(finalizerTrigger),
+    'the cloud labels its claim so the bot claim cannot be confused with it');
+ok(/verdict\.skipped/.test(finalizerTrigger) && /if \(!verdict\.ok && !verdict\.skipped\)/.test(finalizerTrigger),
+    'a lost claim is not an error; a hard failure is thrown (visible, not silent)');
+ok(/releaseOrderDiscountUsage\(/.test(finalizerTrigger)
+    && /orders\/\$\{orderId\}\/discountUsageReversed/.test(finalizerTrigger)
+    && /\.transaction\(/.test(finalizerTrigger),
+    'cancel frees discount usage behind the same durable claim the bot uses');
+ok(/resurrectRewardTender\(/.test(finalizerTrigger)
+    && /node\.usedOnOrder !== String\(orderId\)/.test(finalizerTrigger),
+    'cancel returns the reward code only when this exact order burned it');
+ok(/finalizer\.restoreOrderInventory\(orderId, order\)/.test(finalizerTrigger),
+    'cancel restores exactly the stock finalization recorded');
+ok(/String\(order\.status \|\| ''\)\.toLowerCase\(\) !== statusAfter/.test(finalizerTrigger),
+    'a stale cancel event is ignored when a newer status already replaced it');
+
+const factoryRel = path.join(source, 'src', 'shared', 'order-finalizer', 'factory.ts');
+const factory = fs.existsSync(path.join(ROOT, factoryRel)) ? read(factoryRel) : '';
+ok(/export function makeOrderFinalizer\(bid: string, oid: string\)/.test(factory)
+    && /businesses\/\$\{bid\}\/outlets\/\$\{oid\}/.test(factory),
+    'the factory pins the tenant from the event path (never a reverse-index guess)');
+ok(/WEB_ORDER_SOURCES = \['webview_delivery', 'APP'\]/.test(factory),
+    'the shared source list matches bot/index.js isWebOrderSource');
+ok(/isDineInOrder/.test(factory) && /bot\/utils\.js/.test(factory),
+    'dine-in classification comes from the vendored bot module (cannot drift)');
+const shadowSrc23f = read(path.join(source, 'src', 'triggers', 'orderFinalizerShadow.ts'));
+ok(/makeOrderFinalizer\(bid, oid\)\.finalizer/.test(shadowSrc23f)
+    && !/function makeFinalizer\(/.test(shadowSrc23f),
+    'the shadow trigger reuses the factory instead of its own copy');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

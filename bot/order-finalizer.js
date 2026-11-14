@@ -19,6 +19,14 @@
 
 const { formatJid, isDineInOrder } = require('./utils');
 
+// Batch 23f: at-most-once finalization. Two independent writers now share this
+// module (the WhatsApp bot and the Cloud Functions trigger), plus each can
+// replay its own event (bot child_added catch-up, a repeated invocation). The
+// claim below is the shared lock; `stockDeducted` stays the "really finished"
+// marker. A claim older than this is abandoned — a 60 s function timeout never
+// needs five minutes — so a crashed run cannot block an order for ever.
+const FINALIZE_CLAIM_TTL_MS = 5 * 60 * 1000;
+
 // Pure order-totals math shared with the menu checkout and Admin POS.
 // require(esm) needs Node >= 22.12; a partial deploy missing shared/ falls back
 // to the legacy verify formulas (never a WRONG total) and warns in pm2/Functions log.
@@ -365,6 +373,28 @@ function createOrderFinalizer(deps) {
     }
 
     /**
+     * Take the shared finalization lock. Returns true only for the writer that
+     * won it; every other caller must return without touching money or stock.
+     * Cold-tx seeded on purpose: an admin-SDK transaction hands the FIRST
+     * ticket `null` even when the node exists (proven live 2026-10-27).
+     */
+    async function claimFinalization(orderId, outlet, owner) {
+        try {
+            const ref = db.ref(resolvePath(`orders/${orderId}/finalizeClaim`, outlet));
+            const seed = ((await ref.once('value').catch(() => null)) || {}).val();
+            const tx = await ref.transaction((cur) => {
+                const node = cur || seed;
+                if (node && Date.now() - Number(node.at || 0) < FINALIZE_CLAIM_TTL_MS) return; // held
+                return { at: Date.now(), by: owner };
+            }).catch(() => null);
+            return !!(tx && tx.committed);
+        } catch (e) {
+            console.error('[WebOrder] finalization claim failed:', e && e.message);
+            return false;
+        }
+    }
+
+    /**
      * Server-side finalization of one browser-written order.
      *
      * MUST be idempotent-ish at the caller: every write below is either
@@ -375,7 +405,7 @@ function createOrderFinalizer(deps) {
      * @returns {Promise<object>} a compact record of what the server decided, so
      *   a shadow run (batch 23c) can compare without diffing the whole order.
      */
-    async function finalizeWebOrder({ orderId, order, sock = null, dryRun = false }) {
+    async function finalizeWebOrder({ orderId, order, sock = null, dryRun = false, owner = 'server' }) {
         const shadow = !!dryRun;
         const outlet = (order && order.outlet) || defaultOutlet;
         const result = {
@@ -383,6 +413,7 @@ function createOrderFinalizer(deps) {
             outlet,
             ok: false,
             dryRun: shadow,
+            skipped: null,
             priceChanged: false,
             subtotal: null,
             discount: null,
@@ -397,6 +428,20 @@ function createOrderFinalizer(deps) {
             discountUsageRecorded: false,
         };
         try {
+            // Batch 23f: a replay must never re-run the side effects. The
+            // marker is written by this module itself, so this is also the
+            // correct answer when the bot finalized and the cloud trigger
+            // heard about the order later.
+            if (!shadow && order && order.stockDeducted === true) {
+                result.skipped = 'already-finalized';
+                return result;
+            }
+            if (!shadow && !(await claimFinalization(orderId, outlet, owner))) {
+                result.skipped = 'claimed';
+                console.log(`[WebOrder] ${orderId}: finalization already claimed by another writer — skipping`);
+                return result;
+            }
+
             // --- SAFEST-FIRST: server-side re-pricing ---
             // Every unit price above came from the customer's browser.
             // Rebuild each line from the outlet catalog BEFORE the
@@ -613,6 +658,12 @@ function createOrderFinalizer(deps) {
             result.ok = true;
         } catch (webOrderErr) {
             console.error("[WebOrder] Finalization error:", webOrderErr);
+            // Give the claim back so a later event can retry this order. The
+            // side effects that already landed are the same set a bot retry
+            // would see today; the claim only prevents CONCURRENT duplicates.
+            if (!shadow) {
+                await db.ref(resolvePath(`orders/${orderId}/finalizeClaim`, outlet)).remove().catch(() => {});
+            }
         }
         return result;
     }

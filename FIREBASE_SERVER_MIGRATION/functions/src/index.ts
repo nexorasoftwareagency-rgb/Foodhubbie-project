@@ -71,6 +71,15 @@ export {
   onOrderPushCustomer,
   onLoyaltyTierUp,
 } from './triggers/pushRelay';
+// Batch 23f: the real browser-order finalizer (re-price, discount, reward
+// tender, stock, profile, discount usage) and the cancel-side compensations
+// (discount release + stock restore). `config/orderFinalizer/enabled === true`
+// is the ONE switch: while it is not `true` both triggers are no-ops and the
+// bot keeps finalizing, so this deploy alone changes no behaviour.
+export {
+  onWebOrderPlaced,
+  onOrderCancelledCompensate,
+} from './triggers/orderFinalizer';
 // onWalletUpdate was DELETED in batch 14: it triggered on
 // `walletBilling/{bid}/{oid}/balancePaise` — the META API credit line, not the
 // restaurant wallet — and published the CUSTOMER-facing order gate from it,

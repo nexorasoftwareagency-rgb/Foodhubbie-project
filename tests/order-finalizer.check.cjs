@@ -97,8 +97,8 @@ for (const key of ['priceChanged', 'subtotal', 'discount', 'discountId', 'delive
 // The Functions trigger must be able to run this exact pipeline against a live
 // order without touching it, so every write in the interface is behind `shadow`
 // and both mutating helpers take { dryRun }.
-ok(mod.includes('async function finalizeWebOrder({ orderId, order, sock = null, dryRun = false })'),
-    'finalizeWebOrder accepts an explicit dryRun flag (defaults to a real run)');
+ok(mod.includes("async function finalizeWebOrder({ orderId, order, sock = null, dryRun = false, owner = 'server' })"),
+    'finalizeWebOrder accepts an explicit dryRun flag (defaults to a real run) and a claim owner');
 ok(/const shadow = !!dryRun;/.test(mod), 'every write is guarded by one shadow flag');
 for (const [site, label] of [
     ['if (!shadow) await updateData(`orders/${orderId}`, { priceReview: review }', 'priceReview write'],
@@ -195,6 +195,43 @@ ok(compareFinalization(null, actualOrder).matched === false && compareFinalizati
     'a missing shadow record is a mismatch, never a pass');
 ok(compareFinalization({ ...shadowRec, total: 678.352 }, { ...actualOrder, total: 678.35 }).matched === true,
     'money compares at paisa precision (2dp rounding on both sides)');
+
+// ── batch 23f: at-most-once claim shared by bot + cloud ───────────────────
+ok(/const FINALIZE_CLAIM_TTL_MS = 5 \* 60 \* 1000;/.test(mod),
+    'an abandoned finalization claim expires after 5 minutes');
+ok(/async function claimFinalization\(orderId, outlet, owner\)/.test(mod)
+    && /orders\/\$\{orderId\}\/finalizeClaim/.test(mod)
+    && /\.transaction\(/.test(mod)
+    && /cur \|\| seed/.test(mod),
+    'the claim is a cold-tx-seeded transaction on orders/{id}/finalizeClaim');
+ok(mod.indexOf("result.skipped = 'already-finalized';") > -1
+    && mod.indexOf("result.skipped = 'already-finalized';") < mod.indexOf('// --- SAFEST-FIRST: server-side re-pricing ---'),
+    'a finalized order returns before any side effect');
+ok(mod.indexOf("result.skipped = 'claimed';") > -1
+    && mod.indexOf("result.skipped = 'claimed';") < mod.indexOf('// --- SAFEST-FIRST: server-side re-pricing ---'),
+    'a lost claim returns before any side effect');
+ok(/if \(!shadow\) \{\s*await db\.ref\(resolvePath\(`orders\/\$\{orderId\}\/finalizeClaim`, outlet\)\)\.remove\(\)/.test(mod),
+    'a hard failure releases the claim so a later event can retry');
+ok(/skipped: null,/.test(mod), 'the verdict reports why a run was skipped');
+
+// ── batch 23f: the bot stands down when the cloud owns finalization ───────
+ok(/async function isOrderFinalizerRelayEnabled\(\)/.test(index)
+    && /config\/orderFinalizer\/enabled/.test(index)
+    && /snap\.val\(\) === true/.test(index),
+    'the bot reads the same flag and only an explicit true disables it');
+ok(/await orderFinalizer\.finalizeWebOrder\(\{ orderId: snap\.key, order, sock: currentSock, owner: 'bot' \}\)/.test(index),
+    'the bot labels its own finalization claim');
+ok(/if \(shouldFinalizeWebOrder\(order\) && orderFinalizer && !finalizerRelay\)/.test(index),
+    'the bot does not finalize while the cloud owns it');
+ok(/if \(order && !finalizerRelay\) releaseOrderDiscountUsage/.test(index),
+    'the bot does not release discount usage while the cloud owns it');
+ok(/if \(order && orderFinalizer && !finalizerRelay\) orderFinalizer\.restoreOrderInventory/.test(index),
+    'the bot does not restore stock while the cloud owns it');
+ok(/async function alertAdminFinalizedWebOrder/.test(index)
+    && /orders\/\$\{orderId\}\/_adminWaNotified/.test(index)
+    && /\.transaction\(/.test(index)
+    && /if \(order\.stockDeducted !== true\) return;/.test(index),
+    'the WhatsApp admin alert stays in the bot, claimed once, after finalization');
 
 // ── wiring: script + CI ───────────────────────────────────────────────────
 const pkg = JSON.parse(read('package.json'));
