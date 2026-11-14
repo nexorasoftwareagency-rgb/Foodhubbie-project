@@ -23,6 +23,9 @@ jobs:
       - name: Admin query-chain guard (a Reference has no orderByChild/limitToLast)
         run: node tests/admin-query-chain.check.cjs
 
+      - name: Chat tab guard (chatMeta query list, dismissible onboarding wall)
+        run: node tests/chat-tab.check.cjs
+
       - name: Tables session-window guard (bounded tableSessions read + reconciliation)
         run: node tests/tables-session-window.check.cjs
 

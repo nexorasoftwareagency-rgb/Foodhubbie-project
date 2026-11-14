@@ -418,16 +418,23 @@ export function loadChat() {
 
 // ── WhatsApp bot onboarding ──────────────────────────────────────────
 let _pairUnsub = null;
+// Per-visit dismissal. The onboarding wall must never be the only door to
+// chat history: pair.status reads non-connected for days while the bot is
+// stopped or awaiting a QR re-pair, and old conversations stay fully
+// readable that whole time. Reset on every loadChat() so a fresh tab visit
+// sees onboarding again until the bot connects.
+let _onboardingDismissed = false;
 
 function _checkBotStatus() {
     if (_pairUnsub) { _pairUnsub(); _pairUnsub = null; }
+    _onboardingDismissed = false; // fresh visit — onboarding gets priority again
     let pair = null;
     let waActive = false;
     const apply = () => {
         const tab = document.getElementById('tab-chat');
         if (!tab) return;
         if ((pair && pair.status === 'connected') || waActive) _hideOnboarding();
-        else _showOnboarding(pair);
+        else if (!_onboardingDismissed) _showOnboarding(pair);
     };
     const unsubPair = onValue(Outlet.ref('bot/pair'), (snap) => {
         pair = snap.val();
@@ -456,6 +463,7 @@ function _showOnboarding(pair) {
                 <div style="font-size:48px;margin-bottom:12px">📱</div>
                 <h2 style="font-size:22px;font-weight:800;margin-bottom:8px">Connect Your WhatsApp Bot</h2>
                 <p style="color:var(--text-secondary);font-size:14px;margin-bottom:24px">Follow the steps below to link your WhatsApp Business number as a co-existence bot.</p>
+                <p style="font-size:12px;color:var(--text-muted,#8b95a5);margin:-14px 0 20px">Your past conversations stay available — <button id="waViewHistory" type="button" style="background:none;border:none;padding:0;font:inherit;font-size:12px;color:var(--text-secondary);text-decoration:underline;cursor:pointer">view chat history</button></p>
                 <div style="background:var(--glass-bg,rgba(255,255,255,.04));border:1px solid var(--glass-border,rgba(255,255,255,.09));border-radius:14px;padding:20px;margin-bottom:16px">
                     <div style="font-size:13px;font-weight:700;margin-bottom:12px;text-align:left">Step-by-step guide:</div>
                     <div style="text-align:left;font-size:13px;line-height:2;color:var(--text-secondary)">
@@ -487,6 +495,12 @@ function _showOnboarding(pair) {
         `;
         const chatApp = document.getElementById('chatApp');
         if (chatApp) chatApp.appendChild(el);
+        // Escape hatch — never trap chat history behind onboarding.
+        el.querySelector('#waViewHistory')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            _onboardingDismissed = true;
+            _hideOnboarding();
+        });
     }
     el.style.display = 'flex';
     _renderQR(pair);
