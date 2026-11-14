@@ -36,6 +36,12 @@ export { metaCostPublisher } from './scheduled/metaCostPublisher';
 // outside EC2 - the 2026-11-11 outage was invisible for 13 hours because every
 // signal we owned was written by the host that died.
 export { platformHealth } from './scheduled/platformHealth';
+// Batch 23d-4: website signup auto-approval + the 72 h unverified cleanup that
+// used to live inside bot-control-api. Polls every 2 min (an RTDB trigger does
+// not replay requests written while the function was cold); reuses the SAME
+// `approveOnboardingRequest` the Supreme endpoint uses. Cleanup ships in
+// observe mode - `meta/onboardingAuto/cleanupEnforce` turns deletion on.
+export { onboardingWatcher } from './scheduled/onboardingWatcher';
 
 // Callable Functions (Admin/Client)
 export { botControl } from './api/botControl';

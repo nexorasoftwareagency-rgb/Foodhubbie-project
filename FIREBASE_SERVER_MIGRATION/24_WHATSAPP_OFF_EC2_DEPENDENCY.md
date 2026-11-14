@@ -107,3 +107,59 @@ change, live E2E on APP order + cancel).
 Batch 23c: deploy it as v2 RTDB triggers, shadow-run them disabled, then flip and
 watch one real order.
 Batch 23d: move the four HTTP endpoints + two scheduled jobs, delete the box.
+
+## 6. As built (2026-11-13): what actually moved, and why the WhatsApp routes did not
+
+The plan above is being executed while the box is down. Status:
+
+| batch | moved | record |
+|---|---|---|
+| 23a | `platformHealth` scheduled watchdog + hourly owner push | `25_PLATFORM_HEALTH_ALERT.md` |
+| 23b | order finalization extracted from `bot/index.js` (socket-free) | `26_ORDER_FINALIZER_EXTRACTION.md` |
+| 23c | `discount-engine-core` + two **shadow** RTDB triggers (compare only, write nothing) | `27_ORDER_FINALIZER_SHADOW_TRIGGER.md` |
+| 23d-1 | `POST /tenant-api/upload`, `POST /tenant-api/delete-image` | `28_MEDIA_ENDPOINTS_ON_FUNCTIONS.md` |
+| 23d-2 | `POST /tenant-api/notify` | `29_NOTIFY_ON_FUNCTIONS.md` |
+| 23d-3 | `POST /api/admin/approve-onboarding`, `GET /api/admin/outlet-admin-status`, `POST /api/admin/update-password` | `30_ONBOARDING_ON_FUNCTIONS.md` |
+| 23d-4 | website signup auto-approval + 72 h unverified cleanup (scheduled) | `31_ONBOARDING_WATCHER.md` |
+
+**Decision: the `/api/whatsapp/*` read routes (accounts, numbers, quota,
+templates) stay on EC2 and are not ported in 23d.** Not a scope cut — there is
+nothing to port *to* right now:
+
+* No outlet in RTDB holds a Meta credential. A full walk of `businesses` on
+  2026-11-13 found **`whatsapp` absent on every outlet** (including
+  `roshani-pizza/outlets/pizza`, whose stale Meta test-number node described in
+  `AGENTS.md` has since been deleted — that owner action is done, so the
+  "bot-control-api reprovisions with `BOT_TRANSPORT=meta`" trap is gone), and
+  root **`waAuth` is absent**.
+* The only Meta token that exists is the platform-level `WA_PERMANENT_TOKEN` in
+  `.env` on the box/dev machine — the one `tools/submit-wa-templates.mjs` uses.
+  It is **not** per-tenant, and a per-tenant WABA is the stated tenancy model
+  (`docs/PLAN-PER-TENANT-WABA.md`). Handing every tenant query the platform token
+  would be both wrong and unverifiable.
+* Every one of those routes therefore returns its *no-number* branch today
+  (`404` / empty list). A Functions port would ship code whose only reachable
+  path is the 404 it already returns from the dead box; the client side already
+  tolerates it (quota card says "Sending limit not available", the promo picker
+  falls back to its 5 seed options).
+
+Live pizza runs **Baileys** (`bot.transport = 'baileys'`, `bot.pair.status =
+'connected'`), so the Cloud API routes have no live user even when the box is up.
+Revisit this decision when Track A onboards a real tenant WABA
+(`docs/PLAN-PER-TENANT-WABA.md`) — at that point quota/templates become
+tenant-facing and belong in `tenantOnboarding`'s sibling.
+
+**What legitimately remains on the box** after 23d:
+
+| on the box | why it cannot move yet |
+|---|---|
+| Baileys worker (`bot/index.js` + session data) | a socket that must stay paired; no Functions equivalent |
+| `/api/whatsapp/*`, `/api/bot/*` (provision/restart/stop/delete/rescan/transport) | pm2 + Meta per-tenant credentials |
+| `wallet-watch.js` | live-listener design (batch 14); a stateless per-minute function would regress it. **No outlet is armed today**, so nothing breaks while it is down |
+| daily settlement, nightly demo reseed | cron jobs; both tolerate a missed run |
+| `/api/images/convert-batch` | `sharp`; already **non-fatal** in the onboarding wizard ("failures just mean status updates will use URL fallback") |
+
+Two smaller confirmations from the same probe: the pizza outlet still carries two
+junk child nodes (`pizza`, `undefined`) left by an old write, and its three
+`pushSubscriptions` entries are the only token-like strings under `businesses`.
+Neither is touched here.

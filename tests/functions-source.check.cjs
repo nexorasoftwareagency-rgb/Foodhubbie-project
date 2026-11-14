@@ -288,5 +288,68 @@ ok(!!adminUrlRule && /sign_in_provider != 'anonymous'/.test(String(adminUrlRule)
     'database.rules.json grants the non-anonymous read on config/adminUrl',
     String(adminUrlRule));
 
+// ---- Batch 23d-4: auto-approval + 72 h unverified cleanup -----------------
+// One approval core (the endpoint's), one poller, and NO bookkeeping fields on
+// the request row: `onboardingRequests/$reqId/$other` is .validate:false, so an
+// `autoClaimAt` there would invalidate every later Supreme client write.
+const watcherRel = path.join(source, 'src', 'scheduled', 'onboardingWatcher.ts');
+ok(fs.existsSync(path.join(ROOT, watcherRel)), 'scheduled/onboardingWatcher.ts exists');
+const watcher = fs.existsSync(path.join(ROOT, watcherRel)) ? read(watcherRel) : '';
+ok(/export\s*\{\s*onboardingWatcher\s*\}/.test(entry), 'index.ts exports onboardingWatcher');
+ok(/from\s+['"]\.\.\/api\/tenantOnboarding['"]/.test(watcher) && /approveOnboardingRequest\(key, r, 'auto-onboarding'\)/.test(watcher),
+    'the watcher reuses the endpoint approval core (no second implementation)');
+ok(!/createUser|adminLogin\s*:/.test(watcher), 'the watcher never creates an Auth user or writes adminLogin itself');
+ok(/orderByChild\('status'\)\.equalTo\('pending'\)/.test(watcher), 'polls only the pending requests (status index, never the whole node)');
+ok(/const MAX_AGE_MS = 15 \* 60 \* 1000/.test(watcher) && /Math\.abs\(now - Number\(r\.createdAt \|\| 0\)\) > MAX_AGE_MS/.test(watcher),
+    'only fresh sign-ups are auto-approved (15 min, same window as the control API)');
+ok(/source !== 'website'/.test(watcher), 'only source=website requests are auto-approved');
+ok(/DEFAULT_MAX_PER_HOUR = 20/.test(watcher) && /meta\/onboardingAuto/.test(watcher)
+    && /cfg\.maxPerHour/.test(watcher), 'the hourly cap defaults to 20 and is stored in RTDB (no process state)');
+ok(/transaction\(\(cur: any\) =>/.test(watcher) && /CLAIM_TTL_MS = 10 \* 60 \* 1000/.test(watcher)
+    && /claims\/\$\{key\}`\)\.remove\(\)/.test(watcher), 'a retry-safe claim guards the approval (released after every outcome)');
+ok(!/autoClaimAt|autoNotifiedAt/.test(watcher),
+    'no bookkeeping field is written onto the request row ($other:false would break client writes)');
+ok(/status === 422/.test(watcher) && /left pending \(retry\)/.test(watcher),
+    '422 leaves the request pending for the next tick (no terminal write)');
+ok(/\/already exists\//.test(watcher) && /This login email is already registered\./.test(watcher)
+    && /reviewedBy: 'auto-onboarding'/.test(watcher), 'a duplicate login email is rejected with the control API reason');
+ok(/notices\/\$\{key\}`/.test(watcher) && /notifyOnce\(/.test(watcher), 'over-cap / failure notices are routed through one once-only marker');
+
+// The inquiries rule forbids extra fields ($other:false) and caps every string,
+// so the notification payload is checked against the live rule itself.
+const inquiryRule = dbRules?.rules?.inquiries?.$inquiryId || {};
+const inquiryAllowed = Object.keys(inquiryRule).filter((k) => !k.startsWith('.') && k !== '$other');
+const pushAt = watcher.indexOf("db.ref('inquiries').push({");
+const pushBlock = pushAt < 0 ? '' : watcher.slice(pushAt, watcher.indexOf('});', pushAt));
+const pushedKeys = Array.from(pushBlock.matchAll(/^\s{4,6}([a-zA-Z]+):/gm)).map((m) => m[1]);
+ok(pushedKeys.length >= 6 && pushedKeys.every((k) => inquiryAllowed.includes(k)),
+    'the inquiry payload only writes fields the rule declares',
+    `pushed=[${pushedKeys}] allowed=[${inquiryAllowed}]`);
+ok(/phone\.length >= 5 && phone\.length <= 15 \? phone : '0000000000'/.test(watcher)
+    && /createdAt: Date\.now\(\)/.test(watcher) && /source: 'website'/.test(watcher)
+    && /type: 'New restaurant signup'/.test(watcher), 'inquiry shape matches the rule (phone fallback, website source, numeric createdAt)');
+
+// 72 h cleanup: same candidate test as the control API, observe-mode default.
+ok(/r\.reviewedBy !== 'auto-onboarding'/.test(watcher) && /r\.bid === DEMO_BID/.test(watcher),
+    'cleanup only touches auto-onboarded tenants and never the demo');
+ok(/UNVERIFIED_TTL_MS = 72 \* HOUR_MS/.test(watcher) && /reviewedAt < UNVERIFIED_TTL_MS/.test(watcher),
+    'cleanup waits the full 72 h');
+ok(/orders\.exists\(\) \|\| payments\.exists\(\)/.test(watcher) && /walletBilling\/\$\{r\.bid\}\/\$\{r\.oid\}\/payments/.test(watcher),
+    'a tenant with an order or a payment is never a cleanup candidate');
+ok(/user\.emailVerified === true/.test(watcher), 'a verified owner keeps the tenant');
+ok(/cfg\.cleanupEnforce === true/.test(watcher) && /ONBOARDING_CLEANUP/.test(watcher)
+    && /observe mode/.test(watcher), 'cleanup defaults to observe mode (RTDB flag or ONBOARDING_CLEANUP=enforce)');
+ok(/CLEANUP_EVERY_MS = 24 \* HOUR_MS/.test(watcher) && /cfg\.cleanupAt/.test(watcher),
+    'cleanup runs at most once per 24 h (cleanupAt gate)');
+// The kill switch must be total: a disabled watcher that still ran the cleanup
+// could delete a tenant while an operator believes everything is stopped.
+ok(/summary\.cleanup = enabled\s*\? await runCleanup\(db, cfg, now\)/.test(
+    watcher.replace(/\s*\n\s*/g, ' ')),
+    'enabled:false also stops the cleanup (the kill switch is total, maxPerHour pauses approvals only)');
+ok(/schedule: '\*\/2 \* \* \* \*'/.test(watcher) && /maxInstances: 1/.test(watcher)
+    && /secrets: \['FIREBASE_DATABASE_URL'\]/.test(watcher),
+    'scheduled every 2 min, single instance, database URL secret');
+ok(/await initializeAdmin\(\)/.test(watcher), 'the handler awaits Admin init before the first read');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
