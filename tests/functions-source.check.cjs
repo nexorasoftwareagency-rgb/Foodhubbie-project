@@ -183,18 +183,37 @@ ok(/HISTORY_ROWS = 20/.test(notify), 'keeps the newest 20 history rows per outle
 ok(/res\.json\(\{ ok: true, sent: successCount, failed: failureCount, total: tokens\.length, inbox: inboxCount \}\)/.test(notify),
     'response carries sent / failed / total / inbox (what the tab renders)');
 
-// The caps must not drift from the bot module they mirror.
+// The caps must not drift from the bot module they mirror. Batch 23e moved them
+// out of tenantNotify.ts into a shared module so the notify endpoint and the
+// push relay cannot disagree.
 const capsSrc = read('bot/notification-caps.js');
-const num = (src, re) => (src.match(re) || [])[1];
+const capsModule = read(path.join(source, 'src', 'shared', 'notify', 'caps.ts'));
 for (const [type, cap] of [['order', 50], ['loyalty', 5], ['promo', 3]]) {
-    ok(new RegExp(`${type}\\s*:\\s*${cap}\\b`).test(capsSrc) && new RegExp(`${type}\\s*:\\s*${cap}\\b`).test(notify),
+    ok(new RegExp(`${type}\\s*:\\s*${cap}\\b`).test(capsSrc) && new RegExp(`${type}\\s*:\\s*${cap}\\b`).test(capsModule),
         `daily cap for ${type} is ${cap} on both sides`);
 }
-ok(/IST_OFFSET_MS\s*=\s*5\s*\*\s*3600000\s*\+\s*30\s*\*?\s*60000/.test(capsSrc)
-    && /IST_OFFSET_MS\s*=\s*5\s*\*\s*3600000\s*\+\s*30\s*\*?\s*60000/.test(notify),
+ok(/IST_OFFSET_MS\s*=\s*5\s*\*\s*3600000\s*\+\s*30\s*\*?\s*60000/.test(capsModule),
     'IST offset identical to bot/notification-caps.js');
-ok(/h\s*>=\s*21\s*\|\|\s*h\s*<\s*9/.test(capsSrc) && /h\s*>=\s*21\s*\|\|\s*h\s*<\s*9/.test(notify),
+ok(/h\s*>=\s*21\s*\|\|\s*h\s*<\s*9/.test(capsModule),
     'quiet hours (21:00-09:00 IST) identical to bot/notification-caps.js');
+ok(/batchCheckAndConsumeCaps/.test(notify) && /isDeadPushCode/.test(notify)
+    && !/const CAPS: Record<string, number>/.test(notify),
+    'tenantNotify imports the shared caps module and keeps no second copy');
+// Batch caps (2026-11-14): an outlet-wide send used to pay one RTDB read +
+// one write per recipient, SEQUENTIALLY. The batch fn issues the same leaf
+// reads in parallel and one wave of writes; tenantNotify must not keep a
+// sequential per-recipient cap call.
+ok(/export async function batchCheckAndConsumeCaps/.test(capsModule)
+    && /batchCheckAndConsumeCaps[\s\S]{0,800}?Promise\.all/.test(capsModule),
+    'batchCheckAndConsumeCaps exists in the shared module and reads caps in parallel');
+ok(!/await\s+checkAndConsumeCap\(/.test(notify),
+    'tenantNotify never calls the per-recipient cap fn');
+// One malformed payload fails EVERY token in a multicast with
+// `messaging/invalid-argument`; pruning on it would wipe the subscriber list.
+const deadSet = (capsModule.match(/DEAD_PUSH_CODES[^=]*=\s*new Set<string>\(\[([\s\S]*?)\]\)/) || [])[1] || '';
+ok(deadSet.includes('registration-token-not-registered') && deadSet.includes('mismatched-credential')
+    && !deadSet.includes('invalid-argument'),
+    'DEAD_PUSH_CODES prunes permanent failures but never invalid-argument', deadSet.replace(/\s+/g, ' '));
 
 // Inbox pruning uses the same module as the bot and the control API.
 ok(copyVendor.includes(`'shared/push-inbox.cjs'`), 'vendor list ships shared/push-inbox.cjs');

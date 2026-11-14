@@ -21,6 +21,9 @@ import { logger } from 'firebase-functions/v2';
 import path from 'path';
 import { initializeAdmin, getDB, getMessaging } from '../shared/firebase/admin';
 import { HttpError, readJsonBody, routeOf, tenantFromToken } from '../shared/http/tenant';
+// Batch 23e: caps and dead-token classification are shared with the push relay
+// so the two cloud senders cannot drift from each other or from the bot.
+import { batchCheckAndConsumeCaps, isDeadPushCode } from '../shared/notify/caps';
 
 // CJS shared module, vendored byte-for-byte by scripts/copy-vendor.cjs.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -38,44 +41,6 @@ const DASHBOARD_ORIGINS: Array<string | RegExp> = [
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
 ];
-
-// ---- mirror of bot/notification-caps.js (guard pins equality) --------------
-const IST_OFFSET_MS = 5 * 3600000 + 30 * 60000;
-const CAPS: Record<string, number> = { order: 50, loyalty: 5, promo: 3 };
-
-function istBucketKey(ts = Date.now()): string {
-  return new Date(ts + IST_OFFSET_MS).toISOString().slice(0, 10);
-}
-
-function isQuietHours(ts = Date.now()): boolean {
-  const h = new Date(ts + IST_OFFSET_MS).getUTCHours();
-  return h >= 21 || h < 9;
-}
-
-async function checkAndConsumeCap(
-  bid: string,
-  oid: string,
-  phone: string,
-  type: string,
-): Promise<{ allowed: boolean; reason?: string }> {
-  if (!phone || !/^[6-9]\d{9}$/.test(phone)) return { allowed: true };
-  if ((type === 'promo' || type === 'offer') && isQuietHours()) {
-    return { allowed: false, reason: 'quiet_hours' };
-  }
-  const cap = CAPS[type] ?? CAPS.order;
-  const bucket = istBucketKey();
-  const capRef = getDB().ref(`businesses/${bid}/outlets/${oid}/notifyCaps/${phone}/${type}/${bucket}`);
-  try {
-    const current = Number((await capRef.get()).val() || 0);
-    if (current >= cap) return { allowed: false, reason: 'daily_cap' };
-    await capRef.set(current + 1);
-    return { allowed: true };
-  } catch (e) {
-    // Never block notifications on cap-store failure.
-    logger.warn('[Notify] cap check failed', { error: (e as Error).message });
-    return { allowed: true };
-  }
-}
 
 async function logNotifySend(bid: string, oid: string, row: any): Promise<void> {
   try {
@@ -140,18 +105,19 @@ async function handleNotify(req: any, res: any): Promise<void> {
   }
 
   const notifyType = messageType === 'order' ? 'order' : 'promo';
-  const capped: any[] = [];
-  for (const entry of entries) {
-    const phoneStr = String(entry.phone || '');
-    if (!phoneStr || !/^[6-9]\d{9}$/.test(phoneStr)) {
-      capped.push(entry);
-      continue;
-    }
-    const cap = await checkAndConsumeCap(bid, oid, phoneStr, notifyType);
-    if (cap.allowed) capped.push(entry);
-    else logger.info(`[Notify] suppressed for ${phoneStr}: ${cap.reason}`);
-  }
-  entries = capped;
+  // One parallel caps pass instead of one RTDB read + one write per recipient
+  // (batchCheckAndConsumeCaps keeps the per-phone increments identical).
+  const allowedPhones = await batchCheckAndConsumeCaps(
+    bid,
+    oid,
+    entries.map((e) => String(e.phone || '')),
+    notifyType,
+  );
+  entries = entries.filter((e) => {
+    const phoneStr = String(e.phone || '');
+    if (!phoneStr || !/^[6-9]\d{9}$/.test(phoneStr)) return true; // no valid phone: uncapped
+    return allowedPhones.has(phoneStr);
+  });
 
   const tokens = entries.map((e) => e.token).filter(Boolean);
   if (tokens.length === 0) {
@@ -206,11 +172,6 @@ async function handleNotify(req: any, res: any): Promise<void> {
   const failureCount = response.responses.length - successCount;
 
   if (failureCount > 0) {
-    const deadCodes = new Set([
-      'messaging/registration-token-not-registered',
-      'messaging/invalid-argument',
-      'messaging/invalid-registration-token',
-    ]);
     await Promise.all(
       response.responses.map(async (r, i) => {
         if (r.success) return;
@@ -218,7 +179,10 @@ async function handleNotify(req: any, res: any): Promise<void> {
         const entry = entries.find((e) => e.token === token);
         const code = (r.error as any)?.code || 'unknown';
         logger.warn(`[Notify] FCM failed for ${String(token).slice(0, 12)}...`, { code });
-        if (deadCodes.has(code) && entry && entry.key !== 'test') {
+        // isDeadPushCode excludes `messaging/invalid-argument` on purpose: it is
+        // a payload-level rejection that fails the whole batch, so pruning on it
+        // would delete every subscriber for one bad send.
+        if (isDeadPushCode(code) && entry && entry.key !== 'test') {
           await db.ref(`businesses/${bid}/outlets/${oid}/pushSubscriptions/${entry.key}`).remove().catch(() => {});
         }
       }),
