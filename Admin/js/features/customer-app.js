@@ -1534,6 +1534,50 @@ async function _loadAppSettings() {
     }
 }
 
+/** Restore the Settings form from the in-memory `_settingsOriginal` snapshot
+ * (no RTDB read). Used by Discard Changes so the user gets back the values
+ * they loaded, not whatever another admin may have written in the meantime. */
+function _restoreAppSettingsFromOriginal() {
+    if (!_settingsOriginal) return;
+
+    const fields = {
+        caSettingStoreName: _settingsOriginal.storeName,
+        caSettingStoreAddress: _settingsOriginal.address,
+        caSettingStorePhone: _settingsOriginal.phone,
+        caSettingWhatsAppNumber: _settingsOriginal.whatsappNumber,
+        caSettingGoogleReviewLink: _settingsOriginal.googleReviewLink,
+        caSettingWelcomeMessage: _settingsOriginal.appWelcomeMessage,
+        caSettingDeliveryFee: _settingsOriginal.deliveryFee,
+        caSettingMinOrder: _settingsOriginal.minOrder,
+        caSettingDineIn: _settingsOriginal.dineInEnabled,
+        caSettingDelivery: _settingsOriginal.deliveryEnabled,
+        caSettingPickup: _settingsOriginal.pickupEnabled,
+        caSettingLoyalty: _settingsOriginal.loyaltyEnabled
+    };
+    Object.entries(fields).forEach(([id, val]) => {
+        const el = $(id);
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = val === true;
+        else el.value = val;
+    });
+
+    if ($('caSettingTimezone')) $('caSettingTimezone').value = _settingsOriginal.timezone;
+    if ($('caSettingGSTRate')) $('caSettingGSTRate').value = String(_settingsOriginal.gstRate);
+    if ($('caSettingTaxOnDeliveryFee')) $('caSettingTaxOnDeliveryFee').checked = _settingsOriginal.taxOnDeliveryFee === true;
+    if ($('caSettingThemeColor')) $('caSettingThemeColor').value = _settingsOriginal.themeColor;
+    if ($('caSettingLogoUrl')) $('caSettingLogoUrl').value = _settingsOriginal.logoUrl;
+
+    // Business hours grid
+    _renderBusinessHours(_settingsOriginal.businessHours);
+
+    // Update save button state
+    const saveBtn = $('btnSaveAppSettings');
+    const saveBtnBottom = $('btnSaveAppSettingsBottom');
+    if (saveBtn) saveBtn.disabled = true;
+    if (saveBtnBottom) saveBtnBottom.disabled = true;
+    _updateSettingsDirtyUI();
+}
+
 async function _saveAppSettings() {
     try {
         // Validate all fields first
@@ -1600,13 +1644,19 @@ function _validateSettings() {
     const storeName = ($('caSettingStoreName')?.value || '').trim();
     if (!storeName) errors.caSettingStoreName = 'Store name is required';
 
-    // Phone - 10 digit Indian mobile
+    // Phone - 10 digit Indian mobile (optional +91 country code prefix allowed)
     const phone = ($('caSettingStorePhone')?.value || '').replace(/\D/g, '');
-    if (phone && !/^[6-9]\d{9}$/.test(phone)) errors.caSettingStorePhone = 'Enter a valid 10-digit mobile number';
+    if (phone) {
+        const normalized = phone.startsWith('91') && phone.length === 12 ? phone.slice(2) : phone;
+        if (!/^[6-9]\d{9}$/.test(normalized)) errors.caSettingStorePhone = 'Enter a valid 10-digit mobile number';
+    }
 
-    // WhatsApp - 10 digit if provided
+    // WhatsApp - 10 digit if provided (optional +91 country code prefix allowed)
     const wa = ($('caSettingWhatsAppNumber')?.value || '').replace(/\D/g, '');
-    if (wa && !/^[6-9]\d{9}$/.test(wa)) errors.caSettingWhatsAppNumber = 'Enter a valid 10-digit mobile number';
+    if (wa) {
+        const normalizedWa = wa.startsWith('91') && wa.length === 12 ? wa.slice(2) : wa;
+        if (!/^[6-9]\d{9}$/.test(normalizedWa)) errors.caSettingWhatsAppNumber = 'Enter a valid 10-digit mobile number';
+    }
 
     // Google Review Link - valid URL if provided
     const reviewLink = ($('caSettingGoogleReviewLink')?.value || '').trim();
@@ -1761,7 +1811,7 @@ function _resetAppSettings() {
             _settingsDirty = false;
             _settingsErrors = {};
             _renderSettingsErrors();
-            _loadAppSettings();
+            _restoreAppSettingsFromOriginal();
             showToast('Changes discarded.', 'info');
         });
 }
@@ -1858,14 +1908,14 @@ async function _loadOverview() {
     try { _renderAuditEntries((await loadAuditLog(5)) || [], $('caOvRecent'), 'No changes recorded yet.'); } catch { _renderAuditEntries([], $('caOvRecent'), 'Could not load recent changes.'); }
 
     // Quick Controls: render the one-click action cards
-    _renderQuickControls(subsRaw, discounts, dishes, store);
+    _renderQuickControls(subsRaw, discounts, dishes, cats, store);
     window.lucide?.createIcons?.();
 }
 
 /* ============ QUICK CONTROLS ============ */
 
 /** Render the one-click Quick Controls cards on the Overview tab. */
-function _renderQuickControls(subsRaw, discounts, dishes, store) {
+function _renderQuickControls(subsRaw, discounts, dishes, cats, store) {
     const grid = $('qaGrid');
     if (!grid) return;
 
@@ -1924,7 +1974,23 @@ function _renderQuickControls(subsRaw, discounts, dishes, store) {
             primaryLabel: validOnPage.length > 0 ? 'Hide all' : 'Show all',
             primaryIcon: validOnPage.length > 0 ? 'eye-off' : 'eye',
             primaryClass: 'qa-btn--ghost',
-            primaryAction: () => _bulkSetAllPromoPage(validOnPage.length === 0),
+            canEdit: false,
+            primaryAction: async () => {
+                // Close over the computed coupons from _loadOverview snapshot — never read stale module cache
+                const targetCoupons = validOnPage.length === 0 ? coupons : onPage;
+                if (targetCoupons.length === 0) return;
+                const ok = await showConfirm(`${validOnPage.length === 0 ? 'Show' : 'Hide'} all ${targetCoupons.length} coupons on the Promo Page?`, 'Bulk update');
+                if (!ok) return;
+                try {
+                    await Promise.all(targetCoupons.map(([id]) =>
+                        update(Outlet.ref(`discounts/${id}`), { promoPage: validOnPage.length === 0, updatedAt: Date.now() })
+                    ));
+                    showToast(`${targetCoupons.length} coupon${targetCoupons.length === 1 ? '' : 's'} ${validOnPage.length === 0 ? 'shown on' : 'hidden from'} Promo Page`, 'success');
+                    _loadPromoOffers();
+                } catch (e) {
+                    showToast('Bulk update failed: ' + (e?.message || e), 'error');
+                }
+            },
             goto: 'offers'
         },
         // 4. Dish Visibility
@@ -1937,7 +2003,42 @@ function _renderQuickControls(subsRaw, discounts, dishes, store) {
             primaryLabel: oosCount > 0 ? 'Hide OOS' : 'Show all',
             primaryIcon: oosCount > 0 ? 'eye-off' : 'eye',
             primaryClass: 'qa-btn--ghost',
-            primaryAction: oosCount > 0 ? () => _bulkHideOOSQuick() : () => _bulkShowAllVisibility(),
+            canEdit: false,
+            primaryAction: async () => {
+                // Close over the computed dishList from _loadOverview snapshot — never read stale module cache
+                if (oosCount > 0) {
+                    const oosDishes = dishList.filter(d => d.stock === 0 && d.visible !== false);
+                    if (oosDishes.length === 0) { showToast('No out-of-stock dishes to hide', 'info'); return; }
+                    const ok = await showConfirm(`Hide all ${oosDishes.length} out-of-stock dishes from the app?`, 'Bulk update');
+                    if (!ok) return;
+                    try {
+                        await Promise.all(oosDishes.map(d =>
+                            update(Outlet.ref(`menu/dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
+                        ));
+                        showToast(`${oosDishes.length} out-of-stock dish${oosDishes.length === 1 ? '' : 'es'} hidden`, 'success');
+                        _loadVisibility();
+                    } catch (e) {
+                        showToast('Hide failed: ' + (e?.message || e), 'error');
+                    }
+                } else {
+                    const hiddenDishes = dishList.filter(d => d.visible === false);
+                    const hiddenCats = Object.values(cats || {}).filter(c => c.visible === false);
+                    const totalHidden = hiddenDishes.length + hiddenCats.length;
+                    if (totalHidden === 0) { showToast('No hidden items to show', 'info'); return; }
+                    const ok = await showConfirm(`Show all ${totalHidden} hidden items on the app?`, 'Bulk update');
+                    if (!ok) return;
+                    try {
+                        await Promise.all([
+                            ...hiddenDishes.map(d => update(Outlet.ref(`menu/dishes/${d.id}`), { visible: true, updatedAt: Date.now() })),
+                            ...hiddenCats.map(c => update(Outlet.ref(`menu/categories/${c.id}`), { visible: true, updatedAt: Date.now() }))
+                        ]);
+                        showToast(`${totalHidden} item${totalHidden === 1 ? '' : 's'} shown on app`, 'success');
+                        _loadVisibility();
+                    } catch (e) {
+                        showToast('Show all failed: ' + (e?.message || e), 'error');
+                    }
+                }
+            },
             goto: 'visibility'
         },
         // 5. App Features
@@ -1977,7 +2078,7 @@ function _renderQuickControls(subsRaw, discounts, dishes, store) {
             <div class="qa-card__title">${_escHtml(c.title)}</div>
             <div class="qa-card__value">${_escHtml(c.value)} <span style="font-size:10px;opacity:.6">${_escHtml(c.sub)}</span></div>
             <div class="qa-card__actions">
-                <button type="button" class="qa-btn ${c.primaryClass}" data-qa-action="${c.title.replace(/\s+/g,'-').toLowerCase()}" title="${c.primaryLabel}">
+                <button type="button" class="qa-btn ${c.primaryClass}" data-qa-action="${c.title.replace(/\s+/g,'-').toLowerCase()}" title="${c.primaryLabel}" ${c.canEdit === false ? 'disabled' : ''}>
                     <i data-lucide="${c.primaryIcon}"></i> <span>${c.primaryLabel}</span>
                 </button>
             </div>
@@ -1990,7 +2091,13 @@ function _renderQuickControls(subsRaw, discounts, dishes, store) {
             e.stopPropagation();
             const action = btn.dataset.qaAction;
             const card = cards.find(c => c.title.replace(/\s+/g,'-').toLowerCase() === action);
-            if (card) card.primaryAction();
+            if (card) {
+                if (card.canEdit === false) {
+                    showToast('View only — your role cannot modify this.', 'warning');
+                    return;
+                }
+                card.primaryAction();
+            }
         });
     });
 
