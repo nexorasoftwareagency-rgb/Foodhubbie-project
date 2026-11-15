@@ -11545,6 +11545,7 @@ body.pos-selection-mode .walkin-picker {
 .promo-offer__status.expired { background: #fee2e2; color: #991b1b; }
 .promo-offer__status.disabled { background: #f1f5f9; color: #64748b; }
 .promo-offer__status.not_in_window { background: #fef3c7; color: #92400e; }
+.promo-offer__status.not_started { background: #e2e8f0; color: #475569; }
 
 .promo-offer__toggle {
     position: relative;

@@ -396,7 +396,7 @@ function _scheduleUndo(entry) {
         el.textContent = 'Sent. ';
         const undoBtn = document.createElement('button');
         undoBtn.className = 'btn-secondary btn-sm';
-        undoBtn.textContent = 'Undo';
+        undoBtn.textContent = 'Mark as recalled';
         undoBtn.style.marginLeft = '8px';
         undoBtn.onclick = () => _undoSend();
         el.appendChild(undoBtn);
@@ -420,9 +420,9 @@ function _undoSend() {
     const el = $('pushSendResult');
     if (el) {
         el.className = 'push-result is-warn';
-        el.textContent = 'Send undone.';
+        el.textContent = 'Marked as recalled.';
     }
-    showToast('Notification send undone', 'info');
+    showToast('Notification marked as recalled', 'info');
     _syncUi();
 }
 
@@ -934,7 +934,7 @@ async function _sendPushNotification() {
 
     if (!testMode && aud === 'all') {
         const ok = await showConfirm(
-            `Send "${title}" to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}? You can undo within 5 seconds.`,
+            `Send "${title}" to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}? You can mark as recalled within 5 seconds.`,
             'Send notification'
         );
         if (!ok) return;

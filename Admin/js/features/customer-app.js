@@ -809,17 +809,20 @@ function _openQuickEdit(id) {
     const form = $('quickEditForm');
     if (!panel || !form) return;
 
-    // Populate form
-    $('qeName')?.value && ($('qeName').value = offer.name || '');
-    $('qeCode')?.value && ($('qeCode').value = offer.couponCode || '');
-    $('qeValue')?.value && ($('qeValue').value = offer.value || '');
-    $('qeMode')?.value && ($('qeMode').value = offer.mode || 'percent');
-    $('qeMinSubtotal')?.value && ($('qeMinSubtotal').value = offer.minSubtotal || '');
-    $('qeMaxCap')?.value && ($('qeMaxCap').value = offer.maxCap || '');
-    $('qeChannel')?.value && ($('qeChannel').value = offer.channel || 'all');
-    $('qeStartsAt')?.value && ($('qeStartsAt').value = offer.startsAt ? new Date(offer.startsAt).toISOString().slice(0, 16) : '');
-    $('qeEndsAt')?.value && ($('qeEndsAt').value = offer.endsAt ? new Date(offer.endsAt).toISOString().slice(0, 16) : '');
-    $('qePromoPage')?.checked && ($('qePromoPage').checked = offer.promoPage === true);
+    // Populate form — always assign values so stale values from a previous
+    // edit don't persist when editing a new offer with an empty field.
+        const setInput = (id, val) => { const el = $(id); if (el) el.value = val; };
+setInput('qeName', offer.name || '');
+    setInput('qeCode', offer.couponCode || '');
+    setInput('qeValue', offer.value || '');
+    setInput('qeMode', offer.mode || 'percent');
+    setInput('qeMinSubtotal', offer.minSubtotal || '');
+    setInput('qeMaxCap', offer.maxCap || '');
+    setInput('qeChannel', offer.channel || 'all');
+    setInput('qeStartsAt', offer.startsAt ? new Date(offer.startsAt).toISOString().slice(0, 16) : '');
+    setInput('qeEndsAt', offer.endsAt ? new Date(offer.endsAt).toISOString().slice(0, 16) : '');
+    const promoEl = $('qePromoPage');
+    if (promoEl) promoEl.checked = offer.promoPage === true;
 
     panel.classList.remove('hidden');
     panel.setAttribute('aria-hidden', 'false');
@@ -1224,12 +1227,12 @@ function _renderVisibilityLists() {
             return;
         }
 
-        // Row click -> toggle visibility
-        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
-            const realId = id.replace(/^(dish|category):/, '');
-            const currentCheckbox = row.querySelector('input[data-vis-type]');
-            const newChecked = !currentCheckbox.checked;
-            _toggleVisItem(type, realId, newChecked);
+        // Row click -> toggle selection (for bulk actions)
+        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT' && !e.target.closest('.vis-row__toggle')) {
+            const selectCheckbox = row.querySelector('.vis-row__select input[data-vis-id]');
+            if (selectCheckbox) {
+                selectCheckbox.click();
+            }
         }
     };
 
