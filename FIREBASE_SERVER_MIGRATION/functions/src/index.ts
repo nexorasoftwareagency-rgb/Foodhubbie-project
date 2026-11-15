@@ -42,6 +42,13 @@ export { platformHealth } from './scheduled/platformHealth';
 // `approveOnboardingRequest` the Supreme endpoint uses. Cleanup ships in
 // observe mode - `meta/onboardingAuto/cleanupEnforce` turns deletion on.
 export { onboardingWatcher } from './scheduled/onboardingWatcher';
+// Batch 23i: daily rider settlement at 23:00 IST. Ports
+// `runDailySettlement()` out of bot-control-api/server.js: riders with pending
+// cash get one settlement record the admin can pay and the rider can confirm.
+// No money moves. Enumerates `riderIndex` (never the `businesses` tree) and
+// keeps the control API's `meta/dailySettlementLastRun` day claim, so the box
+// and the cloud can never both settle a day. `foodhubbie-demo` is skipped.
+export { dailySettlement } from './scheduled/dailySettlement';
 
 // Callable Functions (Admin/Client)
 export { botControl } from './api/botControl';

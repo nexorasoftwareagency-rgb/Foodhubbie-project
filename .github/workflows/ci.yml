@@ -80,6 +80,9 @@ jobs:
       - name: Rider relay guard (copy, resolution, leaf triggers, one switch)
         run: node tests/rider-notify.check.cjs
 
+      - name: Daily settlement guard (cron, shared day claim, riderIndex only, record shape)
+        run: node tests/daily-settlement.check.cjs
+
       - name: Supreme dense UI guard (lists, tabs, phone layout, view-only)
         run: node tests/supreme-ui.browser.mjs
 

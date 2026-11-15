@@ -125,6 +125,7 @@ The plan above is being executed while the box is down. Status:
 | 23f | **the real** web/app order finalizer + cancel compensations (reward, discount usage, stock) | `34_ORDER_FINALIZER.md` |
 | 23g | loyalty earn / clawback / dine-in settlement + app reward redemption as three RTDB triggers | `35_LOYALTY_RELAY.md` |
 | 23h | rider assignment / pickup / cancellation FCM pushes as two RTDB triggers | `36_RIDER_RELAY.md` |
+| 23i | daily rider settlement as a scheduled function (23:00 IST) | `37_DAILY_SETTLEMENT.md` |
 
 Batch 23e (2026-11-14) finished the notification surface: **no push depends on
 the box any more**. Batch 23f then gave the extracted finalizer authority, so
@@ -145,10 +146,13 @@ pickup / cancellation pushes are two RTDB triggers behind
 `config/riderRelay/enabled === true`, running the same
 `bot/rider-push.js` bytes the bot used (vendored), with a durable
 `_riderFcm/{assigned,status}` claim so a replay cannot page twice.
+Batch 23i then took the last scheduled money job off the box: the daily rider
+settlement now runs at 23:00 IST and keeps the control API's own
+`meta/dailySettlementLastRun` day claim, so the two can never both settle a day.
+It enumerates `riderIndex` instead of downloading `businesses`.
 What still does depend on the box: the socket-only WhatsApp surface,
 `wallet-watch` (the only writer of the customer-facing `walletGate`),
-the daily settlement and the two cron jobs (demo reseed, onboarding fallback in
-`server.js`).
+the nightly demo reseed, and the onboarding fallback in `server.js`.
 
 **Decision: the `/api/whatsapp/*` read routes (accounts, numbers, quota,
 templates) stay on EC2 and are not ported in 23d.** Not a scope cut — there is
@@ -185,7 +189,7 @@ tenant-facing and belong in `tenantOnboarding`'s sibling.
 | `/api/whatsapp/*`, `/api/bot/*` (provision/restart/stop/delete/rescan/transport) | pm2 + Meta per-tenant credentials |
 | `wallet-watch.js` | live-listener design (batch 14); a stateless per-minute function would regress it. **No outlet is armed today**, so nothing breaks while it is down |
 | rider-assignment WhatsApp **template** (`isRiderChanged` in `bot/index.js`) | rides the socket; the FCM half moved to 23h |
-| daily settlement, nightly demo reseed | cron jobs; both tolerate a missed run |
+| nightly demo reseed | cron job; tolerates a missed run (the public demo's recent-day figures go stale) |
 | `/api/images/convert-batch` | `sharp`; already **non-fatal** in the onboarding wizard ("failures just mean status updates will use URL fallback") |
 
 Loyalty (accrual, clawback, dine-in settlement, app redemption) used to be on this
