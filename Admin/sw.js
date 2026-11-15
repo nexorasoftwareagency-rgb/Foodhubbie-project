@@ -54,11 +54,12 @@ firebase.messaging().onBackgroundMessage((payload) => {
 
 // This SW handles caching, navigation, and offline support only.
 
-// Bumped whenever any precached app file changes: the fetch handler is
-// stale-while-revalidate, so mixed old/new module pairs can serve until the
-// name changes force a clean re-cache (settings subtab race fix + boot preload
-// removal so settings.js evaluates post-auth: js/ui.js).
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.12.52';
+// Bumped whenever the shell changes: activation deletes every other cache, so
+// the bump is also the clean-cache mechanism that evicts stale runtime entries
+// (settings subtab race fix + boot preload removal so settings.js evaluates
+// post-auth: js/ui.js). App code is network-first, so the bump mainly resets
+// the offline fallback.
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.12.53';
 const ASSETS_TO_CACHE = [
   './index.html',
   './style.css?v=5.4.19',
@@ -136,14 +137,16 @@ self.addEventListener('activate', (event) => {
 });
 
 // 3. Fetch Event
-//   - CDN assets (unpkg, cdn.jsdelivr, cdnjs): Cache-First (offline-friendly)
+//   - CDN assets (unpkg, cdn.jsdelivr, cdnjs, gstatic firebasejs): Cache-First
 //   - Firebase RTDB / Auth: bypass (always live)
-//   - All other GETs (our own app code: index.html, JS, CSS, JSON, etc.):
-//       Network-Only. We deliberately do NOT consult the cache for app code,
-//       because a stale cache can serve old modules that reference renamed
-//       files (e.g. discounts-reports.js -> discountsReports.js) and break
-//       dynamic imports. The app already requires auth + Firebase, so it
-//       can't function offline anyway.
+//   - Our own app code (.js/.html/.json + navigations): Network-First.
+//       Network wins; the cache is only the offline fallback. Cache-first here
+//       served stale modules next to fresh ones and broke dynamic imports
+//       (SUPPORT_WA / initPushUI / chat.js orderByChild — every mixed-bundle
+//       incident traced to this handler). The app already requires auth +
+//       Firebase, so it can't function offline anyway.
+//   - All other same-origin GETs (CSS ?v=-busted, images, sounds):
+//       Stale-While-Revalidate.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) return;
 
@@ -185,10 +188,27 @@ self.addEventListener('fetch', (event) => {
   // (e.g. *.web.app bot images) make fetch() reject → respondWith(undefined) throws.
   if (new URL(event.request.url).origin !== self.location.origin) return;
 
-  // Stale-While-Revalidate for our own app code (HTML, JS, CSS, etc.).
-  // All files are versioned (?v=5.4.5) so new deploy = new cache entry.
-  // Cache-first: serve instantly, then update cache from network in background.
-  // This avoids re-downloading on every page load (~0ms for cached files).
+  // Network-First for app code (.js/.html/.json + navigations): network wins,
+  // the cache is only the offline fallback. Cache-first here was the machine
+  // behind every mixed-bundle incident (stale module next to a fresh one).
+  const p = new URL(event.request.url).pathname;
+  const isAppCode = p.endsWith('.js') || p.endsWith('.html') ||
+                    p.endsWith('.json') || event.request.mode === 'navigate';
+  if (isAppCode) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if (response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request).then((cached) => cached || Response.error()))
+    );
+    return;
+  }
+
+  // Stale-While-Revalidate for the rest (CSS ?v=-busted, images, sounds):
+  // versioned URLs mean a new deploy is a new cache entry.
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const fetchPromise = fetch(event.request).then((response) => {

@@ -26,6 +26,9 @@ jobs:
       - name: Chat tab guard (chatMeta query list, dismissible onboarding wall)
         run: node tests/chat-tab.check.cjs
 
+      - name: Admin SW guard (app code is network-first, S-W-R static only)
+        run: node tests/admin-sw-networkfirst.check.cjs
+
       - name: Tables session-window guard (bounded tableSessions read + reconciliation)
         run: node tests/tables-session-window.check.cjs
 
@@ -73,6 +76,9 @@ jobs:
 
       - name: Loyalty relay guard (earn/clawback math, claim, one switch)
         run: node tests/loyalty-engine.check.cjs
+
+      - name: Rider relay guard (copy, resolution, leaf triggers, one switch)
+        run: node tests/rider-notify.check.cjs
 
       - name: Supreme dense UI guard (lists, tabs, phone layout, view-only)
         run: node tests/supreme-ui.browser.mjs
