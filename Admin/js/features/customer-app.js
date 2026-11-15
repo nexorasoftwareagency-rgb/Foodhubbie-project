@@ -193,6 +193,7 @@ function _wireOnce() {
     $('btnSaveAppSettings')?.addEventListener('click', _saveAppSettings);
     $('btnSaveAppSettingsBottom')?.addEventListener('click', _saveAppSettings);
     $('btnResetAppSettings')?.addEventListener('click', _resetAppSettings);
+    $('btnCopyHoursToAll')?.addEventListener('click', _copyHoursToAll);
 
     // App Settings: ANY change inside the settings grid marks it unsaved (nothing saves until you press Save)
     const grid = document.querySelector('#caPaneSettings .ca-settings-grid');
@@ -1667,25 +1668,40 @@ function _validateSettings() {
         try { new URL(reviewLink); } catch { errors.caSettingGoogleReviewLink = 'Enter a valid URL'; }
     }
 
-    // Delivery fee - non-negative number
+    // Delivery fee - non-negative number, reasonable upper bound
     const deliveryFee = $('caSettingDeliveryFee')?.value;
     if (deliveryFee !== '' && deliveryFee !== null) {
         const df = Number(deliveryFee);
         if (isNaN(df) || df < 0) errors.caSettingDeliveryFee = 'Delivery fee must be a non-negative number';
+        else if (df > 10000) errors.caSettingDeliveryFee = 'Delivery fee seems too high (max ₹10,000)';
     }
 
-    // Min order - non-negative number
+    // Min order - non-negative number, reasonable upper bound
     const minOrder = $('caSettingMinOrder')?.value;
     if (minOrder !== '' && minOrder !== null) {
         const mo = Number(minOrder);
         if (isNaN(mo) || mo < 0) errors.caSettingMinOrder = 'Minimum order must be a non-negative number';
+        else if (mo > 50000) errors.caSettingMinOrder = 'Minimum order seems too high (max ₹50,000)';
     }
 
-    // GST rate - 0 to 28
+    // GST rate - standard Indian slabs: 0, 5, 12, 18, 28
     const gstRate = $('caSettingGSTRate')?.value;
     if (gstRate !== '' && gstRate !== null) {
         const gr = Number(gstRate);
-        if (isNaN(gr) || gr < 0 || gr > 28) errors.caSettingGSTRate = 'GST rate must be between 0 and 28';
+        const validGstRates = [0, 5, 12, 18, 28];
+        if (isNaN(gr) || gr < 0 || gr > 28 || !validGstRates.includes(gr)) {
+            errors.caSettingGSTRate = 'GST rate must be between 0 and 28';
+        }
+    }
+
+    // Timezone - must be a valid IANA timezone
+    const timezone = $('caSettingTimezone')?.value;
+    if (timezone) {
+        try {
+            new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+        } catch {
+            errors.caSettingTimezone = 'Invalid timezone';
+        }
     }
 
     return errors;
@@ -1759,22 +1775,22 @@ function _renderBusinessHours(hours = {}) {
     if (!grid) return;
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">';
+    let html = '<div class="ca-bh-grid">';
     days.forEach((day, i) => {
         const dayData = hours[day] || { open: '09:00', close: '22:00', closed: false };
         html += `
-            <div style="border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:10px;background:var(--bg,#fff);">
-                <div style="font-weight:600;font-size:13px;color:var(--text-primary);margin-bottom:6px;">${dayLabels[i]}</div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <label style="font-size:11px;color:var(--text-secondary);margin-right:6px;">Open</label>
-                    <input type="time" id="bh_${day}_open" value="${dayData.open || '09:00'}" style="flex:1;font-size:12px;padding:4px;border:1px solid var(--border,#e5e7eb);border-radius:4px;">
+            <div class="ca-bh-card">
+                <div class="ca-bh-day">${dayLabels[i]}</div>
+                <div class="ca-bh-row">
+                    <label class="ca-bh-label">Open</label>
+                    <input type="time" id="bh_${day}_open" value="${dayData.open || '09:00'}" class="ca-bh-time-input">
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
-                    <label style="font-size:11px;color:var(--text-secondary);margin-right:6px;">Close</label>
-                    <input type="time" id="bh_${day}_close" value="${dayData.close || '22:00'}" style="flex:1;font-size:12px;padding:4px;border:1px solid var(--border,#e5e7eb);border-radius:4px;">
+                <div class="ca-bh-row">
+                    <label class="ca-bh-label">Close</label>
+                    <input type="time" id="bh_${day}_close" value="${dayData.close || '22:00'}" class="ca-bh-time-input">
                 </div>
-                <div style="margin-top:6px;">
-                    <label class="ca-toggle" style="font-size:11px;">
+                <div class="ca-bh-closed">
+                    <label class="ca-bh-toggle-label ca-toggle">
                         <input type="checkbox" id="bh_${day}_closed" ${dayData.closed ? 'checked' : ''}>
                         <span class="ca-toggle-slider"></span>
                         Closed
@@ -1799,10 +1815,40 @@ function _collectBusinessHours() {
     days.forEach(day => {
         const open = $(`bh_${day}_open`)?.value || '09:00';
         const close = $(`bh_${day}_close`)?.value || '22:00';
-        const closed = $(`bh_${day}_closed`)?.checked === false ? false : $(`bh_${day}_closed`)?.checked === true;
+        const closed = $(`bh_${day}_closed`)?.checked === true;
         hours[day] = { open, close, closed };
     });
     return hours;
+}
+
+function _copyHoursToAll() {
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const first = days[0];
+    const firstOpen = $(`bh_${first}_open`)?.value || '09:00';
+    const firstClose = $(`bh_${first}_close`)?.value || '22:00';
+    const firstClosed = $(`bh_${first}_closed`)?.checked === true;
+
+    if (days.every(day => {
+        const open = $(`bh_${day}_open`)?.value || '09:00';
+        const close = $(`bh_${day}_close`)?.value || '22:00';
+        const closed = $(`bh_${day}_closed`)?.checked === true;
+        return open === firstOpen && close === firstClose && closed === firstClosed;
+    })) {
+        showToast('All days already have the same hours.', 'info');
+        return;
+    }
+
+    days.forEach(day => {
+        const openInput = $(`bh_${day}_open`);
+        const closeInput = $(`bh_${day}_close`);
+        const closedInput = $(`bh_${day}_closed`);
+        if (openInput) openInput.value = firstOpen;
+        if (closeInput) closeInput.value = firstClose;
+        if (closedInput) closedInput.checked = firstClosed;
+        _markSettingsDirty('businessHours');
+    });
+
+    showToast('Copied hours to all days.', 'info');
 }
 
 function _resetAppSettings() {

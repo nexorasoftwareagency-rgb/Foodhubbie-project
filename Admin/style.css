@@ -12467,6 +12467,46 @@ body.setup-mode .setup-hide {
 #businessHoursGrid {
     margin-top: 8px;
 }
+.ca-bh-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+.ca-bh-card {
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--bg, #fff);
+}
+.ca-bh-day {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary, #0f172a);
+    margin-bottom: 6px;
+}
+.ca-bh-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ca-bh-label {
+    font-size: 11px;
+    color: var(--text-secondary, #64748b);
+    margin-right: 6px;
+}
+.ca-bh-time-input {
+    flex: 1;
+    font-size: 12px;
+    padding: 4px;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 4px;
+}
+.ca-bh-closed {
+    margin-top: 6px;
+}
+.ca-bh-toggle-label {
+    font-size: 11px;
+}
 
 /* ===== P4: Color Input ===== */
 input[type="color"] {
