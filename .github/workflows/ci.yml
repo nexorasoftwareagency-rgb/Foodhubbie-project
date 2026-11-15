@@ -71,6 +71,9 @@ jobs:
       - name: Order finalizer guard (socket-free, one finalization path)
         run: node tests/order-finalizer.check.cjs
 
+      - name: Loyalty relay guard (earn/clawback math, claim, one switch)
+        run: node tests/loyalty-engine.check.cjs
+
       - name: Supreme dense UI guard (lists, tabs, phone layout, view-only)
         run: node tests/supreme-ui.browser.mjs
 

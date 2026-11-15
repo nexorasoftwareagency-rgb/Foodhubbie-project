@@ -80,6 +80,17 @@ export {
   onWebOrderPlaced,
   onOrderCancelledCompensate,
 } from './triggers/orderFinalizer';
+// Batch 23g: loyalty — accrual on Delivered/Served, clawback on cancel/refund
+// and bill void, dine-in earn on paymentStatus:'Paid', plus the app reward
+// redemption queue. `config/loyaltyRelay/enabled === true` is the ONE switch:
+// while it is not `true` every trigger is a no-op and the bot keeps owning
+// loyalty, so this deploy alone changes no behaviour. The tier-up push is not
+// here — `onLoyaltyTierUp` above fires from the loyalty write itself.
+export {
+  onOrderLoyaltyStatus,
+  onOrderLoyaltyPayment,
+  onRedeemRequest,
+} from './triggers/loyaltyRelay';
 // onWalletUpdate was DELETED in batch 14: it triggered on
 // `walletBilling/{bid}/{oid}/balancePaise` — the META API credit line, not the
 // restaurant wallet — and published the CUSTOMER-facing order gate from it,

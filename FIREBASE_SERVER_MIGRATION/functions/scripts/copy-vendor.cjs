@@ -36,6 +36,11 @@ const FILES = [
     'bot/utils.js',
     'bot/order-pricing.js',
     'bot/discount-engine-core.js',
+    // Batch 23g: loyalty accrual/clawback + the redemption queue handler. Both
+    // are socket-free; `redeem.js` also carries `pointsLapsed`, which the
+    // accrual transaction uses for inactivity expiry.
+    'bot/loyalty-engine.js',
+    'bot/redeem.js',
     'shared/money-math.js',
     'shared/loyalty-math.js',
     'shared/discount-rules.js',

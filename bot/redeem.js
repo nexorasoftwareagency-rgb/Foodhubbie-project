@@ -2,7 +2,10 @@
  * Loyalty redemption (server-authoritative, device-bound).
  *
  * The menu app cannot write redemption records: it pushes a request to
- * bot/redeemQueue and the bot (admin SDK, rules bypass) is the only writer.
+ * bot/redeemQueue and the server (admin SDK, rules bypass) is the only writer —
+ * that is the WhatsApp bot, or the Cloud Functions trigger when the loyalty
+ * relay flag is on (batch 23g). One shared claim keeps the two from ever
+ * double-spending a request.
  * That is what makes a code trustworthy — cost comes from loyalty/config,
  * never from the client, and the points are actually deducted.
  *
@@ -36,75 +39,100 @@ function pointsLapsed(lastOrderAt, expiryDays, now = Date.now()) {
     return now - last > d * DAY_MS;
 }
 
+// Batch 23g: the queue handler is SOCKET-FREE and shared with the Cloud
+// Functions trigger (`onRedeemRequest`), exactly like the order finalizer.
+// At-most-once: a claim under bot/redeemClaims/{queueKey} is taken with a
+// transaction before any points move, so the bot and a Function that both see
+// the same request can never deduct twice or mint two codes. A claim older than
+// CLAIM_TTL_MS may be taken over, so a crashed run cannot wedge the queue.
+const CLAIM_TTL_MS = 5 * 60 * 1000;
+
+async function redeemRewardRequest({ db, resolvePath, OUTLET, key, req, owner = 'bot' }) {
+    const queueRef = db.ref(resolvePath('bot/redeemQueue', OUTLET));
+    const claimRef = db.ref(resolvePath(`bot/redeemClaims/${String(key)}`, OUTLET));
+    const rewardRef = (phone, rkey) => db.ref(resolvePath(`customers/${phone}/rewards/${rkey}`, OUTLET));
+
+    async function reject(phone, reason) {
+        if (!key) return;
+        if (!/^[6-9][0-9]{9}$/.test(phone)) { await queueRef.child(key).remove().catch(() => {}); return; }
+        await rewardRef(phone, key).set({ status: 'rejected', reason, redeemedAt: Date.now(), outlet: OUTLET }).catch(() => {});
+        await queueRef.child(key).remove().catch(() => {});
+    }
+
+    const phone = String((req && req.phone) || '');
+    try {
+        if (!/^[6-9][0-9]{9}$/.test(phone) || !key) throw new Error('bad request');
+        const appUid = String(req.appUid || '').trim();
+        if (!/^[A-Za-z0-9_-]{1,128}$/.test(appUid)) throw new Error('device not linked');
+
+        // Claim once, whichever writer gets here first (cold-tx seeded).
+        const seed = ((await claimRef.once('value').catch(() => null)) || {}).val();
+        const now0 = Date.now();
+        const claim = await claimRef.transaction((cur) => {
+            const c = cur || seed;
+            if (c && now0 - Number(c.at || 0) < CLAIM_TTL_MS) return;   // held
+            return { at: now0, by: owner };
+        }).catch(() => null);
+        if (!claim || !claim.committed) return { ok: false, skipped: 'claimed' };
+
+        const device = await db.ref(resolvePath(`customers/${phone}/devices/${appUid}`, OUTLET)).once('value');
+        if (!device.exists()) throw new Error('device not linked');
+
+        const cfg = (await db.ref(resolvePath('loyalty/config', OUTLET)).once('value')).val() || {};
+        const reward = (cfg.rewards || []).find(r => r && r.id === req.rewardId);
+        if (!reward) throw new Error('unknown reward');
+        const cost = Number(reward.cost);
+        if (!Number.isFinite(cost) || cost <= 0) throw new Error('invalid cost');
+
+        const loyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, OUTLET));
+        // RTDB hands the first transaction attempt `null` even when the node
+        // exists (cold transaction queue), and returning undefined aborts.
+        // Seed it from a read so a missing record is the only abort case.
+        const base = (await loyRef.once('value')).val();
+        if (!base) throw new Error('insufficient points');
+        if (pointsLapsed(base.lastOrderAt, cfg.expiryDays)) throw new Error('points expired');
+        if (!canAfford(base.lifetimePoints, base.pointsSpent, cost)) throw new Error('insufficient points');
+
+        const tx = await loyRef.transaction((cur) => {
+            const node = cur || base;
+            if (!node) return;
+            if (!canAfford(node.lifetimePoints, node.pointsSpent, cost)) return;
+            node.pointsSpent = (Number(node.pointsSpent) || 0) + cost;
+            return node;
+        });
+        if (!tx.committed) throw new Error('insufficient points');
+
+        const code = 'LOYAL' + crypto.randomInt(100000, 1000000);
+        await rewardRef(phone, key).set({
+            rewardId: reward.id,
+            label: reward.label || reward.id,
+            cost,
+            code,
+            status: 'active',
+            redeemedAt: Date.now(),
+            outlet: OUTLET
+        });
+        await queueRef.child(key).remove().catch(() => {});
+        console.log(`[Redeem] ${phone} redeemed ${reward.id} (-${cost} pts) code ${code} (${owner})`);
+        return { ok: true, code, cost };
+    } catch (e) {
+        console.warn(`[Redeem] rejected ${key}: ${e.message}`);
+        await reject(phone, e.message);
+        return { ok: false, error: e.message };
+    }
+}
+
 function initRedeemListener({ db, resolvePath, OUTLET }) {
     const qRef = db.ref(resolvePath('bot/redeemQueue', OUTLET));
     qRef.off('child_added');
     qRef.off('child_changed');
 
-    const rewardRef = (phone, key) => db.ref(resolvePath(`customers/${phone}/rewards/${key}`, OUTLET));
-
-    async function reject(phone, key, reason) {
-        if (!key) return;
-        if (!/^[6-9][0-9]{9}$/.test(phone)) { await qRef.child(key).remove().catch(() => {}); return; }
-        await rewardRef(phone, key).set({ status: 'rejected', reason, redeemedAt: Date.now(), outlet: OUTLET }).catch(() => {});
-        await qRef.child(key).remove().catch(() => {});
-    }
-
-    async function handle(snap) {
-        const req = snap.val() || {};
-        const key = String(snap.key || '');
-        const phone = String(req.phone || '');
-        try {
-            if (!/^[6-9][0-9]{9}$/.test(phone) || !key) throw new Error('bad request');
-            const appUid = String(req.appUid || '').trim();
-            if (!/^[A-Za-z0-9_-]{1,128}$/.test(appUid)) throw new Error('device not linked');
-            const device = await db.ref(resolvePath(`customers/${phone}/devices/${appUid}`, OUTLET)).once('value');
-            if (!device.exists()) throw new Error('device not linked');
-
-            const cfg = (await db.ref(resolvePath('loyalty/config', OUTLET)).once('value')).val() || {};
-            const reward = (cfg.rewards || []).find(r => r && r.id === req.rewardId);
-            if (!reward) throw new Error('unknown reward');
-            const cost = Number(reward.cost);
-            if (!Number.isFinite(cost) || cost <= 0) throw new Error('invalid cost');
-
-            const loyRef = db.ref(resolvePath(`customers/${phone}/loyalty`, OUTLET));
-            // RTDB hands the first transaction attempt `null` even when the node
-            // exists (cold transaction queue), and returning undefined aborts.
-            // Seed it from a read so a missing record is the only abort case.
-            const base = (await loyRef.once('value')).val();
-            if (!base) throw new Error('insufficient points');
-            if (pointsLapsed(base.lastOrderAt, cfg.expiryDays)) throw new Error('points expired');
-            if (!canAfford(base.lifetimePoints, base.pointsSpent, cost)) throw new Error('insufficient points');
-
-            const tx = await loyRef.transaction((cur) => {
-                const node = cur || base;
-                if (!node) return;
-                if (!canAfford(node.lifetimePoints, node.pointsSpent, cost)) return;
-                node.pointsSpent = (Number(node.pointsSpent) || 0) + cost;
-                return node;
-            });
-            if (!tx.committed) throw new Error('insufficient points');
-
-            const code = 'LOYAL' + crypto.randomInt(100000, 1000000);
-            await rewardRef(phone, key).set({
-                rewardId: reward.id,
-                label: reward.label || reward.id,
-                cost,
-                code,
-                status: 'active',
-                redeemedAt: Date.now(),
-                outlet: OUTLET
-            });
-            await qRef.child(key).remove().catch(() => {});
-            console.log(`[Redeem] ${phone} redeemed ${reward.id} (-${cost} pts) code ${code}`);
-        } catch (e) {
-            console.warn(`[Redeem] rejected ${key}: ${e.message}`);
-            await reject(phone, key, e.message);
-        }
-    }
-
-    qRef.on('child_added', handle);
+    qRef.on('child_added', (snap) => {
+        redeemRewardRequest({ db, resolvePath, OUTLET, key: String(snap.key || ''), req: snap.val() || {}, owner: 'bot' })
+            .catch(e => console.warn('[Redeem] handler error:', e.message));
+    });
     console.log(`[Bot] Redeem listener started on bot/redeemQueue`);
 }
 
-module.exports = { canAfford, pointsLapsed, initRedeemListener };
+module.exports = { canAfford, pointsLapsed, redeemRewardRequest, initRedeemListener };
+

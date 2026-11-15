@@ -123,6 +123,7 @@ The plan above is being executed while the box is down. Status:
 | 23d-4 | website signup auto-approval + 72 h unverified cleanup (scheduled) | `31_ONBOARDING_WATCHER.md` |
 | 23e | `sendFCMToAdmins`, `notifyCustomerApp`, `notifyTierUp` as RTDB triggers behind one kill flag | `33_PUSH_RELAY.md` |
 | 23f | **the real** web/app order finalizer + cancel compensations (reward, discount usage, stock) | `34_ORDER_FINALIZER.md` |
+| 23g | loyalty earn / clawback / dine-in settlement + app reward redemption as three RTDB triggers | `35_LOYALTY_RELAY.md` |
 
 Batch 23e (2026-11-14) finished the notification surface: **no push depends on
 the box any more**. Batch 23f then gave the extracted finalizer authority, so
@@ -130,10 +131,18 @@ the box any more**. Batch 23f then gave the extracted finalizer authority, so
 re-derivation, discount re-validation, reward burn, stock and the cancel-side
 compensations all run in the cloud behind `config/orderFinalizer/enabled === true`
 (one shared `finalizeClaim` lock keeps the bot from ever double-running it).
-What still does depend on the box: loyalty earn/clawback (`processLoyalty`,
-batch 23g), the socket-only WhatsApp surface, `wallet-watch`, rider assignment
-pushes, the daily settlement and the two cron jobs (demo reseed, onboarding
-fallback in `server.js`).
+Batch 23g closed the loyalty half: `bot/loyalty-engine.js` is a socket-free
+factory vendored into the bundle, and `onOrderLoyaltyStatus` /
+`onOrderLoyaltyPayment` / `onRedeemRequest` run it behind
+`config/loyaltyRelay/enabled === true`. **No order-side money or points path now
+depends on the box** — a delivered order earns, a cancelled one claws back, a
+settled dine-in bill credits the guest and an app reward mints its code with the
+box down. That also switched 23e's `onLoyaltyTierUp` from dormant to live, since
+the accrual that crosses a tier is now a cloud write.
+What still does depend on the box: the socket-only WhatsApp surface,
+`wallet-watch` (the only writer of the customer-facing `walletGate`),
+rider-assignment pushes, the daily settlement and the two cron jobs (demo
+reseed, onboarding fallback in `server.js`).
 
 **Decision: the `/api/whatsapp/*` read routes (accounts, numbers, quota,
 templates) stay on EC2 and are not ported in 23d.** Not a scope cut — there is
@@ -162,15 +171,20 @@ Revisit this decision when Track A onboards a real tenant WABA
 (`docs/PLAN-PER-TENANT-WABA.md`) — at that point quota/templates become
 tenant-facing and belong in `tenantOnboarding`'s sibling.
 
-**What legitimately remains on the box** after 23d:
+**What legitimately remains on the box** after 23d–23g:
 
 | on the box | why it cannot move yet |
 |---|---|
 | Baileys worker (`bot/index.js` + session data) | a socket that must stay paired; no Functions equivalent |
 | `/api/whatsapp/*`, `/api/bot/*` (provision/restart/stop/delete/rescan/transport) | pm2 + Meta per-tenant credentials |
 | `wallet-watch.js` | live-listener design (batch 14); a stateless per-minute function would regress it. **No outlet is armed today**, so nothing breaks while it is down |
+| rider-assignment WhatsApp + FCM push (`isRiderChanged` in `bot/index.js`) | socket-only in its current form; queue item after 23g |
 | daily settlement, nightly demo reseed | cron jobs; both tolerate a missed run |
 | `/api/images/convert-batch` | `sharp`; already **non-fatal** in the onboarding wizard ("failures just mean status updates will use URL fallback") |
+
+Loyalty (accrual, clawback, dine-in settlement, app redemption) used to be on this
+list. Batch 23g took it off: the engine is socket-free and now runs from three
+triggers, so nothing about points or reward codes depends on the box.
 
 Two smaller confirmations from the same probe: the pizza outlet still carries two
 junk child nodes (`pizza`, `undefined`) left by an old write, and its three
