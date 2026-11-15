@@ -41,6 +41,9 @@ const FILES = [
     // accrual transaction uses for inactivity expiry.
     'bot/loyalty-engine.js',
     'bot/redeem.js',
+    // Batch 23h: rider FCM pushes. The Functions triggers build the same copy
+    // and resolve order.riderId (UID or email) with the same rules as the bot.
+    'bot/rider-push.js',
     'shared/money-math.js',
     'shared/loyalty-math.js',
     'shared/discount-rules.js',
@@ -77,6 +80,7 @@ function verifyLoad() {
     const rules = require(abs('shared/discount-rules.js'));
     const inbox = require(abs('shared/push-inbox.cjs'));
     const billing = require(abs('shared/billing-defaults.cjs'));
+    const riderPush = require(abs('bot/rider-push.js'));
 
     if (typeof finalizerMod.createOrderFinalizer !== 'function') problems.push('createOrderFinalizer is not exported');
     if (typeof finalizerMod.compareFinalization !== 'function') problems.push('compareFinalization is not exported');
@@ -93,6 +97,17 @@ function verifyLoad() {
     }
     if (typeof rules.discountAmount !== 'function' || rules.discountAmount({ mode: 'percent', value: 10 }, 697) !== 69.7) {
         problems.push('discountAmount is not the shared math');
+    }
+    // Batch 23h: the rider push copy + status mapping are the contract the
+    // Functions triggers share with the bot. A stale vendored copy would send a
+    // different message than the one the bot used to send.
+    if (typeof riderPush.createRiderPush !== 'function') problems.push('createRiderPush is not exported');
+    const riderCopy = riderPush.riderPushCopy('assigned', { displayId: 'X1', total: 250 });
+    if (!riderCopy || riderCopy.title !== 'New Order Assigned!' || !riderCopy.body.includes('₹250')) {
+        problems.push('rider push copy drifted from the bot wording');
+    }
+    if (riderPush.riderStatusEvent('cooked') !== 'ready' || riderPush.riderStatusEvent('delivered') !== '') {
+        problems.push('riderStatusEvent no longer maps cooked->ready / ignores other statuses');
     }
 
     const stub = finalizerMod.createOrderFinalizer({

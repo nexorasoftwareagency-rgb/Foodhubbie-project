@@ -124,6 +124,7 @@ The plan above is being executed while the box is down. Status:
 | 23e | `sendFCMToAdmins`, `notifyCustomerApp`, `notifyTierUp` as RTDB triggers behind one kill flag | `33_PUSH_RELAY.md` |
 | 23f | **the real** web/app order finalizer + cancel compensations (reward, discount usage, stock) | `34_ORDER_FINALIZER.md` |
 | 23g | loyalty earn / clawback / dine-in settlement + app reward redemption as three RTDB triggers | `35_LOYALTY_RELAY.md` |
+| 23h | rider assignment / pickup / cancellation FCM pushes as two RTDB triggers | `36_RIDER_RELAY.md` |
 
 Batch 23e (2026-11-14) finished the notification surface: **no push depends on
 the box any more**. Batch 23f then gave the extracted finalizer authority, so
@@ -139,10 +140,15 @@ depends on the box** — a delivered order earns, a cancelled one claws back, a
 settled dine-in bill credits the guest and an app reward mints its code with the
 box down. That also switched 23e's `onLoyaltyTierUp` from dormant to live, since
 the accrual that crosses a tier is now a cloud write.
+Batch 23h then closed the last notification path: the rider assignment /
+pickup / cancellation pushes are two RTDB triggers behind
+`config/riderRelay/enabled === true`, running the same
+`bot/rider-push.js` bytes the bot used (vendored), with a durable
+`_riderFcm/{assigned,status}` claim so a replay cannot page twice.
 What still does depend on the box: the socket-only WhatsApp surface,
 `wallet-watch` (the only writer of the customer-facing `walletGate`),
-rider-assignment pushes, the daily settlement and the two cron jobs (demo
-reseed, onboarding fallback in `server.js`).
+the daily settlement and the two cron jobs (demo reseed, onboarding fallback in
+`server.js`).
 
 **Decision: the `/api/whatsapp/*` read routes (accounts, numbers, quota,
 templates) stay on EC2 and are not ported in 23d.** Not a scope cut — there is
@@ -178,7 +184,7 @@ tenant-facing and belong in `tenantOnboarding`'s sibling.
 | Baileys worker (`bot/index.js` + session data) | a socket that must stay paired; no Functions equivalent |
 | `/api/whatsapp/*`, `/api/bot/*` (provision/restart/stop/delete/rescan/transport) | pm2 + Meta per-tenant credentials |
 | `wallet-watch.js` | live-listener design (batch 14); a stateless per-minute function would regress it. **No outlet is armed today**, so nothing breaks while it is down |
-| rider-assignment WhatsApp + FCM push (`isRiderChanged` in `bot/index.js`) | socket-only in its current form; queue item after 23g |
+| rider-assignment WhatsApp **template** (`isRiderChanged` in `bot/index.js`) | rides the socket; the FCM half moved to 23h |
 | daily settlement, nightly demo reseed | cron jobs; both tolerate a missed run |
 | `/api/images/convert-batch` | `sharp`; already **non-fatal** in the onboarding wizard ("failures just mean status updates will use URL fallback") |
 

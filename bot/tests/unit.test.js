@@ -264,12 +264,14 @@ test('promo transport gate: meta allows, Baileys blocks', () => {
 test('admin and rider FCM sends are data-only', () => {
     const fs = require('fs');
     const src = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
-    const adminFn = src.slice(src.indexOf('async function sendFCMToAdmins'), src.indexOf('async function sendFCMToRider'));
-    const riderFn = src.slice(src.indexOf('async function sendFCMToRider'));
+    const adminFn = src.slice(src.indexOf('async function sendFCMToAdmins'), src.indexOf('// Rider FCM sends live in'));
+    // Batch 23h: the rider sender is bot/rider-push.js, vendored into the
+    // deployed Functions bundle so both runners send the same bytes.
+    const riderFn = fs.readFileSync(path.join(__dirname, '../rider-push.js'), 'utf8');
     assert.ok(adminFn.includes('sendEachForMulticast'), 'admin send uses multicast');
     assert.ok(!adminFn.includes('notification:'), 'sendFCMToAdmins must not send a notification payload');
-    assert.ok(riderFn.includes('data:'), 'sendFCMToRider sends a data payload');
-    assert.ok(!riderFn.includes('notification:'), 'sendFCMToRider must not send a notification payload');
+    assert.ok(riderFn.includes('data:'), 'the rider send carries a data payload');
+    assert.ok(!/notification\s*:/.test(riderFn), 'the rider send must not send a notification payload');
 });
 
 test('loyalty redemption: only an earned, unspent balance can pay', () => {

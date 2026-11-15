@@ -91,6 +91,12 @@ export {
   onOrderLoyaltyPayment,
   onRedeemRequest,
 } from './triggers/loyaltyRelay';
+// Batch 23h: rider pushes — assignment and the pickup/cancellation statuses.
+// `config/riderRelay/enabled === true` is the ONE switch: while it is not
+// `true` both triggers are no-ops and the bot keeps sending, so this deploy
+// alone changes no behaviour. The `rider_assigned` WhatsApp TEMPLATE stays in
+// the bot — it rides the socket and cannot follow.
+export { onRiderAssigned, onRiderStatus } from './triggers/riderRelay';
 // onWalletUpdate was DELETED in batch 14: it triggered on
 // `walletBilling/{bid}/{oid}/balancePaise` — the META API credit line, not the
 // restaurant wallet — and published the CUSTOMER-facing order gate from it,

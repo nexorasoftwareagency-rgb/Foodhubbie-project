@@ -130,6 +130,25 @@ try {
     console.error('[LOYALTY] loyalty-engine failed to load — loyalty earn/clawback disabled:', e && e.message);
 }
 
+// Batch 23h: rider FCM pushes moved to a SOCKET-FREE module (`bot/rider-push.js`)
+// so the deployed Functions triggers run the same copy + email->uid resolution
+// as this bot. `config/riderRelay/enabled === true` means the cloud owns them
+// (see isRiderRelayEnabled). Same guarded-require pattern as above.
+let riderPush = null;
+let riderStatusEvent = () => '';
+try {
+    const riderPushModule = require('./rider-push');
+    riderStatusEvent = riderPushModule.riderStatusEvent;
+    riderPush = riderPushModule.createRiderPush({
+        db, resolvePath, getRiderByEmail, isDeadPushCode,
+        messaging: { send: (msg) => admin.messaging().send(msg) },
+        formatOrderId,
+        log: (msg, meta) => console.warn(msg, meta ? JSON.stringify(meta) : ''),
+    });
+} catch (e) {
+    console.error('[RIDER] rider-push failed to load — rider pushes disabled:', e && e.message);
+}
+
 // Batch 23b: the web/app order finalization pipeline moved to a SOCKET-FREE
 // module so the same code can run as an RTDB trigger in Cloud Functions. The
 // WhatsApp-only pieces arrive as deps (`notifyAdmin`); everything else is DB.
@@ -968,6 +987,23 @@ async function isLoyaltyRelayEnabled() {
     }
 }
 
+// Batch 23h: riders get their assignment / pickup / cancellation pushes from
+// the Cloud Functions triggers while `config/riderRelay/enabled` is exactly
+// `true`; this bot then only tracks order state. 30 s cache: the rider branch
+// runs on every order change.
+let _riderRelayCache = { at: 0, on: false };
+async function isRiderRelayEnabled() {
+    if (Date.now() - _riderRelayCache.at < 30000) return _riderRelayCache.on;
+    try {
+        const snap = await db.ref('config/riderRelay/enabled').once('value');
+        _riderRelayCache = { at: Date.now(), on: snap.val() === true };
+        return _riderRelayCache.on;
+    } catch {
+        _riderRelayCache = { at: Date.now(), on: false }; // unreadable = bot owns it
+        return false;
+    }
+}
+
 
 async function sendFCMToAdmins(orderId, order) {
     try {
@@ -1047,31 +1083,8 @@ async function sendFCMToAdmins(orderId, order) {
     }
 }
 
-async function sendFCMToRider(riderId, title, body, data = {}, outlet = 'pizza') {
-    try {
-        const snap = await db.ref(resolvePath(`riders/${riderId}/fcmToken`, outlet)).once('value');
-        const token = snap.val();
-        if (!token) return;
-        await admin.messaging().send({
-            token,
-            // Data-only: the rider SW builds the notification (custom tag/vibrate
-            // and deep link). Sending `notification` too would let the SDK
-            // auto-display a second, untagged popup alongside ours.
-            data: { ...data, title, body },
-            android: { priority: 'high' },
-            webpush: { headers: { Urgency: 'high' } }
-        });
-    } catch (e) {
-        console.error(`[FCM] sendFCMToRider error (rider ${riderId}):`, e.message);
-        // A token minted for another sender/VAPID key never recovers — clear it
-        // so the rider app re-registers on next open instead of failing forever.
-        if (isDeadPushCode(e.code)) {
-            await db.ref(resolvePath(`riders/${riderId}/fcmToken`, outlet)).remove().catch(() => {});
-            await db.ref(resolvePath(`riders/${riderId}/fcmTokenInvalidAt`, outlet)).set(Date.now()).catch(() => {});
-            console.warn(`[FCM] Removed dead rider token for ${riderId} (${e.code}) — re-registers on next app open.`);
-        }
-    }
-}
+// Rider FCM sends live in bot/rider-push.js (batch 23h) — one module, two
+// runners: the bot and the deployed Functions triggers.
 
 // Transactional order updates for the customer app (menu PWA). Mirrors the
 // rider push: data-only FCM so the menu service worker owns the notification.
@@ -2725,35 +2738,15 @@ function initFCMWatcher() {
     const orderId = snap.key;
     const before = orderState.get(orderId) || {};
     orderState.set(orderId, { riderId: after.riderId, status: after.status });
-    if (after.riderId && after.riderId !== before.riderId) {
-      // Resolve rider UID for FCM token lookup (riderId on order may be email or UID)
-      let riderUid = after.riderId;
-      if (riderUid && !riderUid.includes('@') && riderUid.length > 20) {
-        // Likely already a UID (long Firebase UID)
-      } else if (riderUid && riderUid.includes('@') && !riderUid.includes('@s.whatsapp.net') && !riderUid.includes('@g.us') && !riderUid.includes('@broadcast')) {
-        // Looks like an email - resolve to UID
-        const rider = await getRiderByEmail(riderUid, botOutlet);
-        riderUid = rider?.uid || riderUid;
-      }
-      if (riderUid) {
-        sendFCMToRider(riderUid, 'New Order Assigned!', `Order #${formatOrderId(after.orderId || orderId)} for ₹${after.total || 0} — Please check the app.`, { orderId, outlet: botOutlet, type: 'rider_assigned', url: '/active' }, botOutlet);
-      }
-    } else if (after.riderId && after.status && after.status !== before.status) {
-      const s = String(after.status).toLowerCase();
-      // Resolve rider UID for status change FCM
-      let riderUid = after.riderId;
-      if (riderUid && !riderUid.includes('@') && riderUid.length > 20) {
-        // Likely already a UID
-      } else if (riderUid && riderUid.includes('@') && !riderUid.includes('@s.whatsapp.net') && !riderUid.includes('@g.us') && !riderUid.includes('@broadcast')) {
-        const rider = await getRiderByEmail(riderUid, botOutlet);
-        riderUid = rider?.uid || riderUid;
-      }
-      if (['ready', 'packed', 'cooked'].includes(s)) {
-        if (riderUid) sendFCMToRider(riderUid, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} is ready for pickup!`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status }, botOutlet);
-      } else if (s === 'cancelled') {
-        if (riderUid) sendFCMToRider(riderUid, `Order #${formatOrderId(after.orderId || orderId)}`, `Order #${formatOrderId(after.orderId || orderId)} has been cancelled.`, { orderId, outlet: botOutlet, type: 'status_change', status: after.status }, botOutlet);
-      }
-    }
+    // Batch 23h: the Cloud Functions triggers own these pushes while
+    // `config/riderRelay/enabled === true`; state tracking above still runs.
+    if (!riderPush || !after.riderId) return;
+    let event = '';
+    if (after.riderId !== before.riderId) event = 'assigned';
+    else if (after.status && after.status !== before.status) event = riderStatusEvent(after.status);
+    if (!event) return;
+    if (await isRiderRelayEnabled()) return;
+    riderPush.push({ orderId, order: after, outlet: botOutlet, event, status: after.status }).catch(() => {});
   });
 }
 

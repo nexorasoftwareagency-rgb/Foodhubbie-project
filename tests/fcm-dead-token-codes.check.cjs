@@ -58,7 +58,7 @@ function bodyOf(name) {
     return next === -1 ? rest : rest.slice(0, next);
 }
 
-for (const fn of ['sendFCMToAdmins', 'sendFCMToRider', 'notifyCustomerApp', 'notifyTierUp']) {
+for (const fn of ['sendFCMToAdmins', 'notifyCustomerApp', 'notifyTierUp']) {
     const body = bodyOf(fn);
     assert.ok(body.includes('isDeadPushCode('), `${fn}() must prune through isDeadPushCode()`);
     assert.ok(
@@ -66,12 +66,20 @@ for (const fn of ['sendFCMToAdmins', 'sendFCMToRider', 'notifyCustomerApp', 'not
         `${fn}() must not keep a private dead-code list`,
     );
 }
+// Batch 23h: the rider sender moved into the socket-free `bot/rider-push.js`
+// (one module, two runners). Its `send()` is the path that prunes, so the pin
+// follows the code instead of being relaxed.
+const riderSrc = fs.readFileSync(path.join(ROOT, 'bot', 'rider-push.js'), 'utf8');
+assert.ok(riderSrc.includes('isDeadPushCode('), 'rider push must prune through isDeadPushCode()');
+assert.ok(!/deadCodes\.has\(|code === 'messaging\//.test(riderSrc), 'rider push must not keep a private dead-code list');
+assert.ok(!/notification\s*:/.test(riderSrc), 'rider push stays data-only');
 console.log('  ok  all four push paths use the shared helper');
 
 // ---- 4. rider cleanup stamps the record so the app re-registers -------------
-const rider = bodyOf('sendFCMToRider');
-assert.ok(rider.includes('riders/${riderId}/fcmToken'), 'rider dead token is removed');
-assert.ok(rider.includes('fcmTokenInvalidAt'), 'rider record is stamped for re-registration');
+// The rider sender lives in bot/rider-push.js since batch 23h (shared with the
+// Functions triggers); the cleanup contract is unchanged.
+assert.ok(riderSrc.includes('riders/${riderId}/fcmToken'), 'rider dead token is removed');
+assert.ok(riderSrc.includes('fcmTokenInvalidAt'), 'rider record is stamped for re-registration');
 console.log('  ok  rider dead token is pruned and stamped');
 
 console.log('\nRESULT: dead-token prune list is token-scoped only');
