@@ -33,6 +33,10 @@ let _auditLogListener = null;
 // P5: Keyboard shortcut state
 let _keyboardWired = false;
 
+// Quick Controls caches (populated when lists load)
+let _dishesCache = [];
+let _discountsCache = [];
+
 // P2: Promo Page Offers state
 let _offersSearchQuery = '';
 let _offersFilter = 'all'; // 'all' | 'on-page' | 'off-page' | 'valid' | 'expired' | 'disabled' | 'archived'
@@ -471,6 +475,7 @@ async function _loadPromoOffers() {
                 .map(([id, d]) => ({ id, ...d }))
                 .sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
             _allOffersCache = offers;
+            _discountsCache = offers;
             _offersSearchQuery = '';
             _offersFilter = 'all';
             _offersSort = 'updated';
@@ -989,7 +994,8 @@ async function _loadVisibility() {
         ]);
         const dishes = dishSnap.val() || {};
         const cats = catSnap.val() || {};
-        _allDishesCache = Object.entries(dishes).filter(([, d]) => d).map(([id, d]) => ({ id, ...d }));
+        _dishesCache = Object.entries(dishes).filter(([, d]) => d).map(([id, d]) => ({ id, ...d }));
+        _allDishesCache = _dishesCache;
         _allCategoriesCache = Object.entries(cats).filter(([, c]) => c).map(([id, c]) => ({ id, ...c }));
         _loadVisibilityStats(_allDishesCache, _allCategoriesCache);
         _renderVisibilityLists();
@@ -1850,5 +1856,192 @@ async function _loadOverview() {
     if ($('caOvStatus')) $('caOvStatus').innerHTML = group('Live in the app', liveList(), 'ca-dot ca-dot--live') + group('Saved, not applied yet', notAppliedList(), 'ca-dot ca-dot--saved');
 
     try { _renderAuditEntries((await loadAuditLog(5)) || [], $('caOvRecent'), 'No changes recorded yet.'); } catch { _renderAuditEntries([], $('caOvRecent'), 'Could not load recent changes.'); }
+
+    // Quick Controls: render the one-click action cards
+    _renderQuickControls(subsRaw, discounts, dishes, store);
     window.lucide?.createIcons?.();
+}
+
+/* ============ QUICK CONTROLS ============ */
+
+/** Render the one-click Quick Controls cards on the Overview tab. */
+function _renderQuickControls(subsRaw, discounts, dishes, store) {
+    const grid = $('qaGrid');
+    if (!grid) return;
+
+    const subs = Object.values(subsRaw || {}).filter((x) => x && String(x.phone || '').replace(/\D/g, '').slice(-10).length === 10);
+    const offersOn = subs.filter((x) => !x.prefs || x.prefs.offers === true).length;
+    const coupons = Object.entries(discounts || {}).filter(([, d]) => d && d.type === 'coupon' && d.couponCode && d.archived !== true);
+    const onPage = coupons.filter(([, d]) => d.promoPage === true);
+    const validOnPage = onPage.filter(([, d]) => couponStatus(d, Date.now()) === 'valid');
+    const dishList = Object.values(dishes || {}).filter(Boolean);
+    const dishLive = dishList.filter((d) => d.stock !== false);
+    const oosCount = dishList.filter((d) => d.stock === 0).length;
+    const featuredCount = dishList.filter((d) => d.featured === true).length;
+    const st = store || {};
+
+    const canEdit = canEditTab(CA_TAB_ID);
+
+    const cards = [
+        // 1. App Link
+        {
+            icon: 'external-link',
+            title: 'App Link',
+            value: st.storeName || 'Not set',
+            sub: `${subs.length} subscribers · ${offersOn} accept offers`,
+            badge: 'live',
+            primaryLabel: 'Copy',
+            primaryIcon: 'copy',
+            primaryClass: 'qa-btn--primary',
+            primaryAction: () => {
+                const v = $('caOvAppLink')?.value || '';
+                if (!v) return;
+                navigator.clipboard.writeText(v).then(() => showToast('App link copied', 'success'))
+                    .catch(() => { $('caOvAppLink')?.select(); showToast('Press Ctrl+C to copy', 'info'); });
+            },
+            goto: null
+        },
+        // 2. Push Notifications
+        {
+            icon: 'bell',
+            title: 'Push Notifications',
+            value: `${subs.length} subscribers`,
+            sub: `${offersOn} receive offers · Paused 9PM–9AM IST`,
+            badge: subs.length > 0 ? 'live' : 'saved',
+            primaryLabel: subs.length > 0 ? 'Send now' : 'Get subs',
+            primaryIcon: 'send',
+            primaryClass: 'qa-btn--primary',
+            primaryAction: subs.length > 0 ? () => _requestSwitch('notification') : () => showToast('Share the app link to get subscribers', 'info'),
+            goto: 'notification'
+        },
+        // 3. Promo Page Coupons
+        {
+            icon: 'tag',
+            title: 'Promo Page Coupons',
+            value: `${validOnPage.length} live on page`,
+            sub: `${onPage.length} marked · ${coupons.length} total`,
+            badge: validOnPage.length > 0 ? 'live' : 'saved',
+            primaryLabel: validOnPage.length > 0 ? 'Hide all' : 'Show all',
+            primaryIcon: validOnPage.length > 0 ? 'eye-off' : 'eye',
+            primaryClass: 'qa-btn--ghost',
+            primaryAction: () => _bulkSetAllPromoPage(validOnPage.length === 0),
+            goto: 'offers'
+        },
+        // 4. Dish Visibility
+        {
+            icon: 'eye',
+            title: 'Dish Visibility',
+            value: `${dishLive.length} live`,
+            sub: `${oosCount} out of stock · ${dishList.length} total`,
+            badge: dishLive.length > 0 ? 'live' : 'saved',
+            primaryLabel: oosCount > 0 ? 'Hide OOS' : 'Show all',
+            primaryIcon: oosCount > 0 ? 'eye-off' : 'eye',
+            primaryClass: 'qa-btn--ghost',
+            primaryAction: oosCount > 0 ? () => _bulkHideOOSQuick() : () => _bulkShowAllVisibility(),
+            goto: 'visibility'
+        },
+        // 5. App Features
+        {
+            icon: 'settings',
+            title: 'App Features',
+            value: '4 switches',
+            sub: 'Online order · Table booking · Promo page · Loyalty',
+            badge: 'saved',
+            primaryLabel: 'Configure',
+            primaryIcon: 'sliders',
+            primaryClass: 'qa-btn--ghost',
+            primaryAction: () => _requestSwitch('visibility'),
+            goto: 'visibility'
+        },
+        // 6. App Settings (live fields)
+        {
+            icon: 'store',
+            title: 'App Settings',
+            value: st.storeName ? 'Set' : 'Not set',
+            sub: `${st.whatsappNumber ? 'WhatsApp set' : 'No WhatsApp'} · ${st.googleReviewLink ? 'Review link set' : 'No review link'}`,
+            badge: st.storeName ? 'live' : 'saved',
+            primaryLabel: 'Edit',
+            primaryIcon: 'edit-2',
+            primaryClass: 'qa-btn--primary',
+            primaryAction: () => _requestSwitch('settings'),
+            goto: 'settings'
+        }
+    ];
+
+    grid.innerHTML = cards.map(c => `
+        <div class="qa-card ${c.primaryClass === 'qa-btn--primary' ? 'qa-card--primary' : ''}">
+            <div class="qa-card__head">
+                <div class="qa-card__icon"><i data-lucide="${c.icon}"></i></div>
+                <span class="qa-badge qa-badge--${c.badge}">${c.badge === 'live' ? 'Live in app' : 'Saved only'}</span>
+            </div>
+            <div class="qa-card__title">${_escHtml(c.title)}</div>
+            <div class="qa-card__value">${_escHtml(c.value)} <span style="font-size:10px;opacity:.6">${_escHtml(c.sub)}</span></div>
+            <div class="qa-card__actions">
+                <button type="button" class="qa-btn ${c.primaryClass}" data-qa-action="${c.title.replace(/\s+/g,'-').toLowerCase()}" title="${c.primaryLabel}">
+                    <i data-lucide="${c.primaryIcon}"></i> <span>${c.primaryLabel}</span>
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    // Wire quick control button clicks
+    grid.querySelectorAll('.qa-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const action = btn.dataset.qaAction;
+            const card = cards.find(c => c.title.replace(/\s+/g,'-').toLowerCase() === action);
+            if (card) card.primaryAction();
+        });
+    });
+
+    window.lucide?.createIcons?.();
+}
+
+/** Bulk set all coupons to show/hide on Promo Page. */
+async function _bulkSetAllPromoPage(showOnPage) {
+    const coupons = Object.entries(discountsCache || {}).filter(([, d]) => d && d.type === 'coupon' && d.couponCode && d.archived !== true);
+    if (coupons.length === 0) return;
+    const ok = await showConfirm(`${showOnPage ? 'Show' : 'Hide'} all ${coupons.length} coupons on the Promo Page?`, 'Bulk update');
+    if (!ok) return;
+    try {
+        await Promise.all(coupons.map(([id]) =>
+            update(Outlet.ref(`discounts/${id}`), { promoPage: showOnPage === true, updatedAt: Date.now() })
+        ));
+        showToast(`${coupons.length} coupon${coupons.length === 1 ? '' : 's'} ${showOnPage ? 'shown on' : 'hidden from'} Promo Page`, 'success');
+        _loadPromoOffers();
+    } catch (e) {
+        showToast('Bulk update failed: ' + (e?.message || e), 'error');
+    }
+}
+
+/** Quick: hide all out-of-stock dishes. */
+async function _bulkHideOOSQuick() {
+    const oosDishes = _dishesCache.filter(d => d.stock === 0 && d.visible !== false);
+    if (oosDishes.length === 0) { showToast('No out-of-stock dishes to hide', 'info'); return; }
+    try {
+        await Promise.all(oosDishes.map(d =>
+            update(Outlet.ref(`menu/dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
+        ));
+        showToast(`${oosDishes.length} out-of-stock dish${oosDishes.length === 1 ? '' : 'es'} hidden`, 'success');
+        _loadVisibility();
+    } catch (e) {
+        showToast('Hide failed: ' + (e?.message || e), 'error');
+    }
+}
+
+/** Quick: show all hidden visibility items. */
+async function _bulkShowAllVisibility() {
+    const hidden = _processVisibilityItems().filter(i => !i.visible);
+    if (hidden.length === 0) { showToast('No hidden items to show', 'info'); return; }
+    try {
+        await Promise.all(hidden.map(i => {
+            const [type, realId] = i.id.split(':');
+            const path = type === 'dish' ? `menu/dishes/${realId}` : `menu/categories/${realId}`;
+            return update(Outlet.ref(path), { visible: true, updatedAt: Date.now() });
+        }));
+        showToast(`${hidden.length} item${hidden.length === 1 ? '' : 's'} shown on app`, 'success');
+        _loadVisibility();
+    } catch (e) {
+        showToast('Show all failed: ' + (e?.message || e), 'error');
+    }
 }
