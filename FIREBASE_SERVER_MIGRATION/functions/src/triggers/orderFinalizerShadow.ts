@@ -47,6 +47,14 @@ initializeAdmin().catch((err: Error) => {
 
 const FLAG_PATH = 'migrationFlags/orderFinalizerShadow/enabled';
 const SHADOW_ROOT = 'migrationShadow/orderFinalizer';
+/**
+ * The demo tenant is hard-skipped (same rule as the 23e-23h relays). Its seeded
+ * orders include `source: 'webview_delivery'`, so without this guard every
+ * nightly reseed would dry-run the real finalizer ~170 times and write a shadow
+ * row per order — observation noise about fake food, plus a fan-out the RTDB
+ * trigger budget does not need to spend.
+ */
+const DEMO_BUSINESS_ID = 'foodhubbie-demo';
 
 /** Same 60 s container-local cache as the bot's flag reads. */
 let flagCache: { at: number; enabled: boolean } | null = null;
@@ -94,6 +102,7 @@ export const onWebOrderPlacedShadow = onValueCreated(
   },
   async (event) => {
     const { bid, oid, orderId } = event.params;
+    if (bid === DEMO_BUSINESS_ID) return;
     const order = event.data.val();
     if (!order || typeof order !== 'object') return;
     if (!WEB_ORDER_SOURCES.includes(String(order.source || ''))) return;
@@ -161,9 +170,10 @@ export const onWebOrderFinalizedShadow = onValueWritten(
   },
   async (event) => {
     if (event.data.after.val() !== true) return; // only the bot's finalize flip
+    const { bid, oid, orderId } = event.params;
+    if (bid === DEMO_BUSINESS_ID) return;
     if (!(await shadowEnabled())) return;
 
-    const { bid, oid, orderId } = event.params;
     const db = getDB();
     const rowRef = db.ref(`${SHADOW_ROOT}/${bid}/${oid}/${orderId}`);
     const [rowSnap, orderSnap] = await Promise.all([

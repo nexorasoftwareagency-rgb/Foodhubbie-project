@@ -55,6 +55,13 @@ const FILES = [
     // server-only walletBilling root as the control API; a stale copy here
     // would silently under-provision new tenants.
     'shared/billing-defaults.cjs',
+    // Batch 23j: the nightly demo reseed. The builder and its static content are
+    // plain CJS with no fs/no firebase-admin, so the Function and the CLI run
+    // literally the same bytes (the CLI passed the money math in; so does the
+    // factory). `payroll-math.js` is the ESM half of that injected money object.
+    'tools/demo-seed-core.cjs',
+    'tools/demo-fixtures.cjs',
+    'shared/payroll-math.js',
 ];
 
 // Module-type markers. `functions/package.json` has no "type", so a .js file is
@@ -108,6 +115,49 @@ function verifyLoad() {
     }
     if (riderPush.riderStatusEvent('cooked') !== 'ready' || riderPush.riderStatusEvent('delivered') !== '') {
         problems.push('riderStatusEvent no longer maps cooked->ready / ignores other statuses');
+    }
+
+    // Batch 23j: the demo builder must load and BUILD in the bundle — a stale
+    // fixture copy or a missing payroll import would only show up at 03:00 IST
+    // as a failed reseed with the demo left stale. The stub catalog keeps this
+    // offline; the point is that the module graph resolves and the money math
+    // (computeOrderTotals/round2 + computePayroll) is the real one.
+    const demoCore = require(abs('tools/demo-seed-core.cjs'));
+    const demoFixtures = require(abs('tools/demo-fixtures.cjs'));
+    const payroll = require(abs('shared/payroll-math.js'));
+    if (typeof demoCore.createDemoSeedCore !== 'function' || typeof demoCore.loadLiveCatalog !== 'function') {
+        problems.push('tools/demo-seed-core.cjs did not load (createDemoSeedCore/loadLiveCatalog)');
+    }
+    if (!demoFixtures.DISHES || demoFixtures.DISHES.length !== 14 || !demoFixtures.TABLES || demoFixtures.TABLES.length !== 8) {
+        problems.push('tools/demo-fixtures.cjs did not load the demo content (14 dishes / 8 tables)');
+    }
+    if (typeof payroll.computePayroll !== 'function') {
+        problems.push('shared/payroll-math.js did not load as ESM (computePayroll)');
+    }
+    if (typeof demoCore.createDemoSeedCore === 'function' && typeof payroll.computePayroll === 'function') {
+        const stubLive = {
+            categories: { c1: { name: 'Cat', order: 1 } },
+            dishes: { k1: { name: 'Margherita', price: 199, gstRate: 5 } },
+            combos: {},
+        };
+        try {
+            const built = demoCore
+                .createDemoSeedCore({
+                    now: 1763000000000,
+                    money: { ...require(abs('shared/money-math.js')), computePayroll: payroll.computePayroll },
+                    fixtures: demoFixtures,
+                    live: stubLive,
+                })
+                .buildTenant();
+            if (!built || !built.business || !built.billing || !(built.stats.orders > 0)) {
+                problems.push('the demo builder produced no tenant from the stub catalog');
+            }
+            if (built.billing.mode !== 'percentage') {
+                problems.push('the demo billing row is no longer on the percentage plan');
+            }
+        } catch (err) {
+            problems.push('the demo builder threw in the bundle: ' + (err && err.message));
+        }
     }
 
     const stub = finalizerMod.createOrderFinalizer({

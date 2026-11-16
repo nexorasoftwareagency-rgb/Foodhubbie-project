@@ -37,7 +37,8 @@
     "test:ui": "playwright test --ui",
     "test:debug": "playwright test --debug",
     "install:browsers": "playwright install --with-deps chromium",
-    "test:daily-settlement": "node tests/daily-settlement.check.cjs"
+    "test:daily-settlement": "node tests/daily-settlement.check.cjs",
+    "test:demo-reseed": "node tests/demo-reseed.check.cjs"
   },
   "dependencies": {
     "chart.js": "^4.4.1",

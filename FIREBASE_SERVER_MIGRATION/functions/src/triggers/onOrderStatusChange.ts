@@ -19,6 +19,16 @@ initializeAdmin().catch(err => {
 });
 
 /**
+ * The public demo tenant is hard-skipped, like every other order trigger
+ * (23e-23h). This handler is the only one that WRITES to the order it observes
+ * (`placedAt`/`confirmedAt`/...), so without the guard a nightly consumer reseed
+ * would stamp server timestamps onto 353 seeded orders - the demo would stop
+ * being the bytes the builder produced - and burn a write plus a full order read
+ * per event.
+ */
+const DEMO_BUSINESS_ID = 'foodhubbie-demo';
+
+/**
  * Trigger on order status changes
  */
 export const onOrderStatusChange = onValueWritten(
@@ -31,6 +41,7 @@ export const onOrderStatusChange = onValueWritten(
   },
   async (event) => {
     const { bid, oid, orderId } = event.params;
+    if (bid === DEMO_BUSINESS_ID) return;
     const before = event.data.before.val();
     const after = event.data.after.val();
 

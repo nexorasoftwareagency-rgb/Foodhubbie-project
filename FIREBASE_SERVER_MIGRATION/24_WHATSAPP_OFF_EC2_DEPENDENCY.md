@@ -126,6 +126,7 @@ The plan above is being executed while the box is down. Status:
 | 23g | loyalty earn / clawback / dine-in settlement + app reward redemption as three RTDB triggers | `35_LOYALTY_RELAY.md` |
 | 23h | rider assignment / pickup / cancellation FCM pushes as two RTDB triggers | `36_RIDER_RELAY.md` |
 | 23i | daily rider settlement as a scheduled function (23:00 IST) | `37_DAILY_SETTLEMENT.md` |
+| 23j | nightly demo reseed as a scheduled function (03:00 IST) + the fixtures it had lost | `38_DEMO_RESEED.md` |
 
 Batch 23e (2026-11-14) finished the notification surface: **no push depends on
 the box any more**. Batch 23f then gave the extracted finalizer authority, so
@@ -150,9 +151,18 @@ Batch 23i then took the last scheduled money job off the box: the daily rider
 settlement now runs at 23:00 IST and keeps the control API's own
 `meta/dailySettlementLastRun` day claim, so the two can never both settle a day.
 It enumerates `riderIndex` instead of downloading `businesses`.
+Batch 23j then took the nightly demo reseed: the public demo's 03:00 IST rebuild
+now runs on Functions, which also forced the fixtures out of the deleted
+`Admin/js/demo/demo-data.js` into `tools/demo-fixtures.cjs` (the reseed had been
+broken on its own, independently of the dead box). Writing a tenant with hundreds
+of orders turned out to exceed RTDB's **500-trigger-events-per-write** cap for
+Cloud Functions v2 in one region — both creating *and* deleting them — so the job
+now writes in three phases of 25 orders. It also exposed two order triggers
+(`onOrderStatusChange`, the 23c shadows) that had no demo skip and would have
+stamped `placedAt` onto fake orders; both were fixed.
 What still does depend on the box: the socket-only WhatsApp surface,
-`wallet-watch` (the only writer of the customer-facing `walletGate`),
-the nightly demo reseed, and the onboarding fallback in `server.js`.
+`wallet-watch` (the only writer of the customer-facing `walletGate`) and
+the onboarding fallback in `server.js`.
 
 **Decision: the `/api/whatsapp/*` read routes (accounts, numbers, quota,
 templates) stay on EC2 and are not ported in 23d.** Not a scope cut — there is
@@ -181,7 +191,7 @@ Revisit this decision when Track A onboards a real tenant WABA
 (`docs/PLAN-PER-TENANT-WABA.md`) — at that point quota/templates become
 tenant-facing and belong in `tenantOnboarding`'s sibling.
 
-**What legitimately remains on the box** after 23d–23g:
+**What legitimately remains on the box** after 23d–23j:
 
 | on the box | why it cannot move yet |
 |---|---|
@@ -189,12 +199,14 @@ tenant-facing and belong in `tenantOnboarding`'s sibling.
 | `/api/whatsapp/*`, `/api/bot/*` (provision/restart/stop/delete/rescan/transport) | pm2 + Meta per-tenant credentials |
 | `wallet-watch.js` | live-listener design (batch 14); a stateless per-minute function would regress it. **No outlet is armed today**, so nothing breaks while it is down |
 | rider-assignment WhatsApp **template** (`isRiderChanged` in `bot/index.js`) | rides the socket; the FCM half moved to 23h |
-| nightly demo reseed | cron job; tolerates a missed run (the public demo's recent-day figures go stale) |
 | `/api/images/convert-batch` | `sharp`; already **non-fatal** in the onboarding wizard ("failures just mean status updates will use URL fallback") |
 
 Loyalty (accrual, clawback, dine-in settlement, app redemption) used to be on this
 list. Batch 23g took it off: the engine is socket-free and now runs from three
-triggers, so nothing about points or reward codes depends on the box.
+triggers, so nothing about points or reward codes depends on the box. Batch 23i
+removed the daily rider settlement and batch 23j the nightly demo reseed — both
+are scheduled Functions now, each with its own shared claim so the box can never
+double-run them.
 
 Two smaller confirmations from the same probe: the pizza outlet still carries two
 junk child nodes (`pizza`, `undefined`) left by an old write, and its three

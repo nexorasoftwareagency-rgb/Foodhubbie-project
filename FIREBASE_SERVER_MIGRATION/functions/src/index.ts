@@ -49,6 +49,14 @@ export { onboardingWatcher } from './scheduled/onboardingWatcher';
 // keeps the control API's `meta/dailySettlementLastRun` day claim, so the box
 // and the cloud can never both settle a day. `foodhubbie-demo` is skipped.
 export { dailySettlement } from './scheduled/dailySettlement';
+// Batch 23j: the nightly public-demo reseed at 03:00 IST. The box cron died with
+// the host on 2026-11-11 AND its seeder was broken independently (it read
+// `Admin/js/demo/demo-data.js`, deleted as an orphan by the KDS review), so the
+// demo has been frozen ever since. The builder is `tools/demo-seed-core.cjs`,
+// vendored so the CLI and this function run the same bytes. It only touches the
+// demo tenant: `businesses/foodhubbie-demo`, the server-only `walletBilling`
+// row, `admins/{uid}`, removes `outletIndex/demo`, and never writes `whatsapp`.
+export { demoReseed } from './scheduled/demoReseed';
 
 // Callable Functions (Admin/Client)
 export { botControl } from './api/botControl';
