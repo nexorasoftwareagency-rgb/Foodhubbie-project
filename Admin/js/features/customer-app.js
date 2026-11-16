@@ -200,6 +200,32 @@ function _wireOnce() {
     const dirtyHandler = (e) => { if (e.target.matches('input, select, textarea')) _markSettingsDirty(e.target.id); };
     grid?.addEventListener('input', dirtyHandler);
     grid?.addEventListener('change', dirtyHandler);
+
+    // Logo URL preview
+    const logoInput = $('caSettingLogoUrl');
+    const logoPreview = $('logoPreviewImg');
+    if (logoInput && logoPreview) {
+        logoInput.addEventListener('input', () => {
+            const url = logoInput.value.trim();
+            if (url) {
+                logoPreview.src = url;
+                logoPreview.style.display = 'block';
+                logoPreview.onerror = () => { logoPreview.style.display = 'none'; };
+            } else {
+                logoPreview.style.display = 'none';
+            }
+        });
+    }
+
+    // Theme color preview - sync the color input to a visual swatch
+    const themeInput = $('caSettingThemeColor');
+    if (themeInput) {
+        themeInput.addEventListener('input', (e) => {
+            // The native color input already shows the color, but we can add a visual badge
+            const swatch = document.querySelector('.theme-color-swatch');
+            if (swatch) swatch.style.backgroundColor = e.target.value;
+        });
+    }
     // App Features switches save on their own (they live in App Visibility, not in the Save bar)
     document.querySelectorAll('.ca-feature-toggle input[type="checkbox"]').forEach((el) => el.addEventListener('change', () => _saveFeatureToggle(el)));
 
@@ -1701,6 +1727,21 @@ function _validateSettings() {
             new Intl.DateTimeFormat('en-US', { timeZone: timezone });
         } catch {
             errors.caSettingTimezone = 'Invalid timezone';
+        }
+    }
+
+    // Business hours - open must be before close for each day
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    for (const day of days) {
+        const openInput = $(`bh_${day}_open`);
+        const closeInput = $(`bh_${day}_close`);
+        const closedInput = $(`bh_${day}_closed`);
+        if (closedInput?.checked) continue; // Skip closed days
+        const openVal = openInput?.value;
+        const closeVal = closeInput?.value;
+        if (openVal && closeVal && openVal >= closeVal) {
+            errors[`bh_${day}_open`] = `Open time must be before close time for ${day.charAt(0).toUpperCase() + day.slice(1)}`;
+            break; // Only show one business hours error at a time
         }
     }
 

@@ -12463,6 +12463,91 @@ body.setup-mode .setup-hide {
     opacity: 1;
 }
 
+/* ===== P4: Settings Field Groups & Badges ===== */
+.ca-field-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ca-field-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.ca-field-badge--live {
+    background: rgba(22,163,74,0.12);
+    color: #15803d;
+}
+.ca-field-badge--saved {
+    background: rgba(217,119,6,0.12);
+    color: #b45309;
+}
+.ca-field-preview {
+    margin-top: 6px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* ===== P4: Business Hours Grid ===== */
+#businessHoursGrid {
+    margin-top: 8px;
+}
+.ca-bh-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+.ca-bh-card {
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--bg, #fff);
+}
+.ca-bh-day {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary, #0f172a);
+    margin-bottom: 6px;
+}
+.ca-bh-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ca-bh-label {
+    font-size: 11px;
+    color: var(--text-secondary, #64748b);
+    margin-right: 6px;
+}
+.ca-bh-time-input {
+    flex: 1;
+    font-size: 12px;
+    padding: 4px;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 4px;
+}
+.ca-bh-closed {
+    margin-top: 6px;
+}
+.ca-bh-toggle-label {
+    font-size: 11px;
+}
+
+/* ===== P4: Color Input ===== */
+input[type="color"] {
+    border: none;
+    background: none;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    padding: 0;
+
 /* ===== P4: Business Hours Grid ===== */
 #businessHoursGrid {
     margin-top: 8px;
