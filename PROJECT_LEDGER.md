@@ -586,3 +586,42 @@ L E D G E R   C L O S E   -   2 0 2 6 1 1 1 0 - c u s t o m e r - a p p - q r - 
  -   C o m m i t s :   p e n d i n g   d e p l o y .  
  -   C o n f i d e n c e :   H I G H   -   s t a t i c   a n a l y s i s   4 7 / 4 7 ,   s y n t a x   c h e c k e d ,   s y n t a x   v e r i f i e d .  
  
+LEDGER CLOSE - 20261116-customer-app-qr-card-social-links (Customer APP App Settings: branded QR card, social links, UI/UX audit rounds 1-2, TIER 2, DONE/high)
+
+- Trigger: owner asked for a branded, printable/downloadable customer-app QR card in Admin > Customer APP > App Settings (restaurant name, logo, theme colour, phone, WhatsApp, address, social links), social media links saved from Admin and visible in the customer app, and a clean hierarchy with per-field Live/Saved badges. Followed by a UI/UX audit of the result.
+
+- Repair of a broken intermediate (68d9f2c): the App Settings pane had a stray placeholder div, an orphaned QR block outside the pane, duplicated CSS and an unbalanced input[type=color] brace. Admin/index.html #caPaneSettings was rewritten; Admin/style.css was consolidated to one definition per class (balanced braces); the dead .ca-field-badge/.ca-field-wrapper styles were deleted.
+
+- One QR implementation: NEW Admin/js/utils/qr.js (ensureQrLib + qrDataUri) is now the only QR code path - the table-QR card (Admin/js/features/tables.js) and the Customer App QR card both use it. The pattern stays dark-on-white (#1a1a1a) for scannability; the brand colour lives on the card, never inside the code. The untracked shared/qr-branding.js was deleted.
+
+- Branded QR card (in the App Settings pane): live preview with the theme-colour band (logo, name, "Scan to order on our app"), the QR code, and the facts (phone, WhatsApp, address, social, app link + a Copy button). Download PNG (1080x1520 composed card) and Print card (A4 portrait).
+
+- Print isolation: #qrPrintCard is a direct child of <body>; body.printing-qr > *:not(#qrPrintCard) is hidden and a temporary @page A4 style is injected (the report-export.js pattern).
+
+- Social links: Admin saves Facebook/Instagram to settings/Store.facebook / settings/Store.instagram (the keys the customer app already reads) with URL validation; menu/js/ui.js gained buildFacebookUrl() so a bare handle becomes a URL, exactly like Instagram. customer-app-status.js marks facebookPage/instagramPage as honestly LIVE. reviewUrl stayed out of scope.
+
+- Badge mechanism: _decorateBadges() + liveBadge() (.ca-live/.ca-saved) is the single source; the hand-written wrappers and their CSS are gone.
+
+- Role gating: a view-only role cannot type in App Settings (inputs disabled, Save/Discard disabled via _settingsReadOnly), including the business-hours inputs that are created after _applyRoleGating runs (own gate inside _renderBusinessHours).
+
+- Round-2 UI/UX audit fixes (aad288d): the settings form is a REAL 2-column grid on a desktop (548px + 548px) and 1 column on a phone, with full-width flat inputs instead of the 280px glass search box the class was born for; the QR preview gained the brand band + a Copy button for the app link; the fact labels are sentence case 12px (they were tiny uppercase 11px).
+
+- Phone business hours collapsed to ONE row per day (day | open-close | closed switch) with a column header: the 7 stacked cards were 1567px tall (two screens) and are now 626px, with the 44px tap target kept and the Open/Close labels left for screen readers (visually hidden, not display:none).
+
+- Phone switches restored to real switches: the global mobile input rule (10px padding, 44px min-height, 10px radius) turned every switch into a grey box that overflowed its 24px label and covered the text under it; #tab-customer-app .ca-toggle input now keeps the 44x24 pill (still clears WCAG 2.2).
+
+- Root-cause fix: canAccessTab now honours the legacy 'app-notifications' role id for 'customer-app'. The stored roles are only rewritten when the Settings tab is opened, so every tenant with roles saved before the 2026-11-10 rename had an invisible Customer APP tab (a dead end). The demo tenant still stores the legacy id (the nightly reseed recreates it), so the client-side fallback is the durable fix.
+
+- SW cache: Admin/sw.js v5.12.53 -> v5.12.54 -> v5.12.55 (every commit that changed a served file bumped it); menu/sw.js menu-shell-v64 -> v65 (menu/js/ui.js changed).
+
+- Guards: tests/customer-app-check.mjs 50/50 (+7: QR card inside the pane, print isolation, shared QR helper, social save/validate, balanced CSS, no dead styles, legacy role id, compact phone business hours); customer-app-status.check.mjs pass; customer-app-fixes.check.mjs 9/9; customer-app.browser.mjs 29/29 (+6 browser checks: QR card contents, social save, bad-link rejection, print card, view-only form gate, phone no-scroll); encoding OK; admin-sw-networkfirst 17/17; admin-query-chain 143 files; app-notifications 22/22; admin-menu-subtabs PASS.
+
+- Deploy: firebase deploy --only hosting:admin (aad288d.20261116T041011Z) and hosting:menu in the first commit (135af67.20261116T031510Z). Live wire check 19/19 (version.json, QR band, copy button, 2-col grid, phone row CSS, switch pill, .ca-bh-times/.ca-bh-head in the served JS, legacy role id in the served ui.js, sw v5.12.55, css max-age=0 must-revalidate, sw no-store). Live E2E on foodhubbie-admins.web.app/demo: QR card visible (1112px), band "Demo Dashboard", QR 180x180 with a real src, grid 548px+548px, 7 business-hours rows, SW v5.12.55, 0 console errors, 0 horizontal overflow. Local demo UX pass at 1440 and 390 (tools/serve-dist.cjs, zero Hosting egress): 0 console errors, 0 overflow.
+
+- Files: Admin/index.html, Admin/style.css, Admin/js/features/customer-app.js, Admin/js/features/customer-app-status.js, Admin/js/features/tables.js, Admin/js/utils/qr.js (NEW), Admin/js/ui.js, Admin/sw.js, menu/js/ui.js, menu/sw.js, tests/customer-app-check.mjs, tests/customer-app.browser.mjs.
+
+- Commits: 135af67 (branded QR card + social links) and aad288d (UI/UX audit round 2), both pushed to origin/main.
+
+- Honest limits: reviewUrl (Google review link) was left out of scope; the QR PNG download composes the card in the browser (a CORS-safe logo fetch), so a logo host that blocks the browser cannot be embedded; the phone business-hours layout hides the Open/Close words visually (the column header names them) - the labels stay in the accessibility tree.
+
+- Confidence: HIGH - live wire check 19/19, live E2E clean, local browser suite 29/29, static guard 50/50, encoding clean.
