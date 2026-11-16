@@ -41,8 +41,9 @@ export function renderBillingCard(outlet, readOnly, bid, oid, biz, collapsedSect
   const ym = currentYm();
   const month = scopeStats(outlet, { k: 'month', ym });
   const all = scopeStats(outlet, { k: 'all' });
-  // D4 wallet gate. The flag is published by bot-control-api (wallet-watch.js)
-  // from this same math — never by the tenant's own dashboard.
+  // D4 wallet gate. The flag is published by the cloud wallet-gate Functions
+  // (FIREBASE_SERVER_MIGRATION batch 23l) from this same math — never by the
+  // tenant's own dashboard.
   const enforce = b.wallet?.enforce === true;
   const liveGate = String(outlet.walletGate || '').trim().toLowerCase();
   const isDemo = bid === 'foodhubbie-demo';

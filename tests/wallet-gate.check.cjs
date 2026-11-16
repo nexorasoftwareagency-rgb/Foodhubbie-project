@@ -17,7 +17,9 @@
  *   - a second writer must never come back (that is how batch 14's bug shipped),
  *   - `foodhubbie-demo` is never gated,
  *   - only `wallet.enforce === true` gates anything,
- *   - the index and the reconcile must never read the `businesses` tree.
+ *   - the index and the reconcile must never read the `businesses` tree,
+ *   - a rebuild is authoritative — never rebuild AND add the event's delta
+ *     (the 2026-11-16 review fix: it double-counted the triggering order).
  *
  * Behaviour runs the REAL `shared/cost-math.js`; the rest is static source
  * inspection. No network, no credentials.
@@ -142,6 +144,20 @@ ok('no whole-businesses read in the engine', !/ref\(['"`]businesses['"`]\)/.test
 ok('reconcile enumerates the walletBilling root', /ref\('walletBilling'\)/.test(gateCode));
 ok('order events are no-ops when the order is not billable-changed', /no-billing-change/.test(gateCode));
 
+// Review fix 2026-11-16 — rebuild authority. A rebuild reads the live orders
+// tree, which already contains the write that fired the trigger, so adding the
+// event's delta on top counted the triggering order twice: one ₹40 order on a
+// ₹100-paid wallet seeded 4000 paise, then added 4000 more, publishing 'low'
+// (balance 20) instead of open (balance 60). A rebuild now publishes itself and
+// the delta transaction is skipped.
+ok('ensureFeeIndex reports whether it rebuilt', /Promise<\{ index: any; rebuilt: boolean \}>/.test(gateCode));
+ok('a rebuilt index is authoritative (published, no delta)', /if \(ensured\.rebuilt\)[\s\S]{0,300}index: ensured\.index/.test(gateCode));
+ok('the rebuilt branch applies zero deltas', /delta: 0,[\s\S]{0,60}rebuilt: true/.test(gateCode));
+const rebuiltAt = gateCode.indexOf('if (ensured.rebuilt)');
+const deltaTxAt = gateCode.indexOf('.transaction((cur');
+ok('the rebuilt branch returns BEFORE the delta transaction', rebuiltAt > 0 && deltaTxAt > rebuiltAt, { rebuiltAt, deltaTxAt });
+ok('the delta path still seeds from the returned index', /const seed = ensured\.index;/.test(gateCode));
+
 // ---------------------------------------------------------------------------
 // 3. The three triggers: correct refs, demo skipped, no flag needed
 // ---------------------------------------------------------------------------
@@ -152,6 +168,7 @@ ok('trigger: the gate itself (tamper self-heal)', /ref: 'businesses\/\{bid\}\/ou
 ok('all three triggers skip the demo tenant', (trig.match(/bid === DEMO_BID/g) || []).length === 3);
 ok('a ledger change that was and stays unarmed does nothing', /!isArmed\(bid, before\) && !isArmed\(bid, after\)/.test(trig));
 ok('the gate echo from our own publish is skipped', /summary\.gate \|\| ''\) === current/.test(trig));
+ok('the order trigger logs whether the index was rebuilt', /rebuilt: result\.rebuilt === true/.test(trig));
 ok('three exports: order / ledger / gate', /export const onOrderBillingChange/.test(trig) && /export const onWalletLedgerChange/.test(trig) && /export const onWalletGateTouched/.test(trig));
 
 // ---------------------------------------------------------------------------

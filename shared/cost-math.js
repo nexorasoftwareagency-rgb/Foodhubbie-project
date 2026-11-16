@@ -298,7 +298,8 @@ export function orderFeePaise(billing, order) {
 
 // check: node shared/cost-math.js
 // (dynamic import + .then, NOT top-level await — TLA makes this module
-// un-require()-able, and bot-control-api/wallet-watch.js require()s it.)
+// un-require()-able, and the Functions wallet-gate engine require()s it via
+// lib/vendor/shared/cost-math.js.)
 if (typeof process !== 'undefined' && process.argv?.[1]?.includes('cost-math')) {
     import('node:assert').then(({ default: assert }) => selfCheck(assert));
 }

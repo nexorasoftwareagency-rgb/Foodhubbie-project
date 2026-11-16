@@ -112,17 +112,19 @@ second way for the platform to silently stop gating an armed tenant.
   `orderFeePaise` = 1000 paise on ₹1,000 QR, 0 on cancelled, 200 on a legacy
   `per_order` row, and `costIndexFor` honouring a legacy rate table).
 * `%TEMP%/opencode/e2e-23l-engine.cjs` — the compiled `lib/` against a fake RTDB
-  that models the cold-null transaction and empty-parent pruning: **47/47**.
-  Covers `isArmed` (only `wallet.enforce === true`, demo never), unarmed publish
-  writes no gate/summary and clears a stale one, index seed exact, delta on a new
-  order, no transaction on a non-billing write, cancel reverses and re-opens,
-  replay no-op, stale cancel clamps at 0, top-up/charge, mode switch rebuilds,
-  reconcile repair, orphan sweep, disarm, and "reconcile never read the
-  `businesses` tree".
-* `node tests/wallet-gate.check.cjs` → **55/55** (`npm run test:wallet-gate`, a CI
+  that models the cold-null transaction and empty-parent pruning: **52/52**
+  (47 before the review fix — see §9). Covers `isArmed` (only
+  `wallet.enforce === true`, demo never), unarmed publish writes no gate/summary
+  and clears a stale one, index seed exact, delta on a new order, no transaction
+  on a non-billing write, cancel reverses and re-opens, replay no-op, stale
+  cancel clamps at 0, top-up/charge, mode switch rebuilds, reconcile repair,
+  orphan sweep, disarm, "reconcile never read the `businesses` tree", and a
+  rebuild during an order event being authoritative.
+* `node tests/wallet-gate.check.cjs` → **61/61** (`npm run test:wallet-gate`, a CI
   step): behaviour + source pins (one publisher, `meta/` summary, demo skip,
   `compute.ts` stays deleted, no second wallet import, the Supreme arm writes only
-  `walletBilling`, the EC2 watcher and its route stay gone).
+  `walletBilling`, the EC2 watcher and its route stay gone, and a rebuild is
+  published rather than rebuild + delta).
 * `npm run build` in `functions` → copy-vendor **18 modules / 302.7 KB**, load
   check OK, `tsc` clean, `lib/index.js` exports 34.
 
@@ -207,6 +209,13 @@ route ever needs a business for an unindexed outlet, do not re-introduce the sca
   orders", not "open them".
 * `walletGateReconcile` runs with `maxInstances: 1` and a 300 s timeout; a pass
   that outgrows it would skip outlets (`errors` counted), not corrupt them.
+* **Two concurrent rebuilds can under-count by one event.** Each rebuild reads
+  the orders node and then `update()`s the summary, so a rebuild that read
+  slightly earlier can overwrite a slightly later one, leaving the index one
+  event short until the next hourly pass. It can never double count (a rebuild
+  adds no delta — see §9), and it needs two order events inside one rebuild's
+  read→write window, i.e. effectively the arming moment. The authoritative
+  reconcile bounds it to ≤ 1 h, so it is recorded rather than fixed.
 
 ## 7. What this changes for the rest of the estate
 
@@ -233,3 +242,69 @@ exactly one publisher, its bookkeeping is outside the node it publishes, and it
 reads the estate in one place (`walletBilling`) instead of the `businesses` tree.
 The profiler above is the check that this stays true — a 1.29 MB `businesses` row
 in a wallet-gate capture is a bug, not a cost of doing business.
+
+## 9. Review fix — rebuild authority (2026-11-16)
+
+Found by a code review of `77a3dd2` (batch 23l) and proven by execution, not by
+reading: `applyOrderFeeDelta` called `ensureFeeIndex` and then applied the
+event's delta on top. `ensureFeeIndex` rebuilds the index from the orders node
+when the summary is missing or priced for another plan — and in a real order
+event **the write has already landed**, so the rebuild already contains the
+order. The delta then counted it a second time.
+
+Measured on the compiled engine with the real ordering (order in the tree, then
+the trigger call): one ₹6,000 QR order on a ₹200-paid wallet seeded the index at
+**6,000 paise and then added 6,000 more → 12,000**. The wallet read
+`₹200 − ₹120 = ₹80`, under the ₹100 flat threshold, so the gate published
+**`low`** and the outlet stopped taking orders — the correct answer was ₹140,
+open. On an accumulation the effect compounds: three orders produced **21,000
+instead of 15,000**, i.e. a false **`closed`**. A rebuild on a *deletion* was
+worse in the other direction: it subtracted the order a second time and clamped
+at 0, discarding the surviving orders' fees.
+
+The fix keeps one rule at the only place the two paths meet:
+
+* `ensureFeeIndex` returns `{ index, rebuilt }`.
+* `applyOrderFeeDelta` treats a rebuilt index as **authoritative**: it publishes
+  that index and returns `{ delta: 0, countDelta: 0, rebuilt: true, … }`
+  **before** the delta transaction. A rebuild reads the live tree, so there is
+  nothing to add; adding anything is by definition a double count.
+* The delta path is unchanged (`const seed = ensured.index`), and
+  `publishGate` takes `opts.index` or rebuilds with the same contract.
+* `onOrderBillingChange` logs `rebuilt: true|false`, so the live log says which
+  path an event took.
+
+Evidence:
+
+* `%TEMP%/opencode/review-23l-race.cjs` — the compiled `lib/` with the order
+  already present: **14/14**. A) rebuild on a new order → 6,000 (not 12,000),
+  one order, balance **140** (not 80), **no gate**. B) stale `pricingKey` →
+  rebuild 6,000, new key recorded. C) rebuild on deletion with a sibling
+  present → 6,000 (not 0). D) a valid index still takes the delta path exactly
+  (6,000 + 3,000). Plus one informational case: an arm that lands mid-reconcile
+  is seen as unarmed by that pass — recovery is `onWalletGateTouched`, not this
+  module.
+* `%TEMP%/opencode/e2e-23l-engine.cjs` **52/52** — the original 47 plus five
+  cases that write the order into the fake tree **before** the delta call (the
+  original harness wrote after, which is why it missed this).
+* `node tests/wallet-gate.check.cjs` → **61/61**: six new pins (`rebuilt` in the
+  return type, the authoritative branch publishing the index, `delta: 0` +
+  `rebuilt: true`, the branch returning before the delta transaction, the delta
+  path still seeding from `ensured.index`, the trigger logging `rebuilt`).
+* **Live E2E 18/18** (`%TEMP%/opencode/e2e-23l-rebuild-fix.cjs`, throwaway tenant
+  `e2e-wg-<ts>`, every order `_fcmSent:true` so no device is paged): A) arm →
+  index 0/0, no gate on ₹200. B) delete the summary, then an order lands →
+  **6,000** (double count = 12,000), one order, still open. C) a second order
+  with a valid index → **9,000**, two orders. D) delete the summary again, a
+  third order → **15,000** (double count = 21,000), three orders, gate
+  **`low`** (₹50 left) and never `closed` (double count = −₹10). E) corrupt the
+  index to 999,999 and fire the **real** Cloud Scheduler reconcile → rebuilt to
+  15,000. F) disarm → gate and summary gone, tenant removed. Post-run check:
+  `walletBilling` 19 businesses, **0 armed**, no gate anywhere, no residue.
+* Redeployed `onOrderBillingChange`, `onWalletLedgerChange`,
+  `onWalletGateTouched`, `walletGateReconcile` (4 × "Successful update
+  operation"); `npm run build` copy-vendor 18 modules / 302.7 KB + tsc clean.
+
+The narrower race that remains is recorded in §6, not fixed: two rebuilds can
+under-count by one event, the hourly reconcile repairs it, and a rebuild can
+never double count now that it publishes instead of adding.

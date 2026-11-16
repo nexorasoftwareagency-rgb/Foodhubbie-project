@@ -24,6 +24,10 @@
  *
  *   - Every order write applies `orderFeePaise(billing, after) − …(before)` to
  *     the index in a transaction (`applyOrderFeeDelta`). That is O(1) reads.
+ *     If the index is missing or priced for another plan, that same function
+ *     rebuilds it from the orders node once and treats the rebuild as
+ *     authoritative — it already contains the event, so no delta is added on
+ *     top (`ensureFeeIndex().rebuilt`).
  *   - `pricingKey` = `[mode, rates]`. A mode/rate change re-prices the ENTIRE
  *     order history, so a changed key forces a full recompute instead of a
  *     delta (the same reason the batch-12 announcement said a mode switch
@@ -130,20 +134,36 @@ export async function recomputeFeeIndex(bid: string, oid: string, billing: any):
   return rec;
 }
 
-/** The index, rebuilt only when it is missing or priced for a different plan. */
-export async function ensureFeeIndex(bid: string, oid: string, billing: any): Promise<any> {
+/**
+ * The index, rebuilt only when it is missing or priced for a different plan.
+ *
+ * `rebuilt` is load-bearing. A rebuild reads the live orders tree, which already
+ * contains the write that fired the trigger, so the result is AUTHORITATIVE for
+ * this event — the caller must publish it and never add the event's delta on
+ * top. Doing both double-counted the triggering order (found in review
+ * 2026-11-16: a rebuild seed of 6000 paise plus a 6000 delta published 'low' on
+ * a wallet that should have stayed open).
+ */
+export async function ensureFeeIndex(
+  bid: string,
+  oid: string,
+  billing: any,
+): Promise<{ index: any; rebuilt: boolean }> {
   const cur = await readSummary(bid, oid);
   const key = pricingKey(billing);
   if (cur && cur.pricingKey === key && typeof cur.orderFeesPaise === 'number') {
     return {
-      orderFeesPaise: cur.orderFeesPaise,
-      orders: Number(cur.orders) || 0,
-      pricingKey: cur.pricingKey,
-      at: cur.at,
-      by: cur.by,
+      rebuilt: false,
+      index: {
+        orderFeesPaise: cur.orderFeesPaise,
+        orders: Number(cur.orders) || 0,
+        pricingKey: cur.pricingKey,
+        at: cur.at,
+        by: cur.by,
+      },
     };
   }
-  return recomputeFeeIndex(bid, oid, billing);
+  return { rebuilt: true, index: await recomputeFeeIndex(bid, oid, billing) };
 }
 
 /**
@@ -173,7 +193,7 @@ export async function publishGate(
     return { gate: '', armed: false, balance: null };
   }
 
-  const index = opts.index || (await ensureFeeIndex(bid, oid, billing));
+  const index = opts.index || (await ensureFeeIndex(bid, oid, billing)).index;
   const campaigns = await readCampaigns(bid, oid);
   const wallet = costMath.computeWalletFromIndex({
     billing,
@@ -223,7 +243,22 @@ export async function applyOrderFeeDelta(
     (costMath.isBilledOrder(after) ? 1 : 0) - (costMath.isBilledOrder(before) ? 1 : 0);
   if (!delta && !countDelta) return { skipped: 'no-billing-change' };
 
-  const seed = await ensureFeeIndex(bid, oid, billing);
+  const ensured = await ensureFeeIndex(bid, oid, billing);
+  if (ensured.rebuilt) {
+    // The rebuild read the orders tree AFTER this write landed, so it already
+    // includes the event — adding `delta` would count it twice (deleted order:
+    // subtract it twice). The rebuild is authoritative: publish it, skip the
+    // deltas. Review fix 2026-11-16.
+    const published = await publishGate(bid, oid, { billing, index: ensured.index });
+    return {
+      delta: 0,
+      countDelta: 0,
+      rebuilt: true,
+      index: ensured.index,
+      ...published,
+    };
+  }
+  const seed = ensured.index;
   const key = pricingKey(billing);
   const res = await getDB()
     .ref(summaryPath(bid, oid))

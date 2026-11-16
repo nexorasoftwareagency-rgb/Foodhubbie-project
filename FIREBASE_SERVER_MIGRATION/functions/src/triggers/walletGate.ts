@@ -61,6 +61,7 @@ export const onOrderBillingChange = onValueWritten(
       oid,
       orderId,
       delta: result.delta,
+      rebuilt: result.rebuilt === true,
       gate: result.gate || 'open',
       balance: result.balance,
     });
