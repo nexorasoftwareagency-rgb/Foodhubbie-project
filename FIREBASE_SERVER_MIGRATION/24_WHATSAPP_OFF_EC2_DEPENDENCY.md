@@ -127,6 +127,8 @@ The plan above is being executed while the box is down. Status:
 | 23h | rider assignment / pickup / cancellation FCM pushes as two RTDB triggers | `36_RIDER_RELAY.md` |
 | 23i | daily rider settlement as a scheduled function (23:00 IST) | `37_DAILY_SETTLEMENT.md` |
 | 23j | nightly demo reseed as a scheduled function (03:00 IST) + the fixtures it had lost | `38_DEMO_RESEED.md` |
+| 23k | `/api/images/convert*` **deleted** (not ported) + the Add Restaurant atomic-create fixes | `39_IMAGE_CONVERT_ROUTES.md`, `40_ONBOARDING_CREATE_FIXES.md` |
+| 23l | the wallet gate publisher (`walletGate`): 3 RTDB triggers + an hourly exact reconcile; EC2 watcher + its route deleted | `41_WALLET_GATE_FUNCTIONS.md` |
 
 Batch 23e (2026-11-14) finished the notification surface: **no push depends on
 the box any more**. Batch 23f then gave the extracted finalizer authority, so
@@ -160,9 +162,21 @@ Cloud Functions v2 in one region — both creating *and* deleting them — so th
 now writes in three phases of 25 orders. It also exposed two order triggers
 (`onOrderStatusChange`, the 23c shadows) that had no demo skip and would have
 stamped `placedAt` onto fake orders; both were fixed.
-What still does depend on the box: the socket-only WhatsApp surface,
-`wallet-watch` (the only writer of the customer-facing `walletGate`) and
-the onboarding fallback in `server.js`.
+Batch 23l then took the customer-facing `walletGate` publisher: three RTDB
+triggers (order money, the `walletBilling` ledger, and a tamper on the gate
+itself) keep an incremental order-fee index under `meta/walletWatch`, and an
+hourly scheduled Function rebuilds every armed index exactly, so a lost delta
+cannot drift for more than an hour. The plan above proposed running the 60 s
+pass as a per-minute function; that would have re-read the orders node every
+minute (the batch-14 egress regression), so the as-built is index + reconcile
+instead. `wallet-watch.js` and its `POST /api/bot/wallet-gate/:bid/:oid` route
+are **deleted** — one writer, as batch 14 requires. No outlet is armed today,
+so the deploy changed no live behaviour.
+
+What still does depend on the box: the socket-only WhatsApp surface and the
+onboarding fallback in `server.js` (superseded by 23d-4's watcher — when the box
+returns, `ONBOARDING_AUTO_APPROVE=off` and no `ONBOARDING_CLEANUP`, or the two
+race).
 
 **Decision: the `/api/whatsapp/*` read routes (accounts, numbers, quota,
 templates) stay on EC2 and are not ported in 23d.** Not a scope cut — there is
@@ -197,8 +211,8 @@ tenant-facing and belong in `tenantOnboarding`'s sibling.
 |---|---|
 | Baileys worker (`bot/index.js` + session data) | a socket that must stay paired; no Functions equivalent |
 | `/api/whatsapp/*`, `/api/bot/*` (provision/restart/stop/delete/rescan/transport) | pm2 + Meta per-tenant credentials |
-| `wallet-watch.js` | live-listener design (batch 14); a stateless per-minute function would regress it. **No outlet is armed today**, so nothing breaks while it is down |
 | rider-assignment WhatsApp **template** (`isRiderChanged` in `bot/index.js`) | rides the socket; the FCM half moved to 23h |
+| WhatsApp daily/weekly/monthly reports (`bot/reports.js`) | composed and delivered over the same socket |
 
 Loyalty (accrual, clawback, dine-in settlement, app redemption) used to be on this
 list. Batch 23g took it off: the engine is socket-free and now runs from three
@@ -211,6 +225,11 @@ the bot never reads, for zero tenants, undoing the media-out-of-RTDB work of
 batches 13/15 (doc 39). Its verification also found and fixed three blockers in
 the Add Restaurant wizard's atomic create (two `menuBank` `.validate` bugs and the
 template status images landing on `bot/` instead of `settings/Bot`, doc 40).
+Batch 23l then took the last piece of platform bookkeeping: the wallet gate is
+published by three RTDB triggers plus an hourly exact reconcile, so an armed
+outlet is gated and released with no box in the loop. It also deleted the
+drifted `src/shared/wallet/compute.ts` port — the gate uses the same vendored
+`shared/cost-math.js` the dashboards use.
 
 Two smaller confirmations from the same probe: the pizza outlet still carries two
 junk child nodes (`pizza`, `undefined`) left by an old write, and its three

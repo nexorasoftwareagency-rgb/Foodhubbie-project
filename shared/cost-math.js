@@ -162,22 +162,38 @@ export function promoSendUsage({ billing, campaigns } = {}) {
  * platform figures for gross-margin review. Restaurants never see Meta cost line items.
  */
 export function computeWallet({ billing, orders, campaigns, metaCost, hasWhatsApp = false } = {}) {
+    return computeWalletFromIndex({
+        billing,
+        orderFeeTotal: costIndexFor(billing, orders).total,
+        campaigns,
+        metaCost,
+        hasWhatsApp,
+    });
+}
+
+/**
+ * The wallet view when the caller ALREADY knows what the outlet's orders cost.
+ * `computeWallet` delegate here with the index it just computed, so the Admin
+ * tab / Supreme / the bot / the cloud gate publisher can never disagree: the
+ * cloud publisher keeps a running order-fee index instead of re-reading every
+ * order every pass (batch 23l; re-reading the orders node per minute was the
+ * batch-14 egress regression).
+ */
+export function computeWalletFromIndex({ billing, orderFeeTotal = 0, campaigns, metaCost, hasWhatsApp = false } = {}) {
     const b = billing || {};
-    const rates = { ...DEFAULT_RATES, ...(b.rates || {}) };
-    const mode = normalizeMode(b.mode);
-    const idx = computeCostIndex(orders || {}, rates, mode);
     const promo = promoSendUsage({ billing: b, campaigns });
     const sum = (node) => Object.values(node || {}).reduce((a, x) => a + _n(x && x.amount), 0);
     const paid = _r2(sum(b.payments));
     const charges = _r2(sum(b.charges));
-    const used = _r2(idx.total + promo.cost);
+    const orderFees = _r2(_n(orderFeeTotal));
+    const used = _r2(orderFees + promo.cost);
     const minTopUp = minTopUpFor(hasWhatsApp);
     // Meta cost: internal only, never subtracted from the customer-facing wallet balance.
     const metaCostPaise = metaCostFromBilling(metaCost || b);
     const metaCostRs = _r2(metaCostPaise / 100);
-    const grossMarginPaise = _r2(Math.round(idx.total * 100) - metaCostPaise);
+    const grossMarginPaise = _r2(Math.round(orderFees * 100) - metaCostPaise);
     return {
-        paid, charges, used, balance: _r2(paid - used - charges), topUpDone: paid >= minTopUp, minTopUp,
+        paid, charges, used, orderFees, balance: _r2(paid - used - charges), topUpDone: paid >= minTopUp, minTopUp,
         level: walletLevel({ paid, used, charges }),
         promoSends: promo.sends, promoCovered: promo.covered, promoBilled: promo.billed,
         // Internal Meta cost tracking (platform-side only — never customer-facing)
@@ -253,6 +269,31 @@ export function computeCostIndex(orders, rates = DEFAULT_RATES, mode = 'percenta
         total += fee; count += 1;
     }
     return { total: Math.round(total * 100) / 100, count, bySource };
+}
+
+/** One outlet's rate table: legacy overrides merged over the defaults. */
+function _ratesOf(billing) {
+    return { ...DEFAULT_RATES, ...((billing && billing.rates) || {}) };
+}
+
+/**
+ * What this outlet's orders cost, with the outlet's own (legacy) rate overrides
+ * and billing mode resolved exactly once, here. Every consumer derives the
+ * order-fee side of the wallet through this.
+ */
+export function costIndexFor(billing, orders) {
+    return computeCostIndex(orders || {}, _ratesOf(billing), normalizeMode(billing && billing.mode));
+}
+
+/**
+ * Paise this ONE order adds to the platform bill — 0 when the order is never
+ * billed (pending/cancelled/refunded), the same exclusion the totals use. The
+ * cloud gate publisher applies `after - before` of this to keep its running
+ * order-fee index in step with the order stream without re-reading the node.
+ */
+export function orderFeePaise(billing, order) {
+    if (!isBilledOrder(order)) return 0;
+    return Math.round(feeOf(order, _ratesOf(billing), normalizeMode(billing && billing.mode)) * 100);
 }
 
 // check: node shared/cost-math.js
@@ -359,6 +400,26 @@ function selfCheck(assert) {
     assert.equal(feeOf({ total: 500, source: 'APP' }, DEFAULT_RATES, 'per_order'), 5, 'flat mode: app orders use the legacy webview rate');
     const wp = computeWallet({ billing: { mode: 'percentage', payments: { a: { amount: 1000 } } }, orders: { a: o(1000, 'webview_delivery'), b: { total: 1000, source: 'APP', status: 'Delivered' } } });
     assert.equal(wp.used, 50, 'wallet: 3% WhatsApp + 2% Customer App');
+    // --- batch 23l: the cloud gate publisher passes a precomputed order-fee total ---
+    const wfi = computeWalletFromIndex({
+        billing: { mode: 'per_order', payments: { a: { amount: 1500 }, b: { amount: 500 } }, charges: { c: { amount: 200 } } },
+        orderFeeTotal: 3, campaigns: { x: { totalSent: 10 } },
+    });
+    const wonce = computeWallet({
+        billing: { mode: 'per_order', payments: { a: { amount: 1500 }, b: { amount: 500 } }, charges: { c: { amount: 200 } } },
+        orders: { a: o(100, 'QR'), b: o(100, 'POS'), c: o(100, 'QR', 'Cancelled') },
+        campaigns: { x: { totalSent: 10 } },
+    });
+    assert.deepEqual(wfi, wonce, 'computeWallet = computeWalletFromIndex with the index it just computed');
+    assert.equal(wfi.used, 13, 'order fees 3 + promo 10'); assert.equal(wfi.balance, 1787, '2000 paid - 13 used - 200 charges'); assert.equal(wfi.orderFees, 3, 'exposes the order-fee side');
+    // one order's delta, exactly what the triggers apply
+    assert.equal(orderFeePaise({}, o(1000, 'QR')), 1000, '1% QR in paise');
+    assert.equal(orderFeePaise({}, o(1000, 'QR', 'Cancelled')), 0, 'a cancelled order never bills');
+    assert.equal(orderFeePaise({}, { total: 1000, type: 'Dine-in' }), 1000, 'untagged dine-in → POS 1% of ₹1000 = 1000 paise');
+    assert.equal(orderFeePaise({ mode: 'per_order' }, o(1000, 'QR')), 200, 'legacy ₹2/order');
+    assert.equal(orderFeePaise({ mode: 'per_order', rates: { QR: 4 } }, o(1000, 'QR')), 400, 'legacy rate overrides are per_order only');
+    assert.equal(costIndexFor({}, { a: o(1000, 'QR') }).total, 10, 'costIndexFor defaults to the percentage package');
+    assert.equal(costIndexFor({ mode: 'per_order', rates: { QR: 2 } }, { a: o(1000, 'QR') }).total, 2, 'costIndexFor honours a legacy row');
     // low balance: <= 25% of everything topped up
     assert.equal(walletLevel({ paid: 0 }), 'none'); assert.equal(walletLevel({ paid: 1000, used: 500 }), 'ok');
     assert.equal(walletLevel({ paid: 1000, used: 750 }), 'low', 'exactly 25% left'); assert.equal(walletLevel({ paid: 1000, used: 749 }), 'ok');

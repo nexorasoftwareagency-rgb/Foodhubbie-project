@@ -92,6 +92,9 @@ jobs:
       - name: Onboarding create guard (menuBank validate parity, sizes map, settings/Bot images)
         run: node tests/onboarding-create.check.cjs
 
+      - name: Wallet gate guard (one cloud writer, shared math, demo skip, armed-only)
+        run: node tests/wallet-gate.check.cjs
+
       - name: Supreme dense UI guard (lists, tabs, phone layout, view-only)
         run: node tests/supreme-ui.browser.mjs
 

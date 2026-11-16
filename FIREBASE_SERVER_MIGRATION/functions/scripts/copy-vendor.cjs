@@ -62,6 +62,13 @@ const FILES = [
     'tools/demo-seed-core.cjs',
     'tools/demo-fixtures.cjs',
     'shared/payroll-math.js',
+    // Batch 23l: the wallet gate publisher. `cost-math.js` is THE money math
+    // (percentage rates, prepaid promo tokens, orderFeePaise deltas) and
+    // `meta-cost-math.js` is its one import — a stale copy here would gate
+    // outlets on the wrong balance, and the drifted `src/shared/wallet/compute.ts`
+    // port it replaces is deleted in the same batch.
+    'shared/cost-math.js',
+    'shared/meta-cost-math.js',
 ];
 
 // Module-type markers. `functions/package.json` has no "type", so a .js file is
@@ -157,6 +164,29 @@ function verifyLoad() {
             }
         } catch (err) {
             problems.push('the demo builder threw in the bundle: ' + (err && err.message));
+        }
+    }
+
+    // Batch 23l: the wallet gate. Percentage rates, the index entry point and a
+    // real order delta must all be live — a stale/absent copy would let the
+    // publisher gate on a number no dashboard shows.
+    const costMath = require(abs('shared/cost-math.js'));
+    if (typeof costMath.computeWalletFromIndex !== 'function' || typeof costMath.computeWallet !== 'function') {
+        problems.push('shared/cost-math.js did not load as ESM (computeWallet/computeWalletFromIndex)');
+    } else {
+        const qrFee = costMath.orderFeePaise({}, { total: 1000, source: 'QR', status: 'Delivered' });
+        const appFee = costMath.orderFeePaise({}, { total: 1000, source: 'APP', status: 'Delivered' });
+        const waFee = costMath.orderFeePaise({}, { total: 1000, source: 'webview_delivery', status: 'Delivered' });
+        if (qrFee !== 1000 || appFee !== 2000 || waFee !== 3000) {
+            problems.push(`percentage rates drifted (QR ${qrFee} / app ${appFee} / WA ${waFee} paise per ₹1000, expected 1000/2000/3000)`);
+        }
+        const idxWallet = costMath.computeWalletFromIndex({
+            billing: { mode: 'percentage', payments: { p: { amount: 2000 } } },
+            orderFeeTotal: 10,
+            campaigns: { c: { totalSent: 2 } },
+        });
+        if (!idxWallet || idxWallet.orderFees !== 10 || idxWallet.used !== 12 || idxWallet.balance !== 1988) {
+            problems.push('computeWalletFromIndex is not the shared wallet math: ' + JSON.stringify(idxWallet));
         }
     }
 

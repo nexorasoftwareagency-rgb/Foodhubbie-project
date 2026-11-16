@@ -1094,9 +1094,12 @@ registerAction('billing-set-mode', async (btn) => {
 
 
 
-// D4: the FoodHubbie-side switch. When armed, bot-control-api/wallet-watch.js
-// publishes outlets/{oid}/walletGate='low'|'closed' from the live balance and
-// the bot/QR/app stop taking new orders. The tenant's Admin tab can only read it.
+// D4: the FoodHubbie-side switch. When armed, the wallet gate Functions
+// (FIREBASE_SERVER_MIGRATION, batch 23l) publish outlets/{oid}/walletGate=
+// 'low'|'closed' from the live balance and the bot/QR/app stop taking new
+// orders. The RTDB write below fires `onWalletLedgerChange`, which republishes
+// within seconds — there is no HTTP call and no second writer (the EC2 watcher
+// was deleted with the box). The tenant's Admin tab can only read the flag.
 registerAction('billing-toggle-gate', async (btn) => {
   if (isReadOnly()) return showToast("Your account is view-only.", 'error');
   if (currentBid === 'foodhubbie-demo') return showToast('The demo outlet is never gated.', 'error');
@@ -1123,15 +1126,8 @@ registerAction('billing-toggle-gate', async (btn) => {
     console.error('wallet gate toggle failed', err);
     return showToast('Could not save the wallet gate setting \u2014 check the console.', 'error');
   }
-  // Publish now instead of waiting for the next watcher pass. A failure here
-  // only delays the flag by up to a minute, so never turn it into an error.
-  try {
-    const token = await firebase.auth().currentUser.getIdToken();
-    await fetch(`${TUNNEL_URL}/api/bot/wallet-gate/${currentBid}/${currentOid}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-  } catch (_) { /* the watcher's next pass applies it */ }
+  // The gate itself is published by the cloud trigger that this write fires, so
+  // an arm takes effect within seconds without a second writer to keep in step.
   showToast(next ? 'Wallet gate armed.' : 'Wallet gate released.', 'success');
 });
 

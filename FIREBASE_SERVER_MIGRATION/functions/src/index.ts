@@ -28,9 +28,7 @@ export { sendOutboundMessage } from './taskqueue/sendOutboundMessage';
 // Scheduled Functions (Cron Jobs)
 // walletGateCheck was DELETED in batch 14: it read the legacy (pruned)
 // `businesses/{bid}/outlets/{oid}/billing` node, so it always believed every
-// outlet was disarmed and reopened an armed gate within a minute — while
-// bot-control-api/wallet-watch.js is the real publisher. Never re-add a second
-// writer of `walletGate`.
+// outlet was disarmed and reopened an armed gate within a minute.
 export { metaCostPublisher } from './scheduled/metaCostPublisher';
 // Batch 23a: out-of-band "box silent" alert. This is the ONLY watcher that runs
 // outside EC2 - the 2026-11-11 outage was invisible for 13 hours because every
@@ -57,6 +55,11 @@ export { dailySettlement } from './scheduled/dailySettlement';
 // demo tenant: `businesses/foodhubbie-demo`, the server-only `walletBilling`
 // row, `admins/{uid}`, removes `outletIndex/demo`, and never writes `whatsapp`.
 export { demoReseed } from './scheduled/demoReseed';
+// Batch 23l: the wallet gate publisher. The 60 s EC2 `wallet-watch.js` pass is
+// deleted — it could never gate an armed outlet again with the box down. This
+// job rebuilds every armed outlet's order-fee index exactly and sweeps gate +
+// summary for unarmed outlets; the triggers below keep it fresh between passes.
+export { walletGateReconcile } from './scheduled/walletGateReconcile';
 
 // Callable Functions (Admin/Client)
 export { botControl } from './api/botControl';
@@ -117,3 +120,12 @@ export { onRiderAssigned, onRiderStatus } from './triggers/riderRelay';
 // restaurant wallet — and published the CUSTOMER-facing order gate from it,
 // ignoring `wallet.enforce` entirely. Its balanceHistory rows had no reader.
 // Never re-add a second writer of `walletGate`.
+// Batch 23l: the one writer — an incremental order-fee index in `meta/walletWatch`
+// fed by these three triggers, with `walletGateReconcile` above as the hourly
+// authority. `bot-control-api/wallet-watch.js` (the EC2 60 s pass) is deleted in
+// this batch, so there is no second owner and no feature flag.
+export {
+  onOrderBillingChange,
+  onWalletLedgerChange,
+  onWalletGateTouched,
+} from './triggers/walletGate';

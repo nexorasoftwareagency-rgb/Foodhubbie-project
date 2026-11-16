@@ -19,5 +19,5 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "lib", "test", "**/*.test.ts", "scripts", "src/shared/orders", "src/shared/wallet"]
+  "exclude": ["node_modules", "lib", "test", "**/*.test.ts", "scripts", "src/shared/orders"]
 }
