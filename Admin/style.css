@@ -12305,6 +12305,9 @@ body.setup-mode .setup-hide {
 /* Stats cards reuse existing .stat-card styles */
 .ca-visibility-stats .stat-card { flex: 1; min-width: 140px; }
 
+/* Header action group (App Visibility: App preview + Refresh) */
+.ca-pane-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
 /* Ensure ca-pane inside notification sub-tab shows push content */
 .ca-pane--notification .push-pane { display: block; }
 .ca-pane--notification .push-pane--send { display: block; }
@@ -12485,8 +12488,119 @@ body.setup-mode .setup-hide {
 /* ===== P3: Bulk Toolbar ===== */
 #visBulkToolbar.bulk-toolbar.hidden { display: none; }
 
-/* ===== P3: Preview Modal ===== */
+/* ===== App Preview modal (Visibility pane) ===== */
 #visPreviewModal.hidden { display: none; }
+.vis-prev-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.vis-prev-modal__card {
+    background: var(--bg, #fff);
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.28);
+    padding: 20px;
+    width: min(440px, 100%);
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+}
+.vis-prev-modal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.vis-prev-modal__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text, #1e293b);
+}
+.vis-prev-modal__close {
+    background: none;
+    border: none;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-secondary, #64748b);
+    padding: 0 4px;
+}
+.vis-prev-modal__hint {
+    margin: 8px 0 14px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary, #64748b);
+}
+.vis-prev-modal__list {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+}
+.vis-prev-modal__foot {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+}
+.vis-prev__summary {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #14532d;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.vis-prev__note {
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #7c2d12;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.vis-prev__section {
+    margin-top: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary, #94a3b8);
+}
+.vis-prev__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border, #eef0f3);
+}
+.vis-prev__name {
+    font-size: 13px;
+    color: var(--text, #1e293b);
+    min-width: 0;
+}
+.vis-prev__meta {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--text-secondary, #64748b);
+    text-align: right;
+}
+.vis-prev__empty {
+    padding: 14px 12px;
+    font-size: 12px;
+    color: var(--text-tertiary, #94a3b8);
+    text-align: center;
+}
 
 /* ===== P4: Settings Validation & Dirty State ===== */
 .ca-field-error {
@@ -12662,9 +12776,6 @@ input[type="color"] {
     font-weight: 600;
     color: var(--text-secondary, #64748b);
 }
-
-/* ===== P5: Audit Log Modal ===== */
-.audit-log-modal.hidden { display: none; }
 
 /* ===== Customer APP control centre ===== */
 #tab-customer-app .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

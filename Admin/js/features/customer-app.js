@@ -26,10 +26,6 @@ let _subTab = 'overview'; // 'overview' | 'notification' | 'offers' | 'visibilit
 const CA_TAB_ID = 'customer-app'; // role checks use the real tab id, not the sub-tab name
 const SUB_TABS = ['overview', 'notification', 'offers', 'visibility', 'settings', 'activity'];
 let _offersListener = null;
-let _visibilityListener = null;
-
-// P5: Audit trail state
-let _auditLogListener = null;
 
 // P5: Activity pagination state (the tab used to read 100 rows with no way
 // to reach anything older - RTDB has no "skip N", so we page by key cursor)
@@ -84,6 +80,33 @@ export function dishStockLabel(d) {
     return 'Available';
 }
 
+/**
+ * What the CUSTOMER APP really shows - mirrored from `menu/js/app.js`
+ * (`loadMenu`), which is the authority:
+ *
+ *   categories: c.visible !== false
+ *   dishes:     d.stock !== false && d.visible !== false
+ *               && !hiddenCatKeys.has(d.category)
+ *
+ * `hiddenCatKeys` holds the ids AND the names of the hidden categories, and a
+ * dish carries its category NAME (`d.category`), not the category id.
+ *
+ * The App Visibility preview used to show something else entirely (only
+ * "featured" dishes, which the app does not even highlight, and it counted
+ * dishes per category by `categoryId`, which no dish has) - so the preview
+ * was a picture of a menu that does not exist. One rule, used by the preview
+ * and asserted against the menu source by tests/customer-app-check.mjs.
+ */
+export function customerVisibleMenu(dishes = [], categories = []) {
+    const hiddenCats = categories.filter(c => c && c.visible === false);
+    const hiddenCatKeys = new Set(hiddenCats.flatMap(c => [c.id, c.name].filter(Boolean)));
+    return {
+        visibleCategories: categories.filter(c => c && c.visible !== false),
+        visibleDishes: dishes.filter(d => d && d.stock !== false && d.visible !== false && !hiddenCatKeys.has(d.category)),
+        hiddenCatKeys,
+    };
+}
+
 // P4: App Settings state
 let _settingsDirty = false; // unsaved changes flag
 let _settingsOriginal = {}; // original values for dirty detection
@@ -108,7 +131,6 @@ export function loadCustomerApp() {
 
 export function cleanupCustomerApp() {
     if (_offersListener) { _offersListener(); _offersListener = null; }
-    if (_visibilityListener) { _visibilityListener(); _visibilityListener = null; }
 }
 
 /* ============ WIRING (once) ============ */
@@ -184,6 +206,7 @@ function _wireOnce() {
 
     // Visibility actions
     $('btnVisibilityRefresh')?.addEventListener('click', _loadVisibility);
+    $('btnVisibilityPreview')?.addEventListener('click', _openVisPreview);
 
     // P3: Visibility search & filter
     $('visSearch')?.addEventListener('input', (e) => {
@@ -222,10 +245,6 @@ function _wireOnce() {
     // P3: Preview modal close
     $('btnVisPreviewClose')?.addEventListener('click', _closeVisPreview);
     $('btnVisPreviewClose2')?.addEventListener('click', _closeVisPreview);
-
-    // P5: Audit log modal close
-    $('btnAuditLogClose')?.addEventListener('click', () => _closeModal('auditLogModal'));
-    $('btnAuditLogClose2')?.addEventListener('click', () => _closeModal('auditLogModal'));
 
     // App Settings actions
     $('btnSaveAppSettings')?.addEventListener('click', _saveAppSettings);
@@ -432,8 +451,8 @@ async function _loadOlderActivity() {
     _renderActivity();
 }
 
-/** Old pop-up entry point (Esc / shortcuts still call it): now just opens the Activity tab. */
-async function _openAuditLog() { _requestSwitch('activity'); }
+/** The old P5 pop-up is gone: the Activity sub-tab IS the audit log now
+ *  (and it paginates). That modal had no opener - it was unreachable. */
 
 function _escHtml(s) {
     if (s == null) return '';
@@ -760,14 +779,9 @@ function _renderPromoOffers(offers) {
         }
     });
 
-    // Rebind toggle checkboxes (promoPage) - needed because cloneNode loses listeners
-    newWrap.querySelectorAll('input[data-pp-id]').forEach(cb => {
-        const id = cb.dataset.ppId;
-        cb.addEventListener('change', (e) => {
-            e.stopPropagation();
-            _togglePromoPage(id, cb.checked);
-        });
-    });
+    // The promo-page toggle has ONE path: the delegated `click` handler
+    // above. It used to ALSO have a per-checkbox `change` listener, so one
+    // click wrote the row twice and logged two audit entries.
 }
 
 function _openDiscountsTab() {
@@ -1237,16 +1251,13 @@ function _openPreviewModal() {
         }).join('');
     }
 
-    modal.classList.remove('hidden');
-    modal.setAttribute('aria-hidden', 'false');
+    // Route through the shared modal stack so Escape closes it like every
+    // other modal (the stack already exists - the preview bypassed it).
+    _openModal('promoPreviewModal');
 }
 
 function _closePreview() {
-    const modal = $('promoPreviewModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.setAttribute('aria-hidden', 'true');
-    }
+    _closeModal('promoPreviewModal');
 }
 
 /* ============ PANE 3: APP VISIBILITY ============ */
@@ -1335,7 +1346,6 @@ function _processVisibilityItems() {
                 featured: d.featured === true,
                 sortOrder: d.sortOrder ?? 999,
                 updatedAt: d.updatedAt || 0,
-                categoryId: d.categoryId,
             });
         }
     }
@@ -1351,8 +1361,10 @@ function _processVisibilityItems() {
             if (_visFilter === 'hidden' && visible) continue;
             // out-of-stock / availability-not-set don't apply to categories
 
-            // Count dishes in this category
-            const catDishCount = _allDishesCache.filter(d => d.categoryId === c.id).length;
+            // Count dishes in this category. A dish carries its category NAME
+            // (`d.category`) - it has no `categoryId` - so counting by id
+            // always returned 0 on the category rows.
+            const catDishCount = _allDishesCache.filter(d => d.category === c.name || d.category === c.id).length;
 
             items.push({
                 id: `category:${c.id}`,
@@ -1502,18 +1514,9 @@ function _renderVisibilityLists() {
     newDishWrap.addEventListener('click', (e) => handleVisClick(e, newDishWrap));
     newCatWrap.addEventListener('click', (e) => handleVisClick(e, newCatWrap));
 
-    // Rebind visibility toggle checkboxes
-    [newDishWrap, newCatWrap].forEach(wrap => {
-        wrap.querySelectorAll('input[data-vis-type]').forEach(cb => {
-            cb.addEventListener('change', (e) => {
-                e.stopPropagation();
-                const id = cb.dataset.visId;
-                const type = cb.dataset.visType;
-                const realId = id.replace(/^(dish|category):/, '');
-                _toggleVisItem(type, realId, cb.checked);
-            });
-        });
-    });
+    // The visibility toggle has ONE path too: the delegated `click` handler
+    // above. It used to ALSO have a per-checkbox `change` listener, so one
+    // click wrote the row twice and logged two audit entries.
 }
 
 function _toggleVisSelect(id) {
@@ -1653,53 +1656,58 @@ async function _bulkVisShowAll() {
 
 /* ============ P3: VISIBILITY PREVIEW ============ */
 
+/** Preview of the menu the CUSTOMER sees - same rule as the customer app. */
 function _openVisPreview() {
     const modal = $('visPreviewModal');
     const wrap = $('visPreviewList');
     if (!modal || !wrap) return;
 
-    const now = Date.now();
-    const visibleDishes = _allDishesCache.filter(d => d.visible !== false && d.featured === true);
-    const visibleCategories = _allCategoriesCache.filter(c => c.visible !== false);
-    const features = (_allDishesCache.length > 0) ? {} : {};
+    const { visibleCategories, visibleDishes } = customerVisibleMenu(_allDishesCache, _allCategoriesCache);
+    const hiddenDishes = _allDishesCache.filter(d => d && d.visible === false).length;
+    const hiddenCats = _allCategoriesCache.filter(c => c && c.visible === false).length;
+    const oos = _allDishesCache.filter(d => isDishOOS(d) && d.visible !== false).length;
 
-    if (visibleDishes.length === 0 && visibleCategories.length === 0) {
-        wrap.innerHTML = '<div style="padding:24px;color:var(--text-tertiary);text-align:center;">No visible items to preview.</div>';
-    } else {
-        let html = '';
-        if (visibleCategories.length > 0) {
-            html += '<div style="font-weight:600;margin-bottom:8px;">Categories</div>';
-            html += visibleCategories.map(c => `
-                <div style="padding:8px 12px;border-bottom:1px solid var(--border,#e5e7eb);">
-                    ${_escHtml(c.name)} (${_allDishesCache.filter(d => d.categoryId === c.id && d.visible !== false).length} dishes)
-                </div>
-            `).join('');
-        }
-        if (visibleDishes.length > 0) {
-            html += '<div style="font-weight:600;margin-top:12px;margin-bottom:8px;">Featured Dishes</div>';
-            html += visibleDishes.map(d => `
-                <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border,#e5e7eb);">
-                    <span class="vis-row__badge vis-row__badge--in-stock" style="font-size:10px;">★</span>
-                    <div style="flex:1;min-width:0;">
-                        <div class="vis-row__name" style="font-size:13px;">${_escHtml(d.name)}</div>
-                        <div class="vis-row__meta" style="font-size:11px;">${d.price != null ? `₹${d.price}` : '—'}</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-        wrap.innerHTML = html;
+    const note = [];
+    if (hiddenDishes) note.push(`${hiddenDishes} dish${hiddenDishes === 1 ? '' : 'es'} switched off here`);
+    if (hiddenCats) note.push(`${hiddenCats} categor${hiddenCats === 1 ? 'y' : 'ies'} switched off here`);
+    if (oos) note.push(`${oos} out of stock (the app hides those too)`);
+
+    let html = '';
+    html += `<div class="vis-prev__summary">
+        <strong>${visibleDishes.length} dish${visibleDishes.length === 1 ? '' : 'es'}</strong> and
+        <strong>${visibleCategories.length} categor${visibleCategories.length === 1 ? 'y' : 'ies'}</strong>
+        are visible to customers right now.
+    </div>`;
+    if (note.length) {
+        html += `<div class="vis-prev__note">Not shown: ${note.join(' · ')}.</div>`;
     }
 
-    modal.classList.remove('hidden');
-    modal.setAttribute('aria-hidden', 'false');
+    if (visibleDishes.length === 0 && visibleCategories.length === 0) {
+        html += '<div class="vis-prev__empty">Customers see an empty menu. Switch something on above.</div>';
+    } else {
+        html += '<div class="vis-prev__section">Categories</div>';
+        html += visibleCategories.length
+            ? visibleCategories.map(c => {
+                const n = visibleDishes.filter(d => d.category === c.name).length;
+                return `<div class="vis-prev__row"><span class="vis-prev__name">${_escHtml(c.name)}</span><span class="vis-prev__meta">${n} dish${n === 1 ? '' : 'es'}</span></div>`;
+            }).join('')
+            : '<div class="vis-prev__empty">No categories are visible.</div>';
+
+        html += '<div class="vis-prev__section">Dishes</div>';
+        html += visibleDishes.length
+            ? visibleDishes.map(d => `<div class="vis-prev__row">
+                <span class="vis-prev__name">${_escHtml(d.name || 'Unnamed Dish')}</span>
+                <span class="vis-prev__meta">${d.price != null ? `₹${d.price}` : '—'} · ${_escHtml(d.category || 'Uncategorised')}</span>
+            </div>`).join('')
+            : '<div class="vis-prev__empty">No dishes are visible.</div>';
+    }
+
+    wrap.innerHTML = html;
+    _openModal('visPreviewModal');
 }
 
 function _closeVisPreview() {
-    const modal = $('visPreviewModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.setAttribute('aria-hidden', 'true');
-    }
+    _closeModal('visPreviewModal');
 }
 
 async function _loadVisibilityFeatures() {
@@ -2776,53 +2784,4 @@ function _renderQuickControls(subsRaw, discounts, dishes, cats, store) {
     });
 
     window.lucide?.createIcons?.();
-}
-
-/** Bulk set all coupons to show/hide on Promo Page. */
-async function _bulkSetAllPromoPage(showOnPage) {
-    const coupons = Object.entries(discountsCache || {}).filter(([, d]) => d && d.type === 'coupon' && d.couponCode && d.archived !== true);
-    if (coupons.length === 0) return;
-    const ok = await showConfirm(`${showOnPage ? 'Show' : 'Hide'} all ${coupons.length} coupons on the Promo Page?`, 'Bulk update');
-    if (!ok) return;
-    try {
-        await Promise.all(coupons.map(([id]) =>
-            update(Outlet.ref(`discounts/${id}`), { promoPage: showOnPage === true, updatedAt: Date.now() })
-        ));
-        showToast(`${coupons.length} coupon${coupons.length === 1 ? '' : 's'} ${showOnPage ? 'shown on' : 'hidden from'} Promo Page`, 'success');
-        _loadPromoOffers();
-    } catch (e) {
-        showToast('Bulk update failed: ' + (e?.message || e), 'error');
-    }
-}
-
-/** Quick: hide all out-of-stock dishes. */
-async function _bulkHideOOSQuick() {
-    const oosDishes = _dishesCache.filter(d => isDishOOS(d) && d.visible !== false);
-    if (oosDishes.length === 0) { showToast('No out-of-stock dishes to hide', 'info'); return; }
-    try {
-        await Promise.all(oosDishes.map(d =>
-            update(Outlet.ref(`dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
-        ));
-        showToast(`${oosDishes.length} out-of-stock dish${oosDishes.length === 1 ? '' : 'es'} hidden`, 'success');
-        _loadVisibility();
-    } catch (e) {
-        showToast('Hide failed: ' + (e?.message || e), 'error');
-    }
-}
-
-/** Quick: show all hidden visibility items. */
-async function _bulkShowAllVisibility() {
-    const hidden = _processVisibilityItems().filter(i => !i.visible);
-    if (hidden.length === 0) { showToast('No hidden items to show', 'info'); return; }
-    try {
-        await Promise.all(hidden.map(i => {
-            const [type, realId] = i.id.split(':');
-            const path = type === 'dish' ? `dishes/${realId}` : `categories/${realId}`;
-            return update(Outlet.ref(path), { visible: true, updatedAt: Date.now() });
-        }));
-        showToast(`${hidden.length} item${hidden.length === 1 ? '' : 's'} shown on app`, 'success');
-        _loadVisibility();
-    } catch (e) {
-        showToast('Show all failed: ' + (e?.message || e), 'error');
-    }
 }

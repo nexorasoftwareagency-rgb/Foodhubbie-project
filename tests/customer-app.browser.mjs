@@ -269,6 +269,93 @@ await t('the Overview dish counts agree with the app rule', async () => {
     assert.match(card, /\b2\b/, 'two dishes are orderable');
     assert.match(card, /1 out of stock/);
 });
+await t('the App preview shows exactly what the customer app shows', async () => {
+    // Fixture (the same shape the customer app reads):
+    //   A  Pizza, in stock      -> visible
+    //   B  Pizza, out of stock  -> hidden by the app
+    //   C  Pizza, no stock flag -> visible
+    //   D  Pizza, switched off  -> hidden
+    //   E  Sides, its category is switched off -> hidden
+    //   categories: Pizza (on), Sides (off)
+    await page.evaluate(async () => {
+        const fb = await import('/Admin/js/firebase.js');
+        await fb.set({ path: 'businesses/b1/outlets/o1/dishes' }, {
+            d1: { name: 'A', stock: true, category: 'Pizza', price: 100 },
+            d2: { name: 'B', stock: false, category: 'Pizza', price: 120 },
+            d3: { name: 'C', category: 'Pizza', price: 130 },
+            d4: { name: 'D', stock: true, category: 'Pizza', visible: false, price: 140 },
+            d5: { name: 'E', stock: true, category: 'Sides', price: 150 },
+        });
+        await fb.set({ path: 'businesses/b1/outlets/o1/categories' }, {
+            c1: { name: 'Pizza', visible: true },
+            c2: { name: 'Sides', visible: false },
+        });
+    });
+    await goto(page, 'visibility');
+    await page.waitForTimeout(500);
+    await page.locator('#btnVisibilityPreview').evaluate(el => el.click());
+    await page.waitForTimeout(250);
+
+    assert.equal(await page.locator('#visPreviewModal.hidden').count(), 0, 'the preview modal must open');
+    assert.ok(await page.locator('#visPreviewModal').isVisible(), 'the preview modal must actually be on screen');
+    const text = await page.innerText('#visPreviewList');
+    assert.match(text, /2 dishes/, 'exactly A and C are visible (got: ' + text.replace(/\s+/g, ' ').slice(0, 200) + ')');
+    assert.match(text, /1 category/, 'only Pizza is visible');
+    // The listed names are exact: the visible category + the visible dishes.
+    const names = (await page.locator('#visPreviewList .vis-prev__name').allTextContents()).map(n => n.trim());
+    assert.deepEqual(names, ['Pizza', 'A', 'C'], 'the preview lists only the visible category and dishes');
+    // The "not shown" note is honest about every exclusion.
+    const note = await page.innerText('#visPreviewList .vis-prev__note');
+    assert.match(note, /1 dish switched off here/, 'the note names the switched-off dish');
+    assert.match(note, /1 category switched off here/, 'the note names the switched-off category');
+    assert.match(note, /1 out of stock/, 'the note names the out-of-stock dish');
+    // The per-category count matches the app grouping (category NAME).
+    const catRow = await page.locator('#visPreviewList .vis-prev__row', { hasText: 'Pizza' }).first().innerText();
+    assert.match(catRow, /2 dishes/, 'Pizza holds A and C');
+});
+await t('Escape closes the App preview', async () => {
+    assert.equal(await page.locator('#visPreviewModal.hidden').count(), 0, 'the preview is open before Escape');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    assert.equal(await page.locator('#visPreviewModal.hidden').count(), 1, 'Escape must close the preview');
+    assert.equal(await page.locator('#visPreviewModal').isVisible(), false, 'the preview must be off screen after Escape');
+});
+await t('the App preview button is in the Visibility pane header', async () => {
+    const vis = await page.locator('#caPaneVisibility').innerText();
+    assert.match(vis, /App preview/);
+});
+await t('the visibility fixture is restored for the tests below', async () => {
+    await page.evaluate(async () => {
+        const fb = await import('/Admin/js/firebase.js');
+        await fb.set({ path: 'businesses/b1/outlets/o1/dishes' }, {
+            d1: { name: 'A', stock: true }, d2: { name: 'B', stock: false }, d3: { name: 'C' },
+        });
+        await fb.set({ path: 'businesses/b1/outlets/o1/categories' }, { c1: { name: 'Pizza', visible: true } });
+    });
+    await goto(page, 'visibility');
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('#visDishList .vis-row').count(), 3, 'the seeded dishes are back');
+});
+await t('one visibility click writes exactly once (no double toggle)', async () => {
+    const auditKeys = () => page.evaluate(() => Object.keys(window.__store['businesses']['b1']['outlets']['o1']['auditLog'] || {}));
+    const before = await auditKeys();
+    await page.locator('#visDishList .vis-row[data-vis-id="dish:d1"] input[data-vis-type="dish"]').evaluate(el => el.click());
+    await page.waitForTimeout(700);
+    const after = await auditKeys();
+    const added = after.filter(k => !before.includes(k));
+    assert.equal(added.length, 1, 'one click = one write (got ' + added.length + ' audit rows)');
+});
+await t('one promo-page click writes exactly once (no double toggle)', async () => {
+    const auditKeys = () => page.evaluate(() => Object.keys(window.__store['businesses']['b1']['outlets']['o1']['auditLog'] || {}));
+    await goto(page, 'offers');
+    await page.waitForTimeout(500);
+    const before = await auditKeys();
+    await page.locator('#promoOffersList .promo-offer-row[data-offer-id="x1"] input[data-pp-id]').evaluate(el => el.click());
+    await page.waitForTimeout(700);
+    const after = await auditKeys();
+    const added = after.filter(k => !before.includes(k));
+    assert.equal(added.length, 1, 'one click = one write (got ' + added.length + ' audit rows)');
+});
 await t('the activity list is paginated', async () => {
     await page.evaluate(() => {
         const fb = window.__fb; // not used - keep the store reachable through __store

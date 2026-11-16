@@ -468,6 +468,123 @@ t('P3: preview modal functions exist', () => {
 });
 
 // =====================================================================
+// App Visibility preview: REACHABLE and HONEST (follow-up batch)
+// =====================================================================
+
+t('VP1: the visibility preview is reachable - a button opens it', () => {
+    // The modal existed and its close buttons were wired, but NOTHING ever
+    // opened it: `_openVisPreview` had no caller, so the whole preview was
+    // unreachable (the same class as finding C6 on the Promo Page).
+    assert.ok(html.includes('id="btnVisibilityPreview"'), 'the App preview button must exist in the Visibility pane header');
+    assert.ok(/btnVisibilityPreview'\)\?\.addEventListener\('click', _openVisPreview\)/.test(js), 'the button opens the preview');
+    // The button must live in the Visibility pane, not somewhere else.
+    const pane = html.slice(html.indexOf('id="caPaneVisibility"'), html.indexOf('id="caPaneSettings"'));
+    assert.ok(pane.includes('id="btnVisibilityPreview"'), 'the preview button belongs to the Visibility pane');
+});
+
+t('VP2: the preview shows what the CUSTOMER app shows (one shared rule)', () => {
+    // The old preview showed only `featured === true` dishes (the app does
+    // not even highlight those), ignored the out-of-stock rule and counted
+    // dishes per category by `categoryId` - a menu that does not exist.
+    const preview = js.match(/function _openVisPreview\(\) \{[\s\S]*?\n\}/);
+    assert.ok(preview, 'the preview function exists');
+    assert.ok(/customerVisibleMenu\(/.test(preview[0]), 'the preview uses the shared customer-visible rule');
+    assert.ok(!/featured === true/.test(preview[0]), 'the preview must not filter on the saved-only `featured` flag');
+    assert.ok(/export function customerVisibleMenu\(/.test(js), 'the shared rule is exported');
+    // The rule must mirror menu/js/app.js (the authority).
+    const app = fs.readFileSync(path.join(root, 'menu/js/app.js'), 'utf8');
+    assert.ok(app.includes('d.stock !== false'), 'the app keeps a dish unless stock === false');
+    assert.ok(app.includes('d.visible !== false'), 'the app keeps a dish unless visible === false');
+    assert.ok(app.includes('hiddenCatKeys'), 'the app hides the dishes of a hidden category');
+    const rule = js.match(/export function customerVisibleMenu\([\s\S]*?\n\}/);
+    assert.ok(rule, 'the shared rule body found');
+    assert.ok(/d\.stock !== false/.test(rule[0]), 'the shared rule applies the stock rule');
+    assert.ok(/d\.visible !== false/.test(rule[0]), 'the shared rule applies the visible rule');
+    assert.ok(/hiddenCatKeys\.has\(d\.category\)/.test(rule[0]), 'the shared rule hides the dishes of a hidden category');
+    assert.ok(/c\.visible !== false/.test(rule[0]), 'the shared rule applies the category rule');
+});
+
+t('VP3: the preview says what is NOT shown (honest counts)', () => {
+    const preview = js.match(/function _openVisPreview\(\) \{[\s\S]*?\n\}/);
+    assert.ok(preview, 'the preview function exists');
+    assert.ok(/vis-prev__summary/.test(preview[0]), 'the preview has a summary line');
+    assert.ok(/vis-prev__note/.test(preview[0]), 'the preview lists what is not shown');
+    assert.ok(/isDishOOS\(d\)/.test(preview[0]), 'the out-of-stock count uses the helper');
+    // Per-category counts must match the app: a dish carries its category NAME.
+    assert.ok(/d\.category === c\.name/.test(preview[0]), 'the per-category count matches the customer app grouping');
+    // And the CSS for those classes must exist (PurgeCSS strips unknown ones).
+    for (const cls of ['.vis-prev__summary', '.vis-prev__note', '.vis-prev__section', '.vis-prev__row', '.vis-prev__name', '.vis-prev__meta', '.vis-prev__empty']) {
+        assert.ok(css.includes(cls), `missing style: ${cls}`);
+    }
+});
+
+t('VP4: both previews go through the shared modal stack (Escape closes them)', () => {
+    assert.ok(/_openModal\('visPreviewModal'\)/.test(js), 'the visibility preview opens through the modal stack');
+    assert.ok(/_closeModal\('visPreviewModal'\)/.test(js), 'the visibility preview closes through the modal stack');
+    assert.ok(/_openModal\('promoPreviewModal'\)/.test(js), 'the promo preview opens through the modal stack');
+    assert.ok(/_closeModal\('promoPreviewModal'\)/.test(js), 'the promo preview closes through the modal stack');
+    assert.ok(/e\.key === 'Escape'[\s\S]{0,200}_closeAllModals\(\)/.test(js), 'Escape closes every open modal');
+    assert.ok(/function _closeAllModals\(\)/.test(js), 'the modal stack has a close-all');
+    // The preview modal must be a real dialog for screen readers.
+    const modal = html.match(/id="visPreviewModal"[\s\S]*?>/);
+    assert.ok(modal, 'the preview modal exists');
+    assert.ok(/role="dialog"/.test(modal[0]), 'the preview modal is a dialog');
+    assert.ok(/aria-modal="true"/.test(modal[0]), 'the preview modal is modal');
+});
+
+t('VP5: the unreachable audit-log modal stays gone', () => {
+    // Activity (with pagination) is the audit log now. The old modal had no
+    // opener at all - it was unreachable dead markup.
+    assert.ok(!html.includes('auditLogModal'), 'the unreachable audit modal markup must stay deleted');
+    assert.ok(!html.includes('auditLogList'), 'the unreachable audit list must stay deleted');
+    assert.ok(!js.includes('_openAuditLog'), 'the unreachable opener must stay deleted');
+    assert.ok(!css.includes('.audit-log-modal'), 'the dead audit modal style must stay deleted');
+});
+
+t('VP6: no orphaned `_` helper is left in customer-app.js', () => {
+    // A defined-but-never-called function is dead code - and in this module it
+    // had already shipped twice (an unreachable preview + three bulk helpers
+    // that no button called). This is the generic guard for that class.
+    const defs = [...js.matchAll(/^\s*(?:export\s+)?(?:async\s+)?function\s+(_[A-Za-z0-9_]+)/gm)].map(m => m[1]);
+    const orphans = defs.filter(fn => js.split(fn).length - 1 < 2);
+    assert.deepEqual(orphans, [], 'orphaned functions: ' + orphans.join(', '));
+    assert.ok(defs.length > 50, 'the function scan must actually find the module functions (' + defs.length + ')');
+});
+
+t('VP7: the category rows count their dishes the way the app groups them', () => {
+    // A dish carries `category` (the NAME) and no `categoryId`, so counting by
+    // id printed "0 dishes" on every category row.
+    assert.ok(!/d\.categoryId === c\.id/.test(js), 'the categoryId count must stay gone');
+    assert.ok(/d\.category === c\.name \|\| d\.category === c\.id/.test(js), 'the count matches the app grouping');
+});
+
+t('V1: a toggle checkbox has ONE event path (no double write)', () => {
+    // A visibility / promo-page checkbox had BOTH a delegated `click`
+    // handler AND a per-checkbox `change` listener, so one click wrote the
+    // row twice and logged two audit entries. The delegated handler is
+    // re-bound on every render (the wrapper is cloned), so the per-checkbox
+    // listener was pure duplication.
+    assert.ok(!/querySelectorAll\('input\[data-vis-type\]'\)/.test(js), 'no per-checkbox change listener for the visibility toggle');
+    assert.ok(!/querySelectorAll\('input\[data-pp-id\]'\)/.test(js), 'no per-checkbox change listener for the promo-page toggle');
+    assert.ok(!/addEventListener\('change'[\s\S]{0,120}_toggleVisItem/.test(js), 'no change listener may call _toggleVisItem');
+    assert.ok(!/addEventListener\('change'[\s\S]{0,120}_togglePromoPage/.test(js), 'no change listener may call _togglePromoPage');
+    // The delegated paths must still exist (one each).
+    assert.ok(/e\.target\.matches\('input\[data-vis-type\]'\)/.test(js), 'the delegated visibility toggle stays');
+    assert.ok(/e\.target\.matches\('input\[data-pp-id\]'\)/.test(js), 'the delegated promo-page toggle stays');
+});
+
+t('VP8: the service worker cache + the stylesheet version are in step', () => {
+    // A file the SW serves needs a CACHE_NAME bump in the same commit, and the
+    // precached stylesheet URL must match the one index.html asks for.
+    const sw = fs.readFileSync(path.join(root, 'Admin/sw.js'), 'utf8');
+    assert.ok(/const CACHE_NAME = 'foodhubbie-erp-shell-v5\.12\.59'/.test(sw), 'the SW cache name must be bumped for this batch');
+    const htmlCss = html.match(/style\.css\?v=([\d.]+)/);
+    const swCss = sw.match(/style\.css\?v=([\d.]+)/);
+    assert.ok(htmlCss && swCss, 'both the page and the SW pin a stylesheet version');
+    assert.equal(swCss[1], htmlCss[1], 'the precached stylesheet version must match the page');
+});
+
+// =====================================================================
 // PANE 4: App Settings (P4)
 // =====================================================================
 
