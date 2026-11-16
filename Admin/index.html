@@ -4997,6 +4997,16 @@
                             </div>
                         </div>
                         <div class="ca-ov-grid" id="caOvGrid" aria-live="polite"><div class="ca-ov-card skeleton-card">Loading…</div></div>
+
+                        <!-- QUICK CONTROLS: the one-click actions come first, then the checks -->
+                        <div class="qa-section">
+                            <h2 class="qa-section__title">
+                                <i data-lucide="zap" style="width:16px;height:16px;"></i> Quick Controls
+                            </h2>
+                            <div class="qa-grid" id="qaGrid"></div>
+                            <hr class="qa-divider">
+                        </div>
+
                         <div class="ca-ov-cols">
                             <section class="ca-ov-box" aria-labelledby="caOvReadyTitle">
                                 <h3 id="caOvReadyTitle">Ready to go live?</h3>
@@ -5007,15 +5017,6 @@
                                 <p class="text-muted-small">Some switches save fine, but the customer app does not read them yet. We mark them so nothing surprises you.</p>
                                 <div class="ca-ov-status" id="caOvStatus"></div>
                             </section>
-                        </div>
-
-                        <!-- QUICK CONTROLS: most-used actions one click away -->
-                        <div class="qa-section">
-                            <h2 class="qa-section__title">
-                                <i data-lucide="zap" style="width:16px;height:16px;"></i> Quick Controls
-                            </h2>
-                            <div class="qa-grid" id="qaGrid"></div>
-                            <hr class="qa-divider">
                         </div>
 
                         <section class="ca-ov-box" aria-labelledby="caOvRecentTitle">
@@ -5372,7 +5373,7 @@
                         <div class="ca-banner" id="caVisBanner" role="note">
                             <i data-lucide="info"></i>
                             <div><strong>What customers see today</strong>
-                                <span>The app hides a dish only when it is marked <b>Out of stock</b> in Menu. The Hide / Show and Featured switches below are saved but the app does not use them yet.</span></div>
+                                <span>The app hides a dish when it is marked <b>Out of stock</b> in Menu — and when you switch it off here. <b>Featured</b> is saved, but the app does not highlight those dishes yet.</span></div>
                             <button class="btn-secondary btn-sm" type="button" data-ca-open-menu>Open Menu</button>
                         </div>
                         <div class="ca-visibility-stats" style="margin:12px 0; display:flex; gap:12px; flex-wrap:wrap;">
@@ -5394,11 +5395,11 @@
                             </div>
                             <div class="stat-card">
                                 <span id="visFeaturedCount" class="stat-value">-</span>
-                                <span class="stat-label">Featured Dishes</span>
+                                <span class="stat-label">Featured (saved only)</span>
                             </div>
                             <div class="stat-card">
-                                <span id="visLowStockCount" class="stat-value">-</span>
-                                <span class="stat-label">Low Stock</span>
+                                <span id="visUnsetCount" class="stat-value">-</span>
+                                <span class="stat-label">Availability not set</span>
                             </div>
                             <div class="stat-card">
                                 <span id="visOutOfStockCount" class="stat-value">-</span>
@@ -5420,7 +5421,7 @@
                                     <label class="chip chip--radio"><input type="radio" name="visFilter" value="visible"> <span>Visible</span></label>
                                     <label class="chip chip--radio"><input type="radio" name="visFilter" value="hidden"> <span>Hidden</span></label>
                                     <label class="chip chip--radio"><input type="radio" name="visFilter" value="out-of-stock"> <span>Out of Stock</span></label>
-                                    <label class="chip chip--radio"><input type="radio" name="visFilter" value="low-stock"> <span>Low Stock</span></label>
+                                    <label class="chip chip--radio"><input type="radio" name="visFilter" value="availability-unset"> <span>Availability not set</span></label>
                                 </div>
                                 <div class="flex-row flex-gap-6">
                                     <label class="text-muted-small" style="font-size:11px;">Sort:</label>
@@ -5800,6 +5801,10 @@
                             <button class="btn-secondary" id="btnActivityRefresh" type="button"><i data-lucide="refresh-cw"></i> <span>Refresh</span></button>
                         </div>
                         <div id="caActivityList" class="ca-activity" aria-live="polite"></div>
+                        <div class="ca-activity__pager hidden" id="caActivityPager">
+                            <span class="text-muted-small" id="caActivityCount"></span>
+                            <button class="btn-secondary btn-sm" id="btnActivityOlder" type="button">Load older changes</button>
+                        </div>
                     </div>
                     <!-- P5: Audit Log Modal -->
                     <div id="auditLogModal" class="audit-log-modal hidden" style="position:fixed; inset:0; z-index:2100; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center;">

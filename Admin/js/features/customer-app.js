@@ -15,7 +15,7 @@ import { loadLucide, canEditTab, canDeleteTab, canAccessTab, roleLabel } from '.
 import { logger } from '../utils/logger.js';
 import { appLink } from '../../shared/app-link.js';
 import { couponStatus, discountAllowsChannel } from '../../shared/discount-rules.js';
-import { logChange, loadAuditLog } from './audit-trail.js';
+import { logChange, loadAuditLog, loadAuditLogPage } from './audit-trail.js';
 import { APP_CONTROLS, liveBadge, notAppliedList, liveList } from './customer-app-status.js';
 import { qrDataUri } from '../utils/qr.js';
 
@@ -30,6 +30,14 @@ let _visibilityListener = null;
 
 // P5: Audit trail state
 let _auditLogListener = null;
+
+// P5: Activity pagination state (the tab used to read 100 rows with no way
+// to reach anything older - RTDB has no "skip N", so we page by key cursor)
+const ACT_PAGE_SIZE = 25;
+let _actEntries = [];
+let _actCursor = null;   // oldest key currently shown
+let _actHasMore = false;
+let _actLoading = false;
 
 // P5: Keyboard shortcut state
 let _keyboardWired = false;
@@ -47,13 +55,34 @@ let _allOffersCache = []; // cached full offer list from RTDB listener
 
 // P3: App Visibility state
 let _visSearchQuery = '';
-let _visFilter = 'all'; // 'all' | 'visible' | 'hidden' | 'out-of-stock' | 'low-stock'
+let _visFilter = 'all'; // 'all' | 'visible' | 'hidden' | 'out-of-stock' | 'availability-unset'
 let _visSort = 'name'; // 'name' | 'price' | 'stock' | 'sortOrder'
 let _visFilterType = 'all'; // 'all' | 'dish' | 'category'
 let _selectedVis = new Set(); // Set of visibility item ids {type:id}
 let _allDishesCache = []; // cached dishes from RTDB
 let _allCategoriesCache = []; // cached categories from RTDB
 let _featuredDishIds = new Set(); // dishes marked featured
+
+/* ============ DISH AVAILABILITY MODEL (one helper, one truth) ============
+ *
+ * The customer app is the authority:
+ *     menu/js/app.js -> `d.stock !== false`  (a dish with NO stock flag is SHOWN)
+ * `stock` is a BOOLEAN flag written by Admin > Catalog ("Available" toggle);
+ * real quantities live in `inventory`, not on the dish. So:
+ *   stock === false -> marked Out of stock in Menu -> the app hides the dish
+ *   stock === true  -> available
+ *   stock == null   -> no flag saved -> the app shows the dish
+ * The old code compared the flag against the number 0 / 5, which never matched
+ * a boolean (so a real out-of-stock dish was shown as "Stock false" and every
+ * available dish was counted as "Low Stock").
+ */
+export function isDishOOS(d) { return !!d && d.stock === false; }
+export function isDishAvailabilityUnset(d) { return !!d && d.stock == null; }
+export function dishStockLabel(d) {
+    if (isDishOOS(d)) return 'Out of stock';
+    if (isDishAvailabilityUnset(d)) return 'Availability not set';
+    return 'Available';
+}
 
 // P4: App Settings state
 let _settingsDirty = false; // unsaved changes flag
@@ -106,6 +135,7 @@ function _wireOnce() {
         catch { $('caOvAppLink')?.select(); showToast('Press Ctrl+C to copy the link', 'info'); }
     });
     $('btnActivityRefresh')?.addEventListener('click', _loadActivity);
+    $('btnActivityOlder')?.addEventListener('click', _loadOlderActivity);
 
     // Refresh subscriber count
     $('caRefreshSubs')?.addEventListener('click', () => _loadPushSubscriptions(true));
@@ -310,7 +340,10 @@ const AUDIT_ACTIONS = {
     recall: 'Flagged'
 };
 const AUDIT_TARGETS = {
-    discounts: 'Offer', 'settings/Store': 'App settings', 'menu/dishes': 'Dish', 'menu/categories': 'Category',
+    discounts: 'Offer', 'settings/Store': 'App settings', 'dishes': 'Dish', 'categories': 'Category',
+    // Legacy target names (written before the Visibility pane was pointed at the
+    // real `dishes` / `categories` nodes) - kept so old entries still read well.
+    'menu/dishes': 'Dish', 'menu/categories': 'Category',
     'push notification': 'Push notification'
 };
 
@@ -329,12 +362,74 @@ function _renderAuditEntries(entries, wrap, emptyText = 'No changes recorded yet
     }).join('');
 }
 
+/** The oldest key on a page (push keys are chronological, so the min key is the oldest row). */
+function _oldestAuditKey(entries) {
+    let min = null;
+    for (const e of entries || []) {
+        if (!e || !e.key) continue;
+        if (min === null || e.key < min) min = e.key;
+    }
+    return min;
+}
+
+function _renderActivity() {
+    const wrap = $('caActivityList');
+    if (!wrap) return;
+    _renderAuditEntries(_actEntries, wrap, 'No changes recorded yet.');
+    const pager = $('caActivityPager');
+    const count = $('caActivityCount');
+    const btn = $('btnActivityOlder');
+    if (count) count.textContent = _actEntries.length
+        ? `Showing ${_actEntries.length} change${_actEntries.length === 1 ? '' : 's'}`
+        : '';
+    if (pager) pager.classList.toggle('hidden', _actEntries.length === 0);
+    if (btn) {
+        btn.classList.toggle('hidden', !_actHasMore);
+        btn.disabled = _actLoading;
+    }
+}
+
 async function _loadActivity() {
     const wrap = $('caActivityList');
     if (!wrap) return;
+    _actLoading = true;
     wrap.innerHTML = '<div class="ca-activity__empty">Loading…</div>';
-    try { _renderAuditEntries(await loadAuditLog(100), wrap); }
-    catch (e) { wrap.innerHTML = '<div class="ca-activity__empty">Could not load activity. Try Refresh.</div>'; }
+    try {
+        const page = await loadAuditLogPage(ACT_PAGE_SIZE);
+        _actEntries = page;
+        _actCursor = _oldestAuditKey(page);
+        _actHasMore = page.length >= ACT_PAGE_SIZE;
+    } catch (e) {
+        wrap.innerHTML = '<div class="ca-activity__empty">Could not load activity. Try Refresh.</div>';
+        return;
+    } finally {
+        // The flag must be cleared BEFORE the render, or the pager button is
+        // painted disabled and "Load older" never fires.
+        _actLoading = false;
+    }
+    _renderActivity();
+}
+
+/** Load the next (older) page of activity rows. */
+async function _loadOlderActivity() {
+    if (_actLoading || !_actHasMore || !_actCursor) return;
+    _actLoading = true;
+    const btn = $('btnActivityOlder');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+    try {
+        const page = await loadAuditLogPage(ACT_PAGE_SIZE, _actCursor);
+        if (page.length) {
+            _actEntries = _actEntries.concat(page);
+            _actCursor = _oldestAuditKey(page);
+        }
+        _actHasMore = page.length >= ACT_PAGE_SIZE;
+    } catch (e) {
+        showToast('Could not load older changes.', 'error');
+    } finally {
+        _actLoading = false;
+        if (btn) { btn.disabled = false; btn.textContent = 'Load older changes'; }
+    }
+    _renderActivity();
 }
 
 /** Old pop-up entry point (Esc / shortcuts still call it): now just opens the Activity tab. */
@@ -1159,8 +1254,8 @@ function _closePreview() {
 async function _loadVisibility() {
     try {
         const [dishSnap, catSnap] = await Promise.all([
-            get(Outlet.ref('menu/dishes')),
-            get(Outlet.ref('menu/categories'))
+            get(Outlet.ref('dishes')),
+            get(Outlet.ref('categories'))
         ]);
         const dishes = dishSnap.val() || {};
         const cats = catSnap.val() || {};
@@ -1184,15 +1279,18 @@ async function _loadVisibilityStats(dishes = _allDishesCache, cats = _allCategor
         const visDishes = dishList.filter(d => d.visible !== false).length;
         const visCats = catList.filter(c => c.visible !== false).length;
         const featuredCount = dishList.filter(d => d.featured === true).length;
-        const lowStockCount = dishList.filter(d => d.stock != null && d.stock > 0 && d.stock <= (d.lowStockThreshold || 5)).length;
-        const outOfStockCount = dishList.filter(d => d.stock == 0).length;
+        // "Low Stock" was fiction: `stock` is a boolean flag, so `stock > 0` was
+        // true for every available dish. The honest counters are the ones the
+        // customer app actually reacts to.
+        const unsetCount = dishList.filter(d => isDishAvailabilityUnset(d)).length;
+        const outOfStockCount = dishList.filter(d => isDishOOS(d)).length;
 
         if ($('visTotalDishes')) $('visTotalDishes').textContent = String(dishList.length);
         if ($('visVisibleDishes')) $('visVisibleDishes').textContent = String(visDishes);
         if ($('visTotalCategories')) $('visTotalCategories').textContent = String(catList.length);
         if ($('visVisibleCategories')) $('visVisibleCategories').textContent = String(visCats);
         if ($('visFeaturedCount')) $('visFeaturedCount').textContent = String(featuredCount);
-        if ($('visLowStockCount')) $('visLowStockCount').textContent = String(lowStockCount);
+        if ($('visUnsetCount')) $('visUnsetCount').textContent = String(unsetCount);
         if ($('visOutOfStockCount')) $('visOutOfStockCount').textContent = String(outOfStockCount);
 
         $('caVisEmpty')?.classList.toggle('hidden', dishList.length > 0 || catList.length > 0);
@@ -1216,15 +1314,13 @@ function _processVisibilityItems() {
             const matchText = !q || String(d.name || '').toLowerCase().includes(q);
             if (!matchText) continue;
             const visible = d.visible !== false;
-            const stock = d.stock != null ? d.stock : 0;
-            const lowThreshold = d.lowStockThreshold || 5;
-            const isOOS = stock === 0;
-            const isLowStock = stock > 0 && stock <= lowThreshold;
+            const isOOS = isDishOOS(d);
+            const unset = isDishAvailabilityUnset(d);
 
             if (_visFilter === 'visible' && !visible) continue;
             if (_visFilter === 'hidden' && visible) continue;
             if (_visFilter === 'out-of-stock' && !isOOS) continue;
-            if (_visFilter === 'low-stock' && !isLowStock) continue;
+            if (_visFilter === 'availability-unset' && !unset) continue;
 
             items.push({
                 id: `dish:${d.id}`,
@@ -1232,10 +1328,10 @@ function _processVisibilityItems() {
                 name: d.name || 'Unnamed Dish',
                 visible,
                 price: d.price != null ? `₹${d.price}` : '—',
-                stock,
-                lowThreshold,
                 isOOS,
-                isLowStock,
+                availabilityUnset: unset,
+                stockLabel: dishStockLabel(d),
+                availabilityRank: isOOS ? 2 : (unset ? 1 : 0),
                 featured: d.featured === true,
                 sortOrder: d.sortOrder ?? 999,
                 updatedAt: d.updatedAt || 0,
@@ -1253,7 +1349,7 @@ function _processVisibilityItems() {
 
             if (_visFilter === 'visible' && !visible) continue;
             if (_visFilter === 'hidden' && visible) continue;
-            // out-of-stock / low-stock don't apply to categories
+            // out-of-stock / availability-not-set don't apply to categories
 
             // Count dishes in this category
             const catDishCount = _allDishesCache.filter(d => d.categoryId === c.id).length;
@@ -1277,7 +1373,7 @@ function _processVisibilityItems() {
         const pb = b.price ? Number(b.price.replace(/[^0-9.]/g, '')) : 0;
         return pb - pa;
     });
-    else if (_visSort === 'stock') items.sort((a, b) => (b.stock ?? 0) - (a.stock ?? 0));
+    else if (_visSort === 'stock') items.sort((a, b) => (a.availabilityRank ?? 0) - (b.availabilityRank ?? 0));
     else if (_visSort === 'sortOrder') items.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
     else items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
@@ -1304,8 +1400,8 @@ function _renderVisibilityLists() {
         dishWrap.innerHTML = dishItems.map(d => {
             const visible = d.visible !== false;
             const isSelected = _selectedVis.has(d.id);
-            const stockBadge = d.isOOS ? 'out-of-stock' : (d.isLowStock ? 'low-stock' : 'in-stock');
-            const stockText = d.isOOS ? 'Out of stock' : (d.isLowStock ? `Low (${d.stock})` : `Stock ${d.stock}`);
+            const stockBadge = d.isOOS ? 'out-of-stock' : (d.availabilityUnset ? 'unset' : 'in-stock');
+            const stockText = d.stockLabel;
             const featuredBadge = d.featured ? ' ★ Featured' : '';
             return `
                 <div class="vis-row ${isSelected ? 'selected' : ''}" data-vis-id="${d.id}">
@@ -1317,7 +1413,7 @@ function _renderVisibilityLists() {
                         <div class="vis-row__meta">${d.price} · ${stockText}${featuredBadge}</div>
                     </div>
                     <span class="vis-row__badge vis-row__badge--${stockBadge}" title="${stockText}">
-                        ${d.isOOS ? '●' : d.isLowStock ? '▲' : '●'}
+                        ${d.isOOS ? '✕' : d.availabilityUnset ? '?' : '●'}
                     </span>
                     <span class="vis-row__status ${visible ? 'valid' : 'disabled'}">${visible ? 'Visible' : 'Hidden'}</span>
                     <label class="vis-row__toggle" title="${visible ? 'Hide dish from app' : 'Show dish on app'}">
@@ -1443,7 +1539,7 @@ function _clearVisSelection() {
 
 async function _toggleVisItem(type, id, visible) {
     try {
-        const path = type === 'dish' ? `menu/dishes/${id}` : `menu/categories/${id}`;
+        const path = type === 'dish' ? `dishes/${id}` : `categories/${id}`;
         const oldVal = type === 'dish'
             ? { visible: _allDishesCache.find(d => d.id === id)?.visible }
             : { visible: _allCategoriesCache.find(c => c.id === id)?.visible };
@@ -1463,7 +1559,7 @@ async function _bulkVisSetVisible(visible) {
     try {
         await Promise.all(ids.map(id => {
             const [type, realId] = id.split(':');
-            const path = type === 'dish' ? `menu/dishes/${realId}` : `menu/categories/${realId}`;
+            const path = type === 'dish' ? `dishes/${realId}` : `categories/${realId}`;
             return update(Outlet.ref(path), { visible: visible === true, updatedAt: Date.now() });
         }));
         await Promise.all(ids.map(id => {
@@ -1499,7 +1595,7 @@ async function _bulkVisSetFeatured(featured) {
     try {
         await Promise.all(dishIds.map(id => {
             const realId = id.replace(/^dish:/, '');
-            return update(Outlet.ref(`menu/dishes/${realId}`), { featured: featured === true, updatedAt: Date.now() });
+            return update(Outlet.ref(`dishes/${realId}`), { featured: featured === true, updatedAt: Date.now() });
         }));
         await Promise.all(dishIds.map(id => {
             const realId = id.replace(/^dish:/, '');
@@ -1513,14 +1609,14 @@ async function _bulkVisSetFeatured(featured) {
 }
 
 async function _bulkVisHideOutOfStock() {
-    const oosDishes = _allDishesCache.filter(d => d.stock === 0 && d.visible !== false);
+    const oosDishes = _allDishesCache.filter(d => isDishOOS(d) && d.visible !== false);
     if (oosDishes.length === 0) {
         showToast('No out-of-stock dishes to hide.', 'info');
         return;
     }
     try {
         await Promise.all(oosDishes.map(d =>
-            update(Outlet.ref(`menu/dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
+            update(Outlet.ref(`dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
         ));
         await Promise.all(oosDishes.map(d =>
             logChange('toggle', 'dishes', d.id, { visible: true }, { visible: false })
@@ -1541,7 +1637,7 @@ async function _bulkVisShowAll() {
     try {
         await Promise.all(hiddenItems.map(i => {
             const [type, realId] = i.id.split(':');
-            const path = type === 'dish' ? `menu/dishes/${realId}` : `menu/categories/${realId}`;
+            const path = type === 'dish' ? `dishes/${realId}` : `categories/${realId}`;
             return update(Outlet.ref(path), { visible: true, updatedAt: Date.now() });
         }));
         await Promise.all(hiddenItems.map(i => {
@@ -2445,7 +2541,7 @@ async function _loadOverview() {
 
     const safe = async (path) => { try { return (await get(Outlet.ref(path))).val() || {}; } catch { return null; } };
     const [subsRaw, discounts, dishes, cats, store] = await Promise.all([
-        safe('pushSubscriptions'), safe('discounts'), safe('menu/dishes'), safe('menu/categories'), safe('settings/Store'),
+        safe('pushSubscriptions'), safe('discounts'), safe('dishes'), safe('categories'), safe('settings/Store'),
     ]);
     const subs = Object.values(subsRaw || {}).filter((x) => x && String(x.phone || '').replace(/\D/g, '').slice(-10).length === 10);
     const offersOn = subs.filter((x) => !x.prefs || x.prefs.offers === true).length;
@@ -2453,14 +2549,15 @@ async function _loadOverview() {
     const onPage = coupons.filter(([, d]) => d.promoPage === true);
     const validOnPage = onPage.filter(([, d]) => couponStatus(d, Date.now()) === 'valid');
     const dishList = Object.values(dishes || {}).filter(Boolean);
-    const dishLive = dishList.filter((d) => d.stock !== false);
+    const dishLive = dishList.filter((d) => !isDishOOS(d));
+    const oosCount = dishList.filter((d) => isDishOOS(d)).length;
     const st = store || {};
     const card = (tone, title, value, sub, goto) => `<button type="button" class="ca-ov-card ca-ov-card--${tone}" data-ca-goto="${goto}">
         <span class="ca-ov-card__title">${_escHtml(title)}</span><span class="ca-ov-card__value">${value}</span><span class="ca-ov-card__sub">${_escHtml(sub)}</span></button>`;
     if ($('caOvGrid')) $('caOvGrid').innerHTML = [
         card(subsRaw === null ? 'warn' : 'ok', 'Customers who can get push', subsRaw === null ? '—' : subs.length, subsRaw === null ? 'Could not load' : `${offersOn} accept offers`, 'notification'),
         card(validOnPage.length ? 'ok' : 'warn', 'Coupons on Promo Page', validOnPage.length, `${onPage.length} marked, ${coupons.length} coupons in total`, 'offers'),
-        card(dishLive.length ? 'ok' : 'warn', 'Dishes customers can order', dishLive.length, `${dishList.length - dishLive.length} out of stock · ${Object.keys(cats || {}).length} categories`, 'visibility'),
+        card(dishLive.length ? 'ok' : 'warn', 'Dishes customers can order', dishLive.length, `${oosCount} out of stock · ${Object.keys(cats || {}).length} categories`, 'visibility'),
         card(st.storeName ? 'ok' : 'warn', 'App name', _escHtml(st.storeName || 'Not set'), st.whatsappNumber ? 'WhatsApp number set' : 'No WhatsApp number', 'settings'),
     ].join('');
 
@@ -2498,8 +2595,10 @@ function _renderQuickControls(subsRaw, discounts, dishes, cats, store) {
     const onPage = coupons.filter(([, d]) => d.promoPage === true);
     const validOnPage = onPage.filter(([, d]) => couponStatus(d, Date.now()) === 'valid');
     const dishList = Object.values(dishes || {}).filter(Boolean);
-    const dishLive = dishList.filter((d) => d.stock !== false);
-    const oosCount = dishList.filter((d) => d.stock === 0).length;
+    // The customer app shows a dish unless it is marked out of stock, so
+    // "live" means exactly that (`d.stock !== false`).
+    const dishLive = dishList.filter((d) => !isDishOOS(d));
+    const oosCount = dishList.filter((d) => isDishOOS(d)).length;
     const featuredCount = dishList.filter((d) => d.featured === true).length;
     const st = store || {};
 
@@ -2547,7 +2646,9 @@ function _renderQuickControls(subsRaw, discounts, dishes, cats, store) {
             primaryLabel: validOnPage.length > 0 ? 'Hide all' : 'Show all',
             primaryIcon: validOnPage.length > 0 ? 'eye-off' : 'eye',
             primaryClass: 'qa-btn--ghost',
-            canEdit: false,
+            // Role gate: a viewer must not run a bulk write. (This used to be a
+            // hard-coded `false`, which disabled the button for EVERYONE.)
+            canEdit,
             primaryAction: async () => {
                 // Close over the computed coupons from _loadOverview snapshot — never read stale module cache
                 const targetCoupons = validOnPage.length === 0 ? coupons : onPage;
@@ -2570,23 +2671,23 @@ function _renderQuickControls(subsRaw, discounts, dishes, cats, store) {
         {
             icon: 'eye',
             title: 'Dish Visibility',
-            value: `${dishLive.length} live`,
+            value: `${dishLive.length} orderable`,
             sub: `${oosCount} out of stock · ${dishList.length} total`,
             badge: dishLive.length > 0 ? 'live' : 'saved',
-            primaryLabel: oosCount > 0 ? 'Hide OOS' : 'Show all',
+            primaryLabel: oosCount > 0 ? 'Hide OOS' : 'Show hidden',
             primaryIcon: oosCount > 0 ? 'eye-off' : 'eye',
             primaryClass: 'qa-btn--ghost',
-            canEdit: false,
+            canEdit,
             primaryAction: async () => {
                 // Close over the computed dishList from _loadOverview snapshot — never read stale module cache
                 if (oosCount > 0) {
-                    const oosDishes = dishList.filter(d => d.stock === 0 && d.visible !== false);
+                    const oosDishes = dishList.filter(d => isDishOOS(d) && d.visible !== false);
                     if (oosDishes.length === 0) { showToast('No out-of-stock dishes to hide', 'info'); return; }
                     const ok = await showConfirm(`Hide all ${oosDishes.length} out-of-stock dishes from the app?`, 'Bulk update');
                     if (!ok) return;
                     try {
                         await Promise.all(oosDishes.map(d =>
-                            update(Outlet.ref(`menu/dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
+                            update(Outlet.ref(`dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
                         ));
                         showToast(`${oosDishes.length} out-of-stock dish${oosDishes.length === 1 ? '' : 'es'} hidden`, 'success');
                         _loadVisibility();
@@ -2602,8 +2703,8 @@ function _renderQuickControls(subsRaw, discounts, dishes, cats, store) {
                     if (!ok) return;
                     try {
                         await Promise.all([
-                            ...hiddenDishes.map(d => update(Outlet.ref(`menu/dishes/${d.id}`), { visible: true, updatedAt: Date.now() })),
-                            ...hiddenCats.map(c => update(Outlet.ref(`menu/categories/${c.id}`), { visible: true, updatedAt: Date.now() }))
+                            ...hiddenDishes.map(d => update(Outlet.ref(`dishes/${d.id}`), { visible: true, updatedAt: Date.now() })),
+                            ...hiddenCats.map(c => update(Outlet.ref(`categories/${c.id}`), { visible: true, updatedAt: Date.now() }))
                         ]);
                         showToast(`${totalHidden} item${totalHidden === 1 ? '' : 's'} shown on app`, 'success');
                         _loadVisibility();
@@ -2696,11 +2797,11 @@ async function _bulkSetAllPromoPage(showOnPage) {
 
 /** Quick: hide all out-of-stock dishes. */
 async function _bulkHideOOSQuick() {
-    const oosDishes = _dishesCache.filter(d => d.stock === 0 && d.visible !== false);
+    const oosDishes = _dishesCache.filter(d => isDishOOS(d) && d.visible !== false);
     if (oosDishes.length === 0) { showToast('No out-of-stock dishes to hide', 'info'); return; }
     try {
         await Promise.all(oosDishes.map(d =>
-            update(Outlet.ref(`menu/dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
+            update(Outlet.ref(`dishes/${d.id}`), { visible: false, updatedAt: Date.now() })
         ));
         showToast(`${oosDishes.length} out-of-stock dish${oosDishes.length === 1 ? '' : 'es'} hidden`, 'success');
         _loadVisibility();
@@ -2716,7 +2817,7 @@ async function _bulkShowAllVisibility() {
     try {
         await Promise.all(hidden.map(i => {
             const [type, realId] = i.id.split(':');
-            const path = type === 'dish' ? `menu/dishes/${realId}` : `menu/categories/${realId}`;
+            const path = type === 'dish' ? `dishes/${realId}` : `categories/${realId}`;
             return update(Outlet.ref(path), { visible: true, updatedAt: Date.now() });
         }));
         showToast(`${hidden.length} item${hidden.length === 1 ? '' : 's'} shown on app`, 'success');

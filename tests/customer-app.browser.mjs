@@ -22,9 +22,21 @@ export const db = {}; export const auth = { currentUser: { uid: 'u1', email: 'ow
 export const BUSINESS_ID = () => 'b1';
 export const Outlet = { current: 'o1', ref: p => ({ path: 'businesses/b1/outlets/o1/' + p }) };
 export const ref = (_d, p) => ({ path: p });
-export const query = r => r; export const orderByKey = () => ({}); export const limitToLast = () => ({});
+export const query = (r, ...cons) => ({ path: r.path, cons }); export const orderByKey = () => ({ type: 'orderByKey' }); export const limitToLast = n => ({ type: 'limitToLast', n }); export const endAt = k => ({ type: 'endAt', k });
 export const onValue = (r, cb) => { const l = { path: r.path, cb }; listeners.push(l); cb(snap(r.path.split('/').at(-1), getVal(r.path))); return () => listeners.splice(listeners.indexOf(l), 1); };
-export const get = async r => snap(r.path.split('/').at(-1), getVal(r.path));
+export const get = async r => {
+    if (!r.cons) return snap(r.path.split('/').at(-1), getVal(r.path));
+    // honour the query constraints so pagination is really exercised
+    const lim = r.cons.find(c => c.type === 'limitToLast');
+    const end = r.cons.find(c => c.type === 'endAt');
+    const val = getVal(r.path) || {};
+    let keys = Object.keys(val);
+    if (end) keys = keys.filter(k => k <= end.k);
+    keys.sort();
+    if (lim) keys = keys.slice(-lim.n);
+    const out = {}; keys.forEach(k => out[k] = val[k]);
+    return snap(r.path.split('/').at(-1), out);
+};
 export const set = async (r, v) => { setVal(r.path, v); notify(r.path); };
 export const update = async (r, v) => { if (v === null) throw new Error('update(ref, null) is invalid'); Object.entries(v).forEach(([k, x]) => setVal(r.path + '/' + k, x)); notify(r.path); };
 export const remove = async r => { setVal(r.path, null); notify(r.path); };
@@ -61,8 +73,8 @@ const REAL = {
 const OUT = 'businesses/b1/outlets/o1/';
 const SEED = {
     'settings/Store': { storeName: 'Roshani Pizza', whatsappNumber: '9876543210', gstRate: 5, logoUrl: 'https://x.test/logo.png', themeColor: '#112233', timezone: 'Asia/Kolkata', appFeatures: { onlineOrdering: true, tableBooking: true, promoPage: true, loyalty: false }, taxOnDeliveryFee: true },
-    'menu/dishes': { d1: { name: 'A', stock: true }, d2: { name: 'B', stock: false }, d3: { name: 'C' } },
-    'menu/categories': { c1: { name: 'Pizza', visible: true } },
+    'dishes': { d1: { name: 'A', stock: true }, d2: { name: 'B', stock: false }, d3: { name: 'C' } },
+    'categories': { c1: { name: 'Pizza', visible: true } },
     'pushSubscriptions': { '9876543210': { phone: '9876543210', prefs: { offers: true } }, '9123456780': { phone: '9123456780', prefs: { offers: false } } },
     'discounts': { x1: { type: 'coupon', couponCode: 'HI10', promoPage: true, enabled: true, value: 10 }, x2: { type: 'coupon', couponCode: 'OLD', promoPage: false, enabled: true } },
 };
@@ -75,6 +87,7 @@ async function open(vp = { width: 1280, height: 900 }, role = 'owner') {
     const page = await browser.newPage({ viewport: vp });
     page.errors = [];
     page.on('pageerror', e => page.errors.push(e.message));
+    page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) page.errors.push('console: ' + m.text()); });
     // qrcodejs is loaded from a CDN in production; the test blocks the network, so stub it.
     await page.addInitScript(() => {
         window.QRCode = class {
@@ -204,6 +217,82 @@ await t('loyalty switch mirrors loyaltyEnabled', async () => {
     assert.equal(s.appFeatures.loyalty, true); assert.equal(s.loyaltyEnabled, true);
 });
 await t('visibility banner explains stock rule', async () => { assert.match(await page.innerText('#caVisBanner'), /out of stock/i); });
+await t('visibility banner says hide/show IS applied and Featured is not', async () => {
+    const t = await page.innerText('#caVisBanner');
+    assert.match(t, /switch it off here/i);
+    assert.match(t, /does not highlight/i);
+});
+await t('the visibility pane lists the REAL dishes (dishes/, not menu/dishes/)', async () => {
+    await goto(page, 'visibility');
+    await page.waitForTimeout(400);
+    const rows = await page.locator('#visDishList .vis-row').count();
+    assert.equal(rows, 3, 'the three seeded dishes must be listed');
+    assert.equal(await page.locator('#visCategoryList .vis-row').count(), 1);
+});
+await t('availability badges match the customer-app rule (boolean stock)', async () => {
+    const badges = await page.evaluate(() => [...document.querySelectorAll('#visDishList .vis-row')].map(r => ({
+        name: r.querySelector('.vis-row__name')?.textContent.trim(),
+        badge: r.querySelector('.vis-row__badge')?.className.match(/badge--(\S+)/)?.[1],
+        text: r.querySelector('.vis-row__meta')?.textContent.trim(),
+    })));
+    const by = Object.fromEntries(badges.map(b => [b.name, b]));
+    assert.equal(by['A'].badge, 'in-stock', 'A (stock:true) is available');
+    assert.match(by['A'].text, /Available/);
+    assert.equal(by['B'].badge, 'out-of-stock', 'B (stock:false) is out of stock');
+    assert.match(by['B'].text, /Out of stock/);
+    assert.equal(by['C'].badge, 'unset', 'C (no stock flag) is shown by the app -> not OOS');
+    assert.match(by['C'].text, /Availability not set/);
+});
+await t('the availability counters are honest (no fictional low stock)', async () => {
+    assert.equal(await page.innerText('#visTotalDishes'), '3');
+    assert.equal(await page.innerText('#visOutOfStockCount'), '1');
+    assert.equal(await page.innerText('#visUnsetCount'), '1');
+    assert.equal(await page.locator('#visLowStockCount').count(), 0);
+});
+await t('the availability filters work', async () => {
+    await page.locator('input[name="visFilter"][value="out-of-stock"]').evaluate(el => el.click());
+    await page.waitForTimeout(250);
+    let names = await page.locator('#visDishList .vis-row__name').allTextContents();
+    assert.deepEqual(names.map(n => n.trim()), ['B']);
+    await page.locator('input[name="visFilter"][value="availability-unset"]').evaluate(el => el.click());
+    await page.waitForTimeout(250);
+    names = await page.locator('#visDishList .vis-row__name').allTextContents();
+    assert.deepEqual(names.map(n => n.trim()), ['C']);
+    await page.locator('input[name="visFilter"][value="all"]').evaluate(el => el.click());
+    await page.waitForTimeout(250);
+});
+await t('the Overview dish counts agree with the app rule', async () => {
+    await goto(page, 'overview');
+    await page.waitForTimeout(400);
+    const card = await page.locator('#caOvGrid .ca-ov-card', { hasText: 'Dishes customers can order' }).innerText();
+    // A (true) + C (no flag) are orderable, B (false) is not
+    assert.match(card, /\b2\b/, 'two dishes are orderable');
+    assert.match(card, /1 out of stock/);
+});
+await t('the activity list is paginated', async () => {
+    await page.evaluate(() => {
+        const fb = window.__fb; // not used - keep the store reachable through __store
+    });
+    // seed 40 audit rows through the stub store
+    await page.evaluate(async () => {
+        const fb = await import('/Admin/js/firebase.js');
+        for (let i = 1; i <= 40; i++) {
+            await fb.set({ path: 'businesses/b1/outlets/o1/auditLog/k' + String(i).padStart(4, '0') },
+                { action: 'update', target: 'dishes', targetId: 'd' + i, byName: 'Owner', at: 1700000000000 + i });
+        }
+    });
+    await goto(page, 'activity');
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator('#caActivityList .ca-activity__row').count(), 25, 'the first page holds 25 rows');
+    assert.match(await page.innerText('#caActivityCount'), /Showing 25/);
+    assert.ok(await page.locator('#btnActivityOlder').isVisible(), 'the load-older button is offered');
+    await page.locator('#btnActivityOlder').evaluate(el => el.click());
+    await page.waitForTimeout(500);
+    const appended = await page.locator('#caActivityList .ca-activity__row').count();
+    assert.equal(appended, 40, 'the older page is appended (got ' + appended + ' rows; errors: ' + page.errors.join('|') + ')');
+    assert.match(await page.innerText('#caActivityCount'), /Showing 40/);
+    assert.equal(await page.locator('#btnActivityOlder:visible').count(), 0, 'no more pages -> the button goes away');
+});
 await t('badges are present on settings and visibility labels', async () => {
     assert.ok((await page.locator('#tab-customer-app .ca-live').count()) > 0);
     assert.ok((await page.locator('#tab-customer-app .ca-saved').count()) > 0);

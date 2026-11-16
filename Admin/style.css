@@ -12473,7 +12473,8 @@ body.setup-mode .setup-hide {
     flex: 0 0 auto;
 }
 .vis-row__badge--in-stock { background: #dcfce7; color: #166534; }
-.vis-row__badge--low-stock { background: #fef3c7; color: #92400e; }
+/* "Availability not set" - the dish has no stock flag, so the app shows it. */
+.vis-row__badge--unset { background: #f1f5f9; color: #475569; }
 .vis-row__badge--out-of-stock { background: #fee2e2; color: #991b1b; }
 .vis-row__badge--category { background: #e0e7ff; color: #3730a3; font-size: 11px; }
 .vis-row__status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; flex: 0 0 auto; }
@@ -12718,6 +12719,7 @@ input[type="color"] {
 .ca-activity__dot{width:8px;height:8px;border-radius:50%;margin-top:6px;background:#6b7280;flex:0 0 8px}
 .ca-activity__dot--create{background:#16a34a}.ca-activity__dot--delete{background:#dc2626}.ca-activity__dot--toggle{background:#2563eb}
 .ca-activity__empty{padding:14px 0;font-size:13px;opacity:.7}
+.ca-activity__pager{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 0 2px}
 @media (max-width:640px){.ca-ov-cols{grid-template-columns:1fr}.ca-activity__row{flex-wrap:wrap}.ca-activity__meta{align-items:flex-start;flex-direction:row;gap:8px;width:100%}}
 @media (max-width:768px){.ca-savebar{bottom:calc(64px + env(safe-area-inset-bottom,0px))}}
 /* Phone: drop the Customer APP title + intro line (the sub-tabs already say where you are); keep Refresh */

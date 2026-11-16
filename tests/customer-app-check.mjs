@@ -312,9 +312,14 @@ t('P3: visibility search/filter/sort elements exist', () => {
         assert.ok(html.includes(`id="${id}"`), `missing id: ${id}`);
     }
     assert.ok(!html.includes('id="visFilterCount"'), 'the stray visFilterCount must stay gone');
-    for (const val of ['all', 'visible', 'hidden', 'out-of-stock', 'low-stock']) {
+    for (const val of ['all', 'visible', 'hidden', 'out-of-stock', 'availability-unset']) {
         assert.ok(html.includes(`value="${val}"`) && html.includes('name="visFilter"'), `missing filter radio: ${val}`);
     }
+    // "Low Stock" was fiction: `stock` is a BOOLEAN flag, so `stock > 0` was
+    // true for every available dish (21 of 22 in the demo).
+    assert.ok(!html.includes('value="low-stock"'), 'the fictional low-stock filter must stay gone');
+    assert.ok(!html.includes('visLowStockCount'), 'the fictional low-stock stat card must stay gone');
+    assert.ok(html.includes('id="visUnsetCount"'), 'the honest "availability not set" counter');
     for (const val of ['name', 'price', 'stock', 'sortOrder']) {
         assert.ok(html.includes(`value="${val}"`) && html.includes('name="visSort"'), `missing sort radio: ${val}`);
     }
@@ -355,8 +360,104 @@ t('P3: featured/max-6 enforcement exists', () => {
 });
 
 t('P3: stock indicator functions exist', () => {
-    assert.ok(/isOOS|isLowStock|out-of-stock|low-stock/.test(js), 'stock indicator logic must exist');
-    assert.ok(/vis-row__badge--in-stock|vis-row__badge--low-stock|vis-row__badge--out-of-stock/.test(css), 'stock badge styles must exist');
+    assert.ok(/isDishOOS/.test(js), 'stock indicator logic must exist');
+    assert.ok(/vis-row__badge--in-stock|vis-row__badge--unset|vis-row__badge--out-of-stock/.test(css), 'stock badge styles must exist');
+});
+
+// =====================================================================
+// V2 / V3: visibility model + honest labels (Customer APP audit)
+// =====================================================================
+
+t('V-ROOT: the visibility pane reads and writes the REAL dish/category nodes', () => {
+    // The pane pointed at `menu/dishes` / `menu/categories`, but every dish
+    // lives at `dishes` / `categories` (Admin > Catalog and the customer app
+    // both use those), so the pane was EMPTY for every tenant and any write
+    // landed on a phantom node.
+    assert.ok(!/Outlet\.ref\(['"`]menu\//.test(js), 'no RTDB ref may point at the phantom menu/ node');
+    assert.ok(!/safe\(['"`]menu\//.test(js), 'no overview read may point at the phantom menu/ node');
+    assert.ok(js.includes("get(Outlet.ref('dishes'))"), 'dishes must be read from the real node');
+    assert.ok(js.includes("get(Outlet.ref('categories'))"), 'categories must be read from the real node');
+    assert.ok(/`dishes\/\$\{/.test(js), 'dish writes must target dishes/{id}');
+    assert.ok(/`categories\/\$\{/.test(js), 'category writes must target categories/{id}');
+    // The catalog (the writer of the same data) uses the same paths.
+    const catalog = fs.readFileSync(path.join(root, 'Admin/js/features/catalog.js'), 'utf8');
+    assert.ok(catalog.includes("Outlet.ref('dishes')"), 'catalog reads dishes at the outlet root');
+});
+
+t('V2: one availability helper, and the customer app is the authority', () => {
+    assert.ok(/export function isDishOOS\(d\)/.test(js), 'isDishOOS helper');
+    assert.ok(/export function isDishAvailabilityUnset\(d\)/.test(js), 'isDishAvailabilityUnset helper');
+    assert.ok(/export function dishStockLabel\(d\)/.test(js), 'dishStockLabel helper');
+    // The customer app shows a dish unless `stock === false`.
+    const app = fs.readFileSync(path.join(root, 'menu/js/app.js'), 'utf8');
+    assert.ok(app.includes('d.stock !== false'), 'the customer app rule (d.stock !== false) must stay');
+    assert.ok(/function isDishOOS\(d\) \{ return !!d && d\.stock === false; \}/.test(js), 'isDishOOS must match the app rule');
+    // The old comparisons never matched a boolean.
+    assert.ok(!/stock === 0/.test(js), 'no `stock === 0` comparison may survive (stock is a boolean)');
+    assert.ok(!/lowStockThreshold/.test(js), 'the fictional low-stock threshold must stay gone');
+    assert.ok(!/isLowStock/.test(js), 'the fictional isLowStock flag must stay gone');
+});
+
+t('V2: every availability consumer uses the helper', () => {
+    // stats, row badge, filters, bulk hide, overview stat card + quick controls
+    const uses = (js.match(/isDishOOS\(/g) || []).length;
+    assert.ok(uses >= 6, `isDishOOS must be used by every consumer (found ${uses})`);
+    assert.ok(js.includes('availabilityUnset'), 'the row badge carries the availability state');
+    assert.ok(js.includes("d.availabilityUnset ? 'unset'"), 'the unset badge class');
+    assert.ok(css.includes('.vis-row__badge--unset'), 'the unset badge style');
+});
+
+t('V3: the banner and the Live/Saved labels are honest', () => {
+    // The app DOES honour `visible` (dish + category) - only `featured` is
+    // saved-only. The old banner claimed the opposite.
+    const banner = html.match(/id="caVisBanner"[\s\S]*?<\/div>\s*<\/div>/);
+    assert.ok(banner, 'the visibility banner exists');
+    assert.ok(/Out of stock/.test(banner[0]), 'the banner names the out-of-stock rule');
+    assert.ok(/switch it off here/i.test(banner[0]), 'the banner says hide/show IS applied');
+    assert.ok(/Featured/.test(banner[0]), 'the banner mentions Featured');
+    assert.ok(/does not highlight/i.test(banner[0]), 'the banner says Featured is not applied yet');
+    const status = fs.readFileSync(path.join(root, 'Admin/js/features/customer-app-status.js'), 'utf8');
+    assert.ok(/dishVisible:\s*\{[^}]*live: true/.test(status), 'hide/show dishes is LIVE');
+    assert.ok(/categoryVisible:\s*\{[^}]*live: true/.test(status), 'hide/show categories is LIVE');
+    assert.ok(/featured:\s*\{[^}]*live: false/.test(status), 'featured is still saved-only');
+});
+
+t('B3: the Overview stat card and the Quick Controls agree on the dish counts', () => {
+    // Both used different rules (`stock !== false` vs `stock === 0`), so the
+    // Overview said "0 out of stock" while the stat card said "1".
+    assert.ok(/dishLive = dishList\.filter\(\(d\) => !isDishOOS\(d\)\)/.test(js), 'overview live count uses the helper');
+    assert.ok(/oosCount = dishList\.filter\(\(d\) => isDishOOS\(d\)\)\.length/.test(js), 'overview oos count uses the helper');
+    assert.ok((js.match(/oosCount = .*isDishOOS\(d\)/g) || []).length >= 2, 'both overview functions use the same rule');
+});
+
+t('B2: the Quick Control buttons are gated by the ROLE, not disabled for everyone', () => {
+    // They used a hard-coded `canEdit: false`, which disabled the two bulk
+    // actions (hide/show all coupons, hide OOS) for every role.
+    assert.ok(!/canEdit: false/.test(js), 'no hard-coded canEdit:false may survive');
+    assert.ok(/const canEdit = canEditTab\(CA_TAB_ID\)/.test(js), 'the role gate is computed');
+    assert.ok((js.match(/\n\s+canEdit,\s*\n/g) || []).length >= 2, 'the mutating quick controls use the role flag');
+});
+
+t('Activity: the list is paginated instead of reading 100 rows with no way back', () => {
+    const audit = fs.readFileSync(path.join(root, 'Admin/js/features/audit-trail.js'), 'utf8');
+    assert.ok(/export async function loadAuditLogPage\(/.test(audit), 'loadAuditLogPage exists');
+    assert.ok(/endAt\(beforeKey\)/.test(audit), 'the page uses a key cursor');
+    assert.ok(js.includes('loadAuditLogPage(ACT_PAGE_SIZE)'), 'the activity tab reads one page');
+    assert.ok(js.includes('loadAuditLogPage(ACT_PAGE_SIZE, _actCursor)'), 'older pages use the cursor');
+    assert.ok(!/loadAuditLog\(100\)/.test(js), 'the old 100-row read must stay gone');
+    assert.ok(html.includes('id="btnActivityOlder"'), 'the "load older" control exists');
+    assert.ok(html.includes('id="caActivityPager"'), 'the pager exists');
+    assert.ok(html.includes('id="caActivityCount"'), 'the pager shows how many rows are on screen');
+});
+
+t('Activity: an audit entry with an undefined leaf can still be written', () => {
+    // RTDB rejects `undefined` inside a value. A dish with no `visible` field
+    // yet produces `{ visible: undefined }`, which silently dropped the whole
+    // audit entry ("Failed to write audit entry").
+    const audit = fs.readFileSync(path.join(root, 'Admin/js/features/audit-trail.js'), 'utf8');
+    assert.ok(/_cleanForRtdb/.test(audit), 'the audit payload is sanitised');
+    assert.ok(/oldValue: _cleanForRtdb\(oldValue\)/.test(audit), 'oldValue is sanitised');
+    assert.ok(/newValue: _cleanForRtdb\(newValue\)/.test(audit), 'newValue is sanitised');
 });
 
 t('P3: preview modal functions exist', () => {
@@ -578,7 +679,7 @@ t('P1-P5: CSS literals exist for dynamic classes', () => {
     assert.ok(css.includes('.vis-row.selected'), '.vis-row.selected style');
     assert.ok(css.includes('.vis-row__badge'), '.vis-row__badge style');
     assert.ok(css.includes('.vis-row__badge--in-stock'), 'in-stock badge style');
-    assert.ok(css.includes('.vis-row__badge--low-stock'), 'low-stock badge style');
+    assert.ok(css.includes('.vis-row__badge--unset'), 'unset badge style');
     assert.ok(css.includes('.vis-row__badge--out-of-stock'), 'out-of-stock badge style');
     assert.ok(css.includes('.vis-row__status'), '.vis-row__status style');
     // Preview panels hidden

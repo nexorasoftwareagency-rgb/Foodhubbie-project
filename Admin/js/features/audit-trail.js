@@ -11,12 +11,33 @@
  *  - renderAuditLog(containerId) — render audit log UI
  */
 
-import { db, auth, Outlet, BUSINESS_ID, ref, get, push, set, query, orderByKey, limitToLast } from '../firebase.js';
+import { db, auth, Outlet, BUSINESS_ID, ref, get, push, set, query, orderByKey, limitToLast, endAt } from '../firebase.js';
 import { state } from '../state.js';
 import { showToast } from '../ui-utils.js';
 import { formatDate } from '../utils.js';
 
 const $ = (id) => document.getElementById(id);
+
+/**
+ * RTDB rejects `undefined` inside a value ("value argument contains undefined").
+ * A dish that has no `visible` field yet yields `{ visible: undefined }`, so
+ * the raw old/new values could not be written - the audit entry was silently
+ * dropped. `null` is RTDB's "delete this key", so an undefined leaf simply
+ * disappears instead of failing the whole write.
+ */
+function _cleanForRtdb(v) {
+    if (v === undefined) return null;
+    if (Array.isArray(v)) return v.map(_cleanForRtdb);
+    if (v && typeof v === 'object') {
+        const out = {};
+        for (const [k, x] of Object.entries(v)) {
+            if (x === undefined) continue;
+            out[k] = _cleanForRtdb(x);
+        }
+        return out;
+    }
+    return v;
+}
 
 /**
  * Write an audit log entry. Fire-and-forget (never blocks the UI).
@@ -31,8 +52,8 @@ export async function logChange(action, target, targetId, oldValue, newValue) {
             action,
             target,
             targetId: targetId || '',
-            oldValue,
-            newValue,
+            oldValue: _cleanForRtdb(oldValue),
+            newValue: _cleanForRtdb(newValue),
             by,
             byName,
             at
@@ -48,15 +69,25 @@ export async function logChange(action, target, targetId, oldValue, newValue) {
  * Load recent audit log entries (newest first).
  */
 export async function loadAuditLog(limit = 50) {
+    return loadAuditLogPage(limit);
+}
+
+/**
+ * Load ONE page of audit entries, newest first.
+ *
+ * RTDB has no "skip N" - the honest way to paginate is a key cursor.
+ * Push keys are chronological, so `beforeKey` = the oldest key already shown
+ * and the next page is everything strictly before it.
+ */
+export async function loadAuditLogPage(limit = 25, beforeKey = null) {
     try {
-        const snap = await get(query(
-            Outlet.ref('auditLog'),
-            orderByKey(),
-            limitToLast(limit)
-        ));
+        const constraints = [orderByKey(), limitToLast(limit)];
+        if (beforeKey) constraints.splice(1, 0, endAt(beforeKey));
+        const snap = await get(query(Outlet.ref('auditLog'), ...constraints));
         const raw = snap.val() || {};
         return Object.entries(raw)
             .map(([key, v]) => ({ key, ...v }))
+            .filter(e => !beforeKey || e.key < beforeKey)
             .sort((a, b) => (b.at || 0) - (a.at || 0));
     } catch (e) {
         console.error('[AuditTrail] Failed to load audit log:', e);
