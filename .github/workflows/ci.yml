@@ -95,6 +95,24 @@ jobs:
       - name: Wallet gate guard (one cloud writer, shared math, demo skip, armed-only)
         run: node tests/wallet-gate.check.cjs
 
+      - name: Webhook inbox guard (drains webhookInbox, no whole-tree reads)
+        run: node tests/webhook-inbox.check.cjs
+
+      - name: Process inbound message guard (opt-out, strikes, sessions, rate limit)
+        run: node tests/process-inbound.check.cjs
+
+      - name: Order status alert guard (admin WhatsApp NEW ORDER alert)
+        run: node tests/order-status-alert.check.cjs
+
+      - name: Promo scheduler guard (due campaigns, caps, demo skip)
+        run: node tests/promo-scheduler.check.cjs
+
+      - name: Daily reports guard (sales report computation, formatting)
+        run: node tests/daily-reports.check.cjs
+
+      - name: RTDB egress guard (no whole-businesses-tree reads in new functions)
+        run: node tests/egress-guard.check.cjs
+
       - name: Supreme dense UI guard (lists, tabs, phone layout, view-only)
         run: node tests/supreme-ui.browser.mjs
 

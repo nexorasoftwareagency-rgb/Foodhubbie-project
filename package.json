@@ -41,7 +41,14 @@
     "test:demo-reseed": "node tests/demo-reseed.check.cjs",
     "test:image-convert": "node tests/image-convert-removal.check.cjs",
     "test:onboarding-create": "node tests/onboarding-create.check.cjs",
-    "test:wallet-gate": "node tests/wallet-gate.check.cjs"
+    "test:wallet-gate": "node tests/wallet-gate.check.cjs",
+    "test:webhook-inbox": "node tests/webhook-inbox.check.cjs",
+    "test:process-inbound": "node tests/process-inbound.check.cjs",
+    "test:order-status-alert": "node tests/order-status-alert.check.cjs",
+    "test:promo-scheduler": "node tests/promo-scheduler.check.cjs",
+    "test:daily-reports": "node tests/daily-reports.check.cjs",
+    "test:egress-guard": "node tests/egress-guard.check.cjs",
+    "test:ec2-retirement": "npm run test:webhook-inbox && npm run test:process-inbound && npm run test:order-status-alert && npm run test:promo-scheduler && npm run test:daily-reports && npm run test:egress-guard"
   },
   "dependencies": {
     "chart.js": "^4.4.1",

@@ -60,6 +60,13 @@ export { demoReseed } from './scheduled/demoReseed';
 // job rebuilds every armed outlet's order-fee index exactly and sweeps gate +
 // summary for unarmed outlets; the triggers below keep it fresh between passes.
 export { walletGateReconcile } from './scheduled/walletGateReconcile';
+// Batch: EC2 retirement — promo campaign scheduler. Picks up scheduled
+// campaigns whose runAt is due and enqueues send tasks. Config flag:
+// config/promoScheduler/enabled === true. Demo hard-skipped.
+export { promoScheduler } from './scheduled/promoScheduler';
+// Sends daily/weekly/monthly sales reports to outlet admins via WhatsApp.
+// Config flag: config/dailyReports/enabled === true. Demo hard-skipped.
+export { dailyReports } from './scheduled/dailyReports';
 
 // Callable Functions (Admin/Client)
 export { botControl } from './api/botControl';
@@ -71,6 +78,13 @@ export { transportSwitch } from './api/transportSwitch';
 
 // RTDB Triggers (Event-Driven)
 export { onOrderStatusChange } from './triggers/onOrderStatusChange';
+// Batch: EC2 retirement — drains the webhookInbox queue that whatsappWebhook
+// writes to, and enqueues processInboundMessage tasks. Config flag:
+// config/webhookInbox/enabled === true. Demo hard-skipped.
+export { onWebhookInboxMessage } from './triggers/webhookInbox';
+// Sends WhatsApp "NEW ORDER" alert to outlet admins when status flips to Placed.
+// Config flag: config/orderStatusAlert/enabled === true. Demo hard-skipped.
+export { onOrderStatusAlert } from './triggers/orderStatusAlert';
 // Batch 23c: runs the bot's own web/app order finalizer in DRY-RUN against live
 // orders and compares its verdict with what the bot actually produced. It never
 // writes to an order, a stock count, a reward or a billing row — only to

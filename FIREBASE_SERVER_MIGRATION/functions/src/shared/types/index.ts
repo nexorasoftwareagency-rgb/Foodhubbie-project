@@ -167,6 +167,14 @@ export interface ProcessInboundMessagePayload {
   businessId: string;
   phoneNumberId: string;
   correlationId: string;
+  // EC2-retirement fields (webhookInbox trigger):
+  bid?: string;
+  oid?: string;
+  jid?: string;
+  text?: string;
+  pushName?: string;
+  receivedAt?: number;
+  source?: string;
 }
 
 export interface SendOutboundMessagePayload {
