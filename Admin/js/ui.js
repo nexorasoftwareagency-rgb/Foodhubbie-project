@@ -119,7 +119,16 @@ export const canAccessTab = (tabId) => {
     // the email doesn't match the configured SUPER_ADMIN_EMAIL (isSuper=false).
     if (key === 'super admin' || key === 'supreme admin') return true;
     const role = getRoles()[key];
-    if (role) return !Array.isArray(role.tabs) || role.tabs.includes(tabId);
+    if (role) {
+        if (!Array.isArray(role.tabs)) return true;
+        if (role.tabs.includes(tabId)) return true;
+        // Legacy id: 'app-notifications' was renamed to 'customer-app'. The stored
+        // roles are only rewritten when the Settings tab is opened, so honour the
+        // old id too — otherwise the Customer APP tab is invisible (a dead end)
+        // for every tenant whose roles were saved before the rename.
+        if (tabId === 'customer-app' && role.tabs.includes('app-notifications')) return true;
+        return false;
+    }
     if (!_roleWarned) {
         _roleWarned = true;
         console.warn(`[RoleAccess] Missing/unknown role "${key}" — access denied`);

@@ -205,6 +205,16 @@ function _wireOnce() {
     // Customer App QR card
     $('btnDownloadQR')?.addEventListener('click', _downloadQrCard);
     $('btnPrintQR')?.addEventListener('click', _printQrCard);
+    $('btnCopyQrLink')?.addEventListener('click', async () => {
+        const link = _qrFacts().link;
+        if (!link) { showToast('The app link is not ready yet.', 'warning'); return; }
+        try {
+            await navigator.clipboard.writeText(link);
+            showToast('App link copied', 'success');
+        } catch {
+            showToast('Could not copy the link — select it and press Ctrl+C.', 'error');
+        }
+    });
 
     // App Settings: ANY change inside the settings grid marks it unsaved (nothing saves until you press Save)
     // and the QR card previews the change straight away.
@@ -1855,25 +1865,30 @@ function _renderBusinessHours(hours = {}) {
     if (!grid) return;
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    let html = '<div class="ca-bh-grid">';
+    // The column header only shows on a phone (where each day is one compact
+    // row); on a desktop each day is its own card with its own labels.
+    let html = '<div class="ca-bh-grid">'
+        + '<div class="ca-bh-head" aria-hidden="true"><span>Day</span><span>Open &ndash; Close</span><span>Closed</span></div>';
     days.forEach((day, i) => {
         const dayData = hours[day] || { open: '09:00', close: '22:00', closed: false };
         html += `
             <div class="ca-bh-card">
                 <div class="ca-bh-day">${dayLabels[i]}</div>
-                <div class="ca-bh-row">
-                    <label class="ca-bh-label">Open</label>
-                    <input type="time" id="bh_${day}_open" value="${dayData.open || '09:00'}" class="ca-bh-time-input">
-                </div>
-                <div class="ca-bh-row">
-                    <label class="ca-bh-label">Close</label>
-                    <input type="time" id="bh_${day}_close" value="${dayData.close || '22:00'}" class="ca-bh-time-input">
+                <div class="ca-bh-times">
+                    <div class="ca-bh-row">
+                        <label class="ca-bh-label" for="bh_${day}_open">Open</label>
+                        <input type="time" id="bh_${day}_open" value="${dayData.open || '09:00'}" class="ca-bh-time-input">
+                    </div>
+                    <div class="ca-bh-row">
+                        <label class="ca-bh-label" for="bh_${day}_close">Close</label>
+                        <input type="time" id="bh_${day}_close" value="${dayData.close || '22:00'}" class="ca-bh-time-input">
+                    </div>
                 </div>
                 <div class="ca-bh-closed">
                     <label class="ca-bh-toggle-label ca-toggle">
                         <input type="checkbox" id="bh_${day}_closed" ${dayData.closed ? 'checked' : ''}>
                         <span class="ca-toggle-slider"></span>
-                        Closed
+                        <span class="ca-bh-closedText">Closed</span>
                     </label>
                 </div>
             </div>
@@ -2028,6 +2043,8 @@ async function _renderQrCard() {
 
     const name = $('qrCardName');
     if (name) name.textContent = facts.name;
+    const preview = $('qrPreviewCard');
+    if (preview) preview.style.setProperty('--ca-qr-theme', _safeHex(facts.theme)); // the one inline value: the colour the user chose
     const phone = $('qrPhoneDisplay');
     if (phone) phone.textContent = facts.phone || '—';
     const whatsapp = $('qrWhatsappDisplay');

@@ -330,6 +330,16 @@ t('P4: business hours render/collect functions exist', () => {
     assert.ok(/monday|tuesday|wednesday|thursday|friday|saturday|sunday/.test(js), 'all 7 days must be handled');
 });
 
+t('P4: business hours collapse to one compact row per day on a phone', () => {
+    // Stacked day cards were 1567px tall on a 390px phone (two screens).
+    // The phone layout is one row per day (day | open-close | closed switch).
+    assert.ok(js.includes('class="ca-bh-times"'), '_renderBusinessHours must wrap the two time rows');
+    assert.ok(js.includes('class="ca-bh-head"'), '_renderBusinessHours must emit the phone column header');
+    assert.ok(js.includes('class="ca-bh-closedText"'), 'the Closed word must be its own span (it is screen-reader only on a phone)');
+    assert.ok(/grid-template-areas:\s*"day times closed"/.test(css), 'the phone card must be a 3-column row');
+    assert.ok(/\.ca-bh-head\s*\{[^}]*display:\s*grid/.test(css), 'the phone column header must be a grid');
+});
+
 // =====================================================================
 // PANE 4b: Customer App QR card + social links (App Settings)
 // =====================================================================
@@ -405,6 +415,16 @@ t('Customer APP CSS is balanced and the dead badge styles are gone', () => {
     }
     assert.ok(css.includes('.ca-qr-card'), 'the QR card styles must exist');
     assert.ok(css.includes('.qr-print-sheet'), 'the print sheet styles must exist');
+});
+
+t('the legacy app-notifications role id still opens the Customer APP tab', () => {
+    // Roles saved before the 2026-11-10 rename still list 'app-notifications'.
+    // canAccessTab must honour it, or the tab is invisible until Settings is
+    // opened (and the stored roles are rewritten).
+    assert.ok(
+        /tabId === 'customer-app' && role\.tabs\.includes\('app-notifications'\)/.test(uiJs),
+        'canAccessTab must accept the legacy app-notifications id for customer-app'
+    );
 });
 
 // =====================================================================

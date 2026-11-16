@@ -5545,23 +5545,36 @@
                                 </div>
                             </div>
                             <div class="ca-qr-card__body">
-                                <div class="ca-qr-preview">
-                                    <div class="ca-qr-preview__brand">
+                                <div class="ca-qr-preview" id="qrPreviewCard">
+                                    <div class="ca-qr-preview__band">
                                         <img class="ca-qr-preview__logo" id="qrCardLogo" alt="" aria-hidden="true" hidden>
-                                        <span class="ca-qr-preview__name" id="qrCardName">Your restaurant</span>
+                                        <div class="ca-qr-preview__bandText">
+                                            <span class="ca-qr-preview__name" id="qrCardName">Your restaurant</span>
+                                            <span class="ca-qr-preview__tag">Scan to order on our app</span>
+                                        </div>
                                     </div>
-                                    <img class="ca-qr-preview__code" id="qrCodeImg" alt="QR code that opens this restaurant's customer app" width="200" height="200" hidden>
+                                    <img class="ca-qr-preview__code" id="qrCodeImg" alt="QR code that opens this restaurant's customer app" width="180" height="180" hidden>
                                     <p class="ca-qr-preview__cta">Scan to order</p>
                                 </div>
-                                <dl class="ca-qr-facts">
-                                    <div class="ca-qr-fact"><dt>Phone</dt><dd id="qrPhoneDisplay">&#8212;</dd></div>
-                                    <div class="ca-qr-fact"><dt>WhatsApp</dt><dd id="qrWhatsappDisplay">&#8212;</dd></div>
-                                    <div class="ca-qr-fact"><dt>Address</dt><dd id="qrAddressDisplay">&#8212;</dd></div>
-                                    <div class="ca-qr-fact"><dt>Social</dt><dd id="qrSocialDisplay">&#8212;</dd></div>
-                                    <div class="ca-qr-fact ca-qr-fact--wide"><dt>App link</dt><dd id="qrAppLinkDisplay" class="ca-qr-fact__link">&#8212;</dd></div>
-                                </dl>
+                                <div class="ca-qr-card__details">
+                                    <dl class="ca-qr-facts">
+                                        <div class="ca-qr-fact"><dt>Phone</dt><dd id="qrPhoneDisplay">&#8212;</dd></div>
+                                        <div class="ca-qr-fact"><dt>WhatsApp</dt><dd id="qrWhatsappDisplay">&#8212;</dd></div>
+                                        <div class="ca-qr-fact"><dt>Address</dt><dd id="qrAddressDisplay">&#8212;</dd></div>
+                                        <div class="ca-qr-fact"><dt>Social</dt><dd id="qrSocialDisplay">&#8212;</dd></div>
+                                        <div class="ca-qr-fact ca-qr-fact--wide">
+                                            <dt>App link</dt>
+                                            <dd class="ca-qr-fact__linkRow">
+                                                <span id="qrAppLinkDisplay" class="ca-qr-fact__link">&#8212;</span>
+                                                <button class="btn-secondary btn-sm" id="btnCopyQrLink" type="button" title="Copy the customer app link">
+                                                    <i data-lucide="copy"></i> <span>Copy</span>
+                                                </button>
+                                            </dd>
+                                        </div>
+                                    </dl>
+                                    <p class="ca-qr-card__note">The card is built from the name, logo, colour and links saved below &#8212; edit a field and the card updates live.</p>
+                                </div>
                             </div>
-                            <p class="ca-qr-card__note">The card is built from the name, logo, colour and links saved below &#8212; edit a field and the card updates live.</p>
                         </section>
 
                         <div class="ca-settings-grid">
