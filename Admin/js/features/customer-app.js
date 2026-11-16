@@ -147,7 +147,8 @@ function _wireOnce() {
     $('btnQuickEditCancel2')?.addEventListener('click', _closeQuickEdit);
     $('btnQuickEditSave')?.addEventListener('click', _saveQuickEdit);
 
-    // P2: Preview modal close
+    // P2: Preview modal (the preview was built but nothing ever opened it)
+    $('btnPromoPreview')?.addEventListener('click', _openPreviewModal);
     $('btnPreviewClose')?.addEventListener('click', _closePreview);
     $('btnPreviewClose2')?.addEventListener('click', _closePreview);
 
@@ -579,7 +580,7 @@ function _renderPromoOffers(offers) {
         const archived = d.archived === true;
         const statusLabel = {
             valid: 'Valid', disabled: 'Disabled', not_started: 'Not started',
-            expired: 'Expired', not_in_window: 'Not in window'
+            expired: 'Expired', not_in_window: 'Not in window', limit_reached: 'Limit reached'
         }[status] || status;
         const valueTxt = d.mode === 'percent' ? `${d.value}% off` : `₹${Number(d.value || 0)} off`;
         const minTxt = d.minSubtotal ? ` min ₹${d.minSubtotal}` : '';
@@ -687,7 +688,10 @@ async function _togglePromoPage(id, showOnPage) {
         showToast(showOnPage ? 'Added to Promo Page' : 'Removed from Promo Page', 'success');
     } catch (e) {
         showToast('Update failed: ' + (e?.message || e), 'error');
-        const cb = document.querySelector(`input[data-id="${id}"]`);
+        // The promo-page switch is `data-pp-id` (the row also carries other
+        // data-* attributes), so a rollback that looks for `data-id` never
+        // found the checkbox and left it stuck in the wrong state.
+        const cb = document.querySelector(`input[data-pp-id="${id}"]`);
         if (cb) cb.checked = !showOnPage;
     }
 }
@@ -877,6 +881,11 @@ setInput('qeName', offer.name || '');
     const promoEl = $('qePromoPage');
     if (promoEl) promoEl.checked = offer.promoPage === true;
 
+    // A stale validation message from a previous edit must not greet the
+    // next one.
+    const errEl = $('qeError');
+    if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+
     panel.classList.remove('hidden');
     panel.setAttribute('aria-hidden', 'false');
 }
@@ -887,22 +896,101 @@ function _closeQuickEdit() {
         panel.classList.add('hidden');
         panel.setAttribute('aria-hidden', 'true');
     }
+    const errEl = $('qeError');
+    if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
     _quickEditId = null;
+}
+
+/**
+ * Validate the quick-edit form BEFORE it is written.
+ *
+ * The audit found this path had no validation at all: an empty name, a code
+ * with spaces, a 500 % percent offer, a cap above the discount, a duplicate
+ * code or an end date before the start date were all happily saved - and the
+ * customer app then showed a coupon that could never be redeemed.
+ *
+ * @returns {{field:string, message:string}|null} the first problem, or null.
+ */
+function _validateQuickEdit() {
+    const name = ($('qeName')?.value || '').trim();
+    const code = ($('qeCode')?.value || '').trim();
+    const valueRaw = ($('qeValue')?.value || '').trim();
+    const mode = $('qeMode')?.value || 'percent';
+    const minRaw = ($('qeMinSubtotal')?.value || '').trim();
+    const capRaw = ($('qeMaxCap')?.value || '').trim();
+    const channel = $('qeChannel')?.value || 'all';
+    const startsAt = $('qeStartsAt')?.value;
+    const endsAt = $('qeEndsAt')?.value;
+
+    if (!name) return { field: 'qeName', message: 'Give the offer a name.' };
+    if (!code) return { field: 'qeCode', message: 'A coupon code is required.' };
+    if (!/^[A-Za-z0-9_-]{3,24}$/.test(code)) {
+        return { field: 'qeCode', message: 'Use 3-24 letters, numbers, dashes or underscores - no spaces.' };
+    }
+    const clash = _allOffersCache.find(d => d.id !== _quickEditId
+        && String(d.couponCode || '').trim().toLowerCase() === code.toLowerCase());
+    if (clash) return { field: 'qeCode', message: `"${code}" is already used by "${clash.name || clash.couponCode}".` };
+
+    if (!valueRaw) return { field: 'qeValue', message: 'Enter the discount value.' };
+    const value = Number(valueRaw);
+    if (!Number.isFinite(value) || value <= 0) return { field: 'qeValue', message: 'The discount value must be more than 0.' };
+    if (mode === 'percent' && value > 100) return { field: 'qeValue', message: 'A percent discount cannot be more than 100%.' };
+
+    if (minRaw) {
+        const min = Number(minRaw);
+        if (!Number.isFinite(min) || min < 0) return { field: 'qeMinSubtotal', message: 'Minimum subtotal cannot be negative.' };
+    }
+    if (capRaw) {
+        const cap = Number(capRaw);
+        if (!Number.isFinite(cap) || cap < 0) return { field: 'qeMaxCap', message: 'The cap cannot be negative.' };
+        if (mode !== 'percent' && cap > value) return { field: 'qeMaxCap', message: 'The cap cannot be more than the discount value.' };
+    }
+    if (startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+        return { field: 'qeEndsAt', message: 'The end date must be after the start date.' };
+    }
+    if (!['all', 'website', 'table', 'pos'].includes(channel)) {
+        return { field: 'qeChannel', message: 'Pick a valid channel.' };
+    }
+    // The Promo Page is the customer's website - an offer that cannot run on
+    // the website must not be published there.
+    if ($('qePromoPage')?.checked && !discountAllowsChannel({ channel }, 'website')) {
+        return { field: 'qePromoPage', message: 'This offer cannot sit on the Promo Page - its channel does not include the website.' };
+    }
+    return null;
 }
 
 async function _saveQuickEdit() {
     if (!_quickEditId) return;
     const btn = $('btnQuickEditSave');
     const origText = btn.textContent;
+    const errEl = $('qeError');
+
+    // Validate FIRST - a broken offer must never reach the database.
+    const problem = _validateQuickEdit();
+    if (problem) {
+        if (errEl) {
+            errEl.textContent = problem.message;
+            errEl.classList.remove('hidden');
+        }
+        const field = $(problem.field);
+        if (field) field.focus();
+        showToast(problem.message, 'warning');
+        return;
+    }
+    if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+
     btn.disabled = true;
     btn.textContent = 'Saving…';
 
     try {
         const oldOffer = _allOffersCache.find(d => d.id === _quickEditId) || {};
+        // Trimmed values: a coupon code is typed by the customer, and the bot
+        // matches it exactly (`String(d.couponCode).toLowerCase() === code`),
+        // so a stored " WELCOME20 " could never be redeemed.
         const updates = {
-            name: $('qeName')?.value || undefined,
-            couponCode: $('qeCode')?.value || undefined,
-            value: $('qeValue')?.value ? Number($('qeValue').value) : undefined,
+            name: ($('qeName')?.value || '').trim(),
+            couponCode: ($('qeCode')?.value || '').trim(),
+            value: Number($('qeValue')?.value),
             mode: $('qeMode')?.value || undefined,
             minSubtotal: $('qeMinSubtotal')?.value ? Number($('qeMinSubtotal').value) : undefined,
             maxCap: $('qeMaxCap')?.value ? Number($('qeMaxCap').value) : undefined,
@@ -971,6 +1059,21 @@ async function _deleteOffer(id) {
     }
 }
 
+/**
+ * A coupon code that is not taken yet.
+ * The old code always produced `<code>-COPY`, so duplicating twice produced
+ * two offers with the SAME code - and the customer could only ever redeem
+ * one of them.
+ */
+function _uniqueOfferCode(base) {
+    const taken = new Set(_allOffersCache.map(d => String(d.couponCode || '').trim().toLowerCase()));
+    const root = (String(base || '').trim() || 'OFFER').slice(0, 18);
+    let code = `${root}-COPY`;
+    let n = 2;
+    while (taken.has(code.toLowerCase())) code = `${root}-COPY${n++}`;
+    return code;
+}
+
 /** Duplicate an offer. */
 async function _duplicateOffer(id) {
     const offer = _allOffersCache.find(d => d.id === id);
@@ -980,7 +1083,7 @@ async function _duplicateOffer(id) {
         const dupe = {
             ...offer,
             id: undefined, // will be set by push
-            couponCode: (offer.couponCode || '') + '-COPY',
+            couponCode: _uniqueOfferCode(offer.couponCode),
             name: (offer.name || '') + ' (Copy)',
             createdAt: now,
             updatedAt: now,
@@ -988,6 +1091,9 @@ async function _duplicateOffer(id) {
             promoPage: false,
         };
         delete dupe.id;
+        // A new offer starts with zero redemptions - copying `stats` would
+        // inherit the original's usage (and could be born at its limit).
+        delete dupe.stats;
         const newKey = OfferPushKey();
         await update(Outlet.ref('discounts'), { [newKey]: dupe });
         await logChange('create', 'discounts', newKey, null, dupe);
@@ -1009,7 +1115,13 @@ function _openPreviewModal() {
     if (!modal || !wrap) return;
 
     const now = Date.now();
-    const visible = _allOffersCache.filter(d => d.promoPage === true && d.archived !== true && couponStatus(d, now) === 'valid');
+    // The Promo Page IS the customer's website, so the preview must apply the
+    // same channel rule the customer app does - otherwise the preview showed
+    // a POS-only offer that no customer could ever see.
+    const visible = _allOffersCache.filter(d => d.promoPage === true
+        && d.archived !== true
+        && couponStatus(d, now) === 'valid'
+        && discountAllowsChannel(d, 'website'));
 
     if (visible.length === 0) {
         wrap.innerHTML = '<div style="padding:24px;color:var(--text-tertiary);text-align:center;">No offers currently showing on the Promo Page.</div>';
@@ -1018,11 +1130,13 @@ function _openPreviewModal() {
             const valueTxt = d.mode === 'percent' ? `${d.value}% off` : `₹${Number(d.value || 0)} off`;
             return `
                 <div class="preview-offer-card">
-                    <div class="preview-offer__badge">${valueTxt}</div>
-                    <div class="preview-offer__name">${_escHtml(d.name || d.couponCode)}</div>
-                    <div class="preview-offer__code">Code: ${_escHtml(d.couponCode)}</div>
-                    ${d.minSubtotal ? `<div class="preview-offer__meta">Min order ₹${d.minSubtotal}</div>` : ''}
-                    <button class="preview-offer__btn" type="button">Apply</button>
+                    <span class="preview-offer__badge">${valueTxt}</span>
+                    <div class="preview-offer__body">
+                        <div class="preview-offer__name">${_escHtml(d.name || d.couponCode)}</div>
+                        <div class="preview-offer__code">Code: ${_escHtml(d.couponCode)}</div>
+                        ${d.minSubtotal ? `<div class="preview-offer__meta">Min order ₹${d.minSubtotal}</div>` : ''}
+                    </div>
+                    <button class="preview-offer__btn" type="button" disabled title="Preview only - customers apply the code in the app">Apply</button>
                 </div>
             `;
         }).join('');

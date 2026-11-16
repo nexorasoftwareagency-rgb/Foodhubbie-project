@@ -175,6 +175,11 @@ export function couponStatus(d, now = Date.now()) {
     if (d.startsAt && now < d.startsAt) return 'not_started';
     if (d.endsAt && d.endsAt > 0 && now > d.endsAt) return 'expired';
     if (!inSchedule(d, now)) return 'not_in_window';
+    // A coupon whose global redemption limit is spent is no longer valid -
+    // evaluateDiscounts() refuses it (the globalLimit gate), so the lifecycle
+    // status has to say so too. Without this, the Admin list and the
+    // customer's Promo Page showed a coupon that could not be redeemed.
+    if (d.globalLimit && (d.stats?.usedCount || 0) >= d.globalLimit) return 'limit_reached';
     return 'valid';
 }
 
@@ -184,6 +189,7 @@ export const COUPON_STATUS_TEXT = {
     not_started: 'This coupon is not active yet — please try again later',
     expired: 'This coupon has expired',
     not_in_window: 'This coupon is not valid at this time — check its scheduled hours',
+    limit_reached: 'This coupon has reached its redemption limit',
 };
 
 /**
@@ -294,7 +300,12 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.includes('discount-rule
         assert.strictEqual(couponStatus({ startsAt: Date.now() + 1000 }), 'not_started');
         assert.strictEqual(couponStatus({ endsAt: Date.now() - 1000 }), 'expired');
         assert.strictEqual(couponStatus({}), 'valid');
+        // a spent global limit is not "valid" any more (the evaluator refuses it)
+        assert.strictEqual(couponStatus({ globalLimit: 5, stats: { usedCount: 5 } }), 'limit_reached');
+        assert.strictEqual(couponStatus({ globalLimit: 5, stats: { usedCount: 4 } }), 'valid');
+        assert.strictEqual(couponStatus({ globalLimit: 0 }), 'valid', 'no limit = unlimited');
         assert.ok(COUPON_STATUS_TEXT.expired.length > 5);
+        assert.ok(COUPON_STATUS_TEXT.limit_reached.length > 5);
         // happy-hour window edges
         assert.strictEqual(promotionActive({ daysOfWeek: [5], startTime: '18:00', endTime: '20:00', isActive: true }, 5, toMinutes('18:00')), true, 'start-inclusive');
         assert.strictEqual(promotionActive({ daysOfWeek: [5], startTime: '18:00', endTime: '20:00' }, 5, toMinutes('19:59')), true);

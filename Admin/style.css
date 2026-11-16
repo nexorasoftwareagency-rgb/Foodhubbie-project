@@ -11553,6 +11553,20 @@ body.pos-selection-mode .walkin-picker {
 .promo-offer__status.disabled { background: #f1f5f9; color: #64748b; }
 .promo-offer__status.not_in_window { background: #fef3c7; color: #92400e; }
 .promo-offer__status.not_started { background: #e2e8f0; color: #475569; }
+.promo-offer__status.limit_reached { background: #ffedd5; color: #9a3412; }
+
+/* Inline validation message for the quick-edit offer form. */
+.ca-form-error {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    background: rgba(220, 38, 38, 0.08);
+    color: #b91c1c;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.ca-form-error.hidden { display: none; }
 
 .promo-offer__toggle {
     position: relative;
@@ -12359,24 +12373,22 @@ body.setup-mode .setup-hide {
     color: #92400e;
     flex: 0 0 auto;
 }
+.preview-offer__body {
+    flex: 1;
+    min-width: 0;
+}
 .preview-offer__name {
     font-weight: 600;
     color: var(--text-primary, #0f172a);
-    flex: 1;
-    min-width: 0;
 }
 .preview-offer__code {
     font-size: 12px;
     color: var(--text-secondary, #64748b);
     font-family: ui-monospace, SFMono-Regular, monospace;
-    flex: 1;
-    min-width: 0;
 }
 .preview-offer__meta {
     font-size: 12px;
     color: var(--text-tertiary, #94a3b8);
-    flex: 1;
-    min-width: 0;
 }
 .preview-offer__btn {
     background: var(--primary, #E84908);
@@ -12391,6 +12403,16 @@ body.setup-mode .setup-hide {
 }
 .preview-offer__btn:hover {
     opacity: 0.9;
+}
+/* The preview is a picture of the customer's page - its Apply button is not
+   a live control, so it must not look clickable. */
+.preview-offer__btn:disabled {
+    background: var(--text-tertiary, #94a3b8);
+    cursor: default;
+    opacity: 0.75;
+}
+.preview-offer__btn:disabled:hover {
+    opacity: 0.75;
 }
 
 /* ===== P2: Quick Edit / Preview panel backdrop ===== */

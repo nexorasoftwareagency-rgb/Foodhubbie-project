@@ -178,6 +178,86 @@ t('P2: bulk selection functions exist', () => {
     assert.ok(js.includes('function _updateBulkToolbar'), '_updateBulkToolbar must exist');
 });
 
+// --- Audit round 4 (2026-11-16): the Promo Offers pane must not save a
+// broken offer, must not lie about what it can undo, and must show the
+// customer exactly what the customer app shows.
+
+t('C1: the quick-edit form is validated before anything is written', () => {
+    assert.ok(js.includes('function _validateQuickEdit'), '_validateQuickEdit must exist');
+    const body = js.slice(js.indexOf('async function _saveQuickEdit()'), js.indexOf('/** Archive a single offer. */'));
+    assert.ok(body, 'the save function exists');
+    const iValidate = body.indexOf('_validateQuickEdit()');
+    const iPayload = body.indexOf('const updates = {');
+    const iWrite = body.indexOf("update(Outlet.ref(`discounts/${_quickEditId}`)");
+    assert.ok(iValidate > 0, 'the save validates');
+    assert.ok(iPayload > iValidate, 'validation must run BEFORE the update payload is built');
+    assert.ok(iWrite > iValidate, 'validation must run BEFORE the database write');
+});
+
+t('C1: the validation covers name, code shape, duplicate code, value, cap and dates', () => {
+    const v = js.match(/function _validateQuickEdit\(\) \{[\s\S]*?\n\}/);
+    assert.ok(v, '_validateQuickEdit body found');
+    const body = v[0];
+    assert.ok(/if \(!name\)/.test(body), 'name is required');
+    assert.ok(/\/\^\[A-Za-z0-9_-\]\{3,24\}\$/.test(body), 'the code shape is checked');
+    assert.ok(/toLowerCase\(\) === code\.toLowerCase\(\)/.test(body), 'the duplicate code is checked');
+    assert.ok(/value <= 0/.test(body), 'the value must be more than 0');
+    assert.ok(/value > 100/.test(body), 'a percent discount cannot exceed 100');
+    assert.ok(/cap > value/.test(body), 'the cap cannot exceed the discount value');
+    assert.ok(/new Date\(endsAt\)\.getTime\(\) <= new Date\(startsAt\)\.getTime\(\)/.test(body), 'end must be after start');
+    assert.ok(/discountAllowsChannel\(\{ channel \}, 'website'\)/.test(body), 'the promo page needs a website channel');
+});
+
+t('C1: a validation failure is shown in the form and nothing is written', () => {
+    assert.ok(html.includes('id="qeError"'), 'the inline error element exists');
+    assert.ok(css.includes('.ca-form-error'), 'the inline error has a style');
+    assert.ok(/problem\.message/.test(js), 'the message is shown');
+    assert.ok(/field\.focus\(\)|\.focus\(\)/.test(js), 'the offending field is focused');
+    // The error must be cleared when the panel opens again.
+    assert.ok(/errEl\.textContent = ''/.test(js), 'the error is cleared');
+});
+
+t('C4: a failed promo-page toggle rolls the right checkbox back', () => {
+    // The switch carries data-pp-id; the old rollback looked for data-id and
+    // therefore never found it - the checkbox stayed in the wrong state.
+    assert.ok(/input\[data-pp-id="\$\{id\}"\]/.test(js), 'the rollback must target data-pp-id');
+    assert.ok(!/input\[data-id="\$\{id\}"\]/.test(js), 'the old data-id lookup must be gone');
+});
+
+t('C5: a duplicated offer gets a free coupon code and no inherited usage', () => {
+    assert.ok(js.includes('function _uniqueOfferCode'), '_uniqueOfferCode must exist');
+    assert.ok(/couponCode: _uniqueOfferCode\(offer\.couponCode\)/.test(js), 'the duplicate uses the free code');
+    assert.ok(/delete dupe\.stats;/.test(js), 'the duplicate must not inherit the redemption count');
+    assert.ok(!/couponCode: \(offer\.couponCode \|\| ''\) \+ '-COPY'/.test(js), 'the old fixed -COPY code must be gone');
+});
+
+t('C6: the Promo Page preview applies the website channel rule', () => {
+    const preview = js.match(/function _openPreviewModal\(\) \{[\s\S]*?\n\}/);
+    assert.ok(preview, 'the preview function exists');
+    assert.ok(/discountAllowsChannel\(d, 'website'\)/.test(preview[0]), 'the preview must filter on the website channel');
+});
+
+t('C6: the preview is reachable - a button opens it', () => {
+    // The preview modal was built (and its close buttons were wired) but
+    // NOTHING ever opened it, so the channel fix was unreachable.
+    assert.ok(html.includes('id="btnPromoPreview"'), 'the Preview Page button exists');
+    assert.ok(/btnPromoPreview'\)\?\.addEventListener\('click', _openPreviewModal\)/.test(js), 'the button opens the preview');
+    // The customer app applies the same three filters - keep the preview honest.
+    const customer = fs.readFileSync(path.join(root, 'menu/js/customer.js'), 'utf8');
+    assert.ok(/couponStatus\(d, now\) === 'valid'/.test(customer), 'the customer app filters by status');
+    assert.ok(/discountAllowsChannel\(d, 'website'\)/.test(customer), 'the customer app filters by channel');
+    assert.ok(/d\.promoPage === true/.test(customer), 'the customer app filters by the promo-page flag');
+});
+
+t('C7: an offer at its global limit is not reported as valid', () => {
+    const rules = fs.readFileSync(path.join(root, 'shared/discount-rules.js'), 'utf8');
+    assert.ok(/return 'limit_reached';/.test(rules), 'couponStatus must report limit_reached');
+    assert.ok(/limit_reached: 'This coupon has reached its redemption limit'/.test(rules), 'the customer-facing reason exists');
+    assert.ok(/globalLimit && \(d\.stats\?\.usedCount \|\| 0\) >= d\.globalLimit/.test(rules), 'the limit gate mirrors the evaluator');
+    assert.ok(js.includes("limit_reached: 'Limit reached'"), 'the Admin label exists');
+    assert.ok(css.includes('.promo-offer__status.limit_reached'), 'the status badge has a style');
+});
+
 t('P2: bulk action functions exist', () => {
     assert.ok(js.includes('function _bulkSetPromoPage'), '_bulkSetPromoPage must exist');
     assert.ok(js.includes('function _bulkSetEnabled'), '_bulkSetEnabled must exist');
@@ -225,9 +305,13 @@ t('P2: bulk toolbar markup exists', () => {
 // =====================================================================
 
 t('P3: visibility search/filter/sort elements exist', () => {
-    for (const id of ['visSearch', 'visFilterCount', 'visMatchCount']) {
+    // `visFilterCount` was a copy-paste stray that lived inside the PROMO
+    // PREVIEW modal and was read by nothing; the visibility pane's own match
+    // counter is `visMatchCount`.
+    for (const id of ['visSearch', 'visMatchCount']) {
         assert.ok(html.includes(`id="${id}"`), `missing id: ${id}`);
     }
+    assert.ok(!html.includes('id="visFilterCount"'), 'the stray visFilterCount must stay gone');
     for (const val of ['all', 'visible', 'hidden', 'out-of-stock', 'low-stock']) {
         assert.ok(html.includes(`value="${val}"`) && html.includes('name="visFilter"'), `missing filter radio: ${val}`);
     }

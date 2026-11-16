@@ -5187,9 +5187,14 @@
                                 <h3 class="panel-title mb-0" style="font-size:18px;">Promo Page Offers</h3>
                                 <p class="panel-subtitle mt-2">Choose which coupon discounts appear on your restaurant's Promo Page in the customer app. Only coupon-type discounts that are active and allow the website channel will show.</p>
                             </div>
-                            <button class="btn-primary" id="btnPromoOffersNew" type="button" title="Create a new coupon discount">
-                                <i data-lucide="plus"></i> <span>New Coupon</span>
-                            </button>
+                            <div class="flex-row flex-gap-8">
+                                <button class="btn-secondary" id="btnPromoPreview" type="button" title="See exactly what customers see on the Promo Page">
+                                    <i data-lucide="eye"></i> <span>Preview Page</span>
+                                </button>
+                                <button class="btn-primary" id="btnPromoOffersNew" type="button" title="Create a new coupon discount">
+                                    <i data-lucide="plus"></i> <span>New Coupon</span>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="promo-offers-stats" style="margin:12px 0;">
@@ -5266,6 +5271,7 @@
                                     <button class="btn-close" id="btnQuickEditCancel" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">&times;</button>
                                 </div>
                                 <form id="quickEditForm" style="display:flex;flex-direction:column;gap:12px;">
+                                    <p class="ca-form-error hidden" id="qeError" role="alert"></p>
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                                         <div>
                                             <label class="ca-field-label">Name</label>
@@ -5335,14 +5341,13 @@
 
                         <!-- P2: Preview Modal -->
                         <div id="promoPreviewModal" class="promo-preview-modal hidden" style="position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center;">
-                            <div class="promo-preview-card" style="background:var(--bg,#fff); border-radius:12px; padding:24px; width:min(400px, 92vw); max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3); border:1px solid var(--border,#e5e7eb);">
+                            <div class="promo-preview-card" style="background:var(--bg,#fff); border-radius:12px; padding:24px; width:min(460px, 92vw); max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3); border:1px solid var(--border,#e5e7eb);">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                                     <h3 style="font-size:16px; margin:0;">Promo Page Preview</h3>
                                     <button class="btn-close" id="btnPreviewClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">&times;</button>
                                 </div>
-                                <p class="text-muted-small mt-2" style="font-size:12px;">How your active offers appear to customers in the app.</p>
+                                <p class="text-muted-small mt-2" style="font-size:12px;">How your active offers appear to customers in the app. Preview only &mdash; customers copy the code and apply it in the app.</p>
                                 <div id="promoPreviewList" style="display:flex;flex-direction:column;gap:12px;"></div>
-                                <div id="visFilterCount" style="margin-left:12px; font-size:11px; color:var(--text-secondary);"></div>
                                 <div style="margin-top:16px; display:flex; justify-content:flex-end;">
                                     <button class="btn-secondary" id="btnPreviewClose2" type="button">Close</button>
                                 </div>
