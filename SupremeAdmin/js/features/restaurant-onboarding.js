@@ -367,6 +367,13 @@ async function handleSubmit(e) {
       });
     }
 
+    // Template bot defaults are split across two REAL nodes: the status images
+    // are read from `settings/Bot` (bot/index.js getData('settings/Bot') and
+    // the Admin Status-images card), while `transport` is read from
+    // `bot/transport` (bot-control-api). Spreading the template's `bot` block
+    // onto the outlet wrote the images to `bot/img*` — a node nothing reads.
+    const { transport: tplTransport, ...tplBotImages } = tplDefaults?.bot || {};
+
     // Single atomic multi-path update — either both the business and its
     // outlet land together, or neither does. The outlet must be nested under
     // the business key (not a sibling path): Firebase rejects one update whose
@@ -387,11 +394,18 @@ async function handleSubmit(e) {
             createdAt: firebase.database.ServerValue.TIMESTAMP,
             ...(outletNo ? { outletNo } : {}),
             whatsapp: { status: 'pending' },
-            ...(tplDefaults || {}),
+            // Template catalogs land on the outlet's own nodes.
+            ...(tplDefaults?.categories ? { categories: tplDefaults.categories } : {}),
+            ...(tplDefaults?.dishes ? { dishes: tplDefaults.dishes } : {}),
+            ...(tplTransport ? { bot: { transport: tplTransport } } : {}),
             // Feature flags default OFF for new restaurants (user scope answer).
             // Nested merge so a template's own settings AND feature flags
             // survive; our discountApproval flag still wins.
-            settings: { ...(tplDefaults?.settings || {}), features: { ...(tplDefaults?.settings?.features || {}), discountApproval: false } },
+            settings: {
+              ...(tplDefaults?.settings || {}),
+              features: { ...(tplDefaults?.settings?.features || {}), discountApproval: false },
+              ...(Object.keys(tplBotImages).length ? { Bot: tplBotImages } : {}),
+            },
           },
         },
       },
@@ -407,39 +421,12 @@ async function handleSubmit(e) {
       ...bankUpdates,
     });
 
-    // Auto-convert default status images to PNG base64 for fast sending
-    // (non-blocking — failures just mean status updates will use URL fallback)
-    if (tplDefaults?.bot) {
-      const statusImageKeys = ['imgPlaced', 'imgConfirmed', 'imgReady', 'imgOut', 'imgDelivered'];
-      const imagesToConvert = statusImageKeys
-        .filter(k => tplDefaults.bot[k])
-        .map(k => ({ key: `${k}Png`, url: tplDefaults.bot[k] }));
-      if (imagesToConvert.length > 0) {
-        try {
-          const token = await firebase.auth().currentUser.getIdToken();
-          const res = await fetch(`${TUNNEL_URL}/api/images/convert-batch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ images: imagesToConvert }),
-          });
-          if (res.ok) {
-            const { results } = await res.json();
-            const pngUpdates = {};
-            for (const [key, result] of Object.entries(results)) {
-              if (result.ok) {
-                pngUpdates[`businesses/${bid}/outlets/${oid}/bot/${key}`] = result.base64;
-              }
-            }
-            if (Object.keys(pngUpdates).length > 0) {
-              await db.ref().update(pngUpdates);
-              console.log(`[Onboarding] Pre-converted ${Object.keys(pngUpdates).length} status images for ${bid}/${oid}`);
-            }
-          }
-        } catch (e) {
-          console.warn('[Onboarding] Image pre-conversion failed (non-fatal):', e.message);
-        }
-      }
-    }
+    // No status-image pre-conversion: template defaults already carry https
+    // JPEG URLs and the bot converts/falls back at send time. The old
+    // /api/images/convert-batch pre-pass wrote base64 PNGs into
+    // `bot/{key}Png`, a node nothing reads (the bot reads `settings/Bot`),
+    // and base64 in RTDB is exactly what batch 13/15 removed. See
+    // FIREBASE_SERVER_MIGRATION/39_IMAGE_CONVERT_ROUTES.md.
 
     showToast('Restaurant created. Creating admin login…', 'success');
 

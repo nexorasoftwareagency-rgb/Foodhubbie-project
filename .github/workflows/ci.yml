@@ -86,6 +86,12 @@ jobs:
       - name: Demo reseed guard (determinism, 20h claim, demo-only writes, no whatsapp/outletIndex)
         run: node tests/demo-reseed.check.cjs
 
+      - name: Image convert guard (routes deleted, not ported; no base64 back into RTDB)
+        run: node tests/image-convert-removal.check.cjs
+
+      - name: Onboarding create guard (menuBank validate parity, sizes map, settings/Bot images)
+        run: node tests/onboarding-create.check.cjs
+
       - name: Supreme dense UI guard (lists, tabs, phone layout, view-only)
         run: node tests/supreme-ui.browser.mjs
 

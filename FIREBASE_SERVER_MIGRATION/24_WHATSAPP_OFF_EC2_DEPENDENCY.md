@@ -191,7 +191,7 @@ Revisit this decision when Track A onboards a real tenant WABA
 (`docs/PLAN-PER-TENANT-WABA.md`) — at that point quota/templates become
 tenant-facing and belong in `tenantOnboarding`'s sibling.
 
-**What legitimately remains on the box** after 23d–23j:
+**What legitimately remains on the box** after 23d–23k:
 
 | on the box | why it cannot move yet |
 |---|---|
@@ -199,14 +199,18 @@ tenant-facing and belong in `tenantOnboarding`'s sibling.
 | `/api/whatsapp/*`, `/api/bot/*` (provision/restart/stop/delete/rescan/transport) | pm2 + Meta per-tenant credentials |
 | `wallet-watch.js` | live-listener design (batch 14); a stateless per-minute function would regress it. **No outlet is armed today**, so nothing breaks while it is down |
 | rider-assignment WhatsApp **template** (`isRiderChanged` in `bot/index.js`) | rides the socket; the FCM half moved to 23h |
-| `/api/images/convert-batch` | `sharp`; already **non-fatal** in the onboarding wizard ("failures just mean status updates will use URL fallback") |
 
 Loyalty (accrual, clawback, dine-in settlement, app redemption) used to be on this
 list. Batch 23g took it off: the engine is socket-free and now runs from three
 triggers, so nothing about points or reward codes depends on the box. Batch 23i
 removed the daily rider settlement and batch 23j the nightly demo reseed — both
 are scheduled Functions now, each with its own shared claim so the box can never
-double-run them.
+double-run them. Batch 23k then removed `/api/images/convert-batch` from this
+table entirely: it was **deleted, not ported** — it wrote base64 PNGs to a node
+the bot never reads, for zero tenants, undoing the media-out-of-RTDB work of
+batches 13/15 (doc 39). Its verification also found and fixed three blockers in
+the Add Restaurant wizard's atomic create (two `menuBank` `.validate` bugs and the
+template status images landing on `bot/` instead of `settings/Bot`, doc 40).
 
 Two smaller confirmations from the same probe: the pizza outlet still carries two
 junk child nodes (`pizza`, `undefined`) left by an old write, and its three

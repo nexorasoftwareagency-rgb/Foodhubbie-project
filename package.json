@@ -38,7 +38,9 @@
     "test:debug": "playwright test --debug",
     "install:browsers": "playwright install --with-deps chromium",
     "test:daily-settlement": "node tests/daily-settlement.check.cjs",
-    "test:demo-reseed": "node tests/demo-reseed.check.cjs"
+    "test:demo-reseed": "node tests/demo-reseed.check.cjs",
+    "test:image-convert": "node tests/image-convert-removal.check.cjs",
+    "test:onboarding-create": "node tests/onboarding-create.check.cjs"
   },
   "dependencies": {
     "chart.js": "^4.4.1",
