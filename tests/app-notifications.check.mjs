@@ -240,5 +240,64 @@ t('the send path refreshes through functions that exist', () => {
         'the post-send refresh awaits both defined functions');
 });
 
+// --- Audit round 4 (2026-11-16): CB1-CB5 - the Push pane must not promise
+// more than the server can deliver, and it must not offer actions the
+// platform cannot perform.
+
+t('CB1: "Offers reachable" counts only subscribers the server can push to (token + offers on)', () => {
+    assert.ok(/function _reachable\(type\)/.test(js), '_reachable helper exists');
+    assert.ok(/s\.hasToken && \(!marketing \|\| s\.offers\)/.test(js), 'a record without a device token is not reachable');
+    assert.ok(/pushOffersReach'\)\.textContent = String\(reach\)/.test(js), 'the stat uses the reachable set');
+    assert.ok(/_reachable\('promo'\)\.length/.test(js), 'the stat is computed from the reachable set');
+    // The server pushes to `entries.map(e => e.token).filter(Boolean)`.
+    const server = fs.readFileSync(path.join(root, 'FIREBASE_SERVER_MIGRATION/functions/src/api/tenantNotify.ts'), 'utf8');
+    assert.ok(/entries\.map\([^\n]*e\.token\)\.filter\(Boolean\)/.test(server), 'server pushes only to records with a token');
+});
+
+t('CB1: a one-customer send is blocked when the record has no device token', () => {
+    const one = js.match(/if \(aud === 'one'\) \{[\s\S]*?\n    \}/);
+    assert.ok(one, 'one-customer branch exists');
+    assert.ok(/devices === 0/.test(one[0]), 'the branch must check for a token');
+    assert.ok(/has no push token on file/.test(one[0]), 'the reason must name the missing token');
+});
+
+t('CB2: the count is an upper bound ("up to") and the daily limit is stated', () => {
+    assert.ok(/Will reach up to \$\{ev\.count\} of \$\{total\}/.test(js), 'the reach line must say "up to"');
+    assert.ok(/Send to up to \$\{ev\.count\} subscriber/.test(js), 'the button label must say "up to"');
+    assert.ok(/up to \$\{ev\.count\} subscriber\$\{ev\.count === 1 \? '' : 's'\}\?/.test(js), 'the confirm dialog must say "up to"');
+    assert.ok(js.includes('up to 3 offer pushes a day'), 'the daily cap must be stated');
+    assert.ok(/skipped \(daily limit\)/.test(js), 'a capped recipient is reported as a daily-limit skip');
+});
+
+t('CB3: quiet hours are anchored to the server clock, not the device clock', () => {
+    assert.ok(/async function _syncClock\(\)/.test(js), 'clock sync helper exists');
+    assert.ok(/payload\.iat/.test(js), 'the server clock comes from the Auth token iat claim');
+    assert.ok(/function _istHour\(\)[\s\S]{0,120}_clockSkewMs/.test(js), 'the IST hour uses the server offset');
+    assert.ok(!/getUTCHours\(\) \+ 5/.test(js), 'the old device-clock arithmetic must be gone');
+    assert.ok(/await _syncClock\(\);/.test(js), 'the pane syncs the clock before it evaluates a send');
+});
+
+t('CB4: a test send says it ignores quiet hours and the daily limit', () => {
+    assert.ok(js.includes('ignore quiet hours and the daily limit'), 'the test-mode note must state the carve-out');
+    assert.ok(/pushTestHint'\)[\s\S]{0,400}ignore quiet hours/.test(js), 'the test hint states it too');
+});
+
+t('CB5: no fake recall - notifyLog is server-written and read-only for the client', () => {
+    assert.ok(!/notifyLog\/\$\{|update\(Outlet\.ref\(`notifyLog/.test(js), 'the client must not write notifyLog');
+    assert.ok(!/recalled: true/.test(js), 'no fake recall flag');
+    assert.ok(/logChange\(\s*'recall'/.test(js), 'the flag writes an audit entry instead');
+    assert.ok(js.includes('cannot be pulled back'), 'the copy must say a delivered push cannot be pulled back');
+    assert.ok(/push notification/.test(js), 'the audit target names the push');
+    // The Activity trail needs a label for the new action.
+    const appJs = fs.readFileSync(path.join(root, 'Admin/js/features/customer-app.js'), 'utf8');
+    assert.ok(/recall: 'Flagged'/.test(appJs), 'the Activity trail labels the recall action');
+});
+
+t('the reach note has markup and a style (PurgeCSS drops unused classes)', () => {
+    assert.ok(html.includes('id="pushReachText"') && html.includes('id="pushReachNote"'), 'reach text + note ids in markup');
+    assert.ok(css.includes('.push-reach__note'), 'the note class exists in the stylesheet');
+    assert.ok(js.includes("$('pushReachNote')"), 'the module fills the note');
+});
+
 console.log(failed ? `\n${failed} check(s) failed` : '\napp notifications guard ok');
 process.exit(failed ? 1 : 0);

@@ -305,9 +305,13 @@ function _closeAllModals() {
 
 const AUDIT_ACTIONS = {
     create: 'Created', update: 'Updated', delete: 'Deleted', archive: 'Archived', restore: 'Restored',
-    toggle: 'Toggled', reorder: 'Reordered', feature: 'Featured', unfeature: 'Unfeatured'
+    toggle: 'Toggled', reorder: 'Reordered', feature: 'Featured', unfeature: 'Unfeatured',
+    recall: 'Flagged'
 };
-const AUDIT_TARGETS = { discounts: 'Offer', 'settings/Store': 'App settings', 'menu/dishes': 'Dish', 'menu/categories': 'Category' };
+const AUDIT_TARGETS = {
+    discounts: 'Offer', 'settings/Store': 'App settings', 'menu/dishes': 'Dish', 'menu/categories': 'Category',
+    'push notification': 'Push notification'
+};
 
 /** Readable list of audit entries (shared by Overview, Activity and the old pop-up). */
 function _renderAuditEntries(entries, wrap, emptyText = 'No changes recorded yet.') {

@@ -24,6 +24,7 @@ import { formatDate } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { logger } from '../utils/logger.js';
 import { appLink } from '../../shared/app-link.js';
+import { logChange } from './audit-trail.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -35,7 +36,7 @@ const TYPE_INFO = {
     order:   { label: 'Order update',  icon: 'receipt',   color: '#e84908', hint: 'Goes to one customer. Order updates ignore the offer opt-in and are never paused.' },
 };
 
-let _subs = [];        // [{ key, phone, name, offers, updatedAt }]
+let _subs = [];        // [{ key, phone, name, offers, hasToken, updatedAt }]
 let _wired = false;    // listeners are bound once
 let _loaded = false;   // subscriber snapshot has landed at least once
 let _loadError = false;
@@ -58,6 +59,7 @@ export async function initPushUI() {
     logger.info('APP-NOTIF', 'Initialising push notification UI…');
     _wireOnce();
     renderAppLink();
+    await _syncClock();
     await checkDevice();
     await loadPushSubscriptions();
     await loadHistory();
@@ -385,8 +387,16 @@ function _renderTemplatesList() {
     `).join('');
 }
 
-/* ============ UNDO AFTER SEND ============ */
+/* ============ AFTER A SEND ============ */
 
+/**
+ * A delivered push cannot be pulled back: FCM has no recall, and the send
+ * history (`notifyLog`) is written by the server and READ-ONLY for the
+ * client (database.rules.json grants no client write). The old "Mark as
+ * recalled" button therefore did nothing at all - it promised a recall the
+ * platform cannot perform. This offers the honest alternative: flag the
+ * send in the Activity trail so the team has a record of it.
+ */
 function _scheduleUndo(entry) {
     if (_undoTimer) { clearTimeout(_undoTimer); _undoTimer = null; }
     _undoEntry = entry;
@@ -394,12 +404,12 @@ function _scheduleUndo(entry) {
     if (el) {
         el.className = 'push-result is-ok';
         el.textContent = 'Sent. ';
-        const undoBtn = document.createElement('button');
-        undoBtn.className = 'btn-secondary btn-sm';
-        undoBtn.textContent = 'Mark as recalled';
-        undoBtn.style.marginLeft = '8px';
-        undoBtn.onclick = () => _undoSend();
-        el.appendChild(undoBtn);
+        const flagBtn = document.createElement('button');
+        flagBtn.className = 'btn-secondary btn-sm';
+        flagBtn.textContent = 'Flag as sent in error';
+        flagBtn.style.marginLeft = '8px';
+        flagBtn.onclick = () => _flagSendError();
+        el.appendChild(flagBtn);
     }
     _undoTimer = setTimeout(() => {
         _undoTimer = null;
@@ -408,21 +418,24 @@ function _scheduleUndo(entry) {
     }, 5000);
 }
 
-function _undoSend() {
+async function _flagSendError() {
     if (!_undoEntry) return;
     if (_undoTimer) { clearTimeout(_undoTimer); _undoTimer = null; }
-    // Mark the history entry as recalled
-    const key = _undoEntry.key;
-    if (key) {
-        update(Outlet.ref(`notifyLog/${key}`), { recalled: true, recalledAt: Date.now() }).catch(() => {});
-    }
+    const entry = _undoEntry;
     _undoEntry = null;
+    await logChange(
+        'recall',
+        'push notification',
+        entry.title || '',
+        { type: entry.type, audience: entry.audience, phone: entry.phone, sentAt: entry.at },
+        { flagged: true }
+    );
     const el = $('pushSendResult');
     if (el) {
         el.className = 'push-result is-warn';
-        el.textContent = 'Marked as recalled.';
+        el.textContent = 'Flagged in the activity trail. A push that was already delivered cannot be pulled back.';
     }
-    showToast('Notification marked as recalled', 'info');
+    showToast('Flagged in the activity trail', 'info');
     _syncUi();
 }
 
@@ -475,6 +488,11 @@ export async function loadPushSubscriptions(manual = false) {
                 name: String(s?.name || ''),
                 // Mirrors the server: a record without prefs predates consent.
                 offers: !s?.prefs || s.prefs.offers === true,
+                // The server only pushes to records that carry a token
+                // (tenantNotify: entries.map(e => e.token).filter(Boolean)),
+                // so a record without one is a subscriber whose device cannot
+                // be reached - it must not be counted as reachable.
+                hasToken: !!s?.token,
                 updatedAt: Number(s?.updatedAt || 0),
             };
         });
@@ -498,12 +516,21 @@ export async function loadPushSubscriptions(manual = false) {
 
 function _renderSubs() {
     const total = _subs.length;
-    const offers = _subs.filter(s => s.offers).length;
+    // "Offers reachable" = subscribers who kept offers on AND have a device
+    // token on file - the server can push to nobody else.
+    const reach = _reachable('promo').length;
     const latest = _subs.reduce((m, s) => Math.max(m, s.updatedAt || 0), 0);
 
     if ($('pushSubCount')) $('pushSubCount').textContent = String(total);
-    if ($('pushOffersReach')) $('pushOffersReach').textContent = String(offers);
+    if ($('pushOffersReach')) $('pushOffersReach').textContent = String(reach);
     if ($('pushSubUpdated')) $('pushSubUpdated').textContent = latest ? formatDate(latest) : '—';
+
+    // Native tooltips carry the "what exactly is this number" answer without
+    // adding another line of copy to the pane.
+    const subCard = $('pushSubCount')?.closest('.stat-card');
+    if (subCard) subCard.title = 'Subscription records in this outlet. A record can lose its device token.';
+    const reachCard = $('pushOffersReach')?.closest('.stat-card');
+    if (reachCard) reachCard.title = 'Subscribers who kept offers on AND have a device token on file.';
 
     $('pushEmptyState')?.classList.toggle('hidden', total > 0);
 
@@ -704,10 +731,41 @@ function _phone() {
     return ($('pushNotifPhone')?.value || '').replace(/\D/g, '').slice(0, 10);
 }
 
+/**
+ * Quiet hours belong to the SERVER (functions/src/shared/notify/caps.ts:
+ * 21:00-09:00 IST, promo/offer only). The browser clock can be wrong - a
+ * device 12 hours out would silently block a morning send or let a night
+ * send through - so the IST hour is anchored to the Firebase Auth token's
+ * issued-at claim, which is the server's own clock. The device clock is only
+ * the fallback (no token yet).
+ */
+const IST_OFFSET_MS = 5 * 3600000 + 30 * 60000;
+let _clockSkewMs = 0;
+
+async function _syncClock() {
+    try {
+        const user = auth.currentUser;
+        if (!user) return;
+        const token = await user.getIdToken();
+        const part = String(token || '').split('.')[1];
+        if (!part) return;
+        const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
+        const payload = JSON.parse(atob(padded));
+        if (Number.isFinite(payload.iat)) _clockSkewMs = payload.iat * 1000 - Date.now();
+    } catch (e) {
+        // Keep the device clock - the server is the authority in any case.
+    }
+}
+
+/** The current IST hour (0-23), anchored to the server clock when known. */
+function _istHour() {
+    return new Date(Date.now() + _clockSkewMs + IST_OFFSET_MS).getUTCHours();
+}
+
 function _isQuietHours() {
-    const now = new Date();
-    const istHour = (now.getUTCHours() + 5 + (now.getUTCMinutes() >= 30 ? 1 : 0)) % 24;
-    return istHour >= 21 || istHour < 9;
+    const h = _istHour();
+    return h >= 21 || h < 9;
 }
 
 /**
@@ -720,7 +778,30 @@ function _quietBlocked(type) {
 }
 
 /**
+ * The subscribers the server can ACTUALLY reach for a type.
+ *
+ * The server pushes to `entries.map(e => e.token).filter(Boolean)`
+ * (functions/src/api/tenantNotify.ts), so a subscription record without a
+ * device token is a subscriber whose phone cannot be reached - counting it
+ * would promise a push that never lands. Marketing types additionally need
+ * the customer's offers preference ON (the server filters the same way).
+ */
+function _reachable(type) {
+    const marketing = type !== 'order';
+    return _subs.filter(s => s.hasToken && (!marketing || s.offers));
+}
+
+/** Why nobody can be reached: either no device token at all, or offers off. */
+function _noReach(total) {
+    const withToken = _subs.filter(s => s.hasToken).length;
+    if (withToken === 0) return { ok: false, count: 0, reason: `0 of ${total} subscribers have a device token on file.`, note: 'A subscriber only gets a token after allowing notifications in the app.' };
+    return { ok: false, count: 0, reason: `0 of ${total} subscribers kept offers on.`, note: 'Customers can turn offers back on in the app.' };
+}
+
+/**
  * Single decision table for "can this go out, and to how many".
+ * `count` is an UPPER BOUND: the server suppresses anyone who already had
+ * 3 marketing pushes today, so the real number can be lower.
  * @returns {{ok:boolean, count:number, reason:string, note?:string}}
  */
 function _evaluate() {
@@ -728,7 +809,6 @@ function _evaluate() {
     const aud = _currentAudience();
     const phone = _phone();
     const total = _subs.length;
-    const offers = _subs.filter(s => s.offers).length;
     const testMode = !!$('pushNotifTestMode')?.checked;
 
     if (_sending) return { ok: false, count: 0, reason: 'Sending…' };
@@ -736,7 +816,7 @@ function _evaluate() {
     // the subscriber list (a failed subscriptions read must not block a test).
     if (testMode) {
         return _deviceReady
-            ? { ok: true, count: 1, reason: '' }
+            ? { ok: true, count: 1, reason: '', note: 'Test sends go only to your own device and ignore quiet hours and the daily limit.' }
             : { ok: false, count: 0, reason: 'No push token on your admin account yet.', note: 'Enable notifications from the bell prompt, then reload this page.' };
     }
     if (!_loaded) return { ok: false, count: 0, reason: 'Checking subscribers…' };
@@ -746,18 +826,34 @@ function _evaluate() {
 
     if (aud === 'one') {
         if (!/^[6-9]\d{9}$/.test(phone)) return { ok: false, count: 0, reason: 'Enter a 10-digit mobile number.' };
-        const sub = _subs.find(s => s.phone === phone);
-        if (!sub) return { ok: false, count: 0, reason: 'This number has no app notifications enabled.', note: 'Only customers who allowed notifications can receive a push.' };
-        if (type !== 'order' && !sub.offers) return { ok: false, count: 0, reason: 'This customer turned offers off.', note: 'Send an Order update instead, or pick another customer.' };
+        // One phone can have several subscription records (one per device).
+        const matches = _subs.filter(s => s.phone === phone);
+        if (matches.length === 0) return { ok: false, count: 0, reason: 'This number has no app notifications enabled.', note: 'Only customers who allowed notifications can receive a push.' };
+        const devices = matches.filter(s => s.hasToken).length;
+        if (devices === 0) return { ok: false, count: 0, reason: 'This customer has no push token on file.', note: 'Their device registered without notifications, or the token has expired. Ask them to re-enable notifications in the app.' };
+        if (type !== 'order' && !matches.some(s => s.offers)) return { ok: false, count: 0, reason: 'This customer turned offers off.', note: 'Send an Order update instead, or pick another customer.' };
         if (_quietBlocked(type)) return { ok: false, count: 0, reason: 'Offers pause 9 PM-9 AM IST.', note: 'Send after 9:00 AM - transactional Order updates are never paused.' };
-        return { ok: true, count: 1, reason: '' };
+        return {
+            ok: true,
+            count: devices,
+            reason: '',
+            note: type === 'order'
+                ? 'Order updates ignore the offer opt-in and are never paused.'
+                : 'This customer can get up to 3 offer pushes a day - the server skips anyone who already had 3 today.',
+        };
     }
 
     // Broadcast - never allowed for transactional order updates.
     if (type === 'order') return { ok: false, count: 0, reason: 'Order updates go to one customer.' };
-    if (offers === 0) return { ok: false, count: 0, reason: `0 of ${total} subscribers kept offers on.`, note: 'Customers can turn offers back on in the app.' };
+    const reach = _reachable(type).length;
+    if (reach === 0) return _noReach(total);
     if (_quietBlocked(type)) return { ok: false, count: 0, reason: 'Offers pause 9 PM-9 AM IST.', note: 'Send after 9:00 AM, or use an Order update for one customer.' };
-    return { ok: true, count: offers, reason: '' };
+    return {
+        ok: true,
+        count: reach,
+        reason: '',
+        note: 'Each customer can receive up to 3 offer pushes a day - the server skips anyone who already had 3 today.',
+    };
 }
 
 /* ============ RENDER ============ */
@@ -785,13 +881,31 @@ function _syncUi() {
     });
 
     const reach = $('pushReachLine');
-    if (reach) {
-        const total = _subs.length;
-        reach.textContent = testMode
-            ? (_deviceReady ? 'Test sends go to the device registered to your admin account.' : 'No push token on your admin account yet.')
-            : (ev.reason || `Will reach ${ev.count} of ${total} subscriber${total === 1 ? '' : 's'}.`);
-        reach.classList.toggle('is-warn', !ev.ok);
+    const reachText = $('pushReachText');
+    const reachNote = $('pushReachNote');
+    const total = _subs.length;
+    if (reach || reachText) {
+        let text = '';
+        if (testMode) {
+            text = _deviceReady
+                ? 'Test sends go to the device registered to your admin account.'
+                : 'No push token on your admin account yet.';
+        } else if (!ev.ok) {
+            text = ev.reason || '';
+        } else if (aud === 'one') {
+            text = `Will reach ${_phone() || 'this customer'} on ${ev.count} device${ev.count === 1 ? '' : 's'}.`;
+        } else {
+            // "up to" because the server skips anyone who already had 3
+            // marketing pushes today - the client cannot know that count.
+            text = `Will reach up to ${ev.count} of ${total} subscriber${total === 1 ? '' : 's'}.`;
+        }
+        if (reachText) reachText.textContent = text;
+        else if (reach) reach.textContent = text;
+        reach?.classList.toggle('is-warn', !ev.ok);
     }
+    // The note is the honest caveat under the headline number. When the send
+    // is blocked, the preflight block below already shows reason + note.
+    if (reachNote) reachNote.textContent = (ev.ok && ev.note) ? ev.note : '';
 
     const pf = $('pushPreflight');
     if (pf) {
@@ -819,7 +933,7 @@ function _syncUi() {
     if (label) {
         const base = testMode ? 'Send test to my device'
             : aud === 'one' ? `Send to ${_phone() || 'customer'}`
-                : `Send to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}`;
+                : `Send to up to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}`;
         label.textContent = _sending ? 'Sending…'
             : (!ev.ok || contentOk) ? base
                 : 'Add title and message';
@@ -828,16 +942,21 @@ function _syncUi() {
     const testHint = $('pushTestHint');
     if (testHint) {
         testHint.textContent = _deviceReady
-            ? 'Test sends go to the device registered to your admin account.'
+            ? 'Test sends go to the device registered to your admin account, and ignore quiet hours and the daily limit.'
             : 'No push token on your admin account yet - enable notifications from the bell prompt, then reload.';
     }
 
     const phoneHint = $('pushPhoneHint');
     if (phoneHint) {
         const withPhone = _subs.filter(s => s.phone).length;
-        phoneHint.textContent = withPhone
+        const noToken = _subs.filter(s => !s.hasToken).length;
+        const noPhone = _subs.length - withPhone;
+        const bits = [withPhone
             ? `${withPhone} subscriber${withPhone === 1 ? '' : 's'} with a number on file - start typing to pick one.`
-            : 'No subscriber has a number on file yet.';
+            : 'No subscriber has a number on file yet.'];
+        if (noToken) bits.push(`${noToken} without a device token, so they cannot be reached.`);
+        if (noPhone) bits.push(`${noPhone} without a number.`);
+        phoneHint.textContent = bits.join(' ');
     }
 }
 
@@ -934,7 +1053,7 @@ async function _sendPushNotification() {
 
     if (!testMode && aud === 'all') {
         const ok = await showConfirm(
-            `Send "${title}" to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}? You can mark as recalled within 5 seconds.`,
+            `Send "${title}" to up to ${ev.count} subscriber${ev.count === 1 ? '' : 's'}? Each customer can get up to 3 offer pushes a day.`,
             'Send notification'
         );
         if (!ok) return;
@@ -990,7 +1109,12 @@ async function _sendPushNotification() {
         // The server writes the in-app inbox independently of FCM delivery, so
         // a push no device received can still be visible to the customer.
         const inbox = Number(result.inbox || 0);
-        const skipped = aud === 'all' && !testMode ? Math.max(0, _subs.length - attempted) : 0;
+        // `total` counts the devices the server actually attempted, i.e. after
+        // the daily cap suppressed some recipients. The base is the set the
+        // client can see (token + consent), so the difference is what the cap
+        // took away.
+        const reachBase = _reachable(type).length;
+        const skipped = aud === 'all' && !testMode ? Math.max(0, reachBase - attempted) : 0;
 
         if (sent === 0) {
             const why = testMode
@@ -1004,7 +1128,7 @@ async function _sendPushNotification() {
             const bits = [`Sent to ${sent} device${sent === 1 ? '' : 's'}`];
             if (failed) bits.push(`${failed} failed`);
             if (inbox > 0) bits.push(`${inbox} in-app`);
-            if (skipped > 0) bits.push(`${skipped} skipped (offers off or daily limit)`);
+            if (skipped > 0) bits.push(`${skipped} skipped (daily limit)`);
             bits.push(_timeNow());
             _showResult('ok', bits.join(' · '));
             showToast(`Notification sent to ${sent} device${sent === 1 ? '' : 's'}`, 'success');

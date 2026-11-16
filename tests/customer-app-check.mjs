@@ -112,11 +112,17 @@ t('P1: keyboard shortcuts wired', () => {
     assert.ok(/Escape/.test(appNotifJs) || /e\.key\s*===\s*['"]Escape['"]/.test(appNotifJs), 'Escape must clear composer');
 });
 
-t('P1: undo after send exists', () => {
+t('P1: after a send, a 5-second flag action exists (no fake recall)', () => {
+    // The old "Mark as recalled" wrote `recalled: true` to notifyLog, which the
+    // server owns and the rules make READ-ONLY for the client - so the button
+    // promised a recall the platform cannot perform. It now writes an audit
+    // entry and says a delivered push cannot be pulled back.
     assert.ok(appNotifJs.includes('function _scheduleUndo'), '_scheduleUndo must exist in app-notifications.js');
-    assert.ok(appNotifJs.includes('function _undoSend'), '_undoSend must exist in app-notifications.js');
-    assert.ok(appNotifJs.includes('5000'), 'undo window must be 5 seconds');
-    assert.ok(appNotifJs.includes('recalled: true'), 'undo must mark the history entry as recalled');
+    assert.ok(appNotifJs.includes('function _flagSendError'), '_flagSendError must exist in app-notifications.js');
+    assert.ok(appNotifJs.includes('5000'), 'the flag window must be 5 seconds');
+    assert.ok(!appNotifJs.includes('recalled: true'), 'no fake recall flag may be written');
+    assert.ok(/logChange\(\s*'recall'/.test(appNotifJs), 'the flag writes an audit entry');
+    assert.ok(appNotifJs.includes('cannot be pulled back'), 'the copy must be honest about what can be undone');
 });
 
 t('P1: initPushUI calls draft/template/keyboard setup', () => {
