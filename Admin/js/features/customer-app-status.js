@@ -14,6 +14,8 @@ export const APP_CONTROLS = {
     storeName:        { label: 'Store name',            live: true,  note: 'Shown in the app header.',                                   reads: ['menu/js/app.js', 'storeName'] },
     whatsappNumber:   { label: 'WhatsApp number',       live: true,  note: 'Used by the "Chat on WhatsApp" card.',                       reads: ['menu/js/ui.js', 's.whatsappNumber'] },
     googleReviewLink: { label: 'Google review link',    live: true,  note: 'Opens from the "Rate us" card.',                             reads: ['menu/js/ui.js', 's.googleReviewLink'] },
+    facebookPage:    { label: 'Facebook page',          live: true,  note: 'Shown as a "Like us on Facebook" card.',                         reads: ['menu/js/ui.js', 's.facebook'] },
+    instagramPage:   { label: 'Instagram page',         live: true,  note: 'Shown as a "Follow on Instagram" card.',                        reads: ['menu/js/ui.js', 's.instagram'] },
     promoPage:        { label: 'Coupons on Promo Page', live: true,  note: 'Only coupons marked "Show on Promo Page" appear.',           reads: ['menu/js/customer.js', 'offer.promoPage === true'] },
     pushNotes:        { label: 'Push notifications',    live: true,  note: 'Sent through the notification service.',                     reads: null },
     dishStock:        { label: 'Out-of-stock dishes',   live: true,  note: 'Dishes marked out of stock in Menu are hidden from customers.', reads: ['menu/js/app.js', 'd.stock !== false'] },
@@ -33,7 +35,7 @@ export const APP_CONTROLS = {
     taxOnDeliveryFee: { label: 'GST on delivery fee',   live: false, note: 'Not used for pricing. Tax comes from your Tax settings.' },
     businessHours:    { label: 'Business hours',        live: false, note: 'Saved, but the app does not show "closed now" yet.' },
     timezone:         { label: 'Timezone',              live: false, note: 'Saved, but the app does not read it.' },
-    themeColor:       { label: 'Theme colour',          live: false, note: 'Saved, but the app keeps its own colours.' },
+    themeColor:       { label: 'Theme colour',          live: false, note: 'The customer app keeps its own colours. This colour is used on your printable QR card.' },
     logoUrl:          { label: 'Logo URL',              live: false, note: 'Saved, but the app does not show it yet.' },
 };
 

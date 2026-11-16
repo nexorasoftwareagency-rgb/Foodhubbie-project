@@ -34,6 +34,7 @@ import { printOrderReceipt } from './printing.js';
 import { haptic, escapeHtml, playNotificationSound, logAudit, formatOrderId, gateManualDiscountPin, gateManagerPin } from '../utils.js';
 import { loadLucide } from '../ui.js';
 import { evaluateDiscount, recordDiscountUsage, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
+import { qrDataUri as _qrDataUri } from '../utils/qr.js';
 
 // ---------------------------------------------------------------------
 // Module-level cache
@@ -2558,31 +2559,7 @@ function _ensureQrCardCssInPage() {
     _qrCardCssInjected = true;
 }
 
-async function _ensureQrLib() {
-    if (window.QRCode) return true;
-    return new Promise((resolve) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-        s.onload = () => resolve(true);
-        s.onerror = () => resolve(false);
-        document.head.appendChild(s);
-    });
-}
 
-async function _qrDataUri(text, size = 220) {
-    const ok = await _ensureQrLib();
-    if (!ok || !window.QRCode) return null;
-    try {
-        const holder = document.createElement('div');
-        new window.QRCode(holder, { text, width: size, height: size, colorDark: '#1a1a1a', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.M });
-        const img = holder.querySelector('img');
-        const canvas = holder.querySelector('canvas');
-        return img?.src || canvas?.toDataURL('image/png') || null;
-    } catch (e) {
-        console.error('[QRDataUri]', e);
-        return null;
-    }
-}
 
 // Secure URL shape — TOKEN ONLY, never a table number (Decision #5/#6)
 async function _qrUrlForTable(t) {

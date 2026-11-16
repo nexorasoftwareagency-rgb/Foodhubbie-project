@@ -331,6 +331,83 @@ t('P4: business hours render/collect functions exist', () => {
 });
 
 // =====================================================================
+// PANE 4b: Customer App QR card + social links (App Settings)
+// =====================================================================
+
+/** The markup between the App Settings pane opening and the next pane. */
+function settingsPane() {
+    const start = html.indexOf('id="caPaneSettings"');
+    const end = html.indexOf('id="caPaneActivity"', start);
+    assert.ok(start > 0 && end > start, 'could not slice the App Settings pane out of Admin/index.html');
+    return html.slice(start, end);
+}
+
+t('QR card markup lives inside the App Settings pane', () => {
+    const pane = settingsPane();
+    assert.ok(pane.includes('class="ca-qr-card"'), 'the QR card section must sit inside #caPaneSettings');
+    assert.ok(!/<div id="qr-generator-placeholder">/.test(html), 'the old placeholder div must be gone');
+    assert.ok(!html.includes('qr-generator-card'), 'the old QR generator block must be gone');
+    for (const id of ['btnDownloadQR', 'btnPrintQR', 'qrCodeImg', 'qrCardName', 'qrCardLogo', 'qrPhoneDisplay', 'qrWhatsappDisplay', 'qrAddressDisplay', 'qrSocialDisplay', 'qrAppLinkDisplay', 'logoPreview', 'logoPreviewImg', 'themePreviewSwatch', 'themePreviewValue']) {
+        assert.ok(pane.includes(`id="${id}"`), `missing id inside the settings pane: ${id}`);
+    }
+});
+
+t('QR print card is a direct child of body (print isolation)', () => {
+    const body = html.slice(html.indexOf('<body'));
+    const card = body.indexOf('id="qrPrintCard"');
+    assert.ok(card > 0, '#qrPrintCard must exist');
+    assert.ok(card > body.indexOf('</main>'), '#qrPrintCard must live outside <main>');
+    assert.ok(card < body.indexOf('</body>'), '#qrPrintCard must live before </body>');
+    assert.ok(css.includes('body.printing-qr > *:not(#qrPrintCard)'), 'printing must hide everything except the print card');
+});
+
+t('QR card functions exist in customer-app.js', () => {
+    for (const fn of ['_qrFacts', '_updateBrandPreview', '_renderQrCard', '_qrPrintCardHtml', '_renderQrPrintCard', '_printQrCard', '_composeQrPng', '_downloadQrCard', '_loadCorsImage', '_wrapCanvasText']) {
+        assert.ok(js.includes(`function ${fn}`), `${fn} must exist`);
+    }
+    assert.ok(js.includes("from '../utils/qr.js'"), 'the shared QR helper must be imported');
+    assert.ok(!js.includes('function _ensureQrLib'), 'the QR library loader lives in Admin/js/utils/qr.js only');
+});
+
+t('the shared QR helper exists and is the only implementation', () => {
+    const qr = fs.readFileSync(path.join(root, 'Admin/js/utils/qr.js'), 'utf8');
+    assert.ok(qr.includes('export function ensureQrLib'), 'ensureQrLib must be exported');
+    assert.ok(qr.includes('export async function qrDataUri'), 'qrDataUri must be exported');
+    const tables = fs.readFileSync(path.join(root, 'Admin/js/features/tables.js'), 'utf8');
+    assert.ok(tables.includes("from '../utils/qr.js'"), 'tables.js must use the shared QR helper');
+    assert.ok(!tables.includes('function _ensureQrLib'), 'tables.js must not carry its own QR loader');
+    assert.ok(!/ensureQrLib\s+as/.test(tables), 'tables.js must not import an unused ensureQrLib');
+    const sw = fs.readFileSync(path.join(root, 'Admin/sw.js'), 'utf8');
+    assert.ok(sw.includes('./js/utils/qr.js'), 'the service worker must precache the QR helper');
+});
+
+t('social links are saved, restored and validated', () => {
+    for (const id of ['caSettingFacebookPage', 'caSettingInstagramPage']) {
+        assert.ok(html.includes(`id="${id}"`), `missing id: ${id}`);
+    }
+    assert.ok(/facebook:\s*\$\('caSettingFacebookPage'\)/.test(js), 'facebook must be saved to settings/Store');
+    assert.ok(/instagram:\s*\$\('caSettingInstagramPage'\)/.test(js), 'instagram must be saved to settings/Store');
+    assert.ok(js.includes("caSettingFacebookPage: _settingsOriginal.facebook"), 'facebook must be restored on Discard');
+    assert.ok(js.includes("caSettingInstagramPage: _settingsOriginal.instagram"), 'instagram must be restored on Discard');
+    assert.ok(js.includes('caSettingFacebookPage') && js.includes('caSettingInstagramPage'), 'both social fields must be validated');
+});
+
+t('Customer APP CSS is balanced and the dead badge styles are gone', () => {
+    let depth = 0;
+    for (const ch of css) {
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+        assert.ok(depth >= 0, 'CSS braces close before they open');
+    }
+    assert.equal(depth, 0, 'CSS braces are unbalanced');
+    for (const dead of ['.ca-field-badge', '.ca-field-wrapper', '.qr-generator-card', '.qr-info-row', '.theme-color-swatch', '.logo-preview']) {
+        assert.ok(!css.includes(dead), `dead style must be removed: ${dead}`);
+    }
+    assert.ok(css.includes('.ca-qr-card'), 'the QR card styles must exist');
+    assert.ok(css.includes('.qr-print-sheet'), 'the print sheet styles must exist');
+});
+
+// =====================================================================
 // PANE 5: Audit Trail, Role Gating, Keyboard Shortcuts (cross-cutting)
 // =====================================================================
 

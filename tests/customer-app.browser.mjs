@@ -54,6 +54,7 @@ const REAL = {
     '/Admin/js/features/customer-app-status.js': ['text/javascript', 'Admin/js/features/customer-app-status.js'],
     '/Admin/js/features/audit-trail.js': ['text/javascript', 'Admin/js/features/audit-trail.js'],
     '/Admin/js/features/app-notifications.js': ['text/javascript', 'Admin/js/features/app-notifications.js'],
+    '/Admin/js/utils/qr.js': ['text/javascript', 'Admin/js/utils/qr.js'],
     '/Admin/shared/app-link.js': ['text/javascript', 'shared/app-link.js'],
     '/Admin/shared/discount-rules.js': ['text/javascript', 'shared/discount-rules.js'],
 };
@@ -74,6 +75,20 @@ async function open(vp = { width: 1280, height: 900 }, role = 'owner') {
     const page = await browser.newPage({ viewport: vp });
     page.errors = [];
     page.on('pageerror', e => page.errors.push(e.message));
+    // qrcodejs is loaded from a CDN in production; the test blocks the network, so stub it.
+    await page.addInitScript(() => {
+        window.QRCode = class {
+            constructor(el, opts) {
+                const c = document.createElement('canvas');
+                c.width = opts.width; c.height = opts.height;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = opts.colorLight; ctx.fillRect(0, 0, c.width, c.height);
+                ctx.fillStyle = opts.colorDark; ctx.fillRect(8, 8, 40, 40);
+                el.appendChild(c);
+            }
+        };
+        window.QRCode.CorrectLevel = { M: 0 };
+    });
     await page.route('**/*', r => {
         const p = new URL(r.request().url()).pathname;
         if (STUBS[p]) return r.fulfill({ contentType: 'text/javascript', body: STUBS[p] });
@@ -193,6 +208,50 @@ await t('badges are present on settings and visibility labels', async () => {
     assert.ok((await page.locator('#tab-customer-app .ca-live').count()) > 0);
     assert.ok((await page.locator('#tab-customer-app .ca-saved').count()) > 0);
 });
+await t('QR card lives inside the App Settings pane (not the whole tab)', async () => {
+    assert.equal(await page.locator('#caPaneSettings .ca-qr-card').count(), 1);
+    assert.equal(await page.locator('#tab-customer-app > .ca-qr-card').count(), 0);
+    assert.ok(await page.locator('#caPaneSettings #qrCodeImg').count());
+    // and it is NOT on another sub-tab
+    await goto(page, 'offers');
+    assert.equal(await page.locator('#tab-customer-app .ca-qr-card:visible').count(), 0);
+});
+await t('QR card shows the saved restaurant details', async () => {
+    await goto(page, 'settings');
+    await page.waitForTimeout(400);
+    const name = await page.inputValue('#caSettingStoreName');
+    assert.equal(await page.innerText('#qrCardName'), name);
+    assert.match(await page.getAttribute('#qrCodeImg', 'src'), /^data:image\/png/);
+    assert.equal(await page.locator('#qrCodeImg').isVisible(), true);
+    assert.match(await page.innerText('#qrAppLinkDisplay'), /^https:\/\//);
+});
+await t('social links are saved and shown on the QR card', async () => {
+    await page.fill('#caSettingFacebookPage', 'https://facebook.com/roshani');
+    await page.fill('#caSettingInstagramPage', 'https://instagram.com/roshani');
+    await page.waitForTimeout(200);
+    assert.match(await page.innerText('#qrSocialDisplay'), /facebook\.com\/roshani/);
+    await page.click('#btnSaveAppSettings');
+    await page.waitForTimeout(500);
+    const s = await store(page, 'settings/Store');
+    assert.equal(s.facebook, 'https://facebook.com/roshani');
+    assert.equal(s.instagram, 'https://instagram.com/roshani');
+});
+await t('a bad social link is rejected before saving', async () => {
+    await page.fill('#caSettingFacebookPage', 'not a url');
+    await page.click('#btnSaveAppSettings');
+    await page.waitForTimeout(300);
+    assert.equal((await store(page, 'settings/Store')).facebook, 'https://facebook.com/roshani');
+    assert.ok((await page.locator('#caPaneSettings .ca-field-error').count()) >= 1);
+    await page.click('#btnResetAppSettings');
+    await page.waitForTimeout(300);
+});
+await t('the print card is filled for printing', async () => {
+    await goto(page, 'settings');
+    await page.waitForTimeout(300);
+    const name = await page.inputValue('#caSettingStoreName');
+    assert.ok((await page.locator('#qrPrintCard .qr-print-sheet').count()) === 1);
+    assert.ok((await page.innerText('#qrPrintCard')).includes(name));
+});
 await t('offers: bulk buttons have unique ids and Cancel is wired', async () => {
     const dup = await page.evaluate(() => { const m = {}; document.querySelectorAll('[id]').forEach(e => { m[e.id] = (m[e.id] || 0) + 1; }); return Object.keys(m).filter(k => m[k] > 1 && !/receiptPreview/.test(k)); });
     assert.deepEqual(dup, []);
@@ -229,6 +288,17 @@ await t('viewer role cannot change a feature switch', async () => {
     await page.locator('#visFeatureLoyalty').evaluate(el => el.click());
     await page.waitForTimeout(300);
     assert.equal((await store(page, 'settings/Store/appFeatures')).loyalty, false);
+});
+await t('viewer role cannot type in App Settings or save them', async () => {
+    await goto(page, 'settings');
+    await page.waitForTimeout(500);
+    assert.equal(await page.isDisabled('#caSettingStoreName'), true);
+    assert.equal(await page.isDisabled('#caSettingFacebookPage'), true);
+    assert.equal(await page.isDisabled('#btnSaveAppSettings'), true);
+    assert.equal(await page.isDisabled('#btnResetAppSettings'), true);
+    // the business-hours inputs are created after the role gate runs, so they need their own gate
+    assert.equal(await page.isDisabled('#bh_monday_open'), true);
+    assert.equal(await page.isDisabled('#bh_sunday_closed'), true);
 });
 await page.close();
 

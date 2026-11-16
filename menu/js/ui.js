@@ -882,6 +882,11 @@ export function buildInstagramUrl(handle) {
     if (/^https?:\/\//i.test(handle)) return handle;
     return `https://instagram.com/${handle.replace(/^@/, '').trim()}`;
 }
+export function buildFacebookUrl(handle) {
+    if (!handle) return null;
+    if (/^https?:\/\//i.test(handle)) return handle;
+    return `https://facebook.com/${handle.replace(/^@/, '').trim()}`;
+}
 export function buildWhatsappUrl(number, storeName) {
     if (!number) return null;
     const clean = String(number).replace(/[^\d]/g, '');
@@ -902,7 +907,7 @@ export function renderPromotionsLinks(store) {
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>' },
         { key: 'instagram', title: 'Follow on Instagram', sub: 'See our latest dishes & offers', url: buildInstagramUrl(s.instagram), cls: 'promo-link-instagram',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>' },
-        { key: 'facebook', title: 'Like us on Facebook', sub: 'Stay updated with news & events', url: s.facebook, cls: 'promo-link-facebook',
+        { key: 'facebook', title: 'Like us on Facebook', sub: 'Stay updated with news & events', url: buildFacebookUrl(s.facebook), cls: 'promo-link-facebook',
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2h-3a5 5 0 0 0-5 5v3H6v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>' },
         { key: 'whatsapp', title: 'Chat on WhatsApp', sub: 'Questions or feedback? Message us', url: buildWhatsappUrl(s.whatsappNumber, s.storeName), cls: 'promo-link-whatsapp',
           icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3.5A11 11 0 0 0 2.1 17.6L1 23l5.5-1.4A11 11 0 1 0 20.5 3.5zM12 20.9a9 9 0 0 1-4.6-1.3l-.3-.2-3.4.9.9-3.3-.2-.3A9 9 0 1 1 12 20.9z"/></svg>' }

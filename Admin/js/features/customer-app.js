@@ -10,13 +10,14 @@
 
 import { db, auth, Outlet, BUSINESS_ID, ref, get, onValue, set, update, remove } from '../firebase.js';
 import { showToast, showConfirm } from '../ui-utils.js';
-import { formatDate } from '../utils.js';
+import { formatDate, escapeHtml } from '../utils.js';
 import { loadLucide, canEditTab, canDeleteTab, canAccessTab, roleLabel } from '../ui.js';
 import { logger } from '../utils/logger.js';
 import { appLink } from '../../shared/app-link.js';
 import { couponStatus, discountAllowsChannel } from '../../shared/discount-rules.js';
 import { logChange, loadAuditLog } from './audit-trail.js';
 import { APP_CONTROLS, liveBadge, notAppliedList, liveList } from './customer-app-status.js';
+import { qrDataUri } from '../utils/qr.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -59,6 +60,12 @@ let _settingsDirty = false; // unsaved changes flag
 let _settingsOriginal = {}; // original values for dirty detection
 let _settingsSaveTimer = null; // debounce timer for per-field save
 let _settingsErrors = {}; // field -> error message map
+let _settingsReadOnly = false; // the current role may view but not change App Settings
+
+// P4: Customer App QR card state
+let _qrRenderedLink = ''; // the app link the on-screen QR code was built for
+let _qrDataUrl = ''; // that code as a PNG data URI
+let _qrRenderSeq = 0; // guards against out-of-order async renders
 
 /* ============ MAIN ENTRY ============ */
 
@@ -195,37 +202,21 @@ function _wireOnce() {
     $('btnResetAppSettings')?.addEventListener('click', _resetAppSettings);
     $('btnCopyHoursToAll')?.addEventListener('click', _copyHoursToAll);
 
+    // Customer App QR card
+    $('btnDownloadQR')?.addEventListener('click', _downloadQrCard);
+    $('btnPrintQR')?.addEventListener('click', _printQrCard);
+
     // App Settings: ANY change inside the settings grid marks it unsaved (nothing saves until you press Save)
+    // and the QR card previews the change straight away.
     const grid = document.querySelector('#caPaneSettings .ca-settings-grid');
-    const dirtyHandler = (e) => { if (e.target.matches('input, select, textarea')) _markSettingsDirty(e.target.id); };
+    const dirtyHandler = (e) => {
+        if (!e.target.matches('input, select, textarea')) return;
+        _markSettingsDirty(e.target.id);
+        _updateBrandPreview();
+        _renderQrCard();
+    };
     grid?.addEventListener('input', dirtyHandler);
     grid?.addEventListener('change', dirtyHandler);
-
-    // Logo URL preview
-    const logoInput = $('caSettingLogoUrl');
-    const logoPreview = $('logoPreviewImg');
-    if (logoInput && logoPreview) {
-        logoInput.addEventListener('input', () => {
-            const url = logoInput.value.trim();
-            if (url) {
-                logoPreview.src = url;
-                logoPreview.style.display = 'block';
-                logoPreview.onerror = () => { logoPreview.style.display = 'none'; };
-            } else {
-                logoPreview.style.display = 'none';
-            }
-        });
-    }
-
-    // Theme color preview - sync the color input to a visual swatch
-    const themeInput = $('caSettingThemeColor');
-    if (themeInput) {
-        themeInput.addEventListener('input', (e) => {
-            // The native color input already shows the color, but we can add a visual badge
-            const swatch = document.querySelector('.theme-color-swatch');
-            if (swatch) swatch.style.backgroundColor = e.target.value;
-        });
-    }
     // App Features switches save on their own (they live in App Visibility, not in the Save bar)
     document.querySelectorAll('.ca-feature-toggle input[type="checkbox"]').forEach((el) => el.addEventListener('change', () => _saveFeatureToggle(el)));
 
@@ -356,11 +347,32 @@ function _applyRoleGating(tabId) {
     }
 
     // Disable edit controls if no edit permission
+    _settingsReadOnly = !canEdit;
     if (!canEdit) {
         document.querySelectorAll('[data-action="edit"], .icon-btn[data-edit-id], [data-action="save"], .btn-primary[id*="Save"]').forEach(el => {
             el.disabled = true;
             el.title = `Your role (${role}) can view this but not change it.`;
         });
+        // App Settings is a form: a view-only role must not be able to type in it and save.
+        document.querySelectorAll('#caPaneSettings input, #caPaneSettings select, #caPaneSettings textarea').forEach(el => {
+            el.disabled = true;
+            el.title = `Your role (${role}) can view this but not change it.`;
+        });
+        const copyHours = $('btnCopyHoursToAll');
+        if (copyHours) {
+            copyHours.disabled = true;
+            copyHours.title = `Your role (${role}) can view this but not change it.`;
+        }
+    } else {
+        document.querySelectorAll('#caPaneSettings input, #caPaneSettings select, #caPaneSettings textarea').forEach(el => {
+            el.disabled = false;
+            el.title = '';
+        });
+        const copyHours = $('btnCopyHoursToAll');
+        if (copyHours) {
+            copyHours.disabled = false;
+            copyHours.title = '';
+        }
     }
     // Disable delete controls if no delete permission
     if (!canDelete) {
@@ -1502,6 +1514,8 @@ async function _loadAppSettings() {
             phone: store.phone || '',
             whatsappNumber: store.whatsappNumber || '',
             googleReviewLink: store.googleReviewLink || '',
+            facebook: store.facebook || '',
+            instagram: store.instagram || '',
             appWelcomeMessage: store.appWelcomeMessage || '',
             deliveryFee: store.deliveryFee != null ? store.deliveryFee : '',
             minOrder: store.minOrder != null ? store.minOrder : '',
@@ -1525,6 +1539,8 @@ async function _loadAppSettings() {
             caSettingStorePhone: _settingsOriginal.phone,
             caSettingWhatsAppNumber: _settingsOriginal.whatsappNumber,
             caSettingGoogleReviewLink: _settingsOriginal.googleReviewLink,
+            caSettingFacebookPage: _settingsOriginal.facebook,
+            caSettingInstagramPage: _settingsOriginal.instagram,
             caSettingWelcomeMessage: _settingsOriginal.appWelcomeMessage,
             caSettingDeliveryFee: _settingsOriginal.deliveryFee,
             caSettingMinOrder: _settingsOriginal.minOrder,
@@ -1551,6 +1567,10 @@ async function _loadAppSettings() {
         // Business hours grid
         _renderBusinessHours(_settingsOriginal.businessHours);
 
+        // Logo + colour preview and the QR card follow the saved values
+        _updateBrandPreview();
+        _renderQrCard();
+
         // Update save button state
         const saveBtn = $('btnSaveAppSettings');
         const saveBtnBottom = $('btnSaveAppSettingsBottom');
@@ -1576,6 +1596,8 @@ function _restoreAppSettingsFromOriginal() {
         caSettingStorePhone: _settingsOriginal.phone,
         caSettingWhatsAppNumber: _settingsOriginal.whatsappNumber,
         caSettingGoogleReviewLink: _settingsOriginal.googleReviewLink,
+        caSettingFacebookPage: _settingsOriginal.facebook,
+        caSettingInstagramPage: _settingsOriginal.instagram,
         caSettingWelcomeMessage: _settingsOriginal.appWelcomeMessage,
         caSettingDeliveryFee: _settingsOriginal.deliveryFee,
         caSettingMinOrder: _settingsOriginal.minOrder,
@@ -1599,6 +1621,10 @@ function _restoreAppSettingsFromOriginal() {
 
     // Business hours grid
     _renderBusinessHours(_settingsOriginal.businessHours);
+
+    // The QR card goes back to the saved look too
+    _updateBrandPreview();
+    _renderQrCard();
 
     // Update save button state
     const saveBtn = $('btnSaveAppSettings');
@@ -1629,6 +1655,8 @@ async function _saveAppSettings() {
             phone: $('caSettingStorePhone')?.value.trim() || '',
             whatsappNumber: $('caSettingWhatsAppNumber')?.value.trim() || '',
             googleReviewLink: $('caSettingGoogleReviewLink')?.value.trim() || '',
+            facebook: $('caSettingFacebookPage')?.value.trim() || '',
+            instagram: $('caSettingInstagramPage')?.value.trim() || '',
             appWelcomeMessage: $('caSettingWelcomeMessage')?.value || '',
             deliveryFee: num('caSettingDeliveryFee'),
             minOrder: num('caSettingMinOrder'),
@@ -1692,6 +1720,17 @@ function _validateSettings() {
     const reviewLink = ($('caSettingGoogleReviewLink')?.value || '').trim();
     if (reviewLink) {
         try { new URL(reviewLink); } catch { errors.caSettingGoogleReviewLink = 'Enter a valid URL'; }
+    }
+
+    // Social links - a full URL, or a bare page/handle the app turns into one.
+    for (const [id, key] of [['caSettingFacebookPage', 'Facebook'], ['caSettingInstagramPage', 'Instagram']]) {
+        const value = ($(id)?.value || '').trim();
+        if (!value) continue;
+        if (/^https?:\/\//i.test(value)) {
+            try { new URL(value); } catch { errors[id] = `Enter a valid ${key} URL`; }
+        } else if (/\s/.test(value) || value.length > 120) {
+            errors[id] = `Enter a ${key} URL or a page name without spaces`;
+        }
     }
 
     // Delivery fee - non-negative number, reasonable upper bound
@@ -1788,7 +1827,7 @@ function _renderSettingsErrors() {
 
 function _clearAllSettingsErrors() {
     document.querySelectorAll('.ca-field-error').forEach(el => el.remove());
-    document.querySelectorAll('#caSettingStoreName, #caSettingStorePhone, #caSettingWhatsAppNumber, #caSettingGoogleReviewLink, #caSettingDeliveryFee, #caSettingMinOrder, #caSettingGSTRate').forEach(el => {
+    document.querySelectorAll('#caSettingStoreName, #caSettingStorePhone, #caSettingWhatsAppNumber, #caSettingGoogleReviewLink, #caSettingFacebookPage, #caSettingInstagramPage, #caSettingDeliveryFee, #caSettingMinOrder, #caSettingGSTRate').forEach(el => {
         el.style.borderColor = '';
         el.style.backgroundColor = '';
     });
@@ -1799,10 +1838,10 @@ function _updateSettingsDirtyUI() {
     const saveBtnBottom = $('btnSaveAppSettingsBottom');
     if (!saveBtn || !saveBtnBottom) return;
     // Only toggle state. The old code replaced the button's text and wiped its icon.
-    saveBtn.disabled = !_settingsDirty;
-    saveBtnBottom.disabled = !_settingsDirty;
+    saveBtn.disabled = !_settingsDirty || _settingsReadOnly;
+    saveBtnBottom.disabled = !_settingsDirty || _settingsReadOnly;
     const reset = $('btnResetAppSettings');
-    if (reset) reset.disabled = !_settingsDirty;
+    if (reset) reset.disabled = !_settingsDirty || _settingsReadOnly;
     const msg = $('caSettingsDirtyMsg');
     if (msg) {
         msg.textContent = _settingsDirty ? 'You have unsaved changes' : 'All changes saved';
@@ -1842,6 +1881,14 @@ function _renderBusinessHours(hours = {}) {
     });
     html += '</div>';
     grid.innerHTML = html;
+    // A view-only role must not be able to edit the hours either (these inputs are
+    // created after _applyRoleGating ran, so they need their own gate).
+    if (_settingsReadOnly) {
+        grid.querySelectorAll('input').forEach(el => {
+            el.disabled = true;
+            el.title = 'Your role can view these hours but not change them.';
+        });
+    }
     // Wire change listeners for dirty tracking
     days.forEach(day => {
         $('bh_' + day + '_open')?.addEventListener('change', () => { _markSettingsDirty('businessHours'); });
@@ -1916,6 +1963,307 @@ function _decorateBadges() {
         if (el.querySelector('.ca-live, .ca-saved')) return;
         el.insertAdjacentHTML('beforeend', ' ' + liveBadge(el.dataset.caKey));
     });
+}
+
+/* ============ P4: CUSTOMER APP QR CARD ============ */
+
+/** Only a real hex colour may reach a style attribute. */
+function _safeHex(colour) {
+    return /^#[0-9a-f]{6}$/i.test(colour || '') ? colour : '#E84908';
+}
+
+/** "https://facebook.com/roshani" -> "facebook.com/roshani" */
+function _shortLink(url) {
+    return String(url || '').replace(/^https?:\/\/(www\.)?/i, '').replace(/\/+$/, '');
+}
+
+/** Everything the QR card shows, read from the form so the card previews unsaved edits. */
+function _qrFacts() {
+    const val = (id) => ($(id)?.value || '').trim();
+    const facebook = val('caSettingFacebookPage');
+    const instagram = val('caSettingInstagramPage');
+    const social = [
+        facebook ? 'Facebook: ' + _shortLink(facebook) : '',
+        instagram ? 'Instagram: ' + _shortLink(instagram) : '',
+    ].filter(Boolean).join('  ·  ');
+    return {
+        name: val('caSettingStoreName') || 'Your restaurant',
+        phone: val('caSettingStorePhone'),
+        whatsapp: val('caSettingWhatsAppNumber'),
+        address: val('caSettingStoreAddress'),
+        facebook,
+        instagram,
+        social,
+        logo: val('caSettingLogoUrl'),
+        theme: val('caSettingThemeColor') || '#E84908',
+        link: appLink(BUSINESS_ID(), Outlet.current) || '',
+    };
+}
+
+/** Logo + colour preview next to the inputs. */
+function _updateBrandPreview() {
+    const logoUrl = ($('caSettingLogoUrl')?.value || '').trim();
+    const wrap = $('logoPreview');
+    const img = $('logoPreviewImg');
+    if (wrap) wrap.classList.toggle('is-set', !!logoUrl);
+    if (img) {
+        if (logoUrl) {
+            img.src = logoUrl;
+            img.onerror = () => wrap?.classList.remove('is-set');
+        } else {
+            img.removeAttribute('src');
+        }
+    }
+    const theme = _safeHex(($('caSettingThemeColor')?.value || '').trim());
+    const swatch = $('themePreviewSwatch');
+    if (swatch) swatch.style.background = theme; // the one inline style: a value the user chose
+    const value = $('themePreviewValue');
+    if (value) value.textContent = theme.toUpperCase();
+}
+
+/** Build (or refresh) the on-screen QR card. The code itself only changes with the app link. */
+async function _renderQrCard() {
+    const facts = _qrFacts();
+    const seq = ++_qrRenderSeq;
+
+    const name = $('qrCardName');
+    if (name) name.textContent = facts.name;
+    const phone = $('qrPhoneDisplay');
+    if (phone) phone.textContent = facts.phone || '—';
+    const whatsapp = $('qrWhatsappDisplay');
+    if (whatsapp) whatsapp.textContent = facts.whatsapp || '—';
+    const address = $('qrAddressDisplay');
+    if (address) address.textContent = facts.address || '—';
+    const social = $('qrSocialDisplay');
+    if (social) social.textContent = facts.social || '—';
+    const link = $('qrAppLinkDisplay');
+    if (link) link.textContent = facts.link || 'Business or outlet id missing';
+
+    const logo = $('qrCardLogo');
+    if (logo) {
+        if (facts.logo) {
+            logo.src = facts.logo;
+            logo.hidden = false;
+            logo.onerror = () => { logo.hidden = true; };
+        } else {
+            logo.hidden = true;
+            logo.removeAttribute('src');
+        }
+    }
+
+    if (facts.link && facts.link !== _qrRenderedLink) {
+        _qrRenderedLink = facts.link;
+        _qrDataUrl = (await qrDataUri(facts.link, 240)) || '';
+        if (seq !== _qrRenderSeq) return; // a newer render already won
+        const img = $('qrCodeImg');
+        if (img) {
+            img.hidden = !_qrDataUrl;
+            if (_qrDataUrl) {
+                img.src = _qrDataUrl;
+                img.alt = 'QR code that opens ' + facts.name;
+            }
+        }
+    } else if (!facts.link) {
+        _qrRenderedLink = '';
+        _qrDataUrl = '';
+        const img = $('qrCodeImg');
+        if (img) img.hidden = true;
+    }
+
+    _renderQrPrintCard(facts);
+}
+
+/** The A4 card that goes on paper. Only ever shown while printing. */
+function _qrPrintCardHtml(f) {
+    const theme = _safeHex(f.theme);
+    const logo = f.logo ? `<img class="qr-print-sheet__logo" src="${escapeHtml(f.logo)}" alt="">` : '';
+    const rows = [
+        ['Phone', f.phone],
+        ['WhatsApp', f.whatsapp],
+        ['Address', f.address],
+        ['Social', f.social],
+    ].filter(([, v]) => v);
+    const facts = rows.map(([k, v]) =>
+        `<div class="qr-print-sheet__fact"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('');
+    return `<div class="qr-print-sheet">
+        <div class="qr-print-sheet__band" style="background:${theme}">
+            ${logo}
+            <div>
+                <div class="qr-print-sheet__name">${escapeHtml(f.name)}</div>
+                <div class="qr-print-sheet__tag">Scan to order on our app</div>
+            </div>
+        </div>
+        <div class="qr-print-sheet__body">
+            <img class="qr-print-sheet__qr" src="${escapeHtml(_qrDataUrl)}" alt="">
+            <p class="qr-print-sheet__cta">Scan to order</p>
+            <dl class="qr-print-sheet__facts">${facts}</dl>
+        </div>
+        <div class="qr-print-sheet__foot">Powered by FoodHubbie &middot; ${escapeHtml(f.link)}</div>
+    </div>`;
+}
+
+function _renderQrPrintCard(facts) {
+    const area = $('qrPrintCard');
+    if (!area) return;
+    area.innerHTML = _qrPrintCardHtml(facts);
+}
+
+/** Print the card on A4. Mirrors the report print flow (same class + afterprint cleanup). */
+function _printQrCard() {
+    const facts = _qrFacts();
+    if (!_qrDataUrl) {
+        showToast('The QR code is still loading — try again in a moment.', 'warning');
+        return;
+    }
+    const area = $('qrPrintCard');
+    if (!area) { window.print(); return; }
+    area.innerHTML = _qrPrintCardHtml(facts);
+
+    let pageStyle = $('caQrPageStyle');
+    if (!pageStyle) {
+        pageStyle = document.createElement('style');
+        pageStyle.id = 'caQrPageStyle';
+        document.head.appendChild(pageStyle);
+    }
+    pageStyle.textContent = '@media print { @page { size: A4 portrait; margin: 12mm; } }';
+
+    document.body.classList.add('printing-qr');
+    const cleanup = () => {
+        document.body.classList.remove('printing-qr');
+        pageStyle.textContent = '';
+        window.removeEventListener('afterprint', cleanup);
+        clearTimeout(fallback);
+    };
+    window.addEventListener('afterprint', cleanup);
+    const fallback = setTimeout(cleanup, 5000); // browsers that never fire afterprint
+    window.print();
+}
+
+/** Load an image for canvas work. Remote images need CORS or the canvas would be tainted. */
+function _loadCorsImage(src) {
+    return new Promise((resolve) => {
+        if (!src) return resolve(null);
+        const img = new Image();
+        if (/^https?:/i.test(src)) img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
+    });
+}
+
+function _wrapCanvasText(ctx, text, maxWidth, maxLines = 2) {
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const lines = [];
+    let line = words[0];
+    for (let i = 1; i < words.length; i++) {
+        const test = line + ' ' + words[i];
+        if (ctx.measureText(test).width <= maxWidth) { line = test; continue; }
+        lines.push(line);
+        line = words[i];
+        if (lines.length === maxLines) break;
+    }
+    if (lines.length < maxLines) lines.push(line);
+    if (lines.length === maxLines && ctx.measureText(line).width > maxWidth) {
+        while (line.length > 1 && ctx.measureText(line + '…').width > maxWidth) line = line.slice(0, -1);
+        lines[maxLines - 1] = line + '…';
+    }
+    return lines;
+}
+
+/** Compose the branded card as a PNG (1080 x 1520 — 4:5.6, good for print and for WhatsApp). */
+async function _composeQrPng(f) {
+    const W = 1080, H = 1520;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const theme = _safeHex(f.theme);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    // brand band
+    ctx.fillStyle = theme;
+    ctx.fillRect(0, 0, W, 300);
+    const logo = f.logo ? await _loadCorsImage(f.logo) : null;
+    let nameX = 60;
+    if (logo) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(60, 90, 120, 120);
+        ctx.drawImage(logo, 70, 100, 100, 100);
+        nameX = 220;
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'top';
+    ctx.font = 'bold 56px system-ui, -apple-system, Segoe UI, sans-serif';
+    const nameLines = _wrapCanvasText(ctx, f.name, W - nameX - 60, 2);
+    nameLines.forEach((line, i) => ctx.fillText(line, nameX, 100 + i * 66));
+    ctx.font = '28px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.globalAlpha = 0.92;
+    ctx.fillText('Scan to order on our app', nameX, 108 + nameLines.length * 66);
+    ctx.globalAlpha = 1;
+
+    // the code itself — always dark on white so it keeps scanning
+    const qrImg = await _loadCorsImage(_qrDataUrl);
+    if (!qrImg) return null;
+    const qrSize = 560;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect((W - qrSize) / 2 - 20, 360, qrSize + 40, qrSize + 40);
+    ctx.drawImage(qrImg, (W - qrSize) / 2, 380, qrSize, qrSize);
+
+    ctx.fillStyle = '#111827';
+    ctx.font = 'bold 40px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Scan to order', W / 2, 1000);
+
+    // contact details
+    let y = 1075;
+    ctx.font = '28px system-ui, -apple-system, Segoe UI, sans-serif';
+    const rows = [['Phone', f.phone], ['WhatsApp', f.whatsapp], ['Address', f.address], ['Social', f.social]].filter(([, v]) => v);
+    rows.forEach(([k, v]) => {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = 'bold 22px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.fillText(k.toUpperCase(), W / 2, y);
+        ctx.fillStyle = '#111827';
+        ctx.font = '28px system-ui, -apple-system, Segoe UI, sans-serif';
+        const lines = _wrapCanvasText(ctx, v, W - 160, 2);
+        lines.forEach((line, i) => ctx.fillText(line, W / 2, y + 28 + i * 34));
+        y += 28 + lines.length * 34 + 18;
+    });
+
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '22px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.fillText('Powered by FoodHubbie', W / 2, H - 45);
+
+    return canvas.toDataURL('image/png');
+}
+
+async function _downloadQrCard() {
+    const facts = _qrFacts();
+    if (!_qrDataUrl) {
+        showToast('The QR code is still loading — try again in a moment.', 'warning');
+        return;
+    }
+    try {
+        const png = await _composeQrPng(facts);
+        if (!png) {
+            showToast('Could not build the PNG. Use the Print button instead.', 'error');
+            return;
+        }
+        const slug = (facts.name || 'restaurant').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'restaurant';
+        const a = document.createElement('a');
+        a.href = png;
+        a.download = `${slug}-app-qr.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        showToast('QR card downloaded', 'success');
+    } catch (e) {
+        console.error('[Customer APP] QR download failed:', e);
+        showToast('Could not build the PNG. Use the Print button instead.', 'error');
+    }
 }
 
 /* ============ APP FEATURE SWITCHES (App Visibility) ============ */
