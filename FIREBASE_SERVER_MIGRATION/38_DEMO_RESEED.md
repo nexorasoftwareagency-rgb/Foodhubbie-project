@@ -32,8 +32,10 @@ stub catalog, so a broken bundle fails `npm run build` instead of failing at
 ## 2. Determinism
 
 The builder takes `now` as its only clock. Same `now` → same bytes: the CLI
-produces an identical SHA across runs, and the live pass builds 363 orders /
-22 dishes / 4 combos / a payroll run whose net is 41,113 paise. The seeded
+produces an identical SHA across runs, and a CLI build at one fixed `now`
+produced 363 orders / 22 dishes / 4 combos / a payroll run whose net was
+41,113 paise. The live pass, at a different `now`, produced the same counts and
+**38,797 paise** — expected, because the order mix is date-seeded. The seeded
 `settings/Store.storeName` is `Demo Dashboard`, `settings/Delivery.backupCode`
 is 4 digits (`'2026'` — anything else silently fails every Save Settings in the
 dashboard), and money is written to the server-only `walletBilling` root, never
@@ -212,6 +214,13 @@ hard-skips the demo. `tests/functions-source.check.cjs` 188/188.
   made to them here.
 * **The public demo still has no rate limit.** The reseed restores data, not
   behaviour.
+* **A verification pass consumes the day's claim.** The E2E ran at ~07:45 IST,
+  so the next scheduled fire (03:00 IST, 19.25 h later) would have been refused
+  as `recent` and the demo would have gone a day stale. After the run the claim
+  was reopened — `at` backdated 21 h with
+  `openedFor: 'next-scheduled-pass (E2E 23j consumed the claim…)'` — so the
+  nightly cadence resumes. Any future live test of this job must do the same, or
+  run within an hour of the scheduled slot.
 * **The project is at its Cloud Run CPU ceiling** (see §7). Deploys can fail
   transiently with `Quota exceeded for total allowable CPU per project per
   region`; the previous revision keeps serving, and a retry a few minutes later
