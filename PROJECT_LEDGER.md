@@ -625,3 +625,32 @@ LEDGER CLOSE - 20261116-customer-app-qr-card-social-links (Customer APP App Sett
 - Honest limits: reviewUrl (Google review link) was left out of scope; the QR PNG download composes the card in the browser (a CORS-safe logo fetch), so a logo host that blocks the browser cannot be embedded; the phone business-hours layout hides the Open/Close words visually (the column header names them) - the labels stay in the accessibility tree.
 
 - Confidence: HIGH - live wire check 19/19, live E2E clean, local browser suite 29/29, static guard 50/50, encoding clean.
+LEDGER CLOSE - 20261116-customer-app-push-honesty (Customer APP > Push Notifications: CB1-CB5 honesty pass, TIER 2, DONE/high)
+
+- Trigger: continuing the Customer APP multi-agent UI/UX audit (2026-11-15). The Push Notifications sub-tab carried five honesty findings (CB1-CB5); this batch closed all of them.
+
+- CB1 (two subscriber counts): the server pushes to `entries.map(e => e.token).filter(Boolean)` (FIREBASE_SERVER_MIGRATION/functions/src/api/tenantNotify.ts), so a subscription record WITHOUT a device token is a subscriber whose phone cannot be reached. The pane counted those records as reachable. `hasToken` is now carried on every `_subs` row; `_reachable(type)` is the single source for the reachable set (token + offers-on for marketing types); "Offers reachable" counts it; a one-customer send is blocked with "This customer has no push token on file" instead of silently delivering nothing.
+
+- CB2 (daily cap 3 + quiet hours are server-side): the reach number is an UPPER BOUND - the server suppresses any recipient who already had 3 marketing pushes that IST day. The UI now says "Will reach up to N of M subscribers", the send button says "Send to up to N subscribers", the confirm dialog says "up to", and a note under the reach line names the 3-per-day limit. A capped recipient is reported as a "skipped (daily limit)" - the old wording also blamed "offers off", which the reachable base already excludes.
+
+- CB3 (quiet hours from the device clock): the IST hour came from the browser clock with a hand-rolled +5:30 offset, so a device 12 hours out would block a morning send or let a night send through. `_syncClock()` now decodes the Firebase Auth ID token's `iat` claim (the server's clock) and `_istHour()` anchors on that skew; the device clock is only the fallback. The server remains the authority.
+
+- CB4 (test mode bypasses quiet hours): the server caps by phone and a test entry has `phone: null`, so a test is neither capped nor quiet-gated. The client now SAYS that: "Test sends go only to your own device and ignore quiet hours and the daily limit" (push note + pushTestHint).
+
+- CB5 (fake "Mark as recalled"): the button wrote `recalled: true` to `notifyLog`, which the server owns and database.rules.json grants NO client write on - and the server response carries no key either, so the write never even happened. It also promised a recall FCM cannot perform. Replaced with "Flag as sent in error": an audit entry (`logChange('recall', 'push notification', ...)` -> `auditLog`, which IS writable) plus honest copy ("A push that was already delivered cannot be pulled back"). The Activity trail learned the action (`recall: 'Flagged'`) and the target label.
+
+- Reach line + note: `pushReachLine` now wraps a `pushReachText` span and is followed by a `pushReachNote` line (new `.push-reach__note` style in Admin/style.css - a literal class so PurgeCSS keeps it). Blocked sends keep showing reason + note in the preflight block; a ready send shows the caveat under the headline number. The phone hint now says how many subscribers have NO device token, because that is why a one-customer send can be refused.
+
+- SW cache: Admin/sw.js v5.12.55 -> v5.12.56 (every commit that changes a served file bumps it).
+
+- Guards: tests/app-notifications.check.mjs 22 -> 29 checks (+7: CB1 token-aware reach set + the server contract it mirrors, CB1 one-customer token gate, CB2 "up to" + daily-limit copy, CB3 server-clock anchor + the old device-clock arithmetic gone, CB4 test-mode carve-out copy, CB5 no notifyLog write + audit entry + Activity label, reach-note markup + style). tests/customer-app-check.mjs updated: the "undo after send" check now pins the HONEST behaviour (no `recalled: true`, an audit entry, the "cannot be pulled back" copy) instead of the fake recall. Full battery green: customer-app-check 50/50, customer-app-status pass, customer-app-fixes 9/9, customer-app.browser 29/29, app-notifications 29/29, admin-sw-networkfirst 17/17, admin-query-chain 143 files, admin-menu-subtabs PASS, encoding OK, build:admin 3.6MB -> 2.8MB.
+
+- Deploy: firebase deploy --only hosting:admin (aa2c62b.20261116T054932Z). Live wire check 14/14 + cache headers (root/index.html/style.css `public, max-age=0, must-revalidate`, sw.js `no-store`) - checked against the MINIFIED bundle, so the patterns are string literals. Live E2E on foodhubbie-admins.web.app/demo at 1440 and 390: Subscribers 3, Offers reachable 1, "Will reach up to 1 of 3 subscribers." + the daily-limit note, the phone hint naming the token-less subscriber, 0 console errors, 0 horizontal overflow. The demo tenant was seeded with 3 fake subscription records for the run and restored byte-identically (empty) afterwards.
+
+- Files: Admin/js/features/app-notifications.js, Admin/js/features/customer-app.js (audit labels), Admin/index.html, Admin/style.css, Admin/sw.js, tests/app-notifications.check.mjs, tests/customer-app-check.mjs.
+
+- Commit: aa2c62b, pushed to origin/main.
+
+- Honest limits: the client still cannot know the per-customer cap counter (reading `notifyCaps` would be an unbounded subtree read), so the count stays an upper bound; the server-clock anchor needs a signed-in Auth user (the demo's `?demo=1` auto sign-in provides one); a flagged send cannot be withdrawn from a device that already received it - the audit entry is a record, not a recall.
+
+- Confidence: HIGH - live wire 14/14, live E2E clean at both widths, local browser pass clean, static guard 29/29, encoding clean.
