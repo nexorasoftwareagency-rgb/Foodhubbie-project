@@ -5516,6 +5516,52 @@
                     </div>
 
                     <!-- PANE 4: App Settings (configuration) -->
+<div id="qr-generator-placeholder"></div>
+                            <div class="ca-settings-section ca-settings-section--qr">
+                                <div class="qr-generator-card">
+                                    <div class="qr-generator-header">
+                                        <h4>Customer App QR Code</h4>
+                                        <span class="qr-badge qa-badge--live">Live in app</span>
+                                    </div>
+                                    <div class="qr-generator-body">
+                                        <div class="qr-preview-wrapper">
+                                            <div class="qr-preview-container" id="qrPreviewContainer">
+                                                <div id="qrCode"></div>
+                                            </div>
+                                            <div class="qr-actions">
+                                                <button class="btn-primary" id="btnDownloadQR" type="button">
+                                                    <i data-lucide="download"></i> <span>Download QR</span>
+                                                </button>
+                                                <button class="btn-secondary" id="btnPrintQR" type="button">
+                                                    <i data-lucide="printer"></i> <span>Print QR</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="qr-info">
+                                            <div class="qr-info-row">
+                                                <span class="qr-info-label">App Link</label>
+                                                <span class="qr-info-value" id="qrAppLinkDisplay">https://menu.foodhubbie.in/?b=...&o=...</span>
+                                            </div>
+                                            <div class="qr-info-item">
+                                                <label class="qr-info-label">Restaurant</label>
+                                                <span class="qr-info-value" id="qrStoreNameDisplay">-</span>
+                                            </div>
+                                            <div class="qr-info-item">
+                                                <label class="qr-info-label">Phone</label>
+                                                <span class="qr-info-value" id="qrPhoneDisplay">-</span>
+                                            </div>
+                                            <div class="qr-info-item">
+                                                <label class="qr-info-label">WhatsApp</label>
+                                                <span class="qr-info-value" id="qrWhatsappDisplay">-</span>
+                                            </div>
+                                            <div class="qr-info-item">
+                                                <label class="qr-info-label">Address</label>
+                                                <span class="qr-info-value" id="qrAddressDisplay">-</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                     <div class="ca-pane ca-pane--settings hidden" id="caPaneSettings">
 
                         <div class="panel-header mt-8">
@@ -5574,8 +5620,32 @@
                             
 <div class="ca-settings-section">
                                 <label class="ca-field-label" data-ca-key="googleReviewLink">Google Review Link</label>
-                                <input type="url" id="caSettingGoogleReviewLink" class="search-input-group" placeholder="https://g.page/...">
+                                <div class="ca-field-wrapper">
+                                    <input type="url" id="caSettingGoogleReviewLink" class="search-input-group" placeholder="https://g.page/...">
+                                    <span class="ca-field-badge ca-field-badge--saved" id="badge-googleReviewLink" title="Saved, not applied yet">Saved only</span>
+                                </div>
                                 <p class="text-muted-small mt-2">Linked from the Promo Page "Rate us" card.</p>
+                            </div>
+
+                            <!-- Social Media Links -->
+                            <div class="ca-group-head"><h4>Social Media</h4><span>Social media links shown to customers in the app.</span></div>
+
+                            <div class="ca-settings-section ca-settings-section--social">
+                                <label class="ca-field-label" data-ca-key="facebookPage">Facebook Page</label>
+                                <div class="ca-field-wrapper">
+                                    <input type="url" id="caSettingFacebookPage" class="search-input-group" placeholder="https://facebook.com/yourpage">
+                                    <span class="ca-field-badge ca-field-badge--saved" id="badge-facebookPage" title="Saved, not applied yet">Saved only</span>
+                                </div>
+                                <p class="text-muted-small mt-2">Facebook page URL for your restaurant.</p>
+                            </div>
+
+                            <div class="ca-settings-section">
+                                <label class="ca-field-label" data-ca-key="instagramPage">Instagram Page</label>
+                                <div class="ca-field-wrapper">
+                                    <input type="url" id="caSettingInstagramPage" class="search-input-group" placeholder="https://instagram.com/yourhandle">
+                                    <span class="ca-field-badge ca-field-badge--saved" id="badge-instagramPage" title="Saved, not applied yet">Saved only</span>
+                                </div>
+                                <p class="text-muted-small mt-2">Instagram profile URL for your restaurant.</p>
                             </div>
                             
 <div class="ca-group-head"><h4>Ordering</h4><span>Which order types and perks are on.</span></div>
