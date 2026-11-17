@@ -1,4 +1,22 @@
 ================================================================================
+SUPERSEDED 2026-11-17 — DO NOT IMPLEMENT FROM THIS DOCUMENT
+================================================================================
+
+The EC2-retirement goal was reversed. EC2 is retained permanently as a scoped
+socket host; Cloud Functions own every database effect. Authoritative document:
+
+    PLAN/BACKEND-ARCHITECTURE.md
+
+The guards described here for deleted functions were themselves deleted with
+their subjects (`tests/webhook-inbox`, `process-inbound`, `order-status-alert`,
+`promo-scheduler`, `daily-reports`). `tests/egress-guard.check.cjs` survives and
+still matters. The provisioning gate for a rebuilt box is `tools/verify-box.sh`
+(24 gates, `BACKEND-ARCHITECTURE.md` §5.10).
+
+Kept in the repository because the FIREBASE_SERVER_MIGRATION/ batch records
+reference it.
+
+================================================================================
 FOODHUBIE — EC2 → CLOUD FUNCTIONS MIGRATION
 TEST SUITE (PLAN/TEST-SUITE.md)
 ================================================================================

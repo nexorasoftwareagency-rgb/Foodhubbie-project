@@ -1,4 +1,22 @@
 ================================================================================
+SUPERSEDED 2026-11-17 — DO NOT IMPLEMENT FROM THIS DOCUMENT
+================================================================================
+
+The EC2-retirement goal was reversed. EC2 is retained permanently as a scoped
+socket host; Cloud Functions own every database effect. Authoritative document:
+
+    PLAN/BACKEND-ARCHITECTURE.md
+
+What survived from this specification is recorded there as the 22 kept functions
+(§2.1). What did not: `processInboundMessage`, `sendOutboundMessage`,
+`onWebhookInboxMessage`, `promoScheduler`, `dailyReports` and the six dead HTTP
+endpoints are deleted, not ported (§2.2, §9.1). The signatures below describe a
+different, wrong program — read §2.2 before assuming any of them still apply.
+
+Kept in the repository because the FIREBASE_SERVER_MIGRATION/ batch records
+reference it.
+
+================================================================================
 FOODHUBIE — EC2 → CLOUD FUNCTIONS MIGRATION
 FUNCTION SPECIFICATIONS (PLAN/FUNCTION-SPECS.md)
 ================================================================================

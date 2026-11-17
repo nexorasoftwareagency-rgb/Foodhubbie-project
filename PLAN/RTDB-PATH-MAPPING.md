@@ -1,4 +1,23 @@
 ================================================================================
+SUPERSEDED 2026-11-17 — DO NOT IMPLEMENT FROM THIS DOCUMENT
+================================================================================
+
+The EC2-retirement goal was reversed. EC2 is retained permanently as a scoped
+socket host; Cloud Functions own every database effect. Authoritative document:
+
+    PLAN/BACKEND-ARCHITECTURE.md
+
+The live one-writer-per-path contract is `BACKEND-ARCHITECTURE.md` §3.3. That
+table supersedes this one: several paths here are attributed to functions that
+were deleted before ever shipping (`processInboundMessage`,
+`sendOutboundMessage`, `webhookInbox`), and the relay/claim markers added by
+batches 23e-23l (`_fcmSent`, `finalizeClaim`, `stockDeducted`,
+`_riderFcm/*`, `bot/redeemClaims/*`) did not exist when this was written.
+
+Kept in the repository because the FIREBASE_SERVER_MIGRATION/ batch records
+reference it.
+
+================================================================================
 FOODHUBIE — EC2 → CLOUD FUNCTIONS MIGRATION
 RTDB PATH MAPPING (PLAN/RTDB-PATH-MAPPING.md)
 ================================================================================
