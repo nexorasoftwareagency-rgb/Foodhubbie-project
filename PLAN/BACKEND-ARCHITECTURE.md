@@ -119,7 +119,7 @@ rather than by a diagram.
 
 ### 2.1 Deployed Cloud Functions — 34 v2, us-central1, nodejs22
 
-Keep 22:
+Keep 23:
 
 ```
 whatsappWebhook              https           Meta inbound ingress (signature-verified)
@@ -147,7 +147,7 @@ dailySettlement              schedule        23:00 Asia/Kolkata
 demoReseed                   schedule        03:00 Asia/Kolkata
 ```
 
-Delete 12 (section 9.4 has the exact command):
+Delete 11 (section 9.4 has the exact command):
 
 ```
 botControl                   callable   dead - writes restartRequested, nothing reads it
@@ -161,8 +161,10 @@ onWebOrderPlacedShadow       rtdb       redundant - migration scaffolding, nothi
 onWebOrderFinalizedShadow    rtdb       redundant - same
 processInboundMessage        taskqueue  WRONG - see 2.2
 sendOutboundMessage          taskqueue  WRONG - see 2.2
-metaCostPublisher            (keep)     the cloud copy is the single balancePaise writer
 ```
+
+`metaCostPublisher` is deliberately **not** in that list: the cloud copy is the
+single `balancePaise` writer (the EC2 copy is what gets deleted, section 9.3).
 
 Delete 4 that exist in source but were **never deployed** (section 9.1):
 
@@ -218,7 +220,7 @@ Listeners bound:
 | 3001+ | each bot (`HEALTH_PORT`, `GET /health`) | **binds `0.0.0.0`** - security group must not open 3000-3100 |
 | 5000 | `webhook-server` (`WEBHOOK_PORT`) | deleted in M3 |
 
-### 2.4 EC2 route table — 26 routes, keep 15
+### 2.4 EC2 route table — 25 routes, keep 19
 
 Keep (all `/api/bot/*` and `/api/whatsapp/*`):
 
@@ -1208,7 +1210,7 @@ orchestrator's egress discipline.
 `sendOutboundMessage`, `onWebhookInboxMessage`, `onOrderStatusAlert`,
 `promoScheduler`, `dailyReports`.
 
-After the prune `src/index.ts` exports exactly the 22 functions in 2.1.
+After the prune `src/index.ts` exports exactly the 23 functions in 2.1.
 
 ### 9.3 Timers to remove from `bot-control-api/server.js`
 
@@ -1277,10 +1279,10 @@ function with the box down.
 
 ### M1 — Function surface prune
 
-Delete the 12 deployed + 4 source-only functions, their shared modules, and the
+Delete the 11 deployed + 4 source-only functions, their shared modules, and the
 five guards that pin them. Update `src/index.ts`.
 
-**Exit:** `firebase functions:list` shows 22; `npm run build` green;
+**Exit:** `firebase functions:list` shows 23; `npm run build` green;
 `node tests/egress-guard.check.cjs` green; a demo APP order still finalizes
 (stock decrements, `stockDeducted: true`).
 
@@ -1361,7 +1363,7 @@ further ~30 % off compute.
 
 | service | driver | today |
 |---|---|---|
-| Functions | ~22 functions; the hot path is `onOrderBillingChange` per order write | 2 M invocations/month free tier; at 1,000 orders/day (~10 k order writes/day) it is ~300 k/month -> ₹0 |
+| Functions | ~23 functions; the hot path is `onOrderBillingChange` per order write | 2 M invocations/month free tier; at 1,000 orders/day (~10 k order writes/day) it is ~300 k/month -> ₹0 |
 | RTDB | ~12 KB/min steady state after batches 11-19 (~17 MB/day) | 10 GB/month free egress; comfortably inside |
 | Storage | 65 objects, ~1.3 MB, plus per-upload growth | negligible |
 | Hosting | admin shell ~0.55 MB cold after the batch-16 diet | 10 GB/month free |
@@ -1550,3 +1552,4 @@ failure. Gates 23 and 24 (deploy script, reboot survival) are manual.
 | date | change |
 |---|---|
 | 2026-11-17 | document created; EC2 retirement reversed and replaced with the scoped-host model |
+| 2026-11-17 | inventory arithmetic corrected against `firebase functions:list` and `bot-control-api/server.js`: 34 deployed = keep **23** + delete **11** (the earlier "keep 22 / delete 12" miscounted `metaCostPublisher` as deleted); 25 routes = keep **19** + delete **6** |
