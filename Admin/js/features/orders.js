@@ -1103,12 +1103,21 @@ export async function updateStatus(id, status) {
         }
     }
 
+    // The status transition owns the delivery timestamp: the rider performance
+    // report (rider-analytics.js) reads order.deliveredAt to compute delivery
+    // minutes. The rider app and the force-deliver path stamp it themselves,
+    // so this path must too - serverTimestamp is a sentinel, so it goes to the
+    // DB only and never into the optimistic paint (same rule as assignedAt).
+    const dbUpdates = status === "Delivered"
+        ? { ...updates, deliveredAt: serverTimestamp() }
+        : updates;
+
     // Optimistic: flip the row now; listener echo confirms, catch reverts.
     const revertOptimistic = optimisticApply(id, updates);
 
     try {
         logger.firebase('ORDERS', `Saving status update: orders/${id} → ${status}`);
-        await update(Outlet.ref(`orders/${id}`), updates);
+        await update(Outlet.ref(`orders/${id}`), dbUpdates);
         logAudit("Orders", `Updated Status: #${formatOrderId(order.orderId || id)} -> ${status}`, id);
         showToast(`Order status updated to ${status}`, "success");
         logger.success('ORDERS', `Status updated: ${id} → ${status}`);
