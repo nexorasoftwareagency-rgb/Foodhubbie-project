@@ -11,7 +11,7 @@ The guards described here for deleted functions were themselves deleted with
 their subjects (`tests/webhook-inbox`, `process-inbound`, `order-status-alert`,
 `promo-scheduler`, `daily-reports`). `tests/egress-guard.check.cjs` survives and
 still matters. The provisioning gate for a rebuilt box is `tools/verify-box.sh`
-(24 gates, `BACKEND-ARCHITECTURE.md` §5.10).
+(24 gates, `BACKEND-ARCHITECTURE.md` §5 Phase 10).
 
 Kept in the repository because the FIREBASE_SERVER_MIGRATION/ batch records
 reference it.

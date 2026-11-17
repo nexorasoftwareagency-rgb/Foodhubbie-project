@@ -4,7 +4,7 @@
 #
 #   bash /var/www/foodhubbie/tools/verify-box.sh
 #
-# Runs gates 1-22 of PLAN/BACKEND-ARCHITECTURE.md section 5.10 on THIS box and
+# Runs gates 1-22 of PLAN/BACKEND-ARCHITECTURE.md section 5, Phase 10 on THIS box and
 # prints one PASS/FAIL line per gate. Exits 1 if any gate failed.
 #
 # Gates 16, 19, 20, 23 and 24 are manual:
