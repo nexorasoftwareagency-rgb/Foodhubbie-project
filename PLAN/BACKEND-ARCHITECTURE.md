@@ -318,7 +318,7 @@ Two facts here are the reason section 5 exists in this much detail:
 2. There is no evidence a TLS proxy ever existed, yet `platformHealth` requires
    `GET https://api.foodhubbie.in/api/bot/status-all` to answer 401. Either the
    probe was failing for months or something undocumented fronted it. Treat
-   Caddy as a build requirement with an explicit gate (5.9), not as an
+   Caddy as a build requirement with an explicit gate (Phase 9, gates 13-14), not as an
    assumption.
 
 ---
@@ -653,7 +653,8 @@ Target: a working box in ~90 minutes, with 24 verification gates.
 | Meta system-user token + app id/secret | owner | `/api/whatsapp/*` and the Meta transport path |
 | Slack webhook URL | owner | offline alerts |
 
-Do not start until all six are in hand. Phases 6-8 block on 3 and 4.
+Do not start until all six are in hand. Phase 6 blocks on input 3 (the phone),
+Phase 7 on input 4 (the service account), Phase 8 on input 2 (DNS access).
 
 ### Phase 1 — instance
 
@@ -762,6 +763,19 @@ META_SYSTEM_USER_TOKEN=...
 and a test business holding an outlet literally named `pizza` hijacks the live
 bot's subscriptions (this happened on 2026-11-03).
 
+**`PRE-M3` only** - the tree still contains four timers that Cloud Functions now
+own, so a pre-M3 box must be disarmed through `.env` before first boot. Add:
+
+```
+ONBOARDING_AUTO_APPROVE=off     # cloud onboardingWatcher approves signups
+DAILY_SETTLEMENT_HOUR=-1        # cloud dailySettlement owns the day claim
+# ONBOARDING_CLEANUP stays unset -> observe mode, deletes nothing
+```
+
+`-1` never matches `new Date().getHours()`, so the settlement interval is inert.
+The fourth timer (the Meta cost publisher) has no env switch and is handled in
+Phase 7. Post-M3 all four are deleted and these lines are harmless leftovers.
+
 ### Phase 6 — WhatsApp session
 
 **Default: fresh QR pair.** The old box is off; recovering
@@ -809,7 +823,61 @@ pm2 set pm2-logrotate:retain 14
 
 This one process starts the API, the orchestrator and the status watcher.
 
-### Phase 8 — TLS reverse proxy
+**`PRE-M3` only** - `bot-control-api/server.js` still calls
+`startMetaCostPublisher({ admin })` near the bottom of the file. That publisher
+writes `walletBilling/{bid}/{oid}/balancePaise` every 5 minutes for every outlet
+in `outletIndex`, and the cloud `metaCostPublisher` already owns that path (every
+15 minutes) - two writers break the one-writer contract and re-add the
+`outletIndex` egress loop. Comment the call out before starting:
+
+```bash
+cd /var/www/foodhubbie
+nano bot-control-api/server.js
+```
+
+The call spans three lines - comment out all of it, not just the first, or the
+file will not parse:
+
+```js
+// PRE-M3: the cloud metaCostPublisher is the single balancePaise writer.
+// startMetaCostPublisher({ admin }).catch((err) => {
+//   console.error('Meta cost publisher failed to start ...', err);
+// });
+```
+
+```bash
+node --check bot-control-api/server.js     # must print nothing
+```
+
+`bot/transport.js`'s `_metaCostGuard` then reads whatever the cloud publisher
+last wrote, which is the target behaviour anyway. M3 deletes the file.
+
+If `ecosystem.config.js` already declares a `bot-control-api` app (M3 adds it),
+Phase 6's `pm2 start ecosystem.config.js` started it for you - check with
+`pm2 list` and skip the manual start rather than launching a second copy.
+
+### Phase 8 — DNS cutover
+
+Point the name at the Elastic IP **before** TLS, because Caddy issues the
+certificate over HTTP-01 and cannot validate a name that still resolves to the
+old (dead) address.
+
+In GoDaddy: `api.foodhubbie.in` A record -> the Elastic IP, TTL 600.
+
+```bash
+dig +short api.foodhubbie.in          # must print the Elastic IP
+```
+
+If you are cutting over from a still-running old box, lower the TTL to 300 an
+hour before, then flip. Verify from a machine that is not the box.
+
+**The window between this flip and Phase 9 is expected.** The old box has been
+down since 2026-11-11, so nothing is lost; but `platformHealth` probes
+`https://api.foodhubbie.in/api/bot/status-all` every hour and will report the API
+as down (and may page the owner) until Phase 9 finishes. If the old box were
+still live, you would flip DNS last instead and accept a brief cert-retry delay.
+
+### Phase 9 — TLS reverse proxy
 
 ```bash
 sudo apt -y install debian-keyring debian-archive-keyring apt-transport-https
@@ -829,21 +897,14 @@ api.foodhubbie.in {
 
 ```bash
 sudo systemctl reload caddy
+sleep 15 && curl -sI https://api.foodhubbie.in/api/bot/status-all | head -1   # HTTP/2 401
 ```
 
-Caddy obtains the certificate automatically over HTTP-01 once DNS points here.
-Order matters: DNS must resolve to the Elastic IP before this step succeeds.
+Caddy obtains the certificate automatically over HTTP-01 because Phase 8 already
+made the name resolve here. If the first request fails, watch
+`journalctl -u caddy -n 50` - a certificate error almost always means DNS has not
+propagated yet, not that the Caddyfile is wrong.
 
-### Phase 9 — DNS cutover
-
-In GoDaddy: `api.foodhubbie.in` A record -> the Elastic IP, TTL 600.
-
-```bash
-dig +short api.foodhubbie.in          # must print the Elastic IP
-```
-
-If you are cutting over from a still-running old box, lower the TTL to 300 an
-hour before, then flip. Verify from a machine that is not the box.
 
 ### Phase 10 — verification gates
 
@@ -1438,7 +1499,7 @@ the routes that matter, because every mutating route also checks the role.
 
 | gap | fix | phase |
 |---|---|---|
-| no TLS on the old box | Caddy (5.8) + gate 13/14 | M4 |
+| no TLS on the old box | Caddy (Phase 9) + gate 13/14 | M4 |
 | API binds `0.0.0.0` | bind `127.0.0.1` | M3 |
 | default compute SA likely reused | dedicated least-privilege SA | M4 |
 | `bot/alerts` grows forever | prune in `reportInterval` | M3 |
@@ -1471,7 +1532,7 @@ the routes that matter, because every mutating route also checks the role.
 |---|---|---|
 | `NODE_ENV` | all | `production` |
 | `OUTLET` | bot | the outlet id, e.g. `pizza` |
-| `BUSINESS_ID` | bot, orchestrator | **not optional** - see 5.5 |
+| `BUSINESS_ID` | bot, orchestrator | **not optional** - see Phase 5 |
 | `FIREBASE_DATABASE_URL` | all | `https://foodhubbie-10-default-rtdb.firebaseio.com` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | control-api | path to the service account JSON |
 | `BOT_CONTROL_PORT` | control-api | default 4000 |
@@ -1553,3 +1614,4 @@ failure. Gates 23 and 24 (deploy script, reboot survival) are manual.
 |---|---|
 | 2026-11-17 | document created; EC2 retirement reversed and replaced with the scoped-host model |
 | 2026-11-17 | inventory arithmetic corrected against `firebase functions:list` and `bot-control-api/server.js`: 34 deployed = keep **23** + delete **11** (the earlier "keep 22 / delete 12" miscounted `metaCostPublisher` as deleted); 25 routes = keep **19** + delete **6** |
+| 2026-11-17 | runbook correctness pass: DNS cutover moved ahead of TLS (Phase 8/9 swapped - HTTP-01 cannot validate a name still pointing at the old address); the three `PRE-M3` deviations are now all marked and actionable, including the four legacy control-API timers that must be disarmed on a pre-M3 box; broken `5.x` cross-references replaced with `Phase N` |
