@@ -251,6 +251,18 @@ All 10 audit agents deployed. Key fixes:
 - **Phone privacy stays "first phone wins" — ACCEPTED trade-off (owner decision 2026-11-05, closes review item 5)**. No OTP/SMS: a device that types a number *before* its owner claims it (`customers/{phone}/devices/{uid}`, `menu/js/customer.js` `ensureDeviceAccess`) becomes the owner of that number and can read its history/points; an owner who clears Safari/site data on iPhone loses the claim. Both are handled operationally, not with a verification step: `Admin > Customers > Reset phone lock` (`customers.js` → removes `customers/{ph}/devices` + `link`) re-opens the number for the owner, and the 8-digit 10-minute link code (`createLinkCode`/`linkThisDevice`) moves ownership to a second phone. Do NOT add an OTP/verification gate without an explicit owner decision — the trade-off is documented in `docs/FINAL-COMPATIBILITY-GUIDE.md`.
 - **Bots are provisioned from Supreme Admin; the cake bot was deleted from the box 2026-10-27** (`bot-roshani-cake-cake`: pm2 app + `pm2 save` + stale logs + its `bot/status` / `bot/pair` nodes removed; the `ecosystem.config.js` block is gone so `pm2 start ecosystem.config.js` cannot resurrect it). The `businesses/roshani-cake` business/outlet and `bot/transport` stay — re-add the worker from Supreme Admin when that outlet gets a WhatsApp number. `bot-control-api/orchestrator.js` will not recreate it by itself: `desiredState()` returns null while `outlet.whatsapp` is absent.
 
+- **AWS/EC2 credentials retired 2026-11-18 — new Amazon account will host the socket box.** Every key, IAM CSV
+  (access key + console password), CLI profile, SSH host entry and the secret-bearing
+  `GUIDEs/SERVER-ACCESS-GUIDE.md` was deleted from repo + machine (16 artifacts; none was ever committed). Old keys
+  already rejected by STS (`InvalidClientTokenId`); live RTDB walk shows 0 references to the old account/host/IP/key.
+  Inventory + deletion log: `FIREBASE_SERVER_MIGRATION/42_AWS_CREDENTIAL_RETIREMENT.md`. Re-provision runbook: same
+  doc §8 (maps to `PLAN/BACKEND-ARCHITECTURE.md` §5 gates + `tools/verify-box.sh` gates 1–22; **Elastic IP mandatory**).
+  New-account details go in `Credentials/AWS-NEW-ACCOUNT-CREDENTIALS.md` (gitignored blank template — never commit).
+  Regression guard: `npm run test:aws-creds` (`tests/aws-credential-retirement.check.cjs`, CI step), 12 assertions,
+  mutation-tested. Outstanding owner actions: close the old AWS account / confirm the instance terminated, rotate the
+  `roshanipizza@gmail.com` password, treat the retired IAM password as compromised, delete any saved
+  `signin.aws.amazon.com` credential from the browser.
+
 ## Ponytail — Laziness Ladder
 
 **Active every response. Default: full.** Switch: `/ponytail lite|full|ultra|off`.
