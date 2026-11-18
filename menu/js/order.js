@@ -31,14 +31,14 @@ import { computeOrderTotals } from '../../shared/money-math.js';
 import { formatOrderId } from '../../shared/format-order-id.js';
 export { formatOrderId };
 
-// Daily atomic sequence → outletNo-DDMMYY-N-RRRR (e.g. 03-161126-12-8392). Path key also DDMMYY.
+// Daily atomic sequence → outletNo-DDMMYY-N (e.g. 03-161126-12). Path key also DDMMYY.
 // outletNo = platform-wide outlet number from Supreme onboarding; falls back to
 // the raw outlet id when missing (legacy outlets before backfill).
-// SECURITY: order ID includes a 4-digit random suffix so it cannot be guessed
-// by scanning sequential counters. database.rules.json allows unauthenticated
-// reads of source=='QR' orders — so the order ID functions as the tracking
-// secret (address/name/OTP readable to anyone who guesses it). The random
-// suffix raises the search space from ~86400 per day to ~864 million per day.
+// SECURITY NOTE (accepted 2026-09-27): this ID is guessable (outlet + date + small
+// counter) and database.rules.json allows unauthenticated reads of source=='QR'
+// orders — so the order ID functions as the tracking secret (address/name/OTP
+// readable to anyone who guesses it). Hardening options if this ever matters:
+// append a random suffix at generation, or gate reads behind a trackToken query.
 let _outletNo = null;
 export async function generateOrderId() {
     const now = new Date();
@@ -54,8 +54,7 @@ export async function generateOrderId() {
         catch (_) { _outletNo = ''; }
     }
     const oid = _outletNo || (/^\d+$/.test(OUTLET) ? OUTLET.padStart(2, '0') : OUTLET);
-    const suffix = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `${oid}-${dateStr}-${seqNum}-${suffix}`;
+    return `${oid}-${dateStr}-${seqNum}`;
 }
 
 /**
