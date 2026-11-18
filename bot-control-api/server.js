@@ -18,6 +18,15 @@
  * longer call this API for status at all, only for restart/stop/quota.
  */
 
+// Load the box env before anything else. The bot does this itself
+// (bot/index.js line 5); this process did not, so it only ever worked because
+// the old box happened to export these vars in the shell that started pm2. On a
+// fresh box nothing is ambient, and applicationDefault() plus every Meta/Graph
+// path fails. dotenv never overrides an existing var, so an explicit env on the
+// command line still wins. Must stay above the requires below:
+// meta-cost-publisher reads its env at module scope.
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+
 const express = require('express');
 const admin = require('firebase-admin');
 const path = require('path');

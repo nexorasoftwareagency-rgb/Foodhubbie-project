@@ -823,6 +823,17 @@ pm2 set pm2-logrotate:retain 14
 
 This one process starts the API, the orchestrator and the status watcher.
 
+It loads `/var/www/foodhubbie/.env` itself (`require('dotenv').config(...)` is the
+first statement in `server.js`, above every other require, because
+`meta-cost-publisher.js` reads its env at module scope). Nothing has to be
+exported in the shell that starts pm2 - which matters, because the old box only
+worked by accident: its `.env` happened to be ambient, and `applicationDefault()`
+throws at boot when `GOOGLE_APPLICATION_CREDENTIALS` is absent. A missing env now
+means a boot that fails loudly in `pm2 logs`, not a half-started API.
+
+Gate: `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/api/bot/status-all`
+prints `401` (reaching the route at all proves `initializeApp` succeeded).
+
 **`PRE-M3` only** - `bot-control-api/server.js` still calls
 `startMetaCostPublisher({ admin })` near the bottom of the file. That publisher
 writes `walletBilling/{bid}/{oid}/balancePaise` every 5 minutes for every outlet
@@ -985,6 +996,14 @@ It aborts on modified tracked files, fast-forwards, `node --check`s every change
 `/api/bot/status-all` answering 401.
 
 It never runs `git clean`.
+
+It also does not run `npm ci`: if a deploy changes a `package.json` (it changed
+`bot-control-api` on 2026-11-18, when `dotenv` was added), install first or the
+restart lands in a crash loop on `Cannot find module`:
+
+```bash
+npm ci --prefix bot-control-api     # or --prefix bot
+```
 
 **M3 change:** drop `webhook-server/index.js` and `webhook-server/node_modules`
 from the runtime sanity gate at line 90. Until then the script refuses to deploy
@@ -1301,7 +1320,7 @@ of `balancePaise`; the EC2 copy is what gets deleted.
 
 | file | change | why |
 |---|---|---|
-| `bot-control-api/server.js` ~L51 | document/enforce `GOOGLE_APPLICATION_CREDENTIALS` (or use `cert()` with `FIREBASE_SERVICE_ACCOUNT_PATH`) | `applicationDefault()` silently half-works on a fresh box |
+| `bot-control-api/server.js` ~L51 | fail fast with a clear message when `GOOGLE_APPLICATION_CREDENTIALS` is unset (the `.env` load at the top of the file is what supplies it) | `applicationDefault()` throws an opaque error at boot |
 | `bot-control-api/server.js` `app.listen` | bind `127.0.0.1` | health/API ports currently bind `0.0.0.0`; the security group is the only gate |
 | `ecosystem.config.js` | add the `bot-control-api` app | otherwise a reboot loses the API unless someone remembered `pm2 save` |
 | `tools/server-deploy.sh` L90 | drop `webhook-server/index.js` + `webhook-server/node_modules` | the path is being deleted |
@@ -1526,6 +1545,12 @@ the routes that matter, because every mutating route also checks the role.
 
 ### A. Environment variable reference
 
+All of it lives in one file, `/var/www/foodhubbie/.env` (mode `600`, untracked).
+Both processes load it themselves: `bot/index.js` line 5 and
+`bot-control-api/server.js` line 28, each with `dotenv`, which never overrides a
+variable already present in the environment. `ecosystem.config.js` therefore only
+carries the per-process identity (`OUTLET`, `BUSINESS_ID`), not the secrets.
+
 **Required on the box**
 
 | var | consumer | note |
@@ -1615,3 +1640,4 @@ failure. Gates 23 and 24 (deploy script, reboot survival) are manual.
 | 2026-11-17 | document created; EC2 retirement reversed and replaced with the scoped-host model |
 | 2026-11-17 | inventory arithmetic corrected against `firebase functions:list` and `bot-control-api/server.js`: 34 deployed = keep **23** + delete **11** (the earlier "keep 22 / delete 12" miscounted `metaCostPublisher` as deleted); 25 routes = keep **19** + delete **6** |
 | 2026-11-17 | runbook correctness pass: DNS cutover moved ahead of TLS (Phase 8/9 swapped - HTTP-01 cannot validate a name still pointing at the old address); the three `PRE-M3` deviations are now all marked and actionable, including the four legacy control-API timers that must be disarmed on a pre-M3 box; broken `5.x` cross-references replaced with `Phase N` |
+| 2026-11-18 | `bot-control-api/server.js` now loads `/var/www/foodhubbie/.env` itself (first statement, above every require), with `dotenv` added to `bot-control-api/package.json`. The old box only worked because its env happened to be ambient; on a fresh box `applicationDefault()` throws at boot. The same lock refresh dropped the 30 stale `sharp`/`@img` entries left behind when batch 23k removed `sharp` from `package.json`. Phase 7 gained a 401 gate, appendix A states that one `.env` serves both processes, and 6.2 warns that a `package.json` change needs an `npm ci` before the restart |
