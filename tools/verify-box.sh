@@ -82,7 +82,7 @@ DIRTY=$(git status --porcelain --untracked-files=no 2>/dev/null)
 if [ -z "$DIRTY" ]; then
   ok "3b clean tree" "no tracked modifications"
 else
-  bad "3b clean tree" "$(printf '%s' "$DIRTY" | wc -l) modified tracked file(s)"
+  bad "3b clean tree" "$(printf '%s\n' "$DIRTY" | wc -l) modified tracked file(s)"
 fi
 
 # 4 - bot dependencies
@@ -193,7 +193,17 @@ const get = async (p) => (await db.ref(p).once('value')).val();
 })();
 JSEOF
 
-NODE_OUT=$(FH_REPO="$REPO" FH_BID="$BID" FH_OID="$OID" node "$NODECHK" 2>/dev/null)
+# Bounded, because an unreachable database or a credential that hangs would
+# otherwise block the gate script for ever - the one failure an operator on a
+# fresh box cannot diagnose from a hung terminal.
+NODE_TIMEOUT=${NODE_TIMEOUT:-60}
+TIMEOUT_BIN=$(command -v timeout || true)
+if [ -n "$TIMEOUT_BIN" ]; then
+  NODE_OUT=$(FH_REPO="$REPO" FH_BID="$BID" FH_OID="$OID" "$TIMEOUT_BIN" "$NODE_TIMEOUT" node "$NODECHK" 2>/dev/null)
+else
+  NODE_OUT=$(FH_REPO="$REPO" FH_BID="$BID" FH_OID="$OID" node "$NODECHK" 2>/dev/null)
+fi
+NODE_RC=$?
 rm -f "$NODECHK"
 while IFS='|' read -r s n d; do
   case "$s" in
@@ -202,15 +212,20 @@ while IFS='|' read -r s n d; do
   esac
 done <<< "$NODE_OUT"
 
-# If the probe died before printing anything (missing deps, bad credentials,
-# no network) every one of its five gates is a failure, not a silent omission.
-if [ -z "$NODE_OUT" ]; then
-  bad "7 db reachable" "node probe produced no output"
-  bad "15 pairing" "node probe produced no output"
-  bad "17 liveness fresh" "node probe produced no output"
-  bad "18 relay flags" "node probe produced no output"
-  bad "21 platformHealth" "node probe produced no output"
+# Every gate the probe owns must report. A silent omission is a failure: the
+# probe may print gate 7 and then hang on the next read.
+if [ "$NODE_RC" = "124" ]; then
+  WHY="timed out after ${NODE_TIMEOUT}s - database unreachable, credentials hanging, or a wrong FIREBASE_DATABASE_URL"
+elif [ -z "$NODE_OUT" ]; then
+  WHY="node probe produced no output (exit $NODE_RC)"
+else
+  WHY="probe exited before this gate (exit $NODE_RC)"
 fi
+for name in "7 db reachable" "15 pairing" "17 liveness fresh" "18 relay flags" "21 platformHealth"; do
+  if ! grep -qF "|$name|" <<< "$NODE_OUT"; then
+    bad "$name" "$WHY"
+  fi
+done
 
 head1 "processes"
 

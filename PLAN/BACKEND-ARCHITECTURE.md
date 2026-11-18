@@ -1617,8 +1617,21 @@ See 3.3. That table is the contract; this appendix exists only to point at it.
 bash /var/www/foodhubbie/tools/verify-box.sh
 ```
 
-It prints one `PASS`/`FAIL` line per gate and exits non-zero on the first
-failure. Gates 23 and 24 (deploy script, reboot survival) are manual.
+It is read-only - it never restarts, writes or repairs anything - prints one
+`PASS`/`FAIL`/`MANUAL` line per gate, runs **every** gate (it does not stop at the
+first failure, because on a fresh box you want the whole picture), then exits `1`
+if any automated gate failed. Gates 23 and 24 (deploy script, reboot survival) are
+manual, as are 16/19/20; gate 10 and gate 22 degrade to `MANUAL` when the log or
+`ss` is unavailable.
+
+Its database probe is bounded by `NODE_TIMEOUT` (default 60 s) and every gate the
+probe owns must report - a probe that hangs or dies half way marks the remaining
+gates `FAIL` with the reason instead of leaving them out, so an unreachable
+database reads as `timed out after 60s - database unreachable, credentials
+hanging, or a wrong FIREBASE_DATABASE_URL` rather than a frozen terminal.
+
+Override `REPO`, `BRANCH`, `BID`, `OID` or `NODE_TIMEOUT` from the environment to
+point it at another tree or outlet.
 
 ### E. Glossary
 
@@ -1641,3 +1654,4 @@ failure. Gates 23 and 24 (deploy script, reboot survival) are manual.
 | 2026-11-17 | inventory arithmetic corrected against `firebase functions:list` and `bot-control-api/server.js`: 34 deployed = keep **23** + delete **11** (the earlier "keep 22 / delete 12" miscounted `metaCostPublisher` as deleted); 25 routes = keep **19** + delete **6** |
 | 2026-11-17 | runbook correctness pass: DNS cutover moved ahead of TLS (Phase 8/9 swapped - HTTP-01 cannot validate a name still pointing at the old address); the three `PRE-M3` deviations are now all marked and actionable, including the four legacy control-API timers that must be disarmed on a pre-M3 box; broken `5.x` cross-references replaced with `Phase N` |
 | 2026-11-18 | `bot-control-api/server.js` now loads `/var/www/foodhubbie/.env` itself (first statement, above every require), with `dotenv` added to `bot-control-api/package.json`. The old box only worked because its env happened to be ambient; on a fresh box `applicationDefault()` throws at boot. The same lock refresh dropped the 30 stale `sharp`/`@img` entries left behind when batch 23k removed `sharp` from `package.json`. Phase 7 gained a 401 gate, appendix A states that one `.env` serves both processes, and 6.2 warns that a `package.json` change needs an `npm ci` before the restart |
+| 2026-11-18 | `tools/verify-box.sh` hardened after its first end-to-end run: the database probe is bounded by `NODE_TIMEOUT` (a hanging database or credential used to block the script for ever - the one failure a fresh box cannot diagnose), every gate the probe owns is now asserted to have reported (partial output used to drop gates 15/17/18/21 silently), and gate 3b's file count no longer reads `0` for one modified file (`wc -l` after command substitution ate the last newline). Appendix D corrected: the script runs every gate, not just until the first failure. `bash -n` passes and a full run against a non-box tree reports `2 passed, 16 failed, 7 manual`, exit 1 |
