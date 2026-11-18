@@ -31,7 +31,7 @@ const ok = (cond, label, detail) => {
     if (cond) { pass++; console.log('  PASS  ' + label); }
     else { fail++; console.log('  FAIL  ' + label + (detail ? ' :: ' + detail : '')); }
 };
-const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 
 const mod = read('bot/order-finalizer.js');
 const index = read('bot/index.js');
