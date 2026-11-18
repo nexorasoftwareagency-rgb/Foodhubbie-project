@@ -927,3 +927,53 @@ LEDGER CLOSE - 20261118-aws-credential-retirement (AWS/EC2 credential retirement
 - Owner actions outstanding: close old AWS account / confirm instance terminated; rotate roshanipizza@gmail.com password; treat retired IAM password as compromised; delete saved signin.aws.amazon.com credential in browser.
 - Commit 5d3cb06 pushed to origin/main; staged only the 10 files above (.ua/, Fixes-and-Changes/, PLAN/FoodHubbie-CustomerApp-Package/, docs/PLAN-SINGLE-WABA.md, docs/PRODUCT-KNOWLEDGE-MARKETING.md, tests/customer-app-push-notifications.spec.js left unstaged per standing constraint).
 Done.
+
+LEDGER CLOSE - 20261118-chat-whatsapp-pattern (Admin Chat tab: WhatsApp-pattern customer management - labels/customer lists, archive, persisted block list, 24h reply window, TIER 3, DONE/high)
+
+- Why: the owner asked for the WhatsApp (Chat) tab to be reviewed and to adopt "how the real WhatsApp application manages customer data" - together with UI/UX, security and cost improvements across the platform. The WhatsApp-pattern batch is the customer-data half of that ask.
+
+- WHAT SHIPPED (Admin Chat tab):
+  * **Labels / customer lists** (WhatsApp Business parity, max 20): create / rename / delete a label library, assign labels to a thread, filter the thread list by a label chip with live per-label counts. Library = `chatLabels/{labelId}`; assignment = `chatState/{customerId}/labels`.
+  * **Archive / unarchive** a conversation (`chatState/{customerId}/archived`), with an "Archived" filter tab and a menu item that says what it will do ("Archive chat" <-> "Unarchive chat").
+  * **Persisted block list** - the old `window.__blockedNumbers` global was in-memory per page session (a refresh cleared every block) and lived in the LAZILY imported `settings.js`, so the Chat tab found it undefined until Settings had been opened once. One owner now: `Admin/js/chat-contacts.js`, shared by both tabs, persisted to `settings/Bot/blockedNumbers`.
+  * **24h customer-service reply window** - derived from the thread's last CUSTOMER message (our own reply does not extend it), shown as a badge ("Reply window closed" + remaining time) and a notice. Outside the window a free-form reply is billed as a service message on the official WhatsApp API, so Send asks for a second deliberate click. A thread whose bodies have not loaded yet says "unknown", never "closed".
+
+- TWO DATA-MODEL DECISIONS THAT WERE FORCED BY THE PLATFORM:
+  1. **Per-thread Admin state CANNOT live on `chatMeta/{id}`** - `bot/chat-log.js` rewrites that row with `.set(mirrored)` on every inbound message, so any extra field would be wiped. Hence the separate `chatState/{customerId}` node (the bot never writes it).
+  2. **Thread labels are a MAP `{labelId: true}`, not an array.** Realtime Database rules have NO `isArray`, NO `size()` and NO `hasOnly()` (those are Firestore helpers - `firebase deploy` REJECTS a ruleset that uses them), so an array's length cannot be bounded by rules at all. With a map, each label id is its own rules path, so the rules enforce a real integrity guarantee: `newData.isBoolean() && root...chatLabels/$labelId.exists()` - a thread can never carry a label that is missing from the library. The 20-label cap is therefore CLIENT-side (hard throw + visible error); the rules enforce tenancy + label integrity. Consequence: **label deletion is threads-first, library-last**.
+
+- BLOCK-LIST FORMAT: entries are stored as **digits** (`919000000999`), never as JIDs. `bot/utils.js isBlockedJid()` strips non-digits and compares with `endsWith`, so a stored JID would never match and the block would silently do nothing. Verified against the live database (the old code wrote the JID).
+
+- FILES: `Admin/js/chat-contacts-math.js` (new, pure - no Firebase/DOM, Node-testable), `Admin/js/chat-contacts.js` (new, I/O singleton), `Admin/js/features/chat.js`, `Admin/js/features/settings.js`, `Admin/index.html` (filters, chips, load-more, window badge/notice, both modals moved AFTER `</main>`), `Admin/chat.css` (+206 lines, scoped; `chat.css?v=5.3.34`), `Admin/sw.js` (shell `v5.12.62` -> `v5.12.63`, `chat.css` precached), `database.rules.json` (+19 lines, additive: `chatLabels` + `chatState` only), `tests/chat-tab.check.cjs` (42+ checks), `docs/whatsapp-tab.md` (data model, rules, UX, limits rewritten).
+
+- SIX BUGS THE E2E CAUGHT (all fixed before deploy):
+  1. Label deletion read a variable from inside a write-loop callback -> `ReferenceError`. Fixed: pure `stripLabelFromState()`.
+  2. `loadChat()` never wired the labels modal -> opening it did nothing. Fixed: `_wireLabelsModal()` is now called from `loadChat`.
+  3. The modals used the `hidden` attribute instead of the Admin's `.modal` + `.active` pattern -> invisible and unclickable.
+  4. Both modals were nested inside the hidden `#tab-settings` pane -> a modal in a hidden ancestor can never be shown. Moved after `</main>`.
+  5. The Send button kept its amber warning after a normal send -> cleared on send.
+  6. The archive menu item had a static label even when the thread was already archived -> it now follows the state.
+
+- RULES DEPLOY: `firebase deploy --only database --project foodhubbie-10` was **purely additive** - `git diff e22e44b HEAD -- database.rules.json` was EMPTY at deploy time (HEAD's rules were byte-identical to the last deployed version), so the live `orders` rule was untouched by it.
+
+- VERIFICATION:
+  * `tests/chat-tab.check.cjs` 42+ checks PASS (incl. new pins: no Firestore-only helpers in the chatState rules, the label-library existence check, the boolean `archived` rule, the map shape, the modal-after-`</main>` placement, every id the module looks up exists in the markup).
+  * **Real-token rules probe (5/5)**: map write 200, no-labels write 200, bogus label id 401, non-boolean `archived` 401, array-shaped labels 401, label-library write 200.
+  * **Local E2E against the real backend** (`serve-dist` + real Firebase): label created -> assigned -> chip filter -> archive -> archived filter -> rename -> delete (label stripped from the thread first, then the library entry) -> block writes `919000000999` -> unblock -> 30h-old fixture thread shows "Reply window closed" + the amber two-step Send guard (first click warns and sends NOTHING, second click sends one `bot/commands` row). **Every fixture restored byte-identically** (recursively key-sorted JSON equality on `chatMeta`, `chats`, `chatState`, `chatLabels`, `settings/Bot/blockedNumbers`; `bot/commands` cleaned).
+  * **LIVE production E2E on `app.foodhubbie.in/demo`** (Playwright, production bundle + production rules): 3 threads, All/Unread/Archived tabs, labels modal opens (`.active`, after `</main>`), label created -> chip "Live E2E 0" -> assigned to Kabir -> thread tag "Live E2E" -> chip filter narrows the list to one thread -> archive -> "Archived" filter shows it. 0 console errors (2 known-benign warnings: Firebase reconnect, pre-auth RoleAccess). Demo residue restored byte-identically afterwards.
+  * Regression battery: chat-tab ok, customer-reads 30/30, encoding ok, query-chain 145 files, app-notifications ok, admin-sw ok, menu-cart ok, menu-legacy-qr ok, server-branch ok, aws-creds ok, shared twins ok, `node --check` on every edited file, `tools/build.mjs --admin` ok.
+  * Live `menu.foodhubbie.in/?b=roshani-pizza&o=pizza` boots to the sign-in screen with the correct brand ("Roshani Pizza - Order"), overlay hidden, 0 console errors (the menu deploy also carried the earlier pending commits: cart localStorage backup scoped to `qr_`/`webview_` keys, the offline retry countdown and the bounded `pushInbox` query).
+
+- DEPLOYS: `hosting:admin` + `hosting:menu` (`a738131.20261118T185634Z`, Admin SW `v5.12.63`) - the deploy is re-run after the commit so `version.json` names the commit that contains the code. No `hosting:supreme` / `hosting:website` / `hosting:rider` change was needed.
+
+- COMMIT `a738131`, pushed to origin/main. `node tools/check-server-branch.cjs` PASS - `origin/server` (`edad4b2`) is still an ancestor of `origin/main` (`a738131`); **no server-side file changed** in this batch, so the EC2 deploy branch needs no update (and the box is offline anyway).
+
+- HONEST LIMITS:
+  * The 20-label cap is client-side only. RTDB cannot bound a map's size, so a tenant admin who bypasses the UI could exceed it; the rules still guarantee every assigned label exists in the library.
+  * The 24h window guard is ADVISORY on the Admin side. On the official Meta API a closed window is rejected by the API itself; on Baileys the message still goes out and costs nothing extra. The badge is derived from the loaded message bodies of the OPEN thread.
+  * Archive is a VIEW-level state: the bot keeps receiving and logging messages for archived threads, and an archived thread still counts towards the usage/unread totals until it is read.
+  * The block list is outlet-scoped and digit-only; because the bot matches with `endsWith`, a blocked number also blocks that number's other JIDs (country-code variants).
+  * Thread keys are still the last 10 digits of the JID, so +1 and +91 customers with the same local number share a thread (pre-existing convention, unchanged).
+  * The Chat tab is still read-mostly: no thread deletion, no message editing, no media send, no read receipts.
+
+- FLAGGED, NOT TOUCHED (OWNER DECISION): the deployed rules deny **anonymous** reads of `orders/$orderId` (the `|| data.child('source').val() == 'QR'` clause was removed by the 2026-11-15 hardening `f655c06`), while `menu/js/app.js` reads `orders/{oid}` in 6 places (per-order listener, session bill card, push deep-link, order tracking - all with `.catch(() => {})`). Live probe: anon GET `orders/-Ov_m_MS34mTlGnIPZKl` (a live QR order in `roshani-pizza/pizza`, 136 such orders) -> **401**. QR customers' live bill card / order tracking are therefore likely empty since that hardening. Options for the owner: (a) restore a scoped `source == 'QR'` read on `orders/$orderId` (pizza's QR ids are high-entropy Firebase push keys, so guessing is impractical, but the DEMO tenant's `DD-...` ids are sequential and would be guessable), or (b) publish a small public projection node per order instead of exposing the order itself. **No rule was changed here.**
