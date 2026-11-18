@@ -502,8 +502,35 @@ async function _retryBoot() {
 // Manual retry button inside the offline banner (see index.html change) —
 // covers the common real-world case where the device was never actually
 // marked offline by the OS, so the 'online' event above never fires.
+// Offline banner retry countdown — shows remaining retry attempts so the
+// customer knows how many tries are left before they need to wait longer.
+let _retryCount = 0;
+const MAX_RETRIES = 3;
+const _retryBtn = document.getElementById('btnRetryConnection');
+const _retryBanner = document.getElementById('offlineBanner');
+
+function _refreshRetryLabel() {
+    if (!_retryBtn) return;
+    const remaining = MAX_RETRIES - _retryCount;
+    if (remaining <= 0) {
+        _retryBtn.textContent = 'Try again later';
+        _retryBtn.disabled = true;
+        _retryBtn.style.opacity = '0.5';
+        return;
+    }
+    _retryBtn.textContent = remaining === 1 ? 'Last retry' : `Retry (${remaining})`;
+    _retryBtn.disabled = false;
+    _retryBtn.style.opacity = '1';
+}
+
 document.getElementById('btnRetryConnection')?.addEventListener('click', () => {
     haptic(10);
+    _retryCount++;
+    _refreshRetryLabel();
+    if (_retryCount >= MAX_RETRIES) {
+        // Don't auto-reload after max retries; let the user tap again later
+        return;
+    }
     _retryBoot();
 });
 
