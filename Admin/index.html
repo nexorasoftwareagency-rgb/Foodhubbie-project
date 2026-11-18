@@ -6878,14 +6878,14 @@
 
                                 <div class="flex-1">
 
-                                    <label class="form-label">Primary Phone</label>
+                                    <label class="form-label">Primary Phone <span class="required-star">*</span></label>
 
-                                    <input id="riderPhone" type="tel" placeholder="+91 99999 00000"
+                                    <input id="riderPhone" type="tel" placeholder="9999900000" inputmode="numeric" maxlength="10"
 
-                                         class="form-input w-full" title="Rider's primary contact number">
+                                         class="form-input w-full" title="Rider's primary contact number (10 digits, required)">
 
-                                    <input id="riderAltPhone" type="tel" placeholder="+91 99999 00000"
-                                         class="form-input w-full" title="Rider's alternate contact number (optional)">
+                                    <input id="riderAltPhone" type="tel" placeholder="9999900000" inputmode="numeric" maxlength="10"
+                                         class="form-input w-full" title="Rider's alternate contact number (optional, 10 digits)">
 
                                 </div>
 
@@ -6923,11 +6923,11 @@
 
 
 
-                            <label class="form-label">Aadhar Number</label>
+                            <label class="form-label">Aadhar Number <span class="required-star">*</span></label>
 
-                            <input id="riderAadharNo" placeholder="0000 0000 0000" class="form-input w-full"
+                            <input id="riderAadharNo" placeholder="000000000000" inputmode="numeric" maxlength="12" class="form-input w-full"
 
-                                title="Rider's 12-digit Aadhar number">
+                                title="Rider's 12-digit Aadhar number (digits only, required)">
 
 
 

@@ -1,4 +1,4 @@
-import { db, auth, getSecondaryAuth, isSecondaryAuthAvailable, Outlet, serverTimestamp, ref, get, set, push, update, runTransaction, remove, query, orderByChild, equalTo, onValue, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword, BUSINESS_BY_OUTLET, BUSINESS_ID, tenantRef, tenantPath } from '../firebase.js';
+import { db, auth, getSecondaryAuth, Outlet, serverTimestamp, ref, get, set, push, update, runTransaction, remove, query, orderByChild, equalTo, onValue, signOut, sendPasswordResetEmail, createUserWithEmailAndPassword, BUSINESS_BY_OUTLET, BUSINESS_ID, tenantRef, tenantPath } from '../firebase.js';
 import { state } from '../state.js';
 import { showDeleteConfirm } from '../ui-utils.js';
 import { showToast, haptic, escapeHtml, standardizeAuthError, logAudit, showConfirm, addRiderNotification, getSkeletonRows, formatOrderId } from '../utils.js';
@@ -302,10 +302,6 @@ export function showRiderModal() {
     document.getElementById('riderPassLabel').innerText = "Portal Password";
     document.getElementById('riderPass').value = "";
     document.getElementById('riderModal').classList.add('active');
-
-    // Show progress steps
-    document.getElementById('riderModalSteps').style.display = 'flex';
-    updateStepIndicator(1);
 }
 
 export function editRider(id) {
@@ -349,23 +345,11 @@ export function editRider(id) {
     document.getElementById('riderPass').value = "";
 
     document.getElementById('riderModal').classList.add('active');
-    document.getElementById('riderModalSteps').style.display = 'flex';
-    updateStepIndicator(1);
 }
 
 export function hideRiderModal() {
     const modal = document.getElementById('riderModal');
     if (modal) modal.classList.remove('active');
-    document.getElementById('riderModalSteps').style.display = 'none';
-}
-
-function updateStepIndicator(step) {
-    document.querySelectorAll('.step-indicator').forEach((el, idx) => {
-        const num = idx + 1;
-        el.classList.remove('active', 'completed');
-        if (num < step) el.classList.add('completed');
-        else if (num === step) el.classList.add('active');
-    });
 }
 
 export async function saveRiderAccount() {
@@ -387,7 +371,10 @@ export async function saveRiderAccount() {
     let profilePhoto = document.getElementById('riderPhotoUrl').value;
     let aadharPhoto = document.getElementById('aadharUrl').value;
     if (!name || !email || (!state.isEditRiderMode && !pass)) { showToast("Name, Email, and Password are required.", "error"); return; }
-    if (phone && !/^\d{10}$/.test(phone)) { closePasswordModal(); showToast("Invalid Phone Number! Must be 10 digits.", "error"); return; }
+    // The phone is REQUIRED: database.rules.json validates a rider's phone as
+    // a 5-15 character string, so a blank one was rejected by the database
+    // AFTER the Auth account had already been created (an orphaned login).
+    if (!/^\d{10}$/.test(phone)) { closePasswordModal(); showToast("Primary phone is required and must be exactly 10 digits (no +91, no spaces).", "error"); return; }
     if (altPhone && !/^\d{10}$/.test(altPhone)) { closePasswordModal(); showToast("Invalid Alternate Phone Number! Must be 10 digits.", "error"); return; }
     if (!/^\d{12}$/.test(aadharNo)) { closePasswordModal(); showToast("Invalid Aadhar Number! It must be exactly 12 digits.", "error"); return; }
 
@@ -427,8 +414,12 @@ export async function saveRiderAccount() {
             showToast("Rider updated successfully!", "success");
             hideRiderModal();
         } else {
-            if (!isSecondaryAuthAvailable()) { closePasswordModal(); showToast("Secondary Auth Service unavailable.", "error"); return; }
+            // The secondary Auth app is created LAZILY on first use, so ASK for
+            // it first and judge the instance. Reading the availability flag
+            // before the initialiser had ever run made every "Create Account"
+            // fail with "Secondary Auth Service unavailable." on a fresh page.
             const _sa = getSecondaryAuth();
+            if (!_sa) { closePasswordModal(); showToast("Secondary Auth Service unavailable.", "error"); return; }
             const userCredential = await createUserWithEmailAndPassword(_sa, email, pass);
             const uid = userCredential.user.uid;
             await set(Outlet.ref(`riders/${uid}`), { uid, name, email, phone, fatherName, age, aadharNo, qualification, address, profilePhoto, aadharPhoto, status: "Offline", outlet: Outlet.current, businessId: BUSINESS_ID(), createdAt: Date.now() });

@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, onValue, onChildAdded, onChildChanged, set, update, remove, push, runTransaction, query, orderByChild, orderByKey, equalTo, limitToLast, startAt, endAt, endBefore, serverTimestamp, child, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, setPersistence, browserLocalPersistence, browserSessionPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, EmailAuthProvider, sendPasswordResetEmail, sendEmailVerification, createUserWithEmailAndPassword, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
@@ -243,20 +243,28 @@ export async function deleteImage(url) {
     }
 }
 
-let _secondaryAuth, _secondaryAuthAvailable = false;
+let _secondaryAuth = null;
 export function getSecondaryAuth() {
     if (_secondaryAuth) return _secondaryAuth;
     try {
-        const secondaryApp = initializeApp(window.firebaseConfig, 'secondary_auth');
+        // Reuse the app if an earlier attempt already created it: initializeApp
+        // THROWS on a duplicate name, which would leave the secondary Auth
+        // dead for the rest of the session.
+        const existing = getApps().find((a) => a.name === 'secondary_auth');
+        const secondaryApp = existing || initializeApp(window.firebaseConfig, 'secondary_auth');
         _secondaryAuth = getAuth(secondaryApp);
-        _secondaryAuthAvailable = true;
     } catch (e) {
         console.error('Secondary Auth Init Error:', e);
-        _secondaryAuthAvailable = false;
     }
     return _secondaryAuth;
 }
-export function isSecondaryAuthAvailable() { return _secondaryAuthAvailable; }
+/**
+ * Truthful availability. The secondary Auth app is created LAZILY on first
+ * use, so asking this question initialises it - a plain flag read BEFORE the
+ * initialiser had ever run reported "unavailable" on every fresh page and
+ * blocked rider creation entirely.
+ */
+export function isSecondaryAuthAvailable() { return !!getSecondaryAuth(); }
 
 export {
     db, auth, app,
