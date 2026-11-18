@@ -23,24 +23,31 @@
 
 import { Outlet, query, orderByChild, limitToLast, onValue, update, push, set, serverTimestamp } from '../firebase.js';
 import { escapeHtml } from '../utils.js';
-import { showToast } from '../ui-utils.js';
+import { showToast, showConfirm } from '../ui-utils.js';
 import { loadLucide } from '../ui.js';
+import { blockedContacts, chatLabels, chatState, normalizePhone, ensureSubscriptions } from '../chat-contacts.js';
+import { replyWindow, windowLabel } from '../chat-contacts-math.js';
 
 // ---------------------------------------------------------------------
 // Module state
 // ---------------------------------------------------------------------
 let _listener = null;
 let _listenerOutlet = null;
+let _limit = 50;               // how many threads the list query pulls
 let _chatData = {};              // customerId -> { meta, messages: {id: msg} } (messages only for the open thread)
 let _selectedCustomerId = null;
 let _renderedThreadId = null;
 let _searchTerm = '';
+let _filter = 'all';             // 'all' | 'unread' | 'archived'
+let _labelFilter = null;         // label id, or null for no label filter
 let _wired = false;
 let _blockedMenusWired = false;
 let _usageUnsub = null;         // bot/usage listener
 let _usageData = null;          // today's usage snapshot
 let _threadUnsub = null;        // messages listener for the ONE open thread
 let _threadBoundId = null;
+let _windowConfirmArmed = false; // admin already acknowledged the closed-window warning
+let _contactSubsWired = false;   // the contact module's listeners are bound once
 
 function _chatRef(sub) { return Outlet.ref(`chats${sub ? '/' + sub : ''}`); }
 
@@ -198,21 +205,73 @@ function _stopUsageListener() {
     if (bar) bar.classList.add('hidden');
 }
 
+/**
+ * The 24h customer-service window of a thread.
+ * Derived from the OPEN thread's messages (the only place bodies are loaded):
+ * the window opens on a customer message and closes 24h later. A reply from
+ * the restaurant does NOT extend it — only the customer can reopen it.
+ * The maths lives in chat-contacts-math.js (pure, unit-tested).
+ */
+function _replyWindow(msgs) {
+    return replyWindow(msgs);
+}
+
+function _windowLabel(win) {
+    return windowLabel(win);
+}
+
+/** Label chips (filter row) with the number of threads carrying each label. */
+function _renderLabelChips() {
+    const box = document.getElementById('chatLabelChips');
+    if (!box) return;
+    const all = chatLabels.all || {};
+    const ids = Object.keys(all);
+    if (!ids.length) {
+        box.innerHTML = '';
+        if (_labelFilter) { _labelFilter = null; }
+        return;
+    }
+    const counts = {};
+    for (const [cid] of Object.entries(_chatData)) {
+        for (const lid of (chatState.of(cid).labels || [])) counts[lid] = (counts[lid] || 0) + 1;
+    }
+    box.innerHTML = ids.map(id => {
+        const l = all[id] || {};
+        const active = _labelFilter === id;
+        return `<button class="chat-label-chip${active ? ' active' : ''}" data-label-id="${escapeHtml(id)}" aria-pressed="${active}" title="${escapeHtml(l.name || id)}">
+            <span class="chat-label-dot" style="background:${escapeHtml(l.color || '#94a3b8')}"></span>
+            ${escapeHtml(l.name || id)}
+            <span class="chat-label-chip-count">${counts[id] || 0}</span>
+        </button>`;
+    }).join('');
+}
+
 function _renderThreadList() {
     const listEl = document.getElementById('chatThreadList');
     if (!listEl) return;
 
     const term = _searchTerm.trim().toLowerCase();
     const threads = Object.entries(_chatData)
-        .map(([id, t]) => ({ id, meta: t.meta || {} }))
+        .map(([id, t]) => ({ id, meta: t.meta || {}, state: chatState.of(id) }))
+        .filter(t => {
+            const archived = t.state.archived === true;
+            if (_filter === 'archived') return archived;
+            if (archived) return false;                       // archived chats leave the main list
+            if (_filter === 'unread' && !(Number(t.meta.unread || 0) > 0)) return false;
+            if (_labelFilter && !(t.state.labels || []).includes(_labelFilter)) return false;
+            return true;
+        })
         .filter(t => !term || _displayName(t.id, t.meta).toLowerCase().includes(term) || String(t.meta.phone || '').includes(term))
         .sort((a, b) => (b.meta.lastTs || 0) - (a.meta.lastTs || 0));
 
     if (threads.length === 0) {
-        listEl.innerHTML = `<div class="chat-list-empty">${term ? 'No chats match your search.' : 'No conversations yet. When customers message the WhatsApp bot, their chats appear here.'}</div>`;
+        listEl.innerHTML = `<div class="chat-list-empty">${term ? 'No chats match your search.' : (_filter === 'archived' ? 'No archived chats.' : (_filter === 'unread' ? 'No unread chats.' : 'No conversations yet. When customers message the WhatsApp bot, their chats appear here.'))}</div>`;
+        _renderLabelChips();
+        _updateLoadMore();
         return;
     }
 
+    const labels = chatLabels.all || {};
     listEl.innerHTML = threads.map(t => {
         const name = _displayName(t.id, t.meta);
         const meta = t.meta;
@@ -220,6 +279,10 @@ function _renderThreadList() {
         const lastDir = meta.lastDir === 'bot' ? '➤ ' : '';
         const unread = Number(meta.unread || 0);
         const hue = _avatarHue(t.id);
+        const tagHtml = (t.state.labels || []).map(lid => {
+            const l = labels[lid] || {};
+            return `<span class="chat-thread-label"><span class="chat-label-dot" style="background:${escapeHtml(l.color || '#94a3b8')}"></span>${escapeHtml(l.name || lid)}</span>`;
+        }).join('');
         return `<div class="chat-thread ${t.id === _selectedCustomerId ? 'active' : ''}" data-chat-id="${escapeHtml(t.id)}" role="button" tabindex="0" aria-label="Chat with ${escapeHtml(name)}">
             <span class="chat-avatar" style="--hue:${hue}">${escapeHtml(_initials(meta.name, meta.phone))}</span>
             <div class="chat-thread-body">
@@ -231,11 +294,27 @@ function _renderThreadList() {
                     <span class="chat-thread-preview">${escapeHtml(lastDir + lastText)}</span>
                     ${unread > 0 ? `<span class="chat-unread-badge">${unread > 99 ? '99+' : unread}</span>` : ''}
                 </div>
+                ${tagHtml ? `<div class="chat-thread-labels">${tagHtml}</div>` : ''}
             </div>
         </div>`;
     }).join('');
 
+    _renderLabelChips();
+    _updateLoadMore();
     _updateBadges();
+}
+
+/**
+ * The list query pulls the newest N threads. When N is reached there are
+ * probably older ones the admin can neither see nor search — say so and
+ * offer to pull more (the query limit is raised and the listener re-bound).
+ */
+function _updateLoadMore() {
+    const btn = document.getElementById('chatLoadMore');
+    if (!btn) return;
+    const reached = Object.keys(_chatData).length >= _limit;
+    btn.classList.toggle('hidden', !reached);
+    if (reached) btn.textContent = `Load older chats (showing newest ${_limit})`;
 }
 
 // ---------------------------------------------------------------------
@@ -269,6 +348,42 @@ function _renderThreadView() {
     _currentChatPhone = meta.phone || null; // ponytail: track for block/unblock
 
     const msgs = Object.entries(t.messages || {}).sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
+
+    // Labels of the open thread
+    const labelsEl = document.getElementById('chatThreadLabels');
+    if (labelsEl) {
+        const all = chatLabels.all || {};
+        labelsEl.innerHTML = (chatState.of(_selectedCustomerId).labels || []).map(lid => {
+            const l = all[lid] || {};
+            return `<span class="chat-thread-label"><span class="chat-label-dot" style="background:${escapeHtml(l.color || '#94a3b8')}"></span>${escapeHtml(l.name || lid)}</span>`;
+        }).join('');
+    }
+
+    // 24h customer-service window
+    // The bodies of a thread are loaded lazily — while they are still in
+    // flight the window is UNKNOWN (not "closed"): saying "closed" would be
+    // a lie and would block the reply for no reason.
+    const bodiesLoaded = t.messages !== undefined;
+    const win = _replyWindow(msgs.map(([, m]) => m));
+    const winEl = document.getElementById('chatThreadWindow');
+    if (winEl) {
+        if (!bodiesLoaded) {
+            winEl.textContent = '';
+            winEl.classList.add('hidden');
+            winEl.removeAttribute('title');
+        } else {
+            winEl.textContent = _windowLabel(win);
+            winEl.classList.remove('hidden');
+            winEl.classList.toggle('is-closed', !win.open);
+            winEl.title = win.unknown
+                ? 'No customer message in this thread yet — free-form replies need a customer message to open the 24h window.'
+                : (win.open
+                    ? 'This customer messaged recently, so a free-form reply is allowed (and is not billed as a service message).'
+                    : 'The 24h window has closed. On the official WhatsApp API only approved templates can be sent now — a free-form reply will be charged as a service message.');
+        }
+    }
+    _renderWindowNotice(win, bodiesLoaded);
+
     const listEl = document.getElementById('chatMessageList');
     if (!listEl) return;
 
@@ -340,6 +455,10 @@ function _bindThreadMessages(customerId) {
 
 async function _openThread(customerId) {
     _selectedCustomerId = customerId;
+    // A closed-window warning belongs to the thread it was raised for.
+    _windowConfirmArmed = false;
+    const sendBtn = document.getElementById('chatSendBtn');
+    if (sendBtn) { sendBtn.classList.remove('chat-send-warn'); sendBtn.removeAttribute('title'); }
     // Clear unread (best-effort — read marker). chatMeta is the list's source of
     // truth; chats/{id}/meta is still mirrored for cached older shells.
     if (_chatData[customerId]?.meta?.unread) {
@@ -350,10 +469,51 @@ async function _openThread(customerId) {
     _bindThreadMessages(customerId);
     _renderThreadList();
     _renderThreadView();
+    _updateArchiveBtnText();
 
     // Mobile: swap list pane for the conversation pane
     const app = document.getElementById('chatApp');
     if (app && window.innerWidth <= 768) app.classList.add('chat-conv-open');
+}
+
+/**
+ * The strip above the composer. It states the truth about the reply window:
+ * outside the 24h window a free-form message is billed as a service message
+ * (and rejected outright on the official WhatsApp API), so the admin is told
+ * BEFORE sending, not after the money is spent.
+ */
+function _renderWindowNotice(win, bodiesLoaded = true) {
+    const el = document.getElementById('chatWindowNotice');
+    if (!el) return;
+    if (!_selectedCustomerId || win.open || !bodiesLoaded) {
+        el.classList.add('hidden');
+        el.textContent = '';
+        return;
+    }
+    el.classList.remove('hidden');
+    el.innerHTML = win.unknown
+        ? 'This customer has not messaged yet. On the official WhatsApp API a free-form reply is only allowed after the customer messages you — send an approved template instead.'
+        : 'The 24h reply window has closed. A free-form reply is billed as a service message (and rejected on the official WhatsApp API). Send an approved template instead.';
+}
+
+/**
+ * Cost guard: the first send outside the reply window asks for a deliberate
+ * confirmation (the button becomes "Send anyway"), the second one sends.
+ */
+function _guardClosedWindow(win) {
+    if (win.open) return true;
+    if (_windowConfirmArmed) { _windowConfirmArmed = false; return true; }
+    _windowConfirmArmed = true;
+    const btn = document.getElementById('chatSendBtn');
+    if (btn) {
+        btn.title = 'The 24h reply window is closed — click again to send anyway';
+        btn.classList.add('chat-send-warn');
+    }
+    showToast(win.unknown
+        ? 'No customer message in this thread — on the official WhatsApp API only approved templates can be sent. Click send again to send anyway.'
+        : 'Reply window closed — this message will be billed as a service message. Click send again to go ahead.',
+        'error', 7000);
+    return false;
 }
 
 async function _sendMessage() {
@@ -363,6 +523,13 @@ async function _sendMessage() {
     const meta = _chatData[_selectedCustomerId]?.meta;
     const phone = meta?.phone || `${_selectedCustomerId}@s.whatsapp.net`;
     if (!phone) { showToast('Cannot send — no customer number on this thread.', 'error'); return; }
+
+    const win = _replyWindow(Object.values(_chatData[_selectedCustomerId]?.messages || {}));
+    if (!_guardClosedWindow(win)) return;
+    // The warning state belongs to one attempt — clear it once the admin
+    // went ahead (the button must not stay amber after a normal send).
+    const sendBtn = document.getElementById('chatSendBtn');
+    if (sendBtn) { sendBtn.classList.remove('chat-send-warn'); sendBtn.removeAttribute('title'); }
 
     const { online } = _botLiveness();
     const demo = window.__demoMode === true;
@@ -445,6 +612,34 @@ function _wire() {
         });
     }
 
+    // Filter tabs (All / Unread / Archived)
+    document.querySelectorAll('[data-chat-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            _filter = btn.dataset.chatFilter || 'all';
+            document.querySelectorAll('[data-chat-filter]').forEach(b => {
+                const on = b === btn;
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            _renderThreadList();
+        });
+    });
+
+    // Label filter chips
+    document.getElementById('chatLabelChips')?.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-label-id]');
+        if (!chip) return;
+        const id = chip.dataset.labelId;
+        _labelFilter = _labelFilter === id ? null : id;
+        _renderThreadList();
+    });
+
+    // Load older chats (raise the query limit and re-bind the listener)
+    document.getElementById('chatLoadMore')?.addEventListener('click', () => {
+        _limit += 50;
+        _bindThreadListener(true);
+    });
+
     const composerInput = document.getElementById('chatComposerInput');
     if (composerInput) {
         composerInput.addEventListener('input', () => {
@@ -461,52 +656,75 @@ export function loadChat() {
     console.log('[Chat] Loading tab…');
     _wire();
     _wireBlockedMenus(); // ponytail: WhatsApp-style 3-dot menus
+    _wireLabelsModal();  // labels: assign to a chat + manage the library
     _checkBotStatus();
     _lastOnline = _botLiveness().online;
     _renderBotStatus();
     _updateComposerHint();
 
+    // Contact management (block list / labels / archive) — one module owns
+    // all three, subscribed live so the Chat tab and the Settings tab always
+    // agree with each other and with the bot. Subscribed ONCE (the tab is
+    // re-entered on every switch) — the module keeps the listeners alive
+    // across visits, exactly like the thread-list listener below.
+    ensureSubscriptions();
+    if (!_contactSubsWired) {
+        _contactSubsWired = true;
+        blockedContacts.subscribe(() => { _updateBlockBtnText(); _renderBlockedList(); });
+        chatLabels.subscribe(() => { _renderLabelChips(); _renderThreadList(); _renderThreadView(); });
+        chatState.subscribe(() => { _renderThreadList(); _renderThreadView(); _updateArchiveBtnText(); });
+    }
+
     // Single persistent listener. Keeps the sidebar badge alive across tabs
     // (WhatsApp-like) AND renders the thread list while this tab is visible.
     // Re-bound when the admin switches outlet so it follows the new outlet's
     // chats instead of staying stuck on the first-load outlet.
-    const outlet = Outlet.current;
-    if (_listener && _listenerOutlet !== outlet) {
-        _listener();
-        _listener = null;
-    }
-    if (!_listener) {
-        _listenerOutlet = outlet;
-        // The thread list reads the flat meta mirror, never the threads
-        // themselves. One row here is ~400 B with no message bodies, so this is
-        // 9.4 KB instead of 267 KB on a live outlet. Bodies load per-thread in
-        // _bindThreadMessages(). Needs .indexOn ['lastTs'] in database.rules.json.
-        // NOTE: Outlet.ref() returns a Reference, which has no .orderByChild —
-        // the previous `_chatRef('').orderByChild(...)` threw on every Chat open
-        // and left the list permanently empty. Ordering must go through query().
-        _listener = onValue(query(Outlet.ref('chatMeta'), orderByChild('lastTs'), limitToLast(50)), (snap) => {
-            const metas = snap.val() || {};
-            const next = {};
-            for (const [id, meta] of Object.entries(metas)) {
-                // Keep any messages already loaded for the open thread.
-                next[id] = { meta: meta || {}, messages: _chatData[id]?.messages };
-            }
-            _chatData = next;
-            _updateBadges();
-            const tab = document.getElementById('tab-chat');
-            if (tab && !tab.classList.contains('hidden')) {
-                _renderThreadList();
-                _renderThreadView();
-            }
-        }, (err) => {
-            console.error('[Chat] Listener error:', err);
-        });
-    }
+    _bindThreadListener();
 
     // Render immediately on (re)entry even though the listener is persistent.
     _renderThreadList();
     _renderThreadView();
     _startUsageListener();
+}
+
+/**
+ * Bind the thread-list query.
+ * The list reads the flat meta mirror, never the threads themselves. One row
+ * here is ~400 B with no message bodies, so this is 9.4 KB instead of
+ * 267 KB on a live outlet. Bodies load per-thread in _bindThreadMessages().
+ * Needs .indexOn ['lastTs'] in database.rules.json.
+ *
+ * NOTE: Outlet.ref() returns a Reference, which has no .orderByChild — the
+ * previous `_chatRef('').orderByChild(...)` threw on every Chat open and
+ * left the list permanently empty. Ordering must go through query().
+ */
+function _bindThreadListener(force = false) {
+    const outlet = Outlet.current;
+    if (_listener && (_listenerOutlet !== outlet || force)) {
+        _listener();
+        _listener = null;
+    }
+    if (_listener) return;
+    _listenerOutlet = outlet;
+    // The list reads the flat meta mirror, never the threads themselves
+    // (see the note above).
+    _listener = onValue(query(Outlet.ref('chatMeta'), orderByChild('lastTs'), limitToLast(_limit)), (snap) => {
+        const metas = snap.val() || {};
+        const next = {};
+        for (const [id, meta] of Object.entries(metas)) {
+            // Keep any messages already loaded for the open thread.
+            next[id] = { meta: meta || {}, messages: _chatData[id]?.messages };
+        }
+        _chatData = next;
+        _updateBadges();
+        const tab = document.getElementById('tab-chat');
+        if (tab && !tab.classList.contains('hidden')) {
+            _renderThreadList();
+            _renderThreadView();
+        }
+    }, (err) => {
+        console.error('[Chat] Listener error:', err);
+    });
 }
 
 // ── WhatsApp bot onboarding ──────────────────────────────────────────
@@ -630,6 +848,16 @@ function _renderQR(pair) {
 export function cleanupChat() {
     _selectedCustomerId = null;
     _searchTerm = '';
+    _filter = 'all';
+    _labelFilter = null;
+    _windowConfirmArmed = false;
+    // Reset the filter tabs so a re-entry starts on "All" (the DOM classes
+    // are owned by the markup, not by a re-render).
+    document.querySelectorAll('[data-chat-filter]').forEach(b => {
+        const on = b.dataset.chatFilter === 'all';
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
     if (_threadUnsub) { _threadUnsub(); _threadUnsub = null; }
     _threadBoundId = null;
     _stopUsageListener();
@@ -640,24 +868,37 @@ export function cleanupChat() {
 // ── WhatsApp-style blocked contacts (3-dot menu) ─────────────────────
 let _currentChatPhone = null; // phone of currently open conversation
 
-function _getBlocked() { return window.__blockedNumbers?.list || []; }
+// The block list lives in ONE place (Admin/js/chat-contacts.js). It used to
+// be read through `window.__blockedNumbers`, a global owned by
+// features/settings.js — a LAZILY imported module. Until the admin opened
+// the Settings tab at least once, that global was undefined, so "Block
+// Contact" threw a TypeError and did nothing and the Blocked Contacts modal
+// was always empty. The Chat tab now owns its own data.
+function _getBlocked() { return blockedContacts.list; }
+
 async function _blockNumber(phone) {
-    const list = _getBlocked();
-    if (list.includes(phone)) return showToast('Already blocked', 'error');
-    list.push(phone);
-    window.__blockedNumbers.list = list;
-    await window.__blockedNumbers.save();
-    showToast('Contact blocked', 'success');
+    try {
+        const changed = await blockedContacts.block(phone);
+        showToast(changed ? 'Contact blocked — the bot will ignore them now.' : 'Already blocked', changed ? 'success' : 'error');
+        _renderBlockedList();
+        _updateBlockBtnText();
+    } catch (e) {
+        console.error('[Chat] block failed', e);
+        showToast('Could not block contact: ' + (e?.message || e), 'error');
+    }
 }
+
 async function _unblockNumber(phone) {
-    const list = _getBlocked();
-    const idx = list.indexOf(phone);
-    if (idx === -1) return;
-    list.splice(idx, 1);
-    window.__blockedNumbers.list = list;
-    await window.__blockedNumbers.save();
-    showToast('Contact unblocked', 'success');
-    _renderBlockedList();
+    try {
+        const changed = await blockedContacts.unblock(phone);
+        if (!changed) return;
+        showToast('Contact unblocked', 'success');
+        _renderBlockedList();
+        _updateBlockBtnText();
+    } catch (e) {
+        console.error('[Chat] unblock failed', e);
+        showToast('Could not unblock contact: ' + (e?.message || e), 'error');
+    }
 }
 
 function _renderBlockedList() {
@@ -675,12 +916,12 @@ function _renderBlockedList() {
         // Try to find a name from chat data
         let name = '';
         for (const [, thread] of Object.entries(_chatData)) {
-            if (thread.meta?.phone === num) { name = thread.meta?.name || ''; break; }
+            if (normalizePhone(thread.meta?.phone) === num) { name = thread.meta?.name || ''; break; }
         }
         return `<div class="blocked-contact-row">
-            <span class="blocked-contact-phone">${num}</span>
+            <span class="blocked-contact-phone">+${escapeHtml(num)}</span>
             ${name ? `<span class="blocked-contact-label">${escapeHtml(name)}</span>` : ''}
-            <button class="blocked-contact-unblock" data-phone="${num}">Unblock</button>
+            <button class="blocked-contact-unblock" data-phone="${escapeHtml(num)}">Unblock</button>
         </div>`;
     }).join('');
 }
@@ -688,11 +929,26 @@ function _renderBlockedList() {
 function _updateBlockBtnText() {
     const btn = document.getElementById('btnBlockContact');
     if (!btn || !_currentChatPhone) return;
-    const isBlocked = _getBlocked().includes(_currentChatPhone);
+    const isBlocked = blockedContacts.isBlocked(_currentChatPhone);
     btn.innerHTML = isBlocked
         ? '<i data-lucide="shield-check"></i> Unblock Contact'
         : '<i data-lucide="shield-off"></i> Block Contact';
     btn.classList.toggle('chat-menu-danger', !isBlocked);
+    loadLucide(btn);
+}
+
+/**
+ * The archive menu item says what it WILL do — "Unarchive chat" when the
+ * open thread is already archived. A static label made the second click
+ * (which unarchives) look like it was archiving again.
+ */
+function _updateArchiveBtnText() {
+    const btn = document.getElementById('btnArchiveChat');
+    if (!btn || !_selectedCustomerId) return;
+    const archived = chatState.of(_selectedCustomerId).archived === true;
+    btn.innerHTML = archived
+        ? '<i data-lucide="archive-restore"></i> Unarchive chat'
+        : '<i data-lucide="archive"></i> Archive chat';
     loadLucide(btn);
 }
 
@@ -719,8 +975,11 @@ function _wireBlockedMenus() {
     document.getElementById('btnBlockedContacts')?.addEventListener('click', () => {
         document.getElementById('chatMenuDropdown')?.classList.add('hidden');
         _renderBlockedList();
+        // The Admin modal pattern is `.modal` + `.active` (style.css) — the
+        // old `remove('hidden')` left the modal invisible AND unclickable,
+        // so "Blocked Contacts" showed nothing at all.
         const modal = document.getElementById('blockedContactsModal');
-        if (modal) { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden', 'false'); }
+        if (modal) { modal.classList.remove('hidden'); modal.classList.add('active'); modal.setAttribute('aria-hidden', 'false'); }
     });
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.chat-menu-wrap')) {
@@ -748,8 +1007,10 @@ function _wireBlockedMenus() {
     document.getElementById('btnBlockContact')?.addEventListener('click', async () => {
         document.getElementById('chatThreadMenuDropdown')?.classList.add('hidden');
         if (!_currentChatPhone) return;
-        const list = _getBlocked();
-        if (list.includes(_currentChatPhone)) {
+        // The list holds DIGITS (the form the bot matches); the thread carries
+        // the raw JID — compare through the shared helper, never with
+        // Array.includes on the raw string.
+        if (blockedContacts.isBlocked(_currentChatPhone)) {
             await _unblockNumber(_currentChatPhone);
         } else {
             await _blockNumber(_currentChatPhone);
@@ -763,11 +1024,195 @@ function _wireBlockedMenus() {
         if (btn) await _unblockNumber(btn.dataset.phone);
     });
 
+    // Archive / unarchive the open thread
+    document.getElementById('btnArchiveChat')?.addEventListener('click', async () => {
+        document.getElementById('chatThreadMenuDropdown')?.classList.add('hidden');
+        const cid = _selectedCustomerId;
+        if (!cid) return;
+        const archived = chatState.of(cid).archived === true;
+        try {
+            await chatState.setArchived(cid, !archived);
+            showToast(archived ? 'Chat restored to the list' : 'Chat archived', 'success');
+            _renderThreadList();
+            _renderThreadView();
+            _updateArchiveBtnText();
+        } catch (err) {
+            console.error('[Chat] archive failed', err);
+            showToast('Could not archive chat: ' + (err?.message || err), 'error');
+        }
+    });
+
+    // Labels for the open thread
+    document.getElementById('btnChatLabels')?.addEventListener('click', () => {
+        document.getElementById('chatThreadMenuDropdown')?.classList.add('hidden');
+        _openLabelsModal(_selectedCustomerId);
+    });
+    document.getElementById('btnManageLabels')?.addEventListener('click', () => {
+        document.getElementById('chatMenuDropdown')?.classList.add('hidden');
+        _openLabelsModal(null);
+    });
+
     // Close modal
     document.querySelectorAll('[data-close-modal="blockedContactsModal"]').forEach(el => {
         el.addEventListener('click', () => {
             const m = document.getElementById('blockedContactsModal');
-            if (m) { m.classList.add('hidden'); m.setAttribute('aria-hidden', 'true'); }
+            if (m) { m.classList.remove('active', 'hidden'); m.setAttribute('aria-hidden', 'true'); }
         });
+    });
+    document.querySelectorAll('[data-close-modal="chatLabelsModal"]').forEach(el => {
+        el.addEventListener('click', () => _closeLabelsModal());
+    });
+}
+
+// ── WhatsApp-style labels (customer lists) ────────────────────────────
+// A label is a named group of customers (VIP, complaints, festival orders).
+// WhatsApp Business caps a business at 20 labels — same cap here.
+let _labelModalCustomerId = null;
+
+function _openLabelsModal(customerId) {
+    _labelModalCustomerId = customerId || null;
+    const assignWrap = document.getElementById('chatLabelAssignWrap');
+    const target = document.getElementById('chatLabelAssignTarget');
+    if (assignWrap) assignWrap.classList.toggle('hidden', !customerId);
+    if (target && customerId) {
+        const meta = _chatData[customerId]?.meta || {};
+        target.textContent = _displayName(customerId, meta);
+    }
+    _renderLabelsModal();
+    const modal = document.getElementById('chatLabelsModal');
+    // `.modal` + `.active` is the Admin's modal pattern (style.css) — without
+    // `active` the modal stays invisible and unclickable.
+    if (modal) { modal.classList.remove('hidden'); modal.classList.add('active'); modal.setAttribute('aria-hidden', 'false'); }
+}
+
+function _closeLabelsModal() {
+    const modal = document.getElementById('chatLabelsModal');
+    if (modal) { modal.classList.remove('active', 'hidden'); modal.setAttribute('aria-hidden', 'true'); }
+    _labelModalCustomerId = null;
+}
+
+function _labelUsageCounts() {
+    const counts = {};
+    for (const [cid] of Object.entries(_chatData)) {
+        for (const lid of (chatState.of(cid).labels || [])) counts[lid] = (counts[lid] || 0) + 1;
+    }
+    return counts;
+}
+
+function _renderLabelsModal() {
+    const all = chatLabels.all || {};
+    const ids = Object.keys(all);
+    const assignList = document.getElementById('chatLabelAssignList');
+    if (assignList) {
+        const cur = _labelModalCustomerId ? (chatState.of(_labelModalCustomerId).labels || []) : [];
+        assignList.innerHTML = ids.length
+            ? ids.map(id => {
+                const l = all[id] || {};
+                return `<label class="chat-label-row">
+                    <input type="checkbox" data-assign-label="${escapeHtml(id)}" ${cur.includes(id) ? 'checked' : ''}>
+                    <span class="chat-label-dot" style="background:${escapeHtml(l.color || '#94a3b8')}"></span>
+                    <span class="chat-label-row-name">${escapeHtml(l.name || id)}</span>
+                </label>`;
+            }).join('')
+            : '<div class="chat-list-empty">No labels yet — create one below.</div>';
+    }
+    const manageList = document.getElementById('chatLabelManageList');
+    if (manageList) {
+        const counts = _labelUsageCounts();
+        manageList.innerHTML = ids.length
+            ? ids.map(id => {
+                const l = all[id] || {};
+                const n = counts[id] || 0;
+                return `<div class="chat-label-row">
+                    <span class="chat-label-dot" style="background:${escapeHtml(l.color || '#94a3b8')}"></span>
+                    <input class="chat-label-row-input" data-label-name="${escapeHtml(id)}" value="${escapeHtml(l.name || id)}" maxlength="24" aria-label="Label name">
+                    <span class="chat-label-row-count">${n} chat${n === 1 ? '' : 's'}</span>
+                    <button type="button" class="chat-label-row-delete" data-delete-label="${escapeHtml(id)}" aria-label="Delete label">Delete</button>
+                </div>`;
+            }).join('')
+            : '<div class="chat-list-empty">No labels yet. Create one to group customers.</div>';
+    }
+}
+
+function _wireLabelsModal() {
+    const modal = document.getElementById('chatLabelsModal');
+    if (!modal || modal.dataset.wired === '1') return;
+    modal.dataset.wired = '1';
+
+    // Assign / unassign a label on the open thread
+    modal.addEventListener('change', async (e) => {
+        const cb = e.target.closest('[data-assign-label]');
+        if (!cb || !_labelModalCustomerId) return;
+        try {
+            await chatState.toggleLabel(_labelModalCustomerId, cb.dataset.assignLabel);
+            _renderLabelsModal();
+            _renderThreadList();
+            _renderThreadView();
+        } catch (err) {
+            console.error('[Chat] label assign failed', err);
+            showToast('Could not update labels: ' + (err?.message || err), 'error');
+        }
+    });
+
+    // Rename a label (the name is an editable field — saves on change)
+    modal.addEventListener('change', async (e) => {
+        const input = e.target.closest('[data-label-name]');
+        if (!input) return;
+        const id = input.dataset.labelName;
+        const name = input.value.trim();
+        if (!name) { _renderLabelsModal(); return; }
+        try {
+            await chatLabels.rename(id, name);
+            showToast('Label renamed', 'success');
+            _renderLabelsModal();
+            _renderThreadList();
+            _renderThreadView();
+        } catch (err) {
+            console.error('[Chat] label rename failed', err);
+            showToast('Could not rename label: ' + (err?.message || err), 'error');
+            _renderLabelsModal();
+        }
+    });
+
+    // Delete a label (it is stripped from every thread that carried it)
+    modal.addEventListener('click', async (e) => {
+        const del = e.target.closest('[data-delete-label]');
+        if (del) {
+            const id = del.dataset.deleteLabel;
+            const l = (chatLabels.all || {})[id] || {};
+            const ok = await showConfirm(`Delete the label "${l.name || id}"? It will be removed from every chat.`, 'Delete label');
+            if (!ok) return;
+            try {
+                await chatLabels.remove(id);
+                showToast('Label deleted', 'success');
+                if (_labelFilter === id) _labelFilter = null;
+                _renderLabelsModal();
+                _renderThreadList();
+                _renderThreadView();
+            } catch (err) {
+                console.error('[Chat] label delete failed', err);
+                showToast('Could not delete label: ' + (err?.message || err), 'error');
+            }
+            return;
+        }
+        if (e.target.closest('#btnCreateLabel')) {
+            const input = document.getElementById('chatNewLabelInput');
+            const name = (input?.value || '').trim();
+            if (!name) { showToast('Type a label name first', 'error'); return; }
+            try {
+                await chatLabels.create(name);
+                input.value = '';
+                showToast('Label created', 'success');
+                _renderLabelsModal();
+                _renderThreadList();
+            } catch (err) {
+                console.error('[Chat] label create failed', err);
+                showToast(err?.message || 'Could not create label', 'error');
+            }
+        }
+    });
+
+    document.getElementById('chatNewLabelInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btnCreateLabel')?.click(); }
     });
 }

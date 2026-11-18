@@ -1409,6 +1409,212 @@
     }
 }
 
+/* ============================================================================
+   WHATSAPP-STYLE CONTACT MANAGEMENT
+   Labels, archive, filters and the 24h customer-service window.
+   ============================================================================ */
+
+/* --- Label filter chips (above the thread list) --- */
+.chat-label-chips {
+    display: flex;
+    gap: 6px;
+    padding: 0 12px 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+}
+.chat-label-chips::-webkit-scrollbar { display: none; }
+.chat-label-chips:empty { display: none; }
+.chat-label-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color, rgba(15, 23, 42, .1));
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s;
+}
+.chat-label-chip:hover { background: rgba(0, 0, 0, .04); }
+.chat-label-chip.active {
+    color: #fff;
+    border-color: transparent;
+    background: var(--text-primary, #111);
+}
+.chat-label-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+    background: #94a3b8;
+}
+.chat-label-chip.active .chat-label-dot { background: #fff; }
+.chat-label-chip-count {
+    opacity: .7;
+    font-weight: 500;
+}
+
+/* --- Load older chats --- */
+.chat-load-more {
+    margin: 4px 12px 12px;
+    padding: 8px 12px;
+    width: calc(100% - 24px);
+    border: 1px dashed var(--border-color, rgba(15, 23, 42, .12));
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-secondary, #64748b);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+}
+.chat-load-more:hover { background: rgba(0, 0, 0, .04); color: var(--text-primary, #111); }
+.chat-load-more.hidden { display: none; }
+
+/* --- Label markers on a thread row --- */
+.chat-thread-labels {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-top: 3px;
+    flex-wrap: wrap;
+}
+.chat-thread-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    background: rgba(37, 211, 102, .1);
+    color: var(--text-secondary, #64748b);
+}
+.chat-thread-label .chat-label-dot { width: 6px; height: 6px; }
+.chat-thread-archived-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-tertiary, #94a3b8);
+}
+
+/* --- 24h customer-service window --- */
+.chat-window-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    background: rgba(16, 185, 129, .12);
+    color: #047857;
+}
+.chat-window-badge.hidden { display: none; }
+.chat-window-badge.is-closed {
+    background: rgba(245, 158, 11, .14);
+    color: #b45309;
+}
+.chat-window-badge svg { width: 13px; height: 13px; }
+
+.chat-window-notice {
+    padding: 8px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+    background: rgba(245, 158, 11, .12);
+    color: #92400e;
+    border-top: 1px solid rgba(245, 158, 11, .25);
+}
+.chat-window-notice.hidden { display: none; }
+
+/* Send button in the "closed reply window" state */
+.chat-send-warn {
+    background: #f59e0b !important;
+    color: #fff !important;
+}
+
+/* --- Labels modal --- */
+.chat-label-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.chat-label-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid var(--border-color, rgba(15, 23, 42, .1));
+    border-radius: 9px;
+    font-size: 13px;
+    color: var(--text-primary, #111);
+}
+.chat-label-row input[type="checkbox"] {
+    accent-color: #25D366;
+    width: 16px;
+    height: 16px;
+    flex: none;
+}
+.chat-label-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-label-row-input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 13px;
+    color: var(--text-primary, #111);
+    outline: none;
+}
+.chat-label-row-input:hover { border-color: var(--border-color, rgba(15, 23, 42, .12)); }
+.chat-label-row-input:focus { border-color: #25D366; background: var(--bg-primary, #fff); }
+.chat-label-row-count { font-size: 11px; color: var(--text-tertiary, #94a3b8); }
+.chat-label-row-rename {
+    border: 1px solid var(--border-color, rgba(15, 23, 42, .12));
+    background: transparent;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-secondary, #64748b);
+}
+.chat-label-row-rename:hover { background: rgba(0, 0, 0, .04); }
+.chat-label-row-delete {
+    border: 1px solid #ef4444;
+    background: transparent;
+    color: #ef4444;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+}
+.chat-label-row-delete:hover { background: #ef4444; color: #fff; }
+.chat-label-create {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+.chat-label-create .form-input { flex: 1; }
+.chat-label-create .chat-btn-primary { padding: 9px 16px; font-size: 13px; }
+
+@media (prefers-color-scheme: dark) {
+    .chat-window-badge { color: #6ee7b7; background: rgba(16, 185, 129, .18); }
+    .chat-window-badge.is-closed { color: #fcd34d; background: rgba(245, 158, 11, .18); }
+    .chat-window-notice { color: #fde68a; background: rgba(245, 158, 11, .16); }
+}
+
 /* --- Print Styles --- */
 @media print {
     .chat-compose-area,

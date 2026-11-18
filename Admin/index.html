@@ -181,7 +181,7 @@
 
     <link rel="stylesheet" href="mobile-overrides.css?v=5.4.13">
 
-    <link rel="stylesheet" href="chat.css?v=5.3.33">
+    <link rel="stylesheet" href="chat.css?v=5.3.34">
 
     <link rel="manifest" href="manifest.json?v=3">
 
@@ -2507,21 +2507,6 @@
 
                         </div>
 
-                <!-- Blocked Contacts Modal -->
-                <div id="blockedContactsModal" class="modal" role="dialog" aria-modal="true" aria-label="Blocked Contacts" aria-hidden="true">
-                    <div class="modal-content" style="max-width:480px">
-                        <div class="modal-header">
-                            <h3 id="blockedContactsTitle"><i data-lucide="shield-off" class="icon-18"></i> Blocked Contacts</h3>
-                            <button class="modal-close" data-close-modal="blockedContactsModal" aria-label="Close"><i data-lucide="x"></i></button>
-                        </div>
-                        <div class="modal-body" style="padding:16px">
-                            <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px">These contacts cannot send messages to your WhatsApp bot. Unblock to allow them to message again.</p>
-                            <div id="blockedContactsList" class="blocked-contacts-list"></div>
-                            <div id="blockedContactsEmpty" class="chat-list-empty" style="display:none">No blocked contacts.</div>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
                         <div class="glass-card p-20 grid-full" data-settings-section="receipt-dev">
@@ -3502,6 +3487,7 @@
                                     <div class="chat-menu-wrap">
                                         <button class="chat-menu-btn" id="chatMenuBtn" aria-label="Chat options" title="More options"><i data-lucide="more-vertical"></i></button>
                                         <div class="chat-menu-dropdown hidden" id="chatMenuDropdown">
+                                            <button class="chat-menu-item" id="btnManageLabels"><i data-lucide="tags"></i> Manage labels</button>
                                             <button class="chat-menu-item" id="btnBlockedContacts"><i data-lucide="shield-off"></i> Blocked Contacts</button>
                                         </div>
                                     </div>
@@ -3532,7 +3518,14 @@
                                 <i data-lucide="search" class="icon-16"></i>
                                 <input type="text" id="chatSearch" placeholder="Search chats..." aria-label="Search chats" autocomplete="off">
                             </div>
+                            <div class="chat-filter-tabs" role="tablist" aria-label="Conversation filters">
+                                <button class="chat-filter-tab active" data-chat-filter="all" role="tab" aria-selected="true">All</button>
+                                <button class="chat-filter-tab" data-chat-filter="unread" role="tab" aria-selected="false">Unread</button>
+                                <button class="chat-filter-tab" data-chat-filter="archived" role="tab" aria-selected="false">Archived</button>
+                            </div>
+                            <div id="chatLabelChips" class="chat-label-chips" role="group" aria-label="Filter by label"></div>
                             <div id="chatThreadList" class="chat-thread-list" role="list"></div>
+                            <button id="chatLoadMore" class="chat-load-more hidden" type="button">Load older chats</button>
                         </aside>
                         <section class="chat-conv-pane" aria-label="Conversation">
                             <div id="chatEmptyState" class="chat-empty-state">
@@ -3547,11 +3540,16 @@
                                     <div class="chat-thread-meta">
                                         <strong id="chatThreadName"></strong>
                                         <span id="chatThreadPhone"></span>
+                                        <div id="chatThreadLabels" class="chat-thread-labels"></div>
                                     </div>
                                     <div class="chat-thread-actions">
+                                        <span id="chatThreadWindow" class="chat-window-badge hidden" role="status"></span>
                                         <div class="chat-menu-wrap">
                                             <button class="chat-menu-btn" id="chatThreadMenuBtn" aria-label="More options" title="More options"><i data-lucide="more-vertical"></i></button>
                                             <div class="chat-menu-dropdown hidden" id="chatThreadMenuDropdown">
+                                                <button class="chat-menu-item" id="btnChatLabels"><i data-lucide="tags"></i> Labels</button>
+                                                <button class="chat-menu-item" id="btnArchiveChat"><i data-lucide="archive"></i> Archive chat</button>
+                                                <div class="chat-menu-divider"></div>
                                                 <button class="chat-menu-item chat-menu-danger" id="btnBlockContact"><i data-lucide="shield-off"></i> Block Contact</button>
                                             </div>
                                         </div>
@@ -3559,6 +3557,7 @@
                                 </header>
                                 <div id="chatMessageList" class="chat-message-list" role="log" aria-live="polite"></div>
                                 <div id="chatBotStatus" class="chat-bot-status hidden" role="status" aria-live="polite"></div>
+                                <div id="chatWindowNotice" class="chat-window-notice hidden" role="status" aria-live="polite"></div>
                                 <div class="chat-composer">
                                     <textarea id="chatComposerInput" rows="1" placeholder="Type a message" aria-label="Type a message"></textarea>
                                     <button id="chatSendBtn" class="chat-send-btn" aria-label="Send message">
@@ -8802,6 +8801,49 @@
     </div>
 </div>
 <!-- ============== /USER MANUAL MODAL ============== -->
+
+<!-- ============== CHAT TAB MODALS ==============
+     These live OUTSIDE every tab pane on purpose: a modal nested inside a
+     hidden tab (#tab-settings) can never be seen — `display:none` on the
+     ancestor hides it no matter how the modal itself is styled. Both are
+     opened from the Chat tab. -->
+<div id="blockedContactsModal" class="modal" role="dialog" aria-modal="true" aria-label="Blocked Contacts" aria-hidden="true">
+    <div class="modal-content" style="max-width:480px">
+        <div class="modal-header">
+            <h3 id="blockedContactsTitle"><i data-lucide="shield-off" class="icon-18"></i> Blocked Contacts</h3>
+            <button class="modal-close" data-close-modal="blockedContactsModal" aria-label="Close"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body" style="padding:16px">
+            <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px">These contacts cannot send messages to your WhatsApp bot. Unblock to allow them to message again.</p>
+            <div id="blockedContactsList" class="blocked-contacts-list"></div>
+            <div id="blockedContactsEmpty" class="chat-list-empty" style="display:none">No blocked contacts.</div>
+        </div>
+    </div>
+</div>
+
+<!-- Labels Modal (assign to a chat + manage the label library) -->
+<div id="chatLabelsModal" class="modal" role="dialog" aria-modal="true" aria-label="Labels" aria-hidden="true">
+    <div class="modal-content" style="max-width:480px">
+        <div class="modal-header">
+            <h3><i data-lucide="tags" class="icon-18"></i> Labels</h3>
+            <button class="modal-close" data-close-modal="chatLabelsModal" aria-label="Close"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body" style="padding:16px">
+            <div id="chatLabelAssignWrap" class="hidden">
+                <p style="font-size:13px;color:var(--text-muted);margin:0 0 10px">Apply labels to <strong id="chatLabelAssignTarget">this chat</strong>.</p>
+                <div id="chatLabelAssignList" class="chat-label-list"></div>
+                <hr style="border:none;border-top:1px solid var(--border-color);margin:16px 0">
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);margin:0 0 10px">Labels group your customers — VIP, complaints, festival orders. WhatsApp allows up to 20.</p>
+            <div id="chatLabelManageList" class="chat-label-list"></div>
+            <div class="chat-label-create">
+                <input type="text" id="chatNewLabelInput" class="form-input" placeholder="New label name" maxlength="24" autocomplete="off" aria-label="New label name">
+                <button type="button" id="btnCreateLabel" class="chat-btn-primary">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- ============== /CHAT TAB MODALS ============== -->
 
 <!-- Report print view (Phase 5): filled by report-export.js, shown only while printing -->
 <div id="reportPrintArea" aria-hidden="true"></div>
