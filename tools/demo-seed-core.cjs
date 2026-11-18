@@ -1001,6 +1001,7 @@ function createDemoSeedCore({ now, money, fixtures: fx, live }) {
 
     function buildChats({ rnd, fx }) {
         const chats = {};
+        const chatMeta = {};
         fx.CHATS.forEach((c, idx) => {
             // Thread key = last-10-digits of the JID (bot/chat-log.js convention).
             const phone = c.phone.replace(/\D/g, '').slice(-10);
@@ -1016,19 +1017,25 @@ function createDemoSeedCore({ now, money, fixtures: fx, live }) {
                 };
             });
             const last = c.messages[c.messages.length - 1];
-            chats[phone] = {
-                meta: {
-                    name: c.name,
-                    phone: jid,
-                    lastTs: NOW - (fx.CHATS.length - idx) * 3 * HOUR,
-                    lastText: last.text,
-                    lastDir: last.from === 'restaurant' ? 'bot' : 'customer',
-                    unread: c.unread || 0,
-                },
-                messages,
+            const meta = {
+                name: c.name,
+                phone: jid,
+                lastTs: NOW - (fx.CHATS.length - idx) * 3 * HOUR,
+                lastText: last.text,
+                lastDir: last.from === 'restaurant' ? 'bot' : 'customer',
+                unread: c.unread || 0,
             };
+            chats[phone] = { meta, messages };
+            // Flat meta mirror. The Admin Chat LIST reads only `chatMeta`
+            // (batch 19 — one ~400 B row per thread instead of every message
+            // body), and `bot/chat-log.js` writes that mirror on every real
+            // message. A seeded thread WITHOUT a mirror row is invisible: the
+            // demo Chat tab rendered empty while the chats were right there.
+            // Same six keys as `chats/{id}/meta`, so the row also satisfies the
+            // `chatMeta/$customerId` validate clause in database.rules.json.
+            chatMeta[phone] = { ...meta };
         });
-        return chats;
+        return { chats, chatMeta };
     }
 
     // ----------------------------------------------------------------- feedback
@@ -1301,7 +1308,7 @@ function createDemoSeedCore({ now, money, fixtures: fx, live }) {
             rnd, money, fx, orders: orderData.orders, byPhone: orderData.byPhone,
             rankings: orderData.rankings, ordersByPhone: orderData.ordersByPhone,
         });
-        const chats = buildChats({ rnd, fx });
+        const { chats, chatMeta } = buildChats({ rnd, fx });
         const feedbacks = buildFeedback({ money, fx });
         const bot = buildBot({ rnd, money, fx });
         const settings = buildSettings({ rnd, fx });
@@ -1391,6 +1398,9 @@ function createDemoSeedCore({ now, money, fixtures: fx, live }) {
             discountsUsage: orderData.discountUsage,
             customers: loyaltyData.customers,
             chats,
+            // The flat mirror the Admin Chat list reads (batch 19). Without it
+            // the public demo's Chat tab is empty even though `chats` is full.
+            chatMeta,
             riders,
             riderStats,
             settlements,

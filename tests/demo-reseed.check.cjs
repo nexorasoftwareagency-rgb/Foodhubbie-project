@@ -16,7 +16,12 @@
  *   4. it only ever writes the demo tenant (and must never write `whatsapp` or
  *      `outletIndex/demo` — either one would expose or provision the sandbox),
  *   5. the root cause of the broken reseed stays fixed: the fixtures are NOT
- *      `Admin/js/demo/demo-data.js` (deleted as an orphan by the KDS review).
+ *      `Admin/js/demo/demo-data.js` (deleted as an orphan by the KDS review),
+ *   6. the seeded chat threads carry their flat `chatMeta` mirror — the Admin
+ *      Chat LIST reads only that node, so a thread without a mirror row is
+ *      invisible (the public demo's Chat tab was empty while `chats` was full),
+ *   7. the CLI runner can actually APPLY: its order writes are chunked under
+ *      the 500-events-per-write v2 trigger cap, exactly like the Function's.
  *
  * Behaviour on the real database was proven live (see doc 38); this file is the
  * static half that stops a future edit from quietly changing it.
@@ -37,11 +42,15 @@ const FN = process.env.DEMO_RESEED_FN
 const FACTORY = 'FIREBASE_SERVER_MIGRATION/functions/src/shared/demo/factory.ts';
 const INDEX = 'FIREBASE_SERVER_MIGRATION/functions/src/index.ts';
 const COPY_VENDOR = 'FIREBASE_SERVER_MIGRATION/functions/scripts/copy-vendor.cjs';
-const CORE = 'tools/demo-seed-core.cjs';
+// `DEMO_CORE` exists only so the mutation self-test can point the guard at a
+// deliberately broken copy of the builder (the same trick as DEMO_RESEED_FN).
+const CORE = process.env.DEMO_CORE || 'tools/demo-seed-core.cjs';
 const FIXTURES = 'tools/demo-fixtures.cjs';
-const CLI = 'tools/seed-demo-tenant.cjs';
+// `DEMO_CLI` — same trick for the CLI runner.
+const CLI = process.env.DEMO_CLI || 'tools/seed-demo-tenant.cjs';
 
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const at = (p) => (path.isAbsolute(p) ? p : path.join(ROOT, p));
 const fn = stripComments(read(FN));
 const factory = stripComments(read(FACTORY));
 const index = read(INDEX);
@@ -109,7 +118,7 @@ const ok = (label, cond, detail) => {
     ok('the CLI reads the shared fixtures + core, not the deleted page',
         /demo-fixtures\.cjs/.test(cli) && /demo-seed-core\.cjs/.test(cli) && !/demo-data\.js/.test(cli));
 
-    const coreMod = require(path.join(ROOT, CORE));
+    const coreMod = require(at(CORE));
     const moneyMath = await import(require('url').pathToFileURL(path.join(ROOT, 'shared/money-math.js')).href);
     const payrollMath = await import(require('url').pathToFileURL(path.join(ROOT, 'shared/payroll-math.js')).href);
     const money = { ...moneyMath, computePayroll: payrollMath.computePayroll };
@@ -145,6 +154,34 @@ const ok = (label, cond, detail) => {
         /^\d{4}$/.test(String(outlet.settings?.Delivery?.backupCode || '')));
     ok('settings/Store.storeName is the demo name the sidebar shows',
         outlet.settings?.Store?.storeName === coreMod.DEMO_OUTLET_NAME);
+
+    // -----------------------------------------------------------------------
+    // 3b. The chat threads carry their flat `chatMeta` mirror
+    // -----------------------------------------------------------------------
+    // The Admin Chat LIST reads only `chatMeta` (batch 19: one ~400 B row per
+    // thread instead of every message body). `bot/chat-log.js` writes that
+    // mirror on every real message; the demo has no bot, so the SEEDER must
+    // write it. Without it the public demo's Chat tab was empty while the
+    // seeded `chats` node was sitting right there — 3 threads, 0 list rows.
+    const threadIds = Object.keys(outlet.chats || {});
+    const mirror = outlet.chatMeta || {};
+    const mirrorIds = Object.keys(mirror);
+    ok('the seeded threads carry a flat chatMeta mirror', mirrorIds.length > 0
+        && mirrorIds.length === threadIds.length, { threads: threadIds.length, mirror: mirrorIds.length });
+    ok('the mirror is keyed by the same thread id', threadIds.every((id) => mirrorIds.includes(id)));
+    ok('every mirror row equals its thread meta', threadIds.every((id) =>
+        JSON.stringify(mirror[id]) === JSON.stringify(outlet.chats[id]?.meta)));
+    // The exact clause `database.rules.json` validates for chatMeta/$customerId.
+    const MIRROR_KEYS = ['name', 'phone', 'lastTs', 'lastText', 'lastDir', 'unread'];
+    ok('every mirror row satisfies the rules validate clause', mirrorIds.every((id) => {
+        const row = mirror[id] || {};
+        return MIRROR_KEYS.every((k) => Object.prototype.hasOwnProperty.call(row, k))
+            && typeof row.lastTs === 'number' && typeof row.unread === 'number';
+    }));
+    ok('the mirror carries no message bodies (that is the whole point of it)', mirrorIds.every((id) =>
+        !Object.prototype.hasOwnProperty.call(mirror[id], 'messages')));
+    ok('the CLI writes the mirror (it never strips chatMeta)',
+        !/delete\s+[^;]*chatMeta/.test(cli) && /ref\(`businesses\/\$\{BID\}`\)\.set\(business\)/.test(cli));
 
     // -----------------------------------------------------------------------
     // 4. Writes: only the demo tenant, and never the two forbidden nodes
@@ -183,6 +220,28 @@ const ok = (label, cond, detail) => {
         /updateUser\(user\.uid, \{[\s\S]{0,200}password: DEMO_PASSWORD/.test(fn));
 
     // -----------------------------------------------------------------------
+    // 4b. The CLI runner can actually APPLY the seed
+    // -----------------------------------------------------------------------
+    // Same constraint as the Function: RTDB rejects a write that would fire
+    // more than 500 Cloud Functions v2 events in one region, and every seeded
+    // order fans out to ~10 of ours. A single `set()` of the whole tenant was
+    // rejected live with TOO_MANY_TRIGGERS, so the CLI chunks the orders too —
+    // and it must delete yesterday's orders in chunks first, because a delete
+    // fans out exactly like a write.
+    ok('the CLI chunks its order writes under the v2 trigger cap',
+        /ORDERS_PER_WRITE = (\d+)/.test(cli) && Number(RegExp.$1) <= 40
+        && /ordersRef\.update\(patch\)/.test(cli));
+    ok('the CLI removes yesterday\'s orders in chunks before the parent set',
+        /existing\.slice\(i, i \+ ORDERS_PER_WRITE\)/.test(cli)
+        && /patch\[key\] = null/.test(cli)
+        && cli.indexOf('existing.slice') < cli.indexOf('.set(business)'));
+    ok('the CLI writes the new orders in chunks after the parent set',
+        /orderKeys\.slice\(i, i \+ ORDERS_PER_WRITE\)/.test(cli)
+        && cli.indexOf('.set(business)') < cli.indexOf('orderKeys.slice'));
+    ok('the CLI keeps the built orders out of the parent set (they go in chunks)',
+        /delete demoOutlet\.orders/.test(cli));
+
+    // -----------------------------------------------------------------------
     // 5. The bundle actually carries the builder
     // -----------------------------------------------------------------------
     ok('copy-vendor vendors the core + fixtures + payroll math',
@@ -211,13 +270,39 @@ const ok = (label, cond, detail) => {
     const ORDER_REF = /ref:\s*'businesses\/\{bid\}\/outlets\/\{oid\}\/orders\//;
     const orderTriggers = fs.readdirSync(TRIGGERS_DIR).filter((f) => f.endsWith('.ts'))
         .filter((f) => ORDER_REF.test(fs.readFileSync(path.join(TRIGGERS_DIR, f), 'utf8')));
+
+    /**
+     * Does this module hard-skip the demo tenant, and is the demo id it compares
+     * against pinned to the literal 'foodhubbie-demo'?
+     *
+     * Two forms are accepted, because both are safe:
+     *   - a LOCAL constant:  `const DEMO_BUSINESS_ID = 'foodhubbie-demo'` + `bid === DEMO_BUSINESS_ID`
+     *   - a SHARED constant: `import { DEMO_BID } from '../shared/wallet/gate'` + `bid === DEMO_BID`,
+     *     where the imported module pins `DEMO_BID = 'foodhubbie-demo'`.
+     * The old check only accepted the local form, so the wallet-gate trigger
+     * (batch 23l) turned the guard red even though it DOES skip the demo — the
+     * check was about the declaration STYLE, not about the behaviour.
+     */
+    const demoSkipPinned = (file) => {
+        const src = fs.readFileSync(path.join(TRIGGERS_DIR, file), 'utf8');
+        if (/DEMO_BUSINESS_ID\s*=\s*'foodhubbie-demo'/.test(src) && /bid\s*===\s*DEMO_BUSINESS_ID/.test(src)) {
+            return true;
+        }
+        if (/bid\s*===\s*DEMO_BID/.test(src)) {
+            for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*'([^']+)'/g)) {
+                if (!/\bDEMO_BID\b/.test(m[1])) continue;
+                const modPath = path.resolve(TRIGGERS_DIR, m[2]);
+                if (!fs.existsSync(modPath + '.ts')) continue;
+                if (/DEMO_BID\s*=\s*'foodhubbie-demo'/.test(fs.readFileSync(modPath + '.ts', 'utf8'))) return true;
+            }
+        }
+        return false;
+    };
+
     ok('found every module that watches an order path', orderTriggers.length >= 6, orderTriggers);
-    ok('every order trigger hard-skips the demo tenant', orderTriggers.every((f) =>
-        /DEMO_BUSINESS_ID\s*=\s*'foodhubbie-demo'/.test(fs.readFileSync(path.join(TRIGGERS_DIR, f), 'utf8'))
-        && /bid === DEMO_BUSINESS_ID/.test(fs.readFileSync(path.join(TRIGGERS_DIR, f), 'utf8'))),
-        orderTriggers.filter((f) => !/bid === DEMO_BUSINESS_ID/.test(fs.readFileSync(path.join(TRIGGERS_DIR, f), 'utf8'))));
-    ok('every watch module declares its own demo constant (no shared import to drift)',
-        orderTriggers.every((f) => /DEMO_BUSINESS_ID\s*=\s*'foodhubbie-demo'/.test(fs.readFileSync(path.join(TRIGGERS_DIR, f), 'utf8'))));
+    ok('every order trigger hard-skips the demo tenant (the id pinned to the literal)',
+        orderTriggers.every((f) => demoSkipPinned(f)),
+        orderTriggers.filter((f) => !demoSkipPinned(f)));
 
     console.log(`\n${pass} passed, ${process.exitCode ? 1 : 0} failed`);
 })().catch((e) => {

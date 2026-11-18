@@ -58,6 +58,9 @@ const DB_URL = process.env.FIREBASE_DATABASE_URL
     console.log('[demo-seed] orders        ', stats.orders);
     console.log('[demo-seed] open sessions ', stats.openSessions);
     console.log('[demo-seed] customers     ', stats.customers);
+    const demoOutlet = business.outlets[OID];
+    console.log('[demo-seed] chat threads  ', Object.keys(demoOutlet.chats || {}).length,
+        '· chatMeta mirror', Object.keys(demoOutlet.chatMeta || {}).length);
     console.log('[demo-seed] dishes/combos ', stats.dishes, '/', stats.combos);
     console.log('[demo-seed] staff         ', stats.staff);
     console.log('[demo-seed] payroll lines ', stats.payrollLines, '· net', stats.payrollNet);
@@ -91,8 +94,38 @@ const DB_URL = process.env.FIREBASE_DATABASE_URL
     }
 
     // 2. Business subtree (whole-node replace: the demo tenant has no live writers)
+    //
+    //    The orders go in CHUNKS. RTDB rejects a write that would fire more than
+    //    500 Cloud Functions v2 events in one region, and every seeded order
+    //    fans out to ~10 of ours (push relay, order finalizer, the shadows,
+    //    loyalty). One `set()` of the whole tenant was rejected live with
+    //    TOO_MANY_TRIGGERS — the nightly Function chunks the same way
+    //    (FIREBASE_SERVER_MIGRATION/functions/src/scheduled/demoReseed.ts).
+    //    Deleting yesterday's orders fans out exactly like a write, so that
+    //    delete is chunked too.
+    const ORDERS_PER_WRITE = 25;
+    const orderMap = demoOutlet.orders || {};
+    delete demoOutlet.orders;
+    const ordersRef = db.ref(`businesses/${BID}/outlets/${OID}/orders`);
+
+    const existing = Object.keys((await ordersRef.once('value')).val() || {});
+    for (let i = 0; i < existing.length; i += ORDERS_PER_WRITE) {
+        const patch = {};
+        for (const key of existing.slice(i, i + ORDERS_PER_WRITE)) patch[key] = null;
+        await ordersRef.update(patch);
+    }
+    console.log('[demo-seed] removed', existing.length, 'previous order(s) in chunks of', ORDERS_PER_WRITE);
+
     await db.ref(`businesses/${BID}`).set(business);
     console.log('[demo-seed] wrote businesses/' + BID);
+
+    const orderKeys = Object.keys(orderMap);
+    for (let i = 0; i < orderKeys.length; i += ORDERS_PER_WRITE) {
+        const patch = {};
+        for (const key of orderKeys.slice(i, i + ORDERS_PER_WRITE)) patch[key] = orderMap[key];
+        await ordersRef.update(patch);
+    }
+    console.log('[demo-seed] wrote', orderKeys.length, 'order(s) in chunks of', ORDERS_PER_WRITE);
 
     // Money lives at the ROOT (server-owned): businesses/{bid} is tenant-writable.
     await db.ref(`walletBilling/${BID}/${OID}`).set(billing);
