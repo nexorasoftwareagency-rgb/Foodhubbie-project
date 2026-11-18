@@ -24,6 +24,15 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
         get length() { return store.size; },
         key: (i) => [...store.keys()][i],
     };
+    // localStorage holds the backup copy (survives browser restart / tab close).
+    const localStore = new Map();
+    globalThis.localStorage = {
+        getItem: (k) => (localStore.has(k) ? localStore.get(k) : null),
+        setItem: (k, v) => localStore.set(k, String(v)),
+        removeItem: (k) => localStore.delete(k),
+        get length() { return localStore.size; },
+        key: (i) => [...localStore.keys()][i],
+    };
     globalThis.window = { dispatchEvent() {} };
     globalThis.CustomEvent = class { constructor(type) { this.type = type; } };
 
@@ -71,6 +80,55 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
     assert.equal(Object.keys(JSON.parse(store.get('foodhubbie_cart_qr_S1'))).length, 2, 'in-memory lines move to the session key on the next mutation');
     restoreCart(getQRStorageKey('S1'));
     assert.equal(Object.keys(Cart.lines).length, 2, 'the session basket survives a reload');
+
+    // ---- 1b. localStorage backup (survives browser restart / tab close) ----
+    // sessionStorage dies with the tab; localStorage keeps the draft.
+    // ONLY context-scoped keys get a durable backup: the default key is shared
+    // by the app flow and by the QR flow before a table session exists, so a
+    // durable copy of it would surface an old app basket on a scanned table.
+    store.clear();
+    localStore.clear();
+    restoreCart('foodhubbie_cart_qr_S9');
+    const backupId = addLine(line('d9'));
+    assert.ok(localStore.has('foodhubbie_cart_qr_S9_backup'), 'a mutation also writes the localStorage backup');
+    store.clear();                                   // tab closed: sessionStorage is gone
+    restoreCart('foodhubbie_cart_qr_S9');
+    assert.equal(Cart.lines[backupId]?.dishId, 'd9', 'the basket is restored from the localStorage backup');
+
+    store.clear();
+    localStore.clear();
+    restoreCart('foodhubbie_cart');
+    addLine(line('app1'));
+    assert.ok(!localStore.has('foodhubbie_cart_backup'), 'the unscoped default key is never backed up (no app→QR leak)');
+
+    // A browser that denies localStorage (private mode / embedded webview)
+    // must still keep the sessionStorage copy — one failing store must never
+    // blank the other (this wiped the cart when the reads shared one try).
+    store.clear();
+    localStore.clear();
+    const realLocal = globalThis.localStorage;
+    globalThis.localStorage = {
+        getItem() { throw new Error('storage disabled'); },
+        setItem() { throw new Error('storage disabled'); },
+        removeItem() { throw new Error('storage disabled'); },
+    };
+    try {
+        restoreCart('foodhubbie_cart_qr_S10');
+        const id10 = addLine(line('d10'));
+        assert.ok(store.has('foodhubbie_cart_qr_S10'), 'the sessionStorage copy is written even when localStorage throws');
+        restoreCart('foodhubbie_cart_qr_S10');
+        assert.equal(Cart.lines[id10]?.dishId, 'd10', 'a valid sessionStorage cart is NOT wiped when localStorage fails');
+    } finally {
+        globalThis.localStorage = realLocal;
+    }
+
+    // clearCart must remove the backup too, or a cleared basket comes back.
+    store.clear();
+    localStore.clear();
+    restoreCart('foodhubbie_cart_qr_S11');
+    addLine(line('d11'));
+    clearCart();
+    assert.ok(!localStore.has('foodhubbie_cart_qr_S11_backup'), 'clearCart also removes the localStorage backup');
 
     // ---- 2. source guards ------------------------------------------------
     const app = read('menu/js/app.js');

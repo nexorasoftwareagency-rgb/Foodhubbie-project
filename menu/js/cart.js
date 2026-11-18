@@ -58,12 +58,29 @@ export function getWebviewStorageKey(token) {
  * Internal: persist cart to a specific storage key.
  * Writes to both sessionStorage (fast, survives refresh) and localStorage
  * (backup, survives browser restart / tab close).
+ *
+ * The two stores are written independently: a browser that denies localStorage
+ * (private mode, storage pressure, embedded webviews) must still get the
+ * sessionStorage copy, so one failing store can never blank the other.
+ *
+ * Only CONTEXT-SCOPED keys get a durable backup. The default key is shared by
+ * the direct/app flow AND by the QR flow before a table session exists, so a
+ * durable copy of it would let an old app basket surface on a scanned table
+ * (wrong items, wrong outlet). A scoped key (qr_<sessionId> / webview_<token>)
+ * belongs to exactly one visit, so its backup can only ever come back to that
+ * same visit.
  */
+function _isScopedKey(key) {
+    return key.startsWith('foodhubbie_cart_qr_') || key.startsWith('foodhubbie_cart_webview_');
+}
+
 function _persistCart(key) {
-    try {
-        sessionStorage.setItem(key, JSON.stringify(Cart.lines));
-        localStorage.setItem(key + '_backup', JSON.stringify(Cart.lines));
-    } catch (e) { console.warn('[Cart] Storage error:', e); }
+    const payload = JSON.stringify(Cart.lines);
+    try { sessionStorage.setItem(key, payload); }
+    catch (e) { console.warn('[Cart] sessionStorage error:', e); }
+    if (!_isScopedKey(key)) return;
+    try { localStorage.setItem(key + '_backup', payload); }
+    catch (e) { /* private mode / storage disabled — sessionStorage still holds the cart */ }
 }
 
 export const Cart = {
@@ -77,16 +94,20 @@ export const Cart = {
 export function restoreCart(key) {
     _activeKey = _key(key);
     const storageKey = _activeKey;
-    try {
-        let saved = sessionStorage.getItem(storageKey);
-        if (!saved) {
-            // Fall back to localStorage backup (survives browser restart / tab close)
-            saved = localStorage.getItem(storageKey + '_backup');
-            if (saved) sessionStorage.setItem(storageKey, saved);
+    let saved = null;
+    try { saved = sessionStorage.getItem(storageKey); }
+    catch (e) { /* storage disabled */ }
+    if (!saved) {
+        // Fall back to the localStorage backup (survives browser restart / tab close).
+        // Only context-scoped keys have one — see _persistCart().
+        if (_isScopedKey(storageKey)) {
+            try { saved = localStorage.getItem(storageKey + '_backup'); }
+            catch (e) { /* storage disabled — nothing else to restore from */ }
+            if (saved) { try { sessionStorage.setItem(storageKey, saved); } catch (e) {} }
         }
-        if (saved) Cart.lines = JSON.parse(saved);
-        else Cart.lines = {};
-    } catch { Cart.lines = {}; }
+    }
+    try { Cart.lines = saved ? JSON.parse(saved) : {}; }
+    catch { Cart.lines = {}; }
     // Repaint the badge/bar for the restored lines — restoring used to be
     // silent, so a reload with items in the cart showed no count.
     window.dispatchEvent(new CustomEvent('cart:changed'));
@@ -117,13 +138,13 @@ export function setQty(lineId, qty, key) {
 }
 
 /**
- * Clear the in-memory cart and remove from sessionStorage using the provided key.
+ * Clear the in-memory cart and remove it from both stores.
  */
 export function clearCart(key) {
     Cart.lines = {};
     const k = _key(key);
-    sessionStorage.removeItem(k);
-    localStorage.removeItem(k + '_backup');
+    try { sessionStorage.removeItem(k); } catch (e) {}
+    try { localStorage.removeItem(k + '_backup'); } catch (e) {}
     window.dispatchEvent(new CustomEvent('cart:changed'));
 }
 
