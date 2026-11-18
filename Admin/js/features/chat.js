@@ -88,6 +88,61 @@ function _displayName(customerId, meta) {
 }
 
 // ---------------------------------------------------------------------
+// Bot liveness (heartbeat truth)
+// ---------------------------------------------------------------------
+// A reply sent from here is only a COMMAND in bot/commands — the worker
+// picks it up and sends it. The Admin must never claim it was delivered.
+// Liveness comes from the global heartbeat listener (Admin/js/bot-status.js):
+// the worker rewrites bot/status every 60s, so a stale lastSeen means the
+// worker is gone and the command will sit in the queue.
+function _botLiveness() {
+    const online = window._botOnline === true;
+    const lastSeen = Number(window._botLastSeen || 0);
+    return { online, lastSeen, known: lastSeen > 0 };
+}
+
+function _agoLabel(ms) {
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return 'less than a minute';
+    if (mins < 60) return `${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.floor(hours / 24)}d`;
+}
+
+// Honest strip above the composer: says whether replies go out now, wait in
+// the queue, or (demo) never go out at all.
+function _renderBotStatus() {
+    const el = document.getElementById('chatBotStatus');
+    if (!el) return;
+    const { online, lastSeen, known } = _botLiveness();
+    if (window.__demoMode === true) {
+        el.textContent = 'Sandbox — replies are stored in this demo and never delivered to WhatsApp.';
+        el.className = 'chat-bot-status chat-bot-status--info';
+        return;
+    }
+    if (online) {
+        el.textContent = '';
+        el.className = 'chat-bot-status hidden';
+        return;
+    }
+    el.textContent = known
+        ? `Bot offline — last heartbeat ${_agoLabel(Date.now() - lastSeen)} ago. Replies you send are queued and go out when the bot reconnects.`
+        : 'Bot status unknown — no heartbeat from the WhatsApp bot yet. Replies you send may be queued until it reconnects.';
+    el.className = 'chat-bot-status chat-bot-status--warn';
+}
+
+function _updateComposerHint() {
+    const input = document.getElementById('chatComposerInput');
+    if (!input) return;
+    const { online } = _botLiveness();
+    const demo = window.__demoMode === true;
+    input.placeholder = (!online && !demo)
+        ? 'Bot offline — this reply will be queued'
+        : 'Type a message';
+}
+
+// ---------------------------------------------------------------------
 // Render: thread list (left pane)
 // ---------------------------------------------------------------------
 function _updateBadges() {
@@ -227,6 +282,8 @@ function _renderThreadView() {
 
     let html = '';
     let lastDay = null;
+    const { online } = _botLiveness();
+    const demo = window.__demoMode === true;
     for (const [msgId, m] of msgs) {
         const day = _dayLabel(m.ts);
         if (day !== lastDay) {
@@ -234,12 +291,20 @@ function _renderThreadView() {
             lastDay = day;
         }
         const isBot = m.from === 'bot';
+        // A pending bubble is a command that was QUEUED, not a message that
+        // was sent — it must never carry the delivered ✓✓ ticks.
+        const isPending = m.pending === true;
+        const state = isPending
+            ? (demo
+                ? '<span class="chat-msg-state chat-msg-state--demo">demo — not delivered</span>'
+                : `<span class="chat-msg-state ${online ? 'chat-msg-state--sending' : 'chat-msg-state--queued'}">${online ? 'sending…' : 'queued'}</span>`)
+            : (isBot ? ' <span class="chat-ticks">✓✓</span>' : '');
         const body = m.type === 'location'
             ? '<i data-lucide="map-pin" class="icon-16"></i> Location shared'
             : (m.text || '<media>');
-        html += `<div class="chat-bubble-row ${isBot ? 'out' : 'in'}">
+        html += `<div class="chat-bubble-row ${isBot ? 'out' : 'in'}${isPending ? ' chat-bubble-pending' : ''}">
             <div class="chat-bubble">${escapeHtml(body)}
-                <span class="chat-msg-time">${escapeHtml(_timeLabel(m.ts))}${isBot ? ' <span class="chat-ticks">✓✓</span>' : ''}</span>
+                <span class="chat-msg-time">${escapeHtml(_timeLabel(m.ts))}${state}</span>
             </div>
         </div>`;
     }
@@ -299,6 +364,9 @@ async function _sendMessage() {
     const phone = meta?.phone || `${_selectedCustomerId}@s.whatsapp.net`;
     if (!phone) { showToast('Cannot send — no customer number on this thread.', 'error'); return; }
 
+    const { online } = _botLiveness();
+    const demo = window.__demoMode === true;
+
     try {
         const cmdRef = push(Outlet.ref('bot/commands'));
         await set(cmdRef, {
@@ -311,12 +379,19 @@ async function _sendMessage() {
         inputEl.style.height = 'auto';
         // Optimistic echo — the bot's outbound hook persists the real record;
         // this local copy renders instantly and is replaced on the next sync.
+        // It is NOT a delivery receipt: the command only reaches WhatsApp when
+        // the worker is alive, so the bubble is marked pending (queued).
         const msgId = 'pending-' + Date.now();
         if (!_chatData[_selectedCustomerId].messages) _chatData[_selectedCustomerId].messages = {};
         _chatData[_selectedCustomerId].messages[msgId] = {
-            from: 'bot', text, ts: Date.now(), type: 'text'
+            from: 'bot', text, ts: Date.now(), type: 'text', pending: true
         };
         _renderThreadView();
+        if (demo) {
+            showToast('Sandbox — reply stored here, not delivered to WhatsApp.', 'info', 4000);
+        } else if (!online) {
+            showToast('Bot offline — reply queued until it reconnects.', 'info', 5000);
+        }
     } catch (e) {
         showToast('Could not send message: ' + (e?.message || e), 'error');
     }
@@ -325,9 +400,24 @@ async function _sendMessage() {
 // ---------------------------------------------------------------------
 // Wiring (once)
 // ---------------------------------------------------------------------
+let _lastOnline = null;
+
+// Liveness changed (worker died or came back) → refresh the strip, the
+// composer hint and the state of every pending bubble ("sending…" <-> "queued").
+function _onBotStatusChange() {
+    const { online } = _botLiveness();
+    _renderBotStatus();
+    _updateComposerHint();
+    if (online === _lastOnline) return;
+    _lastOnline = online;
+    const tab = document.getElementById('tab-chat');
+    if (tab && !tab.classList.contains('hidden')) _renderThreadView();
+}
+
 function _wire() {
     if (_wired) return;
     _wired = true;
+    window.addEventListener('botStatusChange', _onBotStatusChange);
     const app = document.getElementById('chatApp');
     if (!app) return;
 
@@ -372,6 +462,9 @@ export function loadChat() {
     _wire();
     _wireBlockedMenus(); // ponytail: WhatsApp-style 3-dot menus
     _checkBotStatus();
+    _lastOnline = _botLiveness().online;
+    _renderBotStatus();
+    _updateComposerHint();
 
     // Single persistent listener. Keeps the sidebar badge alive across tabs
     // (WhatsApp-like) AND renders the thread list while this tab is visible.
@@ -520,7 +613,17 @@ function _renderQR(pair) {
         if (statusEl) statusEl.textContent = 'Scan this QR code with your phone';
     } else {
         container.innerHTML = `<div style="width:200px;height:200px;background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#666;font-size:13px">Waiting for QR…</div>`;
-        if (statusEl) statusEl.textContent = 'Waiting for QR code…';
+        if (statusEl) {
+            // The pairing QR is produced by the worker. If the worker is not
+            // reporting, the QR will never appear — saying "waiting for QR"
+            // would send the admin looking for a code that cannot exist.
+            const { online, known } = _botLiveness();
+            statusEl.textContent = online
+                ? 'Waiting for QR code…'
+                : (known
+                    ? 'The bot stopped reporting — this QR appears once the WhatsApp host is back.'
+                    : 'Waiting for the bot to start — this QR appears once the WhatsApp host is up.');
+        }
     }
 }
 

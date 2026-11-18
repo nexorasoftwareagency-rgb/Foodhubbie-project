@@ -473,6 +473,13 @@ export function initAuth() {
             }
         }
 
+        // The tenant is final now (business + outlet). Tenant-bound listeners
+        // (the bot-status heartbeat) resolve the tenant lazily, so they would
+        // stay on the default tenant until their next poll - announce it.
+        document.dispatchEvent(new CustomEvent('tenantResolved', {
+            detail: { businessId: window.currentBusinessId || '', outlet: window.currentOutlet }
+        }));
+
 
         // Show UI
         const authOverlay = document.getElementById("authOverlay");

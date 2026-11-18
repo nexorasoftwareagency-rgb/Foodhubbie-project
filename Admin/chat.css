@@ -428,6 +428,47 @@
     font-weight: 700;
 }
 
+/* ── Bot liveness strip + queued-bubble state ───────────────────────────────
+   A reply written from this panel is a COMMAND in bot/commands: it only
+   reaches WhatsApp when the worker is alive. The strip says so plainly and
+   the bubble carries "queued" instead of the delivered ✓✓ ticks. */
+
+.chat-bot-status {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: #92400e;
+    background: #fffbeb;
+    border-top: 1px solid rgba(217, 119, 6, .22);
+    border-left: 3px solid #f59e0b;
+}
+
+.chat-bot-status.hidden { display: none; }
+
+.chat-bot-status--info {
+    color: #475569;
+    background: #f8fafc;
+    border-top-color: rgba(148, 163, 184, .3);
+    border-left-color: #94a3b8;
+}
+
+.chat-msg-state {
+    margin-left: 6px;
+    font-size: 10.5px;
+    font-weight: 600;
+}
+
+.chat-msg-state--sending { color: #64748b; }
+.chat-msg-state--queued { color: #b45309; }
+.chat-msg-state--demo { color: #64748b; font-style: italic; }
+
+.chat-bubble-row.chat-bubble-pending .chat-bubble {
+    opacity: .92;
+    border: 1px dashed rgba(217, 119, 6, .45);
+}
+
 /* ── Composer ───────────────────────────────────────────────────────────── */
 
 .chat-composer {
@@ -1378,7 +1419,8 @@
     .chat-context-menu,
     .chat-modal,
     .chat-filter-tabs,
-    .chat-usage-bar {
+    .chat-usage-bar,
+    .chat-bot-status {
         display: none !important;
     }
     .chat-thread-view { height: auto; }
