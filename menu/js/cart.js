@@ -56,9 +56,14 @@ export function getWebviewStorageKey(token) {
 
 /**
  * Internal: persist cart to a specific storage key.
+ * Writes to both sessionStorage (fast, survives refresh) and localStorage
+ * (backup, survives browser restart / tab close).
  */
 function _persistCart(key) {
-    try { sessionStorage.setItem(key, JSON.stringify(Cart.lines)); } catch (e) { console.warn('[Cart] Storage error:', e); }
+    try {
+        sessionStorage.setItem(key, JSON.stringify(Cart.lines));
+        localStorage.setItem(key + '_backup', JSON.stringify(Cart.lines));
+    } catch (e) { console.warn('[Cart] Storage error:', e); }
 }
 
 export const Cart = {
@@ -73,7 +78,12 @@ export function restoreCart(key) {
     _activeKey = _key(key);
     const storageKey = _activeKey;
     try {
-        const saved = sessionStorage.getItem(storageKey);
+        let saved = sessionStorage.getItem(storageKey);
+        if (!saved) {
+            // Fall back to localStorage backup (survives browser restart / tab close)
+            saved = localStorage.getItem(storageKey + '_backup');
+            if (saved) sessionStorage.setItem(storageKey, saved);
+        }
         if (saved) Cart.lines = JSON.parse(saved);
         else Cart.lines = {};
     } catch { Cart.lines = {}; }
@@ -111,7 +121,9 @@ export function setQty(lineId, qty, key) {
  */
 export function clearCart(key) {
     Cart.lines = {};
-    sessionStorage.removeItem(_key(key));
+    const k = _key(key);
+    sessionStorage.removeItem(k);
+    localStorage.removeItem(k + '_backup');
     window.dispatchEvent(new CustomEvent('cart:changed'));
 }
 

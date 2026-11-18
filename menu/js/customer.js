@@ -11,6 +11,7 @@
  * the outlet's pushSubscriptions record (see pwa-install.js).
  */
 import { outletRef, get, set, push, update, onValue, ensureAnonAuth, OUTLET, BUSINESS_ID } from './firebase.js';
+import { query, orderByChild, limitToLast } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 import * as UI from './ui.js';
 import { esc, buildInstagramUrl, buildWhatsappUrl } from './ui.js';
 import { couponStatus, discountAllowsChannel } from '../shared/discount-rules.js';
@@ -1005,12 +1006,16 @@ async function loadInbox() {
         return;
     }
     try {
-        const snap = await get(outletRef(`pushInbox/${_profile.phone}`));
+        // Bounded read: only the latest 40 items, never the whole inbox node
+        const snap = await get(query(
+            outletRef(`pushInbox/${_profile.phone}`),
+            orderByChild('sentAt'),
+            limitToLast(40)
+        ));
         const value = snap.val() || {};
         _inbox = Object.entries(value)
             .map(([id, item]) => ({ id, ...(item || {}) }))
-            .sort((a, b) => (Number(b.sentAt) || 0) - (Number(a.sentAt) || 0))
-            .slice(0, 40);
+            .sort((a, b) => (Number(b.sentAt) || 0) - (Number(a.sentAt) || 0));
         // Mark all loaded items as read (user has opened the inbox)
         const unreadIds = _inbox.filter(i => !i.readAt).map(i => i.id);
         if (unreadIds.length) {
