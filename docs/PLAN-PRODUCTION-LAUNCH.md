@@ -4,6 +4,10 @@
 > Owner go required before any Meta console change, DNS change, or EC2 reboot.
 > Secret **values** are never written in this file. They are referenced by path only.
 
+> **RETIRED 2026-11-18 —** the AWS account, instance, IP and key/CSV paths in this plan
+> refer to the decommissioned first account. Do not point DNS at, or SSH into, anything
+> listed here. New-account runbook: `FIREBASE_SERVER_MIGRATION/42_AWS_CREDENTIAL_RETIREMENT.md` §8.
+
 ---
 
 ## 0. Scope and honesty boundary

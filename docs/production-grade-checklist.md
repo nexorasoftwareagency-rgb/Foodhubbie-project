@@ -32,7 +32,7 @@
 
 ## Decision / Risk notes for owner approval
 - **Delivery site retirement** (`foodhubbie-delivery`) — proposed but NOT executed; needs explicit go (`hosting:sites:delete` + `.firebaserc` cleanup)
-- **`api.foodhubbie.in`** — NOT configured; requires nginx/caddy TLS proxy on EC2 (`3.111.39.210`) before exposing; current bot-control-api (:4000) stays behind webhook-server (`:5000`); leave separate domain out unless needed
+- **`api.foodhubbie.in`** — served by Caddy TLS on the socket host; the retired first account's address is dead (`FIREBASE_SERVER_MIGRATION/42_AWS_CREDENTIAL_RETIREMENT.md`). The rebuilt host allocates a **reserved Elastic IP** before DNS. Reach the box as `ubuntu@api.foodhubbie.in`, never by raw IP.
 - **Promo campaigns blocked** on Baileys (`transport-blocked` pause + `isMetaTransport` guard) — stays blocked; picker only changes delivery when `meta` transport enabled; WABA templates (17 total) + `greeting_welcome` remain as-is; `sendPromotionalMessage` requires meta transport
 - **Billing rate change** (percentage plan 3%/1%/1%/3% + ₹1000 top-up, no setup fee) is a separate P1 billing item; NOT affected by domain migration (cost math unchanged: `shared/cost-math.js` `PERCENT_RATES` lives independently of hosting URLs)
 - **Ponytail** (laziness ladder): no new abstraction added; one shared URL constants file (`shared/url-defaults.js` idea) deferred to future refactor; existing per-app constants kept minimal; no new dependency added; no unrequested feature added

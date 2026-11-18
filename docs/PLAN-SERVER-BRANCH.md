@@ -3,6 +3,10 @@
 **Status:** all phases done 2026-11-08 · **Live:** EC2 tracks `origin/server` (`fc26ec2`), deploy script + invariant guard shipped · sparse-checkout **reverted** (see incident)
 **Replaces:** the standing rule *"EC2 `/var/www/foodhubbie` is a pinned dirty worktree — never `git pull` there"* (AGENTS.md → Key Decisions).
 
+> **RETIRED 2026-11-18 —** the AWS account, instance and address used in the commands and
+> measurements below are decommissioned. The socket host is rebuilt in a new AWS account;
+> see `FIREBASE_SERVER_MIGRATION/42_AWS_CREDENTIAL_RETIREMENT.md` §8.
+
 ### Progress
 
 | Phase | State | Evidence |

@@ -27,6 +27,7 @@
     "test:menu-ui": "node tests/admin-menu-subtabs.check.mjs && node tests/admin-add-flow.browser.mjs",
     "test:notify-caps": "node tests/notify-caps.check.cjs",
     "test:server-branch": "node tools/check-server-branch.cjs",
+    "test:aws-creds": "node tests/aws-credential-retirement.check.cjs",
     "test:functions-source": "node tests/functions-source.check.cjs",
     "test:order-finalizer": "node tests/order-finalizer.check.cjs",
     "test:loyalty-engine": "node tests/loyalty-engine.check.cjs",

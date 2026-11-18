@@ -1,6 +1,8 @@
-# ACCESS.md — Foodhubbie Project Complete Access Reference
+# ACCESS.md — Foodhubbie Project Access Reference
 
-> Generated: 2026-09-15 | All credentials, endpoints, and infrastructure in one place.
+> Generated: 2026-09-15 | Updated: 2026-11-18 (AWS/EC2 credentials retired — see §3)
+> Firebase, Meta and application endpoints live here. **No cloud-provider secret is stored in this file.**
+> AWS credentials for the replacement account live only in `Credentials/AWS-NEW-ACCOUNT-CREDENTIALS.md` (gitignored, never committed).
 
 ---
 
@@ -11,8 +13,7 @@
 | Repo | `nexorasoftwareagency-rgb/Foodhubbie-project` |
 | URL | https://github.com/nexorasoftwareagency-rgb/Foodhubbie-project |
 | Branch | `main` |
-| Last Push | `2026-08-19` (commit `8796871`) |
-| Latest Commit | `4966860` (2026-09-15, unpushed until session) |
+| Server deploy branch | `server` (always an ancestor of `main`) |
 
 ---
 
@@ -70,96 +71,27 @@ npx -y firebase-tools@latest deploy --only database
 
 ---
 
-## 3. AWS EC2 Instance
+## 3. AWS / EC2 — RETIRED 2026-11-18
 
-| Field | Value |
-|-------|-------|
-| Instance ID | `i-0c7f49065b1581542` |
-| Public IP | `3.111.39.210` |
-| Private IP | `172.31.9.124` |
-| Instance Type | `t3.small` |
-| Region | `ap-south-1` (Mumbai) |
-| AMI | `ami-07e5ce642bbc48c0d` (Ubuntu) |
-| Security Group | `sg-0a5a73df4b5d37b38` |
-| Key Name | `foodhubbie-key` |
-| Key File | `D:\Foodhubbie Project\foodhubbie-key.pem` |
-| OS | Ubuntu 24.04 LTS |
-| Uptime | 34+ days |
-| Node.js | v20.20.2 |
+The first AWS account and its EC2 instance are **decommissioned and no longer used**. The access key from that account is already rejected by AWS (`InvalidClientTokenId`).
 
-### SSH Access
-```bash
-ssh -i "D:\Foodhubbie Project\foodhubbie-key.pem" ubuntu@3.111.39.210
-```
+**Nothing about that account is needed to run Foodhubbie today:**
 
-### Security Group Inbound Rules
-| Protocol | Port | Source |
-|----------|------|--------|
-| TCP | 22 (SSH) | `223.185.61.40/32` (current) |
-| TCP | 8080 | `0.0.0.0/0` |
-| TCP | 3000 | `0.0.0.0/0` |
-| TCP | 443 | `0.0.0.0/0` |
-| TCP | 80 | `0.0.0.0/0` |
+- Every database effect (orders, loyalty, stock, payments, push, media, onboarding, settlement, demo reseed, wallet gate) runs on **Firebase Cloud Functions**.
+- EC2 exists only to hold the long-lived Baileys WhatsApp socket. It is currently offline, and when it is rebuilt it will be a **brand-new instance in a brand-new AWS account**.
 
-> ⚠️ SSH IP is dynamic. If connection times out:
-> ```bash
-> curl -4 -s ifconfig.me  # get your IPv4
-> aws ec2 authorize-security-group-ingress --group-id sg-0a5a73df4b5d37b38 --protocol tcp --port 22 --cidr YOUR_IP/32
-> ```
+**Where the new account's details go:** `Credentials/AWS-NEW-ACCOUNT-CREDENTIALS.md`
+(inside the gitignored `Credentials/` folder — create it from the template in that file's header; never commit it).
 
-### PM2 Services (Live)
-| App | PID | Port | Uptime | Memory | Status |
-|-----|-----|------|--------|--------|--------|
-| `bot-control-api` | 101862 | :4000 | 29 days | 83 MB | ✅ online |
-| `webhook-server` | 107953 | :5000 | 28 days | 67 MB | ✅ online |
-| `bot-roshani-pizza-pizza` | 459457 | — | 2 days | 155 MB | ✅ online |
-| `bot-roshani-cake-cake` | -- | -- | -- | -- | removed 2026-10-27 |
+**Architecture, provisioning runbook and verification gates:** `PLAN/BACKEND-ARCHITECTURE.md` §4–§5.
 
-### EC2 File Locations
-| Path | Contents |
-|------|----------|
-| `/var/www/foodhubbie/` | Project root |
-| `/var/www/foodhubbie/bot/` | WhatsApp bot source |
-| `/var/www/foodhubbie/bot-control-api/` | Express API (:4000) |
-| `/var/www/foodhubbie/webhook-server/` | Webhook proxy (:5000) |
-| `/var/www/foodhubbie/.env` | Environment variables |
-| `/var/www/foodhubbie/ecosystem.config.js` | PM2 config |
-| `/var/www/foodhubbie/bot/session_data_pizza/` | Baileys session |
-| `/var/www/foodhubbie/bot/service-account.json` | Firebase Admin SDK |
+**Decommissioned identifiers** (recorded for audit only; nothing uses them): account, instance, Elastic IP, key-pair name, security group and SSH endpoints were removed from this file on 2026-11-18. `FIREBASE_SERVER_MIGRATION/42_AWS_CREDENTIAL_RETIREMENT.md` lists every artifact that existed, where it was found, and what happened to it.
 
-### Deploy to EC2
-```bash
-# Copy files
-scp -i "D:\Foodhubbie Project\foodhubbie-key.pem" bot\index.js ubuntu@3.111.39.210:/var/www/foodhubbie/bot/index.js
-
-# Restart services
-ssh -i "D:\Foodhubbie Project\foodhubbie-key.pem" ubuntu@3.111.39.210 "cd /var/www/foodhubbie && pm2 restart all"
-
-# Check status
-ssh -i "D:\Foodhubbie Project\foodhubbie-key.pem" ubuntu@3.111.39.210 "pm2 list && ss -tlnp | grep -E '4000|5000'"
-```
+> Do **not** re-enter an EC2 host's raw IP anywhere in this repo. The socket host must be reached through `api.foodhubbie.in`, which will point at a **reserved Elastic IP** (mandatory — a stop/start must never change the address).
 
 ---
 
-## 4. AWS Account
-
-| Field | Value |
-|-------|-------|
-| Account ID | `772603145096` |
-| Console | https://772603145096.signin.aws.amazon.com/console |
-| IAM User | `nilesh-admin` |
-| Password | `<see Credentials/ folder>` |
-| Region | `ap-south-1` (Mumbai) |
-
-### AWS CLI Credentials
-```
-AWS_ACCESS_KEY_ID: <see Credentials/ folder or AWS Console>
-AWS_SECRET_ACCESS_KEY: <see Credentials/ folder or AWS Console>
-```
-
----
-
-## 5. WhatsApp Business API (Meta)
+## 4. WhatsApp Business API (Meta)
 
 | Field | Value |
 |-------|-------|
@@ -187,9 +119,11 @@ Meta's INR list prices **already include 18% GST** — never add another 18%. Th
 ### WABA Templates
 | Template | Status | Type |
 |----------|--------|------|
+| `promo_cta_*` (6 shells) | PENDING | MARKETING |
+| `promo_hinglish_*` (4 shells) | APPROVED | MARKETING |
+| `rider_assigned` | APPROVED | UTILITY |
 | `bot_live_update` | APPROVED | MARKETING |
 | `hello_world` | APPROVED | UTILITY |
-| `roshani_greeting` | REJECTED | — |
 
 ### Test Numbers
 | From | To |
@@ -199,18 +133,17 @@ Meta's INR list prices **already include 18% GST** — never add another 18%. Th
 ### Webhook
 | Field | Value |
 |-------|-------|
-| EC2 Endpoint | `http://3.111.39.210:5000/webhook` |
+| Public endpoint | `https://api.foodhubbie.in/webhook` (socket host, behind Caddy TLS) |
 | Verify Token | `<see .env>` |
-| Cloudflare Tunnel | `https://photos-whenever-specifics-internationally.trycloudflare.com/webhook` |
 
 ---
 
-## 6. Bot Configuration
+## 5. Bot Configuration
 
 | Field | Value |
 |-------|-------|
 | Database URL | `https://foodhubbie-10-default-rtdb.firebaseio.com` |
-| Redis | `redis://127.0.0.1:6379` |
+| Redis | `redis://127.0.0.1:6379` (optional, in-memory fallback) |
 | Webhook Port | `5000` |
 | Bot Control Port | `4000` |
 | Service Account Path | `/var/www/foodhubbie/bot/service-account.json` |
@@ -223,9 +156,11 @@ apps: [
 ]
 ```
 
+`BUSINESS_ID` is **required** in `/var/www/foodhubbie/.env` — without it the reverse index can resolve the wrong tenant.
+
 ---
 
-## 7. Webhook Server
+## 6. Webhook Server
 
 | Field | Value |
 |-------|-------|
@@ -241,7 +176,7 @@ apps: [
 
 ---
 
-## 8. Bot Control API
+## 7. Bot Control API
 
 | Field | Value |
 |-------|-------|
@@ -265,7 +200,7 @@ apps: [
 
 ---
 
-## 9. Local File Structure
+## 8. Local File Structure
 
 | Path | Purpose |
 |------|---------|
@@ -281,15 +216,14 @@ apps: [
 | `tools\` | Build + seed scripts |
 | `docs\` | Documentation |
 | `GUIDEs\` | Deployment guides |
-| `Credentials\` | API keys + secrets |
-| `website\` | Landing page (new) |
+| `Credentials\` | API keys + secrets (gitignored) |
+| `website\` | Landing page |
 | `ecosystem.config.js` | PM2 process config |
-| `.env` | Environment variables |
-| `foodhubbie-key.pem` | EC2 SSH key |
+| `.env` | Environment variables (gitignored) |
 
 ---
 
-## 10. Deploy Commands Quick Reference
+## 9. Deploy Commands Quick Reference
 
 ```bash
 # Firebase (all)
@@ -299,20 +233,13 @@ firebase deploy --only database,hosting
 firebase deploy --only hosting:admin,hosting:supreme
 firebase deploy --only database
 
-# EC2 (bot)
-scp -i "D:\Foodhubbie Project\foodhubbie-key.pem" bot\index.js ubuntu@3.111.39.210:/var/www/foodhubbie/bot/index.js
-ssh -i "D:\Foodhubbie Project\foodhubbie-key.pem" ubuntu@3.111.39.210 "cd /var/www/foodhubbie && pm2 restart all"
+# Bot / control API / webhook server — run ON the socket host only:
+bash /var/www/foodhubbie/tools/server-deploy.sh
+# (fast-forwards origin/server, node --checks changed JS, restarts pm2, gates on /api/bot/status-all → 401)
+# Never scp individual files: hand edits make the next deploy abort by design.
 
-# EC2 (bot-control-api)
-scp -i "D:\Foodhubbie Project\foodhubbie-key.pem" bot-control-api\server.js ubuntu@3.111.39.210:/var/www/foodhubbie/bot-control-api/server.js
-ssh -i "D:\Foodhubbie Project\foodhubbie-key.pem" ubuntu@3.111.39.210 "pm2 restart bot-control-api"
-
-# EC2 (webhook-server)
-scp -i "D:\Foodhubbie Project\foodhubbie-key.pem" webhook-server\index.js ubuntu@3.111.39.210:/var/www/foodhubbie/webhook-server/index.js
-ssh -i "D:\Foodhubbie Project\foodhubbie-key.pem" ubuntu@3.111.39.210 "pm2 restart webhook-server"
-
-# EC2 (status check)
-ssh -i "D:\Foodhubbie Project\foodhubbie-key.pem" ubuntu@3.111.39.210 "pm2 list && ss -tlnp | grep -E '4000|5000'"
+# Server status
+ssh ubuntu@api.foodhubbie.in "pm2 list && ss -tlnp | grep -E '4000|5000'"
 
 # Build admin
 cd Admin && node ../tools/build.mjs
@@ -320,13 +247,12 @@ cd Admin && node ../tools/build.mjs
 
 ---
 
-## 11. Known Issues
+## 10. Known Issues
 
 | Issue | Status | Notes |
 |-------|--------|-------|
-| SSH IP dynamic | ⚠️ | Home IP changes; re-add to SG via AWS CLI when blocked |
-| Cake bot deleted (2026-10-27) | FIXED | pm2 app + `ecosystem.config.js` entry removed; re-add from Supreme Admin if needed |
-| 55 uncommitted files | ✅ FIXED | Committed + pushed in this session (`4966860`) |
+| AWS account + EC2 credentials retired | DONE 2026-11-18 | Old keys rejected by AWS; all local copies deleted. New account template: `Credentials/AWS-NEW-ACCOUNT-CREDENTIALS.md` |
+| Socket host offline since 2026-11-11 | OPEN | Owner-side rebuild in a new AWS account. Every database effect keeps working without it — see `PLAN/BACKEND-ARCHITECTURE.md` |
+| `api.foodhubbie.in` on an ephemeral address | OPEN | The rebuild must allocate an **Elastic IP** before touching DNS |
 | Delivery site stale | ⚠️ | Last deploy 2026-08-12, no matching `firebase.json` block |
-| Cloud Functions deleted | ✅ | `functions/` removed locally + committed |
-| Website target | ⚠️ | In `firebase.json` but `website/` dir is new/untracked |
+| Website target | ⚠️ | `firebase.json` block exists; verify before deploy |

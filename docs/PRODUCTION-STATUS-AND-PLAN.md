@@ -33,7 +33,7 @@
 
 | Item | Live value |
 |---|---|
-| EC2 | `3.111.39.210`, t3.small, Ubuntu 24.04, **Node v22.23.4** |
+| EC2 | **retired 2026-11-18** — the snapshot below is the old account's box; the rebuilt socket host is reached only as `ubuntu@api.foodhubbie.in` (`FIREBASE_SERVER_MIGRATION/42_AWS_CREDENTIAL_RETIREMENT.md`) |
 | RAM | 1907 MB total, **1009 MB used**, 897 MB available, 2 GB swap |
 | Disk | 29 GB, 6.6 GB used (24%), 22 GB free |
 | UFW | **inactive** (security-group only) |

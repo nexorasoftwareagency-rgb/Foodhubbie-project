@@ -3,6 +3,10 @@
 # STATUS values: PENDING, IN_PROGRESS, VERIFIED, BLOCKED_ON_HUMAN, FAILED
 # This list is sequential and matches the guide's numbering exactly - do not renumber or skip.
 
+> **RETIRED 2026-11-18 —** every AWS account, instance, IP and credential mentioned below
+> belongs to the decommissioned first AWS account. Nothing here is current. See
+> `FIREBASE_SERVER_MIGRATION/42_AWS_CREDENTIAL_RETIREMENT.md`.
+
 [VERIFIED] P.2 - Create blank project folder (root = D:\Foodhubbie Project; Windows adaptation)
 [VERIFIED] P.3 - Fetch Roshani repo (code source)
 [VERIFIED] P.4 - Fetch Food-Hubbie repo (reference only, /tmp)
