@@ -179,7 +179,7 @@
 
     <link rel="stylesheet" href="style.css?v=5.4.20">
 
-    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.22">
+    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.23">
 
     <link rel="stylesheet" href="chat.css?v=5.3.34">
 
@@ -7848,9 +7848,33 @@
 
             <div class="modal-body p-20">
 
+                <!-- Quantity Selection - FIRST: the cashier sets the count before
+                     anything else, so it is never below the fold. -->
+
+                <div class="selection-section">
+
+                    <label class="pos-section-label flex-row flex-center flex-gap-6">
+
+                        <i data-lucide="hash" class="icon-14"></i> QUANTITY
+
+                    </label>
+
+                    <div class="flex-row flex-center flex-gap-20 mt-10" role="group" aria-label="Quantity selection">
+
+                        <button id="btnPosQtyDec" data-action="adjustPOSModalQty" data-val="-1" class="qty-btn-large" aria-label="Decrease quantity">&#8722;</button>
+
+                        <span id="posModalQty" class="qty-val-large" aria-live="polite">1</span>
+
+                        <button id="btnPosQtyInc" data-action="adjustPOSModalQty" data-val="1" class="qty-btn-large" aria-label="Increase quantity">+</button>
+
+                    </div>
+
+                </div>
+
+
                 <!-- Size Selection -->
 
-                <div id="posSizeSection" class="selection-section">
+                <div id="posSizeSection" class="selection-section mt-24">
 
                     <label class="pos-section-label flex-row flex-center flex-gap-6">
 
@@ -7886,29 +7910,6 @@
 
                 </div>
 
-
-
-                <!-- Quantity Selection -->
-
-                <div class="selection-section mt-24">
-
-                    <label class="pos-section-label flex-row flex-center flex-gap-6">
-
-                        <i data-lucide="hash" class="icon-14"></i> QUANTITY
-
-                    </label>
-
-                    <div class="flex-row flex-center flex-gap-20 mt-10" role="group" aria-label="Quantity selection">
-
-                        <button id="btnPosQtyDec" data-action="adjustPOSModalQty" data-val="-1" class="qty-btn-large" aria-label="Decrease quantity">&#8722;</button>
-
-                        <span id="posModalQty" class="qty-val-large" aria-live="polite">1</span>
-
-                        <button id="btnPosQtyInc" data-action="adjustPOSModalQty" data-val="1" class="qty-btn-large" aria-label="Increase quantity">+</button>
-
-                    </div>
-
-                </div>
 
             </div>
 

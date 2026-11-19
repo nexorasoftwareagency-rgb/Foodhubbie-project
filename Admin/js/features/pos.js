@@ -419,13 +419,30 @@ export async function openPOSSelectionModal(dishId) {
             (el || (modal._kbLastFocus?.isConnected ? modal._kbLastFocus : null))?.focus();
         };
         modal._kbClose = hidePOSSelectionModal;
+        // On phones the sheet is a bottom sheet: tapping the dimmed area above
+        // it dismisses it (the standard mobile affordance). Desktop keeps the
+        // right-hand panel, where an accidental click should not lose the
+        // size / add-on selection.
+        if (window.matchMedia('(max-width: 1024px)').matches) {
+            modal.onclick = (e) => {
+                if (e.target === modal) hidePOSSelectionModal();
+            };
+        }
         // Focus the primary action ("Add to Cart") button explicitly so keyboard
         // users land on the most likely next interaction instead of whichever
         // focusable element happens to be first in the DOM.
+        // preventScroll matters: on the compact mobile sheet a plain focus()
+        // scrolls the body to the bottom and hides the QUANTITY row the
+        // cashier came for.
         const addBtn = document.getElementById('posAddBtn');
-        const focusPrimary = () => addBtn?.focus();
-        requestAnimationFrame(focusPrimary);
-        if (!modal.contains(document.activeElement)) setTimeout(focusPrimary, 300);
+        const focusPrimary = () => {
+            try { addBtn?.focus({ preventScroll: true }); }
+            catch (_) { addBtn?.focus(); }
+        };
+        const sheetBody = modal.querySelector('.modal-body');
+        const resetSheetScroll = () => { if (sheetBody) sheetBody.scrollTop = 0; };
+        requestAnimationFrame(() => { focusPrimary(); resetSheetScroll(); });
+        if (!modal.contains(document.activeElement)) setTimeout(() => { focusPrimary(); resetSheetScroll(); }, 300);
         // Ensure all icons (including ones in headers and the button) are rendered
         await loadLucide();
         window.lucide.createIcons({ root: modal });

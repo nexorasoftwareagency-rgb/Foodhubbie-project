@@ -110,8 +110,48 @@ ok(/#demoModeBanner \.dmb-text span\{display:none\}/.test(demoSrc),
     'the demo banner is one compact line on mobile');
 ok(/html\.demo-mode \.mobile-cart-summary\s*\{[\s\S]{0,200}?bottom:\s*calc\(/.test(cssSrc),
     'the mobile cart pill is lifted above the demo banner');
-ok(/body\.pos-selection-mode #alertContainer\s*\{[\s\S]{0,200}?bottom:\s*calc\(/.test(cssSrc),
-    'toasts are lifted above the item sheet footer');
+ok(/body\.pos-selection-mode #alertContainer\s*\{[\s\S]{0,200}?top:\s*12px/.test(cssSrc),
+    'toasts move to the TOP while the item sheet is open (they never cover the footer)');
+
+// ---- the item sheet is a compact BOTTOM SHEET, not a full screen ---------
+// Owner feedback 2026-11-19: "This Selection Modal Needs to be Small - it
+// takes Full Screen--". The mobile sheet now takes at most 72dvh / 620px,
+// is anchored to the bottom, and the menu stays visible above it.
+const sheetRule = (cssSrc.match(/\.selection-panel-v4\s*\{[\s\S]*?\}/) || [''])[0];
+const sideRule = (cssSrc.match(/\.pos-side-panel\s*\{[\s\S]*?\}/) || [''])[0];
+ok(/max-height:\s*min\(72dvh,\s*620px\)/.test(sheetRule),
+    'the item sheet is a compact bottom sheet (max 72dvh / 620px)');
+ok(!/100dvh|100vh/.test(sheetRule), 'the item sheet is no longer a full-height panel on mobile');
+ok(/align-items:\s*flex-end/.test(sideRule), 'the sheet is anchored to the bottom of the screen');
+ok(/\.selection-panel-v4 \.modal-body\s*\{[\s\S]{0,400}?overflow-y:\s*auto/.test(cssSrc),
+    'the sheet body scrolls instead of clipping the footer');
+ok(/\.selection-panel-v4 \.selection-footer\s*\{[\s\S]{0,400}?flex:\s*0 0 auto/.test(cssSrc),
+    'the footer (Total + Add to Cart) is pinned inside the sheet');
+
+// ---- QUANTITY is the first thing in the sheet -----------------------------
+const posModalStart = htmlSrc.indexOf('id="posSelectionModal"');
+const bodyStart = htmlSrc.indexOf('<div class="modal-body p-20">', posModalStart);
+const footerStart = htmlSrc.indexOf('<div class="modal-footer selection-footer">', bodyStart);
+const qtyIdx = htmlSrc.indexOf('QUANTITY', bodyStart);
+const sizeIdx = htmlSrc.indexOf('CHOOSE SIZE', bodyStart);
+ok(bodyStart > -1 && qtyIdx > bodyStart && qtyIdx < sizeIdx,
+    'QUANTITY sits at the top of the sheet, above CHOOSE SIZE');
+ok(bodyStart > -1 && footerStart > bodyStart, 'the sheet has a footer (Total + Add to Cart)');
+// Regression guard: the footer must be a SIBLING of the scrolling body.
+// When the body's </div> is lost the footer lands INSIDE the scroll box and
+// is pushed off-screen (it measured y=1042 on an 844px viewport).
+const bodyToFooter = htmlSrc.slice(bodyStart, footerStart);
+const openDivs = (bodyToFooter.match(/<div\b/g) || []).length;
+const closeDivs = (bodyToFooter.match(/<\/div>/g) || []).length;
+ok(openDivs > 0 && openDivs === closeDivs,
+    'the modal body is CLOSED before the footer (the footer is a sibling, not a child)');
+
+// ---- the sheet must not open scrolled, and the backdrop closes it ---------
+ok(/focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(posSrc),
+    'the sheet does not auto-scroll when it opens (QUANTITY stays visible)');
+ok(/window\.matchMedia\('\(max-width: 1024px\)'\)\.matches/.test(posSrc) &&
+    /e\.target === modal\) hidePOSSelectionModal\(\)/.test(posSrc),
+    'tapping the dimmed area closes the sheet on mobile');
 
 // ---- served-file hygiene: the CSS version must match index.html ----------
 const cssHref = (htmlSrc.match(/mobile-overrides\.css\?v=([0-9.]+)/) || [])[1];

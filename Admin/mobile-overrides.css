@@ -1590,10 +1590,12 @@
         height: auto !important;
     }
 
-    /* The POS item sheet owns the bottom of the screen (qty + Add to Cart),
-       so a toast must not land on top of its controls. */
+    /* The POS item sheet is a bottom sheet now, so a toast must not land on
+       its controls - it moves to the top of the screen while the sheet is
+       open. */
     body.pos-selection-mode #alertContainer {
-        bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important;
+        top: 12px !important;
+        bottom: auto !important;
     }
 
     .alert-box {
@@ -1603,37 +1605,110 @@
         pointer-events: auto !important; /* Re-enable for the actual toast */
     }
 
-    /* POS Selection — full page on mobile, not a partial drawer/sheet.
-       Was a 90vh bottom sheet with rounded top corners (a "drawer" feel,
-       background still peeking through above it); now fills the entire
-       viewport like a dedicated screen, consistent with how every other
-       mobile screen in this app behaves. */
+    /* POS Selection — a compact BOTTOM SHEET on mobile.
+       The full-screen version hid the whole picker behind it, so the cashier
+       lost the menu while choosing an option. The sheet now takes only what
+       it needs (max 72dvh / 620px), the menu stays visible above it, the body
+       scrolls and the footer (Total + Add to Cart) stays pinned. */
     .selection-panel-v4 {
         width: 100% !important;
-        height: 100vh !important;
-        height: 100dvh !important;
-        max-height: none !important;
-        border-radius: 0 !important;
-        margin-top: 0 !important;
-        animation: mobilePanelSlide 0.3s ease !important;
+        height: auto !important;
+        max-height: min(72dvh, 620px) !important;
+        border-radius: 20px 20px 0 0 !important;
+        margin: 0 !important;
+        margin-top: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        animation: mobileSheetUp 0.25s cubic-bezier(0.2, 0, 0, 1) !important;
     }
 
     .pos-side-panel {
-        align-items: stretch !important;
-        justify-content: center !important;
-        flex-direction: column !important;
-        background: var(--card, #fff) !important;
-        -webkit-backdrop-filter: none !important;
-        backdrop-filter: none !important;
+        align-items: flex-end !important;
+        justify-content: flex-end !important;
+        background: rgba(15, 23, 42, 0.45) !important;
+        -webkit-backdrop-filter: blur(2px) !important;
+        backdrop-filter: blur(2px) !important;
     }
 
-    @keyframes mobilePanelSlide {
-        from { transform: translateX(100%); }
-        to { transform: translateX(0); }
+    @keyframes mobileSheetUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    .selection-panel-v4 .modal-header {
+        padding: 12px 16px !important;
+        flex: 0 0 auto !important;
+    }
+
+    .selection-panel-v4 .modal-title {
+        font-size: 17px !important;
+    }
+
+    /* The body scrolls INSIDE the sheet. It carries its own max-height: a
+       flex container with `height:auto` + `max-height` does NOT shrink its
+       children (the sheet would just clip the footer off-screen), so the
+       scroll box is bounded here instead. */
+    .selection-panel-v4 .modal-body {
+        flex: 0 1 auto !important;
+        min-height: 0 !important;
+        max-height: calc(min(72dvh, 620px) - 150px) !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px 14px !important;
+    }
+
+    .selection-panel-v4 .selection-section {
+        padding: 12px !important;
+        border-radius: 14px !important;
+        margin-bottom: 12px !important;
+    }
+
+    /* QUANTITY sits on top of the sheet as ONE compact row (label left,
+       stepper right) so the size cards stay on screen with it. */
+    .selection-panel-v4 .modal-body > .selection-section:first-child {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 12px !important;
+        padding: 10px 12px !important;
+    }
+
+    .selection-panel-v4 .modal-body > .selection-section:first-child .pos-section-label {
+        margin: 0 !important;
+    }
+
+    .selection-panel-v4 .modal-body > .selection-section:first-child .flex-row {
+        margin-top: 0 !important;
+        gap: 14px !important;
+    }
+
+    .selection-panel-v4 .qty-btn-large {
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 12px !important;
+    }
+
+    .selection-panel-v4 .qty-val-large {
+        font-size: 20px !important;
+        min-width: 34px !important;
+    }
+
+    .selection-panel-v4 .selection-footer {
+        flex: 0 0 auto !important;
+        margin-top: 0 !important;
+        padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+        gap: 10px !important;
+        box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.07);
+    }
+
+    .selection-panel-v4 .btn-add-large {
+        white-space: nowrap !important;
+        padding: 12px 14px !important;
     }
 
     .total-price-large {
-        font-size: 22px !important;
+        font-size: 20px !important;
     }
 
     .btn-add-large {
