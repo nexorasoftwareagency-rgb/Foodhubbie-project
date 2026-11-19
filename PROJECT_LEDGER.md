@@ -1040,3 +1040,23 @@ LEDGER CLOSE - 20261119-pos-item-sheet (the POS item sheet is a compact bottom s
   * Add-ons live BELOW the fold in the sheet (the body scrolls) - deliberate: the size + quantity decide the price, the add-ons are optional.
   * The backdrop-tap-to-close is mobile-only; on desktop the sheet is a side panel where a stray click must not lose the selection.
   * The demo tenant's cart total includes its 10% GST (Rs.138 -> Rs.151.80); a tenant's own tax rate decides that number.
+
+LEDGER CLOSE - 20261119-pos-mini-modal (the POS option sheet becomes a CENTERED MINI MODAL with smaller buttons; DONE/high)
+
+- OWNER ASK (2026-11-19, live demo tenant, 390x844): "i want it like mini modal screen -- in Center.. -- Decrease the Size of buttons a Little..". The bottom sheet (the previous ask) was still half the screen and its controls were oversized.
+- MEASURED FIRST (real browser, real `foodhubbie-demo` tenant, local shell):
+  * The bottom sheet was 390x608 (72% of the viewport), full width, anchored to the bottom edge.
+  * The global mobile rule pins EVERY button to a 44px tap target (`button { min-height:44px; min-width:44px }` + `[data-action]`), so the size cards (97px tall), the stepper (44px) and the close button (44px) could not shrink.
+  * The desktop size grid is `repeat(auto-fit, minmax(130px,1fr))`: inside a 253px card that is ONE column, so the two sizes (MEDIUM/SMALL) stacked vertically and the modal grew taller for no reason.
+- FIX (`Admin/mobile-overrides.css`, still inside the existing `@media (max-width: 1024px)` - the desktop side panel is untouched):
+  * The option sheet is now a CENTERED MINI MODAL: `.pos-side-panel{align-items:center; justify-content:center; padding:14px; backdrop blur 3px}` and `.selection-panel-v4{width:min(90vw,380px); max-height:62dvh; border-radius:18px; animation:miniModalIn}`. The menu, the search bar and the category strip stay visible AROUND the card; the dimmed backdrop closes it.
+  * Buttons a little smaller: quantity stepper 44 -> **38px** (with `min-width/min-height` released so the global 44px rule cannot clamp it), close button 44 -> **30px**, size cards 97 -> **66px** tall (`padding:11px 8px`, name 13px, price 12px, the active tick 18 -> 15px), section padding 12 -> 10px, card radius 16 -> 12px, header title 17 -> 16px, footer padding 10 -> 9px, total 20 -> 19px, "Add to Cart" padding 12 -> 10px / font 13.5px. The primary CTA keeps its 44px height (it is the action the cashier hits).
+  * The size grid inside the modal is now `repeat(auto-fit, minmax(88px,1fr))` -> TWO size cards sit side by side (123/125px at 390, 91/93px at 320) instead of stacking.
+- PROOF (real browser, real demo tenant): 390px = panel 351x523 (**62% of the viewport**), x=20, y=160, centred on BOTH axes, radius 18px, body scrolls (scrollTop 0 on open), the footer is inside the panel, "Add to Cart" visible and hit-testable, QUANTITY at y=257 above CHOOSE SIZE at y=337, both size cards on ONE row and fully visible, tapping MEDIUM moves the selection and the Total to Rs.119, the backdrop tap closes the card, no sideways overflow. 360px = 324x523 (2 columns). 320px = 288x484 (2 columns, 91/93px). 0 console errors. Desktop 1280: unchanged (right-hand panel, footer pinned).
+- GUARDS: `tests/pos-mobile.check.cjs` **54/54** (`npm run test:pos-mobile`, CI step) - 7 new checks for the mini modal (mini width, 62dvh cap, 18px card radius, centered on both axes, no bottom-sheet anchoring, the 38px stepper with its min-* released, the 30px close button, the smaller size cards, the two-column size grid). Mutation self-test against the pre-change HEAD copies: **47 of 54 FAIL** (exit 1).
+- SERVED-FILE HYGIENE: `Admin/sw.js` CACHE_NAME v5.12.67 -> **v5.12.68** and `mobile-overrides.css?v=5.4.23` -> **v5.4.24` in BOTH `Admin/index.html` and the SW precache list.
+- HONEST LIMITS:
+  * The stepper is 38px and the close button 30px - below the 44px tap-target guideline the global mobile CSS enforces. That is the explicit owner request; the stepper is still a 38x38 target and the close button is a familiar X in the corner.
+  * Add-ons live BELOW the fold inside the card (the body scrolls) - deliberate: size + quantity decide the price, add-ons are optional.
+  * The backdrop-tap-to-close is mobile-only; on desktop the sheet is a side panel where a stray click must not lose the selection.
+  * A dish with MANY sizes shows two per row inside the card (88px minimum); three in a row would not fit legibly in a 380px card.

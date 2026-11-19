@@ -113,20 +113,33 @@ ok(/html\.demo-mode \.mobile-cart-summary\s*\{[\s\S]{0,200}?bottom:\s*calc\(/.te
 ok(/body\.pos-selection-mode #alertContainer\s*\{[\s\S]{0,200}?top:\s*12px/.test(cssSrc),
     'toasts move to the TOP while the item sheet is open (they never cover the footer)');
 
-// ---- the item sheet is a compact BOTTOM SHEET, not a full screen ---------
-// Owner feedback 2026-11-19: "This Selection Modal Needs to be Small - it
-// takes Full Screen--". The mobile sheet now takes at most 72dvh / 620px,
-// is anchored to the bottom, and the menu stays visible above it.
+// ---- the item sheet is a compact CENTERED MINI MODAL ---------------------
+// Owner feedback 2026-11-19: "i want it like mini modal screen -- in Center
+// -- Decrease the Size of buttons a Little..".
 const sheetRule = (cssSrc.match(/\.selection-panel-v4\s*\{[\s\S]*?\}/) || [''])[0];
 const sideRule = (cssSrc.match(/\.pos-side-panel\s*\{[\s\S]*?\}/) || [''])[0];
-ok(/max-height:\s*min\(72dvh,\s*620px\)/.test(sheetRule),
-    'the item sheet is a compact bottom sheet (max 72dvh / 620px)');
-ok(!/100dvh|100vh/.test(sheetRule), 'the item sheet is no longer a full-height panel on mobile');
-ok(/align-items:\s*flex-end/.test(sideRule), 'the sheet is anchored to the bottom of the screen');
+ok(/width:\s*min\(90vw,\s*380px\)/.test(sheetRule), 'the item modal is mini: at most 380px wide');
+ok(/max-height:\s*62dvh/.test(sheetRule), 'the item modal never takes more than 62% of the screen height');
+ok(/border-radius:\s*18px/.test(sheetRule), 'the mini modal keeps a card radius (not a full-bleed sheet)');
+ok(!/100dvh|100vh/.test(sheetRule), 'the item modal is no longer a full-height panel on mobile');
+ok(/align-items:\s*center/.test(sideRule) && /justify-content:\s*center/.test(sideRule),
+    'the item modal is CENTERED on the screen');
+ok(!/align-items:\s*flex-end/.test(sideRule), 'the bottom-sheet anchoring is gone');
 ok(/\.selection-panel-v4 \.modal-body\s*\{[\s\S]{0,400}?overflow-y:\s*auto/.test(cssSrc),
-    'the sheet body scrolls instead of clipping the footer');
+    'the modal body scrolls instead of clipping the footer');
 ok(/\.selection-panel-v4 \.selection-footer\s*\{[\s\S]{0,400}?flex:\s*0 0 auto/.test(cssSrc),
-    'the footer (Total + Add to Cart) is pinned inside the sheet');
+    'the footer (Total + Add to Cart) is pinned inside the modal');
+
+// ---- the buttons are a little smaller -------------------------------------
+ok(/\.selection-panel-v4 \.qty-btn-large\s*\{[\s\S]{0,300}?width:\s*38px/.test(cssSrc) &&
+   /\.selection-panel-v4 \.qty-btn-large\s*\{[\s\S]{0,300}?min-height:\s*38px/.test(cssSrc),
+    'the quantity stepper buttons are 38px (released from the global 44px tap-target rule)');
+ok(/\.selection-panel-v4 \.close-btn\s*\{[\s\S]{0,300}?width:\s*30px/.test(cssSrc),
+    'the close button is 30px');
+ok(/\.selection-panel-v4 \.size-card\s*\{[\s\S]{0,300}?padding:\s*11px 8px/.test(cssSrc),
+    'the size cards are smaller');
+ok(/\.selection-panel-v4 \.size-selection-grid\s*\{[\s\S]{0,300}?minmax\(88px,\s*1fr\)/.test(cssSrc),
+    'two size cards fit side by side in the mini modal');
 
 // ---- QUANTITY is the first thing in the sheet -----------------------------
 const posModalStart = htmlSrc.indexOf('id="posSelectionModal"');

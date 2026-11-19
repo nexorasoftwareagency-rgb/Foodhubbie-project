@@ -1605,73 +1605,81 @@
         pointer-events: auto !important; /* Re-enable for the actual toast */
     }
 
-    /* POS Selection — a compact BOTTOM SHEET on mobile.
-       The full-screen version hid the whole picker behind it, so the cashier
-       lost the menu while choosing an option. The sheet now takes only what
-       it needs (max 72dvh / 620px), the menu stays visible above it, the body
-       scrolls and the footer (Total + Add to Cart) stays pinned. */
+    /* POS Selection — a compact CENTERED MINI MODAL on mobile.
+       The full-screen version hid the whole picker behind it, and the bottom
+       sheet still ate half the screen. The owner wants a small dialog in the
+       MIDDLE: the menu stays visible around it, the body scrolls inside it,
+       the footer (Total + Add to Cart) stays pinned, and every control is a
+       little smaller so the whole card reads in one glance. */
+    .pos-side-panel {
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 14px !important;
+        background: rgba(15, 23, 42, 0.5) !important;
+        -webkit-backdrop-filter: blur(3px) !important;
+        backdrop-filter: blur(3px) !important;
+    }
+
     .selection-panel-v4 {
-        width: 100% !important;
+        width: min(90vw, 380px) !important;
         height: auto !important;
-        max-height: min(72dvh, 620px) !important;
-        border-radius: 20px 20px 0 0 !important;
+        max-height: 62dvh !important;
+        border-radius: 18px !important;
         margin: 0 !important;
-        margin-top: auto !important;
         display: flex !important;
         flex-direction: column !important;
         overflow: hidden !important;
-        animation: mobileSheetUp 0.25s cubic-bezier(0.2, 0, 0, 1) !important;
+        animation: miniModalIn 0.18s cubic-bezier(0.2, 0, 0, 1) !important;
     }
 
-    .pos-side-panel {
-        align-items: flex-end !important;
-        justify-content: flex-end !important;
-        background: rgba(15, 23, 42, 0.45) !important;
-        -webkit-backdrop-filter: blur(2px) !important;
-        backdrop-filter: blur(2px) !important;
-    }
-
-    @keyframes mobileSheetUp {
-        from { transform: translateY(100%); }
-        to { transform: translateY(0); }
+    @keyframes miniModalIn {
+        from { opacity: 0; transform: translateY(8px) scale(0.97); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
     .selection-panel-v4 .modal-header {
-        padding: 12px 16px !important;
+        padding: 10px 14px !important;
         flex: 0 0 auto !important;
     }
 
     .selection-panel-v4 .modal-title {
-        font-size: 17px !important;
+        font-size: 16px !important;
     }
 
-    /* The body scrolls INSIDE the sheet. It carries its own max-height: a
-       flex container with `height:auto` + `max-height` does NOT shrink its
-       children (the sheet would just clip the footer off-screen), so the
-       scroll box is bounded here instead. */
+    .selection-panel-v4 .close-btn {
+        width: 30px !important;
+        height: 30px !important;
+        min-width: 30px !important;
+        min-height: 30px !important;
+    }
+
+    /* The body scrolls INSIDE the card. It carries its own max-height: a flex
+       container with `height:auto` + `max-height` does NOT shrink its children
+       (the card would just clip the footer off-screen), so the scroll box is
+       bounded here instead. */
     .selection-panel-v4 .modal-body {
         flex: 0 1 auto !important;
         min-height: 0 !important;
-        max-height: calc(min(72dvh, 620px) - 150px) !important;
+        max-height: calc(62dvh - 120px) !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch;
-        padding: 12px 14px !important;
+        padding: 10px 12px !important;
     }
 
     .selection-panel-v4 .selection-section {
-        padding: 12px !important;
-        border-radius: 14px !important;
-        margin-bottom: 12px !important;
+        padding: 10px !important;
+        border-radius: 12px !important;
+        margin-bottom: 10px !important;
     }
 
-    /* QUANTITY sits on top of the sheet as ONE compact row (label left,
-       stepper right) so the size cards stay on screen with it. */
+    /* QUANTITY sits on top as ONE compact row (label left, stepper right)
+       so the size cards stay on screen with it. */
     .selection-panel-v4 .modal-body > .selection-section:first-child {
         display: flex !important;
         align-items: center !important;
         justify-content: space-between !important;
-        gap: 12px !important;
-        padding: 10px 12px !important;
+        gap: 10px !important;
+        padding: 8px 10px !important;
     }
 
     .selection-panel-v4 .modal-body > .selection-section:first-child .pos-section-label {
@@ -1680,40 +1688,73 @@
 
     .selection-panel-v4 .modal-body > .selection-section:first-child .flex-row {
         margin-top: 0 !important;
-        gap: 14px !important;
+        gap: 10px !important;
     }
 
+    /* Buttons a little smaller — the card has to read as ONE glance.
+       The global mobile rule pins every button to a 44px tap target, so the
+       min-* have to be released explicitly for these two compact controls. */
     .selection-panel-v4 .qty-btn-large {
-        width: 40px !important;
-        height: 40px !important;
-        border-radius: 12px !important;
+        width: 38px !important;
+        height: 38px !important;
+        min-width: 38px !important;
+        min-height: 38px !important;
+        padding: 0 !important;
+        border-radius: 11px !important;
+        font-size: 18px !important;
     }
 
     .selection-panel-v4 .qty-val-large {
-        font-size: 20px !important;
-        min-width: 34px !important;
+        font-size: 18px !important;
+        min-width: 30px !important;
+    }
+
+    .selection-panel-v4 .size-selection-grid {
+        /* The mini modal is ~350px wide, so the desktop 130px minimum forced
+           ONE size card per row. 96px lets two sizes sit side by side - the
+           card gets shorter and the whole modal reads in one glance. */
+        grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)) !important;
+        gap: 8px !important;
+    }
+
+    .selection-panel-v4 .size-card {
+        padding: 11px 8px !important;
+        border-radius: 12px !important;
+        gap: 2px !important;
+    }
+
+    .selection-panel-v4 .size-card .size-name {
+        font-size: 13px !important;
+    }
+
+    .selection-panel-v4 .size-card .size-price {
+        font-size: 12px !important;
+    }
+
+    .selection-panel-v4 .size-card.active::before {
+        width: 15px !important;
+        height: 15px !important;
+        top: 6px !important;
+        right: 6px !important;
     }
 
     .selection-panel-v4 .selection-footer {
         flex: 0 0 auto !important;
         margin-top: 0 !important;
-        padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+        padding: 9px 14px calc(9px + env(safe-area-inset-bottom, 0px)) !important;
         gap: 10px !important;
-        box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.07);
+        box-shadow: 0 -4px 14px rgba(15, 23, 42, 0.06);
     }
 
     .selection-panel-v4 .btn-add-large {
         white-space: nowrap !important;
-        padding: 12px 14px !important;
+        padding: 10px 16px !important;
+        font-size: 13.5px !important;
+        border-radius: 12px !important;
     }
 
-    .total-price-large {
-        font-size: 20px !important;
-    }
-
-    .btn-add-large {
-        padding: 12px 20px !important;
-        font-size: 14px !important;
+    .selection-panel-v4 .total-price-large {
+        font-size: 19px !important;
     }
 
     /* --- 14. TABLE MOBILE OPTIMIZATION --- */
