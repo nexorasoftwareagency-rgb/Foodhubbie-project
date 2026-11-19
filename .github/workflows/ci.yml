@@ -41,6 +41,9 @@ jobs:
       - name: KDS guard (badge parity, KOT correctness, phantom Preparing, dead refs)
         run: node tests/kds-check.mjs
 
+      - name: POS mobile guard (full-width picker, honest tile price, one-tap add)
+        run: node tests/pos-mobile.check.cjs
+
       - name: Menu cart persistence guard
         run: node tests/menu-cart-refresh.check.cjs
 

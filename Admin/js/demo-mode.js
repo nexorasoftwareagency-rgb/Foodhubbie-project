@@ -74,8 +74,15 @@ const CSS = `
   padding:6px 10px;border-radius:9px;cursor:pointer}
 #demoModeBanner .dmb-exit:hover{background:rgba(248,250,252,.18)}
 #demoModeBanner .dmb-exit:focus-visible{outline:2px solid #f8fafc;outline-offset:2px}
-@media (max-width:768px){#demoModeBanner{left:10px;right:10px;
-  bottom:calc(74px + env(safe-area-inset-bottom,0px));max-width:none}}
+@media (max-width:768px){#demoModeBanner{left:8px;right:auto;
+  bottom:calc(70px + env(safe-area-inset-bottom,0px));max-width:calc(100vw - 16px);padding:6px 8px 6px 10px;
+  gap:8px;border-radius:12px}
+  #demoModeBanner .dmb-text span{display:none}
+  #demoModeBanner .dmb-text b{font-size:11px;line-height:1.2}
+  #demoModeBanner .dmb-exit{padding:4px 9px;font-size:11px}}
+/* The POS item sheet owns the screen: the banner must not sit on top of its
+   price / "Add to Cart" footer (it is painted over the whole app shell). */
+body.pos-selection-mode #demoModeBanner{display:none !important}
 `;
 
 function injectStyles() {

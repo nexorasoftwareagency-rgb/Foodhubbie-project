@@ -193,13 +193,54 @@ export function applyWalkinFilters() {
         filtered = [];
     } else {
         filtered = state.allWalkinDishes.filter(d => {
-            const matchesSearch = d.name.toLowerCase().includes(search);
+            // Match the name OR the category: typing "pizza" should find every
+            // pizza even when the word is not in the dish name.
+            const matchesSearch = !search
+                || (d.name || '').toLowerCase().includes(search)
+                || (d.category || '').toLowerCase().includes(search);
             const matchesCat = state.activeWalkinCategory === "All" || d.category === state.activeWalkinCategory;
             return matchesSearch && matchesCat;
         });
     }
 
     renderWalkinDishGrid(filtered);
+}
+
+/**
+ * The price a tile advertises.
+ *
+ * A dish with size variants is sold at a different amount per size, so the
+ * tile may only advertise the CHEAPEST one — and it has to say so ("₹69+").
+ * The old code showed `dish.price` (the base price) next to a sheet that
+ * preselected a DIFFERENT size, so the cashier could charge a different
+ * amount than the tile showed. `from: true` means "starts at".
+ *
+ * @param {{price?:number, sizes?:Object}} dish
+ * @returns {{price:number, from:boolean}}
+ */
+export function posPriceInfo(dish) {
+    const sizes = dish?.sizes || {};
+    const prices = Object.values(sizes)
+        .map(p => Number(p))
+        .filter(p => Number.isFinite(p) && p > 0);
+    if (prices.length) return { price: Math.min(...prices), from: true };
+    return { price: Number(dish?.price) || 0, from: false };
+}
+
+/**
+ * True when a dish has nothing to choose: no size variants and no add-ons for
+ * its category. Those tiles are added to the cart with one tap instead of
+ * opening a sheet that only offers a "- Default -" card.
+ *
+ * @param {Object} dish
+ * @param {Array} categories - state.categories (each may carry `addons`)
+ */
+export function posDishIsQuickAddable(dish, categories) {
+    if (!dish) return false;
+    if (Object.keys(dish.sizes || {}).length) return false;
+    const cat = (categories || []).find(c => c.name === dish.category);
+    if (cat?.addons && Object.keys(cat.addons).length) return false;
+    return true;
 }
 
 /**
@@ -226,11 +267,15 @@ export function renderWalkinDishGrid(dishes) {
         return;
     }
 
-    grid.innerHTML = comboTiles + dishes.map(d => {
-        const price = d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0);
+    // Dishes first, combos after: a counter taps single dishes all day, so the
+    // prime space of the screen belongs to them. "Combos" (a chip in the
+    // category strip) shows the combos on their own.
+    grid.innerHTML = dishes.map(d => {
+        const { price, from } = posPriceInfo(d);
         const isOos = d.stock === false;
+        const quick = posDishIsQuickAddable(d, state.categories);
         const oosClass = isOos ? ' oos-wrap is-out-of-stock' : '';
-        const oosOverlay = isOos ? '<div class="oos-overlay" aria-hidden="true">Currently Unavailable</div>' : '';
+        const oosOverlay = isOos ? '<div class="oos-overlay" aria-hidden="true">Out of stock</div>' : '';
         // Native text content (dish-name + dish-category) will be the accessible name.
         // For out-of-stock, add visually-hidden status text.
         const oosStatus = isOos ? '<span class="visually-hidden"> - Currently unavailable</span>' : '';
@@ -240,11 +285,12 @@ export function renderWalkinDishGrid(dishes) {
                  tabindex="${isOos ? '-1' : '0'}"
                  data-action="openPOSSelectionModal" 
                  data-id="${d.id}"
+                 ${quick ? 'data-quick-add="1"' : ''}
                  ${isOos ? ' aria-disabled="true" data-out-of-stock="true"' : ''}>
                 <div class="dish-visual">
                     <img src="${escapeHtml(d.image || 'assets/images/placeholder-dish.png')}" alt="${escapeHtml(d.name)}" loading="lazy">
                     <div class="dish-overlay" aria-hidden="true">
-                        <span class="price-chip">₹${price}</span>
+                        <span class="price-chip">₹${price}${from ? '+' : ''}</span>
                     </div>
                     ${oosOverlay}
                 </div>
@@ -255,7 +301,7 @@ export function renderWalkinDishGrid(dishes) {
                 </div>
             </div>
         `;
-    }).join('');
+    }).join('') + comboTiles;
 }
 
 /**
@@ -268,6 +314,13 @@ export async function openPOSSelectionModal(dishId) {
     if (!dish) return;
     if (dish.stock === false) {
         ui.showToast(t('inv.unavailable', '📦 Item is currently unavailable'), 'warning');
+        return;
+    }
+
+    // Nothing to choose (no sizes, no add-ons): one tap = one line in the
+    // cart. The sheet would only offer a "- Default -" card.
+    if (posDishIsQuickAddable(dish, state.categories)) {
+        addSimpleDishToCart(dish);
         return;
     }
 
@@ -296,8 +349,15 @@ export async function openPOSSelectionModal(dishId) {
         sizes = { "- Default -": dish.price || 0 };
     }
 
-    Object.entries(sizes).forEach(([name, price], idx) => {
-        const isDefault = idx === 0;
+    // The tile advertises the CHEAPEST size ("₹69+"), so the sheet must open
+    // on that same size — otherwise the first "Add to Cart" silently charges
+    // a different amount than the price on the tile.
+    const advertised = posPriceInfo(dish).price;
+    const sizeEntries = Object.entries(sizes);
+    const defaultIdx = Math.max(0, sizeEntries.findIndex(([, p]) => Number(p) === advertised));
+
+    sizeEntries.forEach(([name, price], idx) => {
+        const isDefault = idx === defaultIdx;
         if (isDefault) {
             state.currentPOSModalSize = { name, price: Number(price) };
         }
@@ -432,6 +492,41 @@ function updatePOSModalTotal() {
 /**
  * Cart Management
  */
+
+/**
+ * Adds a dish that has no variants straight to the cart (one tap).
+ * The cart key matches the modal's "- Default -" line, so a quick add and a
+ * manual add of the same dish merge into one row instead of two.
+ *
+ * @param {Object} dish
+ */
+function addSimpleDishToCart(dish) {
+    try {
+        const price = Number(dish.price) || 0;
+        const cartKey = `${dish.id}::- Default -::`;
+        if (state.walkinCart[cartKey]) {
+            state.walkinCart[cartKey].qty += 1;
+        } else {
+            state.walkinCart[cartKey] = {
+                id: dish.id,
+                name: dish.name,
+                category: dish.category,
+                size: '- Default -',
+                price,
+                qty: 1,
+                addons: []
+            };
+        }
+        renderWalkinCart();
+        haptic(20);
+        playSuccessSound();
+        logger.success('POS', `Quick add: ${dish.name}`, { cartKey, price });
+        ui.showToast(`Added ${dish.name} · ₹${price.toLocaleString()}`, 'success');
+    } catch (error) {
+        logger.error('POS', `Quick add error: ${error.message}`, error);
+        ui.showToast('Failed to add to cart', 'error');
+    }
+}
 
 export function addToWalkinCartFromModal() {
     try {
