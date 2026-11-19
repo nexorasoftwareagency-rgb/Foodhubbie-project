@@ -1055,6 +1055,18 @@ The flags are the reason a cloud rollback is a database write, not a deploy.
 | order finalization | `orderFinalizer` | `orders/{id}/finalizeClaim` + `_fcmSent` | per order |
 | API liveness | `platformHealth` probe | `GET https://api.foodhubbie.in/api/bot/status-all` = 401 | schedule |
 
+**Read `platformHealth/state.state` as a statement about the SOCKET HOST, not
+about the platform** (fixed 2026-11-19): the states are `socket-healthy`,
+`socket-degraded`, `socket-down` and `capability-gap`. The old `down` state
+told the owner that order finalization and the API endpoints were offline while
+both were online on Cloud Functions — this function executing *is* the proof
+that the cloud half is alive. `platformHealth/state.cloud` is written `up` for
+the same reason, and `alertDelivered` records whether the owner was actually
+told. `capability-gap` means the socket is down **and** a relay flag
+(`config/orderFinalizer`, `pushRelay`, `loyaltyRelay`, `riderRelay`) is off,
+so the bot owned that capability and nobody is running it — fix the flag or
+bring the socket host back.
+
 ### 7.2 The three queries to run first in any incident
 
 ```bash

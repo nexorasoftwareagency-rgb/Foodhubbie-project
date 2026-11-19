@@ -1,16 +1,26 @@
 /**
- * Platform health watch (batch 23a) - scheduled every 5 minutes.
+ * Socket-host health watch (batch 23a) - scheduled every 5 minutes.
  *
  * Runs OUTSIDE the EC2 box on purpose: the 2026-11-11 outage lasted 13 hours
  * because every signal we had was written by the host that died. This function
  * reads those signals from managed infrastructure, writes a single
- * `platformHealth/state` node, and pushes the platform super admins only when
- * the verdict changes (plus one nudge per hour while it stays broken).
+ * `platformHealth/state` node, and pushes the super admins only when the
+ * verdict changes (plus one nudge per hour while it stays broken).
  *
  * Signals (see `shared/health/evaluate.ts`):
  *   - newest `botStatus.updatedAt` across every outlet in `outletIndex`
  *     (bot-control-api rewrites it every 30 s per outlet);
- *   - `GET https://api.foodhubbie.in/api/bot/status-all` must answer 401.
+ *   - `GET https://api.foodhubbie.in/api/bot/status-all` must answer 401;
+ *   - `config/*Relay*.enabled` - which capabilities the cloud owns. A flag that
+ *     is off leaves that capability with the bot, so while the socket is down
+ *     nobody runs it (`capability-gap`).
+ *
+ * WHAT IT MEASURES: the WhatsApp socket host and its control plane. NOT the
+ * platform - this function running IS the proof that the Cloud Functions half
+ * is alive. The old version called this "the platform" and told the owner that
+ * order finalization and the API endpoints were offline while both were
+ * online; the states now name their subject and the copy lists what still
+ * works.
  *
  * Cost: 288 invocations/day, ~66 tiny RTDB leaf reads per pass - far inside the
  * free tier. It never reads the `businesses` tree (batch-10 lesson).
@@ -21,6 +31,8 @@ import { logger } from 'firebase-functions/v2';
 import { initializeAdmin, getDB, getMessaging } from '../shared/firebase/admin';
 import {
     evaluateHealth,
+    healthMessage,
+    RELAY_FLAGS,
     STALE_AFTER_MS,
     type HealthState,
     type OutletBeat,
@@ -85,28 +97,38 @@ async function readBeats(db: any): Promise<OutletBeat[]> {
     );
 }
 
-function bodyFor(kind: 'down' | 'degraded' | 'recovered', report: any): string {
-    const mins = report.newestAgeMin;
-    if (kind === 'recovered') {
-        return mins === null
-            ? 'The platform is writing heartbeats again.'
-            : `Heartbeats are back (${mins} min old). Order finalization and api.foodhubbie.in are online.`;
-    }
-    if (kind === 'down') {
-        return mins === null
-            ? 'No platform heartbeat at all and api.foodhubbie.in is unreachable.'
-            : `No heartbeat for ${mins} min and api.foodhubbie.in is unreachable. Bots, order finalization and API endpoints are offline.`;
-    }
-    return mins !== null && mins > 5
-        ? `Heartbeat is ${mins} min old - the box may have stopped writing.`
-        : 'api.foodhubbie.in is not answering, but the heartbeat is fresh.';
+/**
+ * Which relay flags leave a capability with the BOT (flag not `enabled: true`).
+ *
+ * With the socket host down, such a capability is covered by nobody - the bot
+ * that owns it is the thing that is gone. That is the one way the cloud half
+ * can genuinely be missing a capability, so the verdict has to know about it.
+ */
+async function readRelayOff(db: any): Promise<string[]> {
+    const cfg = (await db.ref('config').once('value')).val() || {};
+    return RELAY_FLAGS.filter((f) => !(cfg[f.flag] && cfg[f.flag].enabled === true)).map((f) => f.flag);
 }
 
+/**
+ * The push copy lives in `shared/health/evaluate.ts` (pure, asserted by
+ * `scripts/health-selfcheck.cjs`) - it used to sit here untested, and it used
+ * to claim that order finalization and the API endpoints were offline while
+ * both were running.
+ */
+/**
+ * Who gets the alert, and what a dead token does to the channel.
+ *
+ * A permanently-failed token is NOT excluded for 24 h here. It used to be, and
+ * that muted the whole outage channel for a day: the owner's only token failed
+ * once, the stamp was never cleared, and every pass reported `tokens: 0` - the
+ * alert was never delivered at all. The stamp is now a RECORD (cleared the
+ * moment a send succeeds), not a mute: one dead token costs one rejected push
+ * per alert, while a silent channel costs the owner the outage itself.
+ */
 async function notifySupers(db: any, kind: 'down' | 'degraded' | 'recovered', state: HealthState, report: any, repeat: boolean) {
     const admins = (await db.ref('admins').once('value')).val() || {};
     const targets = Object.entries(admins)
         .filter(([, a]: [string, any]) => a && a.isSuper === true && typeof a.fcmToken === 'string' && a.fcmToken.length > 20)
-        .filter(([, a]: [string, any]) => !a.fcmTokenInvalidAt || Date.now() - Number(a.fcmTokenInvalidAt) > 24 * 3600 * 1000)
         .map(([uid, a]: [string, any]) => ({ uid, token: a.fcmToken as string }));
 
     const record: any = {
@@ -125,8 +147,12 @@ async function notifySupers(db: any, kind: 'down' | 'degraded' | 'recovered', st
         return record;
     }
 
-    const title = state === 'healthy' ? 'Platform back online' : state === 'down' ? 'PLATFORM DOWN' : 'Platform degraded';
-    const body = bodyFor(kind, report);
+    const { title, body } = healthMessage(kind, {
+        newestAgeMin: report.newestAgeMin,
+        apiOk: report.apiOk,
+        relayOff: report.relayOff,
+        uncovered: report.uncovered,
+    });
 
     try {
         const res = await getMessaging().sendEachForMulticast({
@@ -140,11 +166,18 @@ async function notifySupers(db: any, kind: 'down' | 'degraded' | 'recovered', st
         record.errors = [];
         for (let i = 0; i < res.responses.length; i++) {
             const r: any = res.responses[i];
-            if (r.success) continue;
+            const uid = targets[i].uid;
+            if (r.success) {
+                // The token works -> it is not the token that died. Clear the
+                // stamp so this channel (and the bot's admin alerts) use it
+                // again instead of muting it for another day.
+                await db.ref(`admins/${uid}/fcmTokenInvalidAt`).remove().catch(() => undefined);
+                continue;
+            }
             const code = (r.error && r.error.code) || 'unknown';
-            record.errors.push({ uid: targets[i].uid, code });
+            record.errors.push({ uid, code });
             if (DEAD_TOKEN_CODES.includes(code)) {
-                await db.ref(`admins/${targets[i].uid}/fcmTokenInvalidAt`).set(Date.now()).catch(() => undefined);
+                await db.ref(`admins/${uid}/fcmTokenInvalidAt`).set(Date.now()).catch(() => undefined);
             }
         }
     } catch (err: any) {
@@ -169,27 +202,31 @@ export async function runPlatformHealthPass(
     opts: { now?: number; dryRun?: boolean } = {}
 ): Promise<{ report: ReturnType<typeof evaluateHealth>; notification: any | null }> {
     const now = opts.now || Date.now();
-    const [outlets, apiOk, previousSnap] = await Promise.all([
+    const [outlets, apiOk, relayOff, previousSnap] = await Promise.all([
         readBeats(db),
         probeApi(),
+        readRelayOff(db),
         db.ref('platformHealth/state').once('value'),
     ]);
     const prevVal = previousSnap.val() || null;
     const previous: PreviousHealth | null =
         prevVal && prevVal.state
             ? {
-                  state: prevVal.state,
+                  state: String(prevVal.state),
                   since: Number(prevVal.since) || now,
                   lastNotifiedAt: Number(prevVal.lastNotifiedAt) || 0,
               }
             : null;
 
-    const report = evaluateHealth({ now, outlets, apiOk, previous });
+    const report = evaluateHealth({ now, outlets, apiOk, previous, relayOff });
     let notification = null;
 
     if (!opts.dryRun) {
         await db.ref('platformHealth/state').update({
             state: report.state,
+            // This pass is running on Cloud Functions, so the cloud half is up by
+            // definition. The state describes the socket host, not the platform.
+            cloud: 'up',
             since: report.since,
             checkedAt: now,
             total: report.total,
@@ -198,11 +235,27 @@ export async function runPlatformHealthPass(
             staleCount: report.stale.length,
             staleOutlets: report.stale,
             apiOk: report.apiOk,
+            relayOff: report.relayOff,
+            uncovered: report.uncovered,
             reasons: report.reasons.join(' | '),
             staleAfterMs: STALE_AFTER_MS,
         });
         if (report.notify) {
             notification = await notifySupers(db, report.notify.kind, report.state, report, report.notify.repeat);
+            // Delivery truth next to the verdict. A state node that says
+            // "socket-down" with no record of whether the owner was actually
+            // told is how this channel looked fine while nobody heard a thing.
+            await db.ref('platformHealth/state').update({
+                alertAttempted: notification.tokens > 0,
+                alertDelivered: notification.sent > 0,
+                alertError:
+                    notification.tokens === 0
+                        ? 'no-eligible-token'
+                        : notification.errors && notification.errors.length
+                          ? notification.errors.map((e: any) => e.code).join(',')
+                          : null,
+                alertedAt: notification.at,
+            });
         }
     }
 
@@ -211,6 +264,8 @@ export async function runPlatformHealthPass(
         total: report.total,
         newestAgeMin: report.newestAgeMin,
         apiOk: report.apiOk,
+        relayOff: report.relayOff,
+        uncovered: report.uncovered,
         notify: report.notify,
         dryRun: !!opts.dryRun,
     });

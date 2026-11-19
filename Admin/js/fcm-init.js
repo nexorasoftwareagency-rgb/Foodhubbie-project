@@ -1,5 +1,5 @@
 import { getMessaging, getToken, onMessage, deleteToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
-import { app, auth, db, ref, set, onAuthStateChanged } from './firebase.js';
+import { app, auth, db, ref, set, remove, onAuthStateChanged } from './firebase.js';
 import { showToast } from '../../shared/dom/modal.js';
 import { VAPID_PUBLIC_KEY } from '../../shared/config/vapid.js';
 
@@ -42,6 +42,11 @@ async function storeToken(userId, token) {
   try {
     if (userId) {
       await set(ref(db, `admins/${userId}/fcmToken`), token);
+      // A token minted now is NOT the token that died: the dead-token stamp
+      // belongs to the previous one. Leaving it in place muted the owner's
+      // outage alerts for 24 h (live 2026-11-19: platformHealth reported
+      // `tokens: 0` for 12.6 h after a single failed send).
+      await remove(ref(db, `admins/${userId}/fcmTokenInvalidAt`)).catch(() => undefined);
     }
   } catch (e) {
     console.error('[FCM] Failed to store token:', e);

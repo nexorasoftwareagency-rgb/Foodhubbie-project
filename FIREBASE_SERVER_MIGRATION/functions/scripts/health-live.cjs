@@ -20,6 +20,7 @@ process.env.FIREBASE_DATABASE_URL =
 
 const { initializeAdmin, getDB } = require(path.join(__dirname, '..', 'lib', 'shared', 'firebase', 'admin.js'));
 const { runPlatformHealthPass } = require(path.join(__dirname, '..', 'lib', 'scheduled', 'platformHealth.js'));
+const { healthMessage } = require(path.join(__dirname, '..', 'lib', 'shared', 'health', 'evaluate.js'));
 
 (async () => {
     await initializeAdmin();
@@ -32,9 +33,22 @@ const { runPlatformHealthPass } = require(path.join(__dirname, '..', 'lib', 'sch
     console.log('newest heartbeat   :', report.newestHeartbeatAt ? new Date(report.newestHeartbeatAt).toISOString() : '(none)');
     console.log('newest age         :', report.newestAgeMin === null ? '(never)' : report.newestAgeMin + ' min');
     console.log('api 401            :', report.apiOk);
+    console.log('relay off (bot owns):', report.relayOff.length ? report.relayOff.join(', ') : '-');
+    console.log('uncovered          :', report.uncovered.length ? report.uncovered.join(', ') : '-');
     console.log('reasons            :', report.reasons.join(' | ') || '-');
     console.log('stale outlets      :', report.stale.length ? report.stale.map((s) => `${s.oid}(${s.ageMin}m,${s.status})`).join(', ') : '-');
     console.log('notify             :', report.notify ? JSON.stringify(report.notify) : 'none');
+    if (report.notify) {
+        const msg = healthMessage(report.notify.kind, {
+            newestAgeMin: report.newestAgeMin,
+            apiOk: report.apiOk,
+            relayOff: report.relayOff,
+            uncovered: report.uncovered,
+        });
+        console.log('\n--- the push the owner WOULD receive ---');
+        console.log('title :', msg.title);
+        console.log('body  :', msg.body);
+    }
     if (notification) console.log('notification       :', JSON.stringify(notification));
     console.log('mode               :', write ? 'WRITE' : 'dry run (nothing written, nothing pushed)');
     process.exit(0);

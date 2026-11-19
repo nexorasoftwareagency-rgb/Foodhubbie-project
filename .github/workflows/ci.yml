@@ -74,6 +74,16 @@ jobs:
       - name: Functions deploy-source guard (firebase.json points at the live tree)
         run: node tests/functions-source.check.cjs
 
+      - name: Install functions dependencies
+        working-directory: FIREBASE_SERVER_MIGRATION/functions
+        run: npm ci
+
+      - name: Platform health decision table + push copy (compiled module)
+        run: npm --prefix FIREBASE_SERVER_MIGRATION/functions run test:health
+
+      - name: Platform health guard (the verdict names its subject; the copy tells the truth)
+        run: node tests/platform-health.check.cjs
+
       - name: Order finalizer guard (socket-free, one finalization path)
         run: node tests/order-finalizer.check.cjs
 

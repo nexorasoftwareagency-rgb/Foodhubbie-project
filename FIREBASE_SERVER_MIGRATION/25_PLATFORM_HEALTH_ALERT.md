@@ -155,3 +155,66 @@ the code (all of it already standalone CJS except the three socket calls):
 
 No APP/webview order was stuck during this outage, so 23b can be done with the
 usual live-E2E discipline rather than as an emergency.
+
+## 8. 2026-11-19 — the false alarm, fixed (and the channel that never delivered)
+
+Two defects, both found by reading the **live** data instead of the code.
+
+### 8.1 The copy said the platform was down
+
+`evaluateHealth()` only ever knew two signals — `botStatus` heartbeats and
+`api.foodhubbie.in` answering 401 — and **both live on the WhatsApp socket
+host**. It called the result "the platform", and `bodyFor()` (which lived in
+the scheduled function, untested) rendered:
+
+> Bots, order finalization and API endpoints are offline.
+
+while order finalization, loyalty, pushes, media, onboarding, settlement and
+the wallet gate were all running on Cloud Functions. **This function executing
+IS the proof the cloud half is alive.** The push was a false alarm for 7 days.
+
+Fixed:
+
+| before | after |
+|---|---|
+| `state: 'healthy' \| 'degraded' \| 'down'` | `socket-healthy` / `socket-degraded` / `socket-down` / `capability-gap` |
+| copy in `platformHealth.ts` (untested) | copy in `shared/health/evaluate.ts` (pure, asserted by the self-check) |
+| "the platform is down" | "WhatsApp is down … ordering, payments, loyalty, stock, app notifications and the dashboard are unaffected" |
+| — | `capability-gap`: the socket is down **and** a relay flag is off, so the bot owned that capability and now nobody runs it (live `config`: all four flags `enabled:true`, so no gap today) |
+| — | `platformHealth/state.cloud = 'up'` — the cloud half, stated instead of implied |
+
+The copy now lives next to the pure decision table on purpose: the decision
+table was tested and the copy was not, and the copy is what the owner reads.
+
+### 8.2 The alert was never delivered
+
+`platformHealth/lastNotification` read `tokens: 0`. The owner's only
+super-admin token carried `fcmTokenInvalidAt` from a permanent FCM failure, and
+the target filter skipped any token stamped within the last **24 h**. One dead
+token therefore silenced the only outage channel for a day, and the stamp was
+never cleared when a later send succeeded.
+
+Fixed:
+
+* the dead-token stamp is now a **record, not a mute** — a token is attempted on
+  every alert (the push rate is ≤ 1/hour, so a dead token costs one rejected
+  push, while a muted channel costs the owner the outage);
+* a **successful** send clears the stamp, so the channel self-heals;
+* `Admin/js/fcm-init.js` clears its own stamp when it stores a token — a token
+  minted now is not the token that died;
+* the state node now records `alertAttempted` / `alertDelivered` / `alertError`,
+  so "the verdict is X" and "the owner was told" are two separate, visible
+  facts instead of one optimistic assumption.
+
+### 8.3 Guards
+
+* `FIREBASE_SERVER_MIGRATION/functions/scripts/health-selfcheck.cjs` — **39/39**
+  (the compiled decision table **and** the copy; the copy assertions are the
+  regression tripwire for the false claim).
+* `tests/platform-health.check.cjs` — **30/30** (`npm run test:platform-health`,
+  CI step): the state names its subject, the forbidden claim is absent from the
+  source, the dead token is not excluded, a success clears the stamp, the
+  dashboard clears its own stamp, delivery truth is written, the cheap-read
+  discipline holds, and the behavioural half runs against the compiled module
+  when the bundle is built (CI builds it).
+
