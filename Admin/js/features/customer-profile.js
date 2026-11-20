@@ -177,6 +177,7 @@ export async function openCustomerProfile(phone, opts = {}) {
             rewards: (customer && customer.rewards) || {},
             optOut: optOutSnap.exists(),
             base,
+            storeName: state.storeName,
             now: Date.now(),
         }, CALC);
         _profile.usageRows = myUsage;

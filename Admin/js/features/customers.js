@@ -20,6 +20,20 @@ function fmtMoney(n) {
     return '₹' + (v % 1 === 0 ? v.toLocaleString('en-IN') : v.toLocaleString('en-IN', { maximumFractionDigits: 1 }));
 }
 
+// Open the Customer Profile 360 for one phone. The feature module is loaded
+// on demand - a customer list that is only browsed never pays for it.
+async function _openProfile(phone) {
+    if (!phone) return;
+    try {
+        const mod = await import('./customer-profile.js');
+        mod.initCustomerProfile();
+        await mod.openCustomerProfile(phone, { orders: _orderSnapshot });
+    } catch (err) {
+        logger.warn('CUSTOMERS', 'open profile failed', err);
+        showToast('Could not open the customer profile.', 'error');
+    }
+}
+
 function _renderCustomerTable() {
     const tbody = document.getElementById('customerDataTableBody');
     const countEl = document.getElementById('custTableCount');
@@ -64,7 +78,12 @@ function _renderCustomerTable() {
         const tier = c.loyaltyTier || 'bronze';
         const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
         const tierColor = tier === 'gold' ? '#c5a005' : tier === 'silver' ? '#a8a8a8' : '#8a6d3b';
-        return `<tr>
+        // The WHOLE row opens the profile (only a customer with a usable
+        // phone can be opened - the profile is keyed by phone).
+        const rowProfile = phone.length === 10
+            ? ` data-cust-profile="${escapeHtml(phone)}" title="Open the full customer profile"`
+            : '';
+        return `<tr class="cp-row"${rowProfile}>
             <td>
                 <div class="mob-cust-name">
                     <span class="mob-cust-avatar">👤</span>
@@ -72,49 +91,55 @@ function _renderCustomerTable() {
                         <div class="mob-td-strong"><button type="button" class="btn-text mob-td-strong" data-cust-profile="${escapeHtml(phone)}" title="Open the full customer profile">${escapeHtml(c.name || 'Anonymous')}</button></div>
                         <div class="mob-td-sub">Joined: ${escapeHtml(c.joined || 'N/A')}</div>
                     </div>
+                    ${phone.length === 10 ? '<i data-lucide="chevron-right" class="mob-row-go" aria-hidden="true"></i>' : ''}
                 </div>
             </td>
             <td>${waLink}${phone.length === 10 ? `<div><button type="button" class="mob-reset-lock" data-reset-lock="${escapeHtml(phone)}" title="Use when the customer lost or changed their phone: the next phone to open the app with this number becomes the owner.">Reset phone lock</button></div>` : ''}</td>
             <td><span class="mob-addr-text" title="${escapeHtml(addrFull)}">${escapeHtml(addr)}</span>${mapLink}</td>
             <td class="mob-th-center"><span class="mob-order-count">${c.orderCount || 0}</span><div class="mob-td-sub">purchases</div></td>
-            <td class="mob-th-center"><span style="color:${tierColor};font-weight:700;text-transform:uppercase;font-size:11px;">${tierLabel}</span><div class="mob-td-sub">${fmtMoney(c.loyaltyPoints || 0)} pts</div></td>
             <td class="mob-th-right"><span class="mob-td-total">${fmtMoney(c.ltv || 0)}</span></td>
+            <td class="mob-th-center"><span style="color:${tierColor};font-weight:700;text-transform:uppercase;font-size:11px;">${tierLabel}</span><div class="mob-td-sub">${fmtMoney(c.loyaltyPoints || 0)} pts</div></td>
         </tr>`;
     }).join('');
 
     if (!tbody.dataset.lockWired) {
         tbody.dataset.lockWired = '1';
         tbody.addEventListener('click', async (e) => {
-            // Row name -> the full Customer Profile 360 drawer.
-            const profileBtn = e.target.closest('[data-cust-profile]');
-            if (profileBtn) {
-                e.preventDefault();
-                const ph = profileBtn.dataset.custProfile;
-                if (!ph) return;
+            // 1. Links do their own thing (WhatsApp, MAP) - never open the profile.
+            if (e.target.closest('a')) return;
+
+            // 2. "Reset phone lock" is its own action.
+            const resetBtn = e.target.closest('[data-reset-lock]');
+            if (resetBtn) {
+                const ph = resetBtn.dataset.resetLock;
+                if (!window.confirm(`Reset the phone lock for ${ph}?\n\nThe customer's phone(s) will be forgotten. The NEXT phone that opens the app with this number becomes the owner, so only do this when the customer asks (lost or new phone).`)) return;
+                resetBtn.disabled = true;
                 try {
-                    const mod = await import('./customer-profile.js');
-                    mod.initCustomerProfile();
-                    await mod.openCustomerProfile(ph, { orders: _orderSnapshot });
+                    await remove(Outlet.ref(`customers/${ph}/devices`));
+                    await remove(Outlet.ref(`customers/${ph}/link`));
+                    showToast('Phone lock reset. Ask the customer to open the app now.', 'success');
                 } catch (err) {
-                    logger.warn('CUSTOMERS', 'open profile failed', err);
-                    showToast('Could not open the customer profile.', 'error');
+                    logger.warn('CUSTOMERS', 'reset lock failed', err);
+                    showToast('Could not reset the lock.', 'error');
                 }
+                resetBtn.disabled = false;
                 return;
             }
-            const btn = e.target.closest('[data-reset-lock]');
-            if (!btn) return;
-            const ph = btn.dataset.resetLock;
-            if (!window.confirm(`Reset the phone lock for ${ph}?\n\nThe customer's phone(s) will be forgotten. The NEXT phone that opens the app with this number becomes the owner, so only do this when the customer asks (lost or new phone).`)) return;
-            btn.disabled = true;
-            try {
-                await remove(Outlet.ref(`customers/${ph}/devices`));
-                await remove(Outlet.ref(`customers/${ph}/link`));
-                showToast('Phone lock reset. Ask the customer to open the app now.', 'success');
-            } catch (err) {
-                logger.warn('CUSTOMERS', 'reset lock failed', err);
-                showToast('Could not reset the lock.', 'error');
-            }
-            btn.disabled = false;
+
+            // 3. The customer NAME button or ANYWHERE in the row -> the profile.
+            //    A control that is NOT the profile target (a future button in the
+            //    row) keeps its own click.
+            const clicked = e.target.closest('a, button, input, select, textarea, label');
+            const target = e.target.closest('[data-cust-profile]');
+            if (!target || (clicked && clicked !== target)) return;
+            const ph = target.dataset.custProfile;
+            if (!ph) return;
+
+            // A drag that selected text is not a click.
+            const sel = window.getSelection ? String(window.getSelection() || '') : '';
+            if (sel.trim()) return;
+
+            await _openProfile(ph);
         });
     }
 

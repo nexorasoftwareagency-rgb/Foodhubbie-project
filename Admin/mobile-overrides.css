@@ -2624,6 +2624,17 @@
     gap: 4px;
 }
 #tab-customers .mob-wa-link:hover { text-decoration: underline; }
+/* The whole customer row opens the Customer Profile 360. */
+#tab-customers .mob-data-table tbody tr.cp-row { cursor: pointer; }
+#tab-customers .mob-data-table tbody tr.cp-row:hover .mob-row-go { color: var(--mob-blue); }
+#tab-customers .mob-row-go {
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    color: #aab4c0;
+    flex-shrink: 0;
+    transition: color .12s ease;
+}
 #tab-customers .mob-map-link {
     color: var(--mob-blue);
     font-size: 10px;

@@ -618,6 +618,7 @@ export function buildProfile(input, calc) {
         rewards = {},
         optOut = false,
         base = null,
+        storeName = '',
         now = Date.now(),
     } = input || {};
 
@@ -687,6 +688,7 @@ export function buildProfile(input, calc) {
     return {
         phone,
         name,
+        storeName: String(storeName || '').trim(),
         calc,
         customer: c,
         app,
@@ -749,21 +751,93 @@ function scoreDots(score) {
     return `<span class="cp-dots" aria-hidden="true">${out}</span>`;
 }
 
+/**
+ * The ONE thing the restaurant should do with this guest right now.
+ *
+ * Pure: the same profile always gives the same recommendation. The WhatsApp
+ * message is a plain SERVICE message - it never promises a discount the
+ * outlet has not approved, and it is only a draft the staff can edit before
+ * sending.
+ */
+export function nextBestAction(p) {
+    const r = p.rfm || {};
+    const seg = RFM_SEGMENTS[r.segment] || RFM_SEGMENTS.new;
+    const first = String(p.name || '').trim().split(/\s+/)[0] || 'there';
+    const store = String(p.storeName || '').trim() || 'our restaurant';
+    const days = r.daysInactive;
+    const gap = r.expectedGapDays;
+    const paid = p.lifetime ? p.lifetime.paidCount : 0;
+    const ordersWord = paid === 1 ? 'order' : 'orders';
+
+    let title; let sub; let msg;
+    switch (r.segment) {
+        case 'lapsed':
+            title = `No visit in ${num(days)} days`;
+            sub = `They used to visit every ~${num(gap)} days. A personal message brings most lapsed guests back.`;
+            msg = `Hi ${first}, it's been a while - we'd love to welcome you back to ${store}. What can we get you today?`;
+            break;
+        case 'at-risk':
+            title = `Going quiet - ${num(days)} days since the last visit`;
+            sub = `They usually visit every ~${num(gap)} days. Reach out before they lapse.`;
+            msg = `Hi ${first}, we miss you at ${store}! What would you like to order today?`;
+            break;
+        case 'attention':
+            title = 'Visits have slowed down';
+            sub = `Last visit ${num(days)} days ago. A check-in usually brings the rhythm back.`;
+            msg = `Hi ${first}, we miss you at ${store}! What would you like to order today?`;
+            break;
+        case 'dormant':
+            title = `Long since the last visit (${num(days)} days)`;
+            sub = 'This guest has not ordered in a long time - worth one personal message.';
+            msg = `Hi ${first}, it's been a while - we'd love to welcome you back to ${store}. What can we get you today?`;
+            break;
+        case 'champion':
+            title = 'Your best guest - keep them close';
+            sub = `${num(paid)} paid ${ordersWord}${p.loyalty.rank ? ` and rank #${num(p.loyalty.rank)} in the outlet` : ''}. Say thanks before they drift.`;
+            msg = `Hi ${first}, great to see you again! Thank you for being our regular - what can we get you today?`;
+            break;
+        case 'loyal':
+            title = 'Coming back regularly';
+            sub = `Last visit ${num(days)} days ago. Keep the rhythm going with a personal message.`;
+            msg = `Hi ${first}, great to see you again! What can we get you today?`;
+            break;
+        case 'potential':
+        case 'promising':
+            title = 'Just getting started';
+            sub = `Only ${num(paid)} paid ${ordersWord} so far - the second visit is what makes a regular.`;
+            msg = `Hi ${first}, thanks for trying ${store}! We'd love to see you again - what would you like next?`;
+            break;
+        default:
+            title = 'No paid orders yet';
+            sub = 'Nothing has been paid on this profile - check the Orders tab for what happened.';
+            msg = `Hi ${first}, thanks for ordering from ${store}!`;
+            break;
+    }
+    return { tone: seg.tone, segment: seg.label, kicker: 'Recommended next step', title, sub, msg };
+}
+
 export function renderHead(p) {
     const initials = (p.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
     const tierTone = p.loyalty.tier === 'gold' ? 'gold' : p.loyalty.tier === 'silver' ? 'silver' : 'bronze';
     const phoneDigits = p.phone || '';
-    const wa = phoneDigits ? `https://wa.me/91${phoneDigits}` : '';
     const memberSince = toTs(p.customer.registeredAt) || toTs(p.app && p.app.registeredAt);
+    const seg = RFM_SEGMENTS[p.rfm.segment] || RFM_SEGMENTS.new;
+    const action = nextBestAction(p);
+    const waMsg = phoneDigits ? `https://wa.me/91${phoneDigits}?text=${encodeURIComponent(action.msg)}` : '';
+    const consentNote = p.consent.state === 'opted-in'
+        ? 'This guest accepts promotional messages.'
+        : 'Promotional messages are blocked for this guest - the button opens a plain service message, not an offer.';
     return `
     <div class="cp-head-main">
         <div class="cp-avatar" aria-hidden="true">${esc(initials)}</div>
         <div class="cp-head-id">
+            <p class="cp-eyebrow">Customer Profile</p>
             <h2 class="cp-name" id="custProfName">${esc(p.name)}</h2>
             <div class="cp-sub">
                 <span class="cp-phone">${esc(fmtPhone(phoneDigits))}</span>
                 ${chip(p.loyalty.tierLabel, tierTone)}
                 ${p.lifetime.paidCount ? chip(`${num(p.lifetime.paidCount)} paid orders`, 'neutral') : ''}
+                ${chip(seg.label, seg.tone)}
             </div>
             <div class="cp-sub cp-sub-dim">
                 ${memberSince ? `Customer since ${esc(fmtDate(memberSince))}` : 'Join date unknown'}
@@ -772,10 +846,21 @@ export function renderHead(p) {
         </div>
     </div>
     <div class="cp-head-actions">
-        ${wa ? `<a class="cp-act" href="${esc(wa)}" target="_blank" rel="noopener"><i data-lucide="message-circle"></i><span>WhatsApp</span></a>` : ''}
-        ${phoneDigits ? `<a class="cp-act" href="tel:+91${esc(phoneDigits)}"><i data-lucide="phone"></i><span>Call</span></a>` : ''}
         <button type="button" class="cp-act" data-cp="copy-phone"><i data-lucide="copy"></i><span>Copy</span></button>
-    </div>`;
+    </div>
+    <section class="cp-cta cp-cta-${esc(action.tone)}">
+        <div class="cp-cta-copy">
+            <p class="cp-cta-kicker">${esc(action.kicker)}</p>
+            <h3 class="cp-cta-title">${esc(action.title)}</h3>
+            <p class="cp-cta-sub">${esc(action.sub)}</p>
+        </div>
+        <div class="cp-cta-actions">
+            ${waMsg ? `<a class="cp-cta-btn cp-cta-primary" href="${esc(waMsg)}" target="_blank" rel="noopener"><i data-lucide="message-circle"></i><span>Message on WhatsApp</span></a>` : ''}
+            ${phoneDigits ? `<a class="cp-cta-btn" href="tel:+91${esc(phoneDigits)}"><i data-lucide="phone"></i><span>Call</span></a>` : ''}
+            <button type="button" class="cp-cta-btn" data-cp-tab="notes"><i data-lucide="clipboard-list"></i><span>Add a note</span></button>
+        </div>
+        <p class="cp-cta-note">${esc(consentNote)}</p>
+    </section>`;
 }
 
 export function renderTabs(active) {
@@ -1087,6 +1172,24 @@ export const CUSTOMER_PROFILE_CSS = `
 .cp-act{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:12px;border:1px solid rgba(20,26,34,.12);background:#fff;color:#2b3442;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;min-height:40px;}
 .cp-act:hover{border-color:#e84908;color:#e84908;}
 .cp-act svg{width:15px;height:15px;}
+.cp-eyebrow{margin:0 0 3px;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#e84908;}
+.cp-cta{flex:1 1 100%;display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:4px;padding:13px 15px;border-radius:14px;border:1px solid rgba(20,26,34,.1);background:#fbfcfe;border-left:4px solid #c9d1dc;}
+.cp-cta-copy{min-width:0;flex:1 1 260px;}
+.cp-cta-kicker{margin:0;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8a95a3;}
+.cp-cta-title{margin:2px 0 0;font-size:15.5px;font-weight:700;color:#141a22;line-height:1.3;overflow-wrap:anywhere;}
+.cp-cta-sub{margin:3px 0 0;font-size:12.5px;color:#5b6675;line-height:1.45;}
+.cp-cta-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.cp-cta-btn{display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:12px;border:1px solid rgba(20,26,34,.14);background:#fff;color:#2b3442;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;min-height:42px;}
+.cp-cta-btn:hover{border-color:#e84908;color:#e84908;}
+.cp-cta-btn svg{width:16px;height:16px;}
+.cp-cta-primary{background:linear-gradient(135deg,#e84908,#c33f06);border-color:transparent;color:#fff;box-shadow:0 4px 12px rgba(232,73,8,.22);}
+.cp-cta-primary:hover{color:#fff;filter:brightness(1.05);border-color:transparent;}
+.cp-cta-note{flex:1 1 100%;margin:0;font-size:11.5px;color:#8a95a3;}
+.cp-cta-ok{border-left-color:#16a34a;background:#f2fbf5;}
+.cp-cta-good{border-left-color:#2f8f4e;background:#f4fbf6;}
+.cp-cta-warn{border-left-color:#d97706;background:#fffaf0;}
+.cp-cta-bad{border-left-color:#dc2626;background:#fff6f5;}
+.cp-cta-neutral{border-left-color:#94a3b8;background:#f8fafc;}
 .cp-tabs{display:flex;gap:4px;padding:10px 22px;background:rgba(255,255,255,.82);border-bottom:1px solid rgba(20,26,34,.08);overflow-x:auto;scrollbar-width:none;}
 .cp-tabs::-webkit-scrollbar{display:none;}
 .cp-tab{flex:none;padding:9px 15px;border-radius:12px;border:0;background:transparent;color:#4e5968;font-size:13.5px;font-weight:600;cursor:pointer;min-height:40px;}
@@ -1221,6 +1324,8 @@ export const CUSTOMER_PROFILE_CSS = `
 @media (max-width:900px){
   .cp-kpis{grid-template-columns:repeat(3,minmax(0,1fr));}
   .cp-grid{grid-template-columns:minmax(0,1fr);}
+  .cp-cta{gap:10px;padding:12px 13px;}
+  .cp-cta-actions{width:100%;}
 }
 @media (max-width:560px){
   .cp-head{padding:14px 54px 12px 14px;gap:10px;}
@@ -1234,6 +1339,9 @@ export const CUSTOMER_PROFILE_CSS = `
   .cp-score-note{text-align:left;}
   .cp-head-actions{width:100%;}
   .cp-act{flex:1 1 auto;justify-content:center;}
+  .cp-cta-title{font-size:14.5px;}
+  .cp-cta-actions{gap:7px;}
+  .cp-cta-btn{flex:1 1 100%;justify-content:center;padding:11px 12px;}
   .cp-act span{display:none;}
   .cp-act svg{width:17px;height:17px;}
   .cp-list li{grid-template-columns:auto 1fr auto;}

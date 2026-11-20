@@ -35,11 +35,44 @@ async function gotoCustomers() {
 try {
     // ---------------------------------------------------------- open a profile
     await gotoCustomers();
-    const rowCount = await page.locator('#customerDataTableBody [data-cust-profile]').count();
-    assert.ok(rowCount > 0, 'the demo tenant has customers');
+    const rowCount = await page.locator('#customerDataTableBody tr.cp-row').count();
+    assert.ok(rowCount > 0, 'the demo tenant has customer rows');
     ok('Customers tab rendered ' + rowCount + ' customers');
 
-    const firstName = page.locator('#customerDataTableBody [data-cust-profile]').first();
+    // The header and the cells must line up.
+    const cols = await page.evaluate(() => {
+        const heads = [...document.querySelectorAll('#customerDataTable thead th')].map((th) => th.textContent.trim());
+        const row = document.querySelector('#customerDataTableBody tr.cp-row');
+        const cells = row ? [...row.querySelectorAll('td')].map((td) => td.innerText.replace(/\s+/g, ' ').trim()) : [];
+        return { heads, cells };
+    });
+    assert.equal(cols.heads.length, cols.cells.length, 'the header and the row have the same number of columns');
+    const valueIdx = cols.heads.findIndex((h) => /Value/.test(h));
+    const loyIdx = cols.heads.findIndex((h) => /Loyalty/.test(h));
+    assert.ok(/^₹/.test(cols.cells[valueIdx] || ''), 'the Value column shows the rupee total: ' + cols.cells[valueIdx]);
+    assert.ok(/pts|bronze|silver|gold/i.test(cols.cells[loyIdx] || ''), 'the Loyalty column shows the tier and points: ' + cols.cells[loyIdx]);
+    ok('the table columns match their headers (Value under Value, points under Loyalty)');
+
+    // A LINK inside the row must keep its own click (no profile).
+    await page.evaluate(() => {
+        const a = document.querySelector('#customerDataTableBody tr.cp-row a');
+        if (a) { a.dataset.testHref = a.getAttribute('href') || ''; a.removeAttribute('href'); }
+    });
+    await page.locator('#customerDataTableBody tr.cp-row a').first().click();
+    await page.waitForTimeout(700);
+    assert.equal(await page.locator('#customerProfileDrawer.active').count(), 0, 'a link inside the row must not open the profile');
+    ok('a link inside the row keeps its own click (the profile stays closed)');
+
+    // The WHOLE row opens the profile: click the ORDERS cell (no link inside).
+    await page.locator('#customerDataTableBody tr.cp-row td:nth-child(4)').first().click();
+    await page.waitForSelector('#customerProfileDrawer.active', { timeout: 30000 });
+    await page.waitForSelector('#customerProfileBody .cp-kpis', { timeout: 30000 });
+    ok('clicking anywhere in the row opens the customer profile');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator('#customerProfileDrawer.active').count(), 0, 'Escape closed it again');
+
+    const firstName = page.locator('#customerDataTableBody button[data-cust-profile]').first();
     const phone = await firstName.getAttribute('data-cust-profile');
     assert.ok(/^\d{10}$/.test(phone || ''), 'the row carries a 10-digit phone: ' + phone);
     await firstName.click();
@@ -57,11 +90,35 @@ try {
     assert.ok(/Paid orders/.test(kpiText) && /Lifetime spend/.test(kpiText), 'the KPI labels are there');
     ok('header + KPI strip: ' + name + ' / ' + kpis + ' KPIs');
 
+    // -------------------------------------------------------- the heading + CTA
+    // The eyebrow is uppercased by CSS, so compare case-insensitively.
+    const eyebrow = (await page.locator('#customerProfileHead .cp-eyebrow').innerText()).trim();
+    assert.equal(eyebrow.toLowerCase(), 'customer profile', 'the profile has a heading');
+    const ctaKicker = (await page.locator('#customerProfileHead .cp-cta-kicker').innerText()).trim();
+    const ctaTitle = (await page.locator('#customerProfileHead .cp-cta-title').innerText()).trim();
+    assert.ok(ctaKicker.length > 0 && ctaTitle.length > 0, 'the CTA has a kicker and a title');
+    const waHref = await page.locator('#customerProfileHead .cp-cta-primary').getAttribute('href');
+    assert.ok(/^https:\/\/wa\.me\/91\d{10}\?text=/.test(waHref || ''), 'the primary CTA opens WhatsApp with a draft: ' + waHref);
+    const ctaBtns = (await page.locator('#customerProfileHead .cp-cta-btn').allInnerTexts()).join(' ');
+    assert.ok(ctaBtns.includes('Message on WhatsApp'), 'the WhatsApp CTA is labelled');
+    assert.ok(ctaBtns.includes('Add a note'), 'the notes jump is labelled');
+    const draft = decodeURIComponent((waHref || '').split('?text=')[1] || '');
+    assert.ok(draft.length > 10 && !/%/.test(draft), 'the WhatsApp draft is readable: ' + draft);
+    ok('the profile has a heading + a primary CTA (draft: "' + draft.slice(0, 58) + '...")');
+
+    // "Add a note" jumps to the Notes tab.
+    await page.click('#customerProfileHead [data-cp-tab="notes"]');
+    await page.waitForTimeout(350);
+    assert.equal(await page.locator('#customerProfileTabs [data-cp-tab="notes"]').getAttribute('aria-selected'), 'true', 'the CTA switched to the Notes tab');
+    await page.click('#customerProfileTabs [data-cp-tab="overview"]');
+    await page.waitForTimeout(250);
+    ok('the CTA can jump straight to the Notes tab');
+
     // --------------------------------------------------------------- the tabs
     const tabLabels = await page.locator('#customerProfileTabs [data-cp-tab]').allInnerTexts();
     assert.deepEqual(tabLabels.map((t) => t.trim()), ['Overview', 'Orders', 'Loyalty', 'Discounts', 'Notes']);
     for (const tab of ['overview', 'orders', 'loyalty', 'discounts', 'notes']) {
-        await page.click(`[data-cp-tab="${tab}"]`);
+        await page.click(`#customerProfileTabs [data-cp-tab="${tab}"]`);
         await page.waitForTimeout(220);
         const bodyLen = (await page.locator('#customerProfileBody').innerHTML()).length;
         assert.ok(bodyLen > 200, 'tab ' + tab + ' rendered something');
@@ -69,7 +126,7 @@ try {
     ok('all five tabs render');
 
     // The Overview must carry the deeper insights, not just the KPIs.
-    await page.click('[data-cp-tab="overview"]');
+    await page.click('#customerProfileTabs [data-cp-tab="overview"]');
     await page.waitForTimeout(220);
     const overview = await page.locator('#customerProfileBody').innerText();
     for (const needle of ['Segment & churn', 'Where they order', 'Favourites', 'Visit rhythm', 'Marketing consent', 'Details on file']) {
@@ -79,7 +136,7 @@ try {
     ok('the overview carries the derived insight cards');
 
     // ------------------------------------------------------- orders + the link
-    await page.click('[data-cp-tab="orders"]');
+    await page.click('#customerProfileTabs [data-cp-tab="orders"]');
     await page.waitForTimeout(220);
     const orderButtons = await page.locator('#customerProfileBody [data-cp-order]').count();
     const ordersText = await page.locator('#customerProfileBody').innerText();
@@ -87,7 +144,7 @@ try {
     ok('orders tab: ' + orderButtons + ' orders listed');
 
     // -------------------------------------------------------- notes + tags
-    await page.click('[data-cp-tab="notes"]');
+    await page.click('#customerProfileTabs [data-cp-tab="notes"]');
     await page.waitForTimeout(220);
     await page.fill('#cpNoteText', 'E2E note — allergic to peanuts');
     await page.click('[data-cp-note-form] button[type="submit"]');
@@ -150,7 +207,7 @@ try {
     await page.waitForTimeout(250);
 
     // ------------------------------------------- an order hands over to Orders
-    await page.click('[data-cp-tab="orders"]');
+    await page.click('#customerProfileTabs [data-cp-tab="orders"]');
     await page.waitForTimeout(400);
     await page.locator('#customerProfileBody [data-cp-order]').first().click();
     await page.waitForTimeout(1800);
@@ -164,7 +221,7 @@ try {
 
     // --------------------------------------------------------- close + errors
     // Reopen the profile and close it with Escape.
-    await page.locator('#customerDataTableBody [data-cust-profile]').first().click();
+    await page.locator('#customerDataTableBody button[data-cust-profile]').first().click();
     await page.waitForSelector('#customerProfileDrawer.active', { timeout: 30000 });
     await page.waitForTimeout(500);
     await page.keyboard.press('Escape');

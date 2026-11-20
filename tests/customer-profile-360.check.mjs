@@ -361,6 +361,60 @@ function series(count, gapDays, total = 200, endDaysAgo = 2, base = {}) {
     ok('order rows escape item names');
 }
 
+// --------------------------------------------------------- 11b. the heading + CTA
+
+{
+    const p = V.buildProfile({
+        phone: '9000000201',
+        customer: { name: 'Aarav Sharma' },
+        storeName: 'Roshani Pizza',
+        orders: [order({ createdAt: NOW - DAY, phone: '9000000201' })],
+        now: NOW,
+    }, calc);
+    const action = V.nextBestAction(p);
+    assert.ok(action.title && action.sub && action.msg, 'the action carries a title, a reason and a draft message');
+    assert.ok(action.msg.includes('Aarav'), 'the draft message greets the guest by name');
+    assert.ok(action.msg.includes('Roshani Pizza'), 'the draft message names the store');
+    assert.ok(!/%|off|discount|coupon/i.test(action.msg), 'the draft message never promises a discount: ' + action.msg);
+    const head = V.renderHead(p);
+    assert.ok(head.includes('Customer Profile'), 'the profile has a heading');
+    assert.ok(head.includes('cp-eyebrow'), 'the heading is rendered as an eyebrow');
+    assert.ok(head.includes('Recommended next step'), 'the CTA has a kicker');
+    assert.ok(/wa\.me\/919000000201\?text=/.test(head), 'the CTA opens WhatsApp with a draft message');
+    assert.ok(head.includes('cp-cta-primary'), 'the WhatsApp button is the primary CTA');
+    assert.ok(head.includes('data-cp-tab="notes"'), 'the CTA can jump to the notes');
+    assert.ok(/Promotional messages are blocked/.test(head), 'the CTA is honest about the consent state');
+    ok('the profile has a heading and a working primary CTA (WhatsApp draft + notes jump)');
+}
+{
+    // A lapsed regular gets a win-back action, not a generic one.
+    const p = V.buildProfile({
+        phone: '9000000201',
+        customer: { name: 'Aarav Sharma' },
+        orders: series(12, 7, 200, 120).map((o) => ({ ...o, phone: '9000000201' })),
+        now: NOW,
+    }, calc);
+    const action = V.nextBestAction(p);
+    assert.equal(p.rfm.segment, 'lapsed');
+    assert.ok(/No visit in/.test(action.title), 'a lapsed guest gets a win-back action: ' + action.title);
+    assert.equal(action.tone, 'bad');
+    ok('the recommended action follows the RFM segment (lapsed -> win them back)');
+}
+{
+    // A hostile store name must never reach the markup raw.
+    const p = V.buildProfile({
+        phone: '9000000201',
+        customer: { name: '<img src=x onerror=alert(1)>' },
+        storeName: '<img src=x onerror=alert(1)>',
+        orders: [],
+        now: NOW,
+    }, calc);
+    const head = V.renderHead(p);
+    assert.ok(!head.includes('<img'), 'no raw tag in the header');
+    assert.ok(head.includes('%3Cimg'), 'the draft message is URL-encoded');
+    ok('the CTA escapes hostile names');
+}
+
 // -------------------------------------------------------- 12. source guards
 
 {
@@ -401,6 +455,31 @@ function series(count, gapDays, total = 200, endDaysAgo = 2, base = {}) {
     ok('Customers table opens the profile and matches orders the same way');
 }
 {
+    // The WHOLE row opens the profile; the controls inside it keep their own click.
+    const cust = readFileSync(CUST_FILE, 'utf8');
+    assert.ok(/<tr class="cp-row"\$\{rowProfile\}>/.test(cust), 'the whole row carries the profile target');
+    assert.ok(cust.includes("if (e.target.closest('a')) return;"), 'a link inside the row keeps its own click');
+    assert.ok(cust.includes("e.target.closest('[data-reset-lock]')"), 'the reset-lock button keeps its own click');
+    assert.ok(cust.includes("e.target.closest('[data-cust-profile]')"), 'the row opens the profile');
+    assert.ok(cust.includes('window.getSelection'), 'a text selection is not treated as a click');
+    ok('the whole customer row opens the profile; links and other controls keep their own click');
+}
+{
+    // The table header and the row cells must agree on the column order.
+    const html = readFileSync(HTML_FILE, 'utf8');
+    const headBlock = html.slice(html.indexOf('id="customerDataTable"'), html.indexOf('id="customerDataTableBody"'));
+    const cols = [...headBlock.matchAll(/data-sort="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(cols, ['name', 'displayPhone', 'address', 'orderCount', 'ltv', 'loyaltyPoints'], 'the header columns: ' + cols);
+    const cust = readFileSync(CUST_FILE, 'utf8');
+    const rowStart = cust.indexOf('return `<tr class="cp-row"');
+    const rowEnd = cust.indexOf('</tr>`', rowStart);
+    assert.ok(rowStart > 0 && rowEnd > rowStart, 'the row template was found');
+    const row = cust.slice(rowStart, rowEnd);
+    assert.ok(row.indexOf('mob-td-total') > -1, 'the row renders the value cell');
+    assert.ok(row.indexOf('mob-td-total') < row.indexOf('loyaltyPoints'), 'the value cell sits under the Value column');
+    ok('the Customers table columns match their headers (Value before Loyalty)');
+}
+{
     const html = readFileSync(HTML_FILE, 'utf8');
     for (const id of ['customerProfileRoot', 'customerProfileOverlay', 'customerProfileDrawer', 'customerProfileHead', 'customerProfileTabs', 'customerProfileBody', 'customerProfileClose']) {
         assert.ok(html.includes(`id="${id}"`), 'index.html must contain #' + id);
@@ -410,10 +489,23 @@ function series(count, gapDays, total = 200, endDaysAgo = 2, base = {}) {
 }
 {
     const sw = readFileSync(SW_FILE, 'utf8');
-    assert.ok(/const CACHE_NAME = 'foodhubbie-erp-shell-v5\.12\.(?!68)\d+'/.test(sw), 'the shell cache must be bumped');
+    assert.ok(/const CACHE_NAME = 'foodhubbie-erp-shell-v5\.12\.(?!6[89])\d+'/.test(sw), 'the shell cache must be bumped');
     assert.ok(sw.includes('./js/features/customer-profile.js'), 'SW precaches the controller');
     assert.ok(sw.includes('./js/features/customer-profile-view.js'), 'SW precaches the view layer');
     ok('service worker precaches both new modules under a bumped shell');
+}
+{
+    // The row affordance lives in the Customers table stylesheet, and the
+    // index.html and the SW precache must ask for the SAME version of it.
+    const css = readFileSync(join(root, 'Admin/mobile-overrides.css'), 'utf8');
+    assert.ok(/tr\.cp-row\s*\{\s*cursor:\s*pointer/.test(css), 'the row shows a pointer cursor');
+    assert.ok(css.includes('.mob-row-go'), 'the row carries a chevron');
+    const html = readFileSync(HTML_FILE, 'utf8');
+    const sw = readFileSync(SW_FILE, 'utf8');
+    const vHtml = (html.match(/mobile-overrides\.css\?v=([0-9.]+)/) || [])[1];
+    const vSw = (sw.match(/mobile-overrides\.css\?v=([0-9.]+)/) || [])[1];
+    assert.ok(vHtml && vHtml === vSw, 'index.html and the SW precache use the same CSS version: ' + vHtml + ' vs ' + vSw);
+    ok('the row affordance is styled and the CSS version matches the SW precache');
 }
 {
     // The staff notes must stay PRIVATE to the dashboard: they live under the
