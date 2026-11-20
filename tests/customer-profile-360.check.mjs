@@ -27,6 +27,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VIEW_FILE = process.env.PROFILE_VIEW_FILE || join(root, 'Admin/js/features/customer-profile-view.js');
 const CTRL_FILE = process.env.PROFILE_CTRL_FILE || join(root, 'Admin/js/features/customer-profile.js');
 const CUST_FILE = join(root, 'Admin/js/features/customers.js');
+// The Customers table MARKUP moved into its own pure view layer (the
+// Customer Database rework) - the invariants below follow it there.
+const CUST_VIEW_FILE = process.env.CUST_VIEW_FILE || join(root, 'Admin/js/features/customers-view.js');
 const HTML_FILE = join(root, 'Admin/index.html');
 const SW_FILE = join(root, 'Admin/sw.js');
 
@@ -449,15 +452,20 @@ function series(count, gapDays, total = 200, endDaysAgo = 2, base = {}) {
 }
 {
     const cust = readFileSync(CUST_FILE, 'utf8');
-    assert.ok(cust.includes('data-cust-profile'), 'the Customers table must link to the profile');
     assert.ok(cust.includes("import('./customer-profile.js')"), 'the profile module is loaded on demand');
-    assert.ok(cust.includes('normalizePhone(o.customerPhone || o.phone)'), 'the table and the profile must match orders the same way');
-    ok('Customers table opens the profile and matches orders the same way');
+    ok('Customers table opens the profile');
+}
+{
+    // The phone match and the row markup live in the Customers view layer.
+    const custView = readFileSync(CUST_VIEW_FILE, 'utf8');
+    assert.ok(custView.includes('customerPhone || o.phone'), 'the table and the profile must match orders the same way');
+    assert.ok(/<tr class="cp-row"\$\{rowProfile\}>/.test(custView), 'the whole row carries the profile target');
+    assert.ok(custView.includes('data-cust-profile'), 'the row opens the profile');
+    ok('the Customers table matches orders the same way as the profile');
 }
 {
     // The WHOLE row opens the profile; the controls inside it keep their own click.
     const cust = readFileSync(CUST_FILE, 'utf8');
-    assert.ok(/<tr class="cp-row"\$\{rowProfile\}>/.test(cust), 'the whole row carries the profile target');
     assert.ok(cust.includes("if (e.target.closest('a')) return;"), 'a link inside the row keeps its own click');
     assert.ok(cust.includes("e.target.closest('[data-reset-lock]')"), 'the reset-lock button keeps its own click');
     assert.ok(cust.includes("e.target.closest('[data-cust-profile]')"), 'the row opens the profile');
@@ -481,17 +489,19 @@ function series(count, gapDays, total = 200, endDaysAgo = 2, base = {}) {
 }
 {
     // The table header and the row cells must agree on the column order.
+    // (The Customer Database rework widened the table to 9 columns.)
     const html = readFileSync(HTML_FILE, 'utf8');
     const headBlock = html.slice(html.indexOf('id="customerDataTable"'), html.indexOf('id="customerDataTableBody"'));
     const cols = [...headBlock.matchAll(/data-sort="([^"]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(cols, ['name', 'displayPhone', 'address', 'orderCount', 'ltv', 'loyaltyPoints'], 'the header columns: ' + cols);
-    const cust = readFileSync(CUST_FILE, 'utf8');
-    const rowStart = cust.indexOf('return `<tr class="cp-row"');
-    const rowEnd = cust.indexOf('</tr>`', rowStart);
+    assert.deepEqual(cols, ['name', 'displayPhone', 'address', 'lastVisit', 'orderCount', 'ltv', 'loyaltyPoints', 'segment'], 'the header columns: ' + cols);
+    const custView = readFileSync(CUST_VIEW_FILE, 'utf8');
+    const rowStart = custView.indexOf('return `<tr class="cp-row"');
+    const rowEnd = custView.indexOf('</tr>`', rowStart);
     assert.ok(rowStart > 0 && rowEnd > rowStart, 'the row template was found');
-    const row = cust.slice(rowStart, rowEnd);
+    const row = custView.slice(rowStart, rowEnd);
     assert.ok(row.indexOf('mob-td-total') > -1, 'the row renders the value cell');
-    assert.ok(row.indexOf('mob-td-total') < row.indexOf('loyaltyPoints'), 'the value cell sits under the Value column');
+    assert.ok(row.indexOf('mob-td-total') < row.indexOf('cust-col-loyalty'), 'the value cell sits under the Value column');
+    assert.ok(row.indexOf('cust-col-loyalty') < row.indexOf('cust-col-segment'), 'the loyalty cell sits under the Loyalty column');
     ok('the Customers table columns match their headers (Value before Loyalty)');
 }
 {

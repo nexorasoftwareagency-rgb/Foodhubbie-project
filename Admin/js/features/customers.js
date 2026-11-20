@@ -1,19 +1,60 @@
+// ============================================================================
+// CUSTOMER DATABASE — CONTROLLER
+//
+// Owns the Customers tab: downloads the rows ONCE (the Customer Profile and
+// the exports reuse the same snapshot), hands them to the pure view layer and
+// wires the events.
+//
+// Data sources (all admin-readable, all outlet-scoped):
+//   customers               the master list of guests
+//   orders                  the order history (paid basis is applied in the view)
+//   loyalty/rankings        tier + rank
+//   loyalty/config          tier thresholds, so the tier matches the profile
+//   bot/promotions/optout   STOP opt-out markers (marketing consent)
+// ============================================================================
+
 import { Outlet, get, remove } from '../firebase.js';
-import { escapeHtml, showToast } from '../utils.js';
+import { showToast } from '../utils.js';
 import { logger } from '../utils/logger.js';
+import { state } from '../state.js';
 import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
 import { ensureXlsx } from '../xlsx.js';
-// Pure helper (no Firebase, no DOM): the same phone normalisation the
-// Customer Profile uses, so both pages count the same orders.
-import { normalizePhone } from './customer-profile-view.js';
+// The shared helpers are INJECTED into the pure layer — never copied.
+import { isBilledOrder } from '../../shared/cost-math.js';
+import { tierForPoints } from '../../shared/loyalty-math.js';
+import {
+    buildCustomerRows, filterRows, sortRows, computeKpiTiles, computeChipCounts,
+    renderKpis, renderFilters, renderRow, renderEmpty, renderPager,
+    renderSkeleton, SEGMENT_CHIPS, AUDIENCE_CHIPS, CUSTOMER_DASHBOARD_CSS,
+} from './customers-view.js';
 
-let _customerData = [];
+const CALC = { isBilledOrder, tierForPoints };
+const PAGE_SIZE = 50;
+const DENSITY_KEY = 'fh:custDensity';
+
+let _rows = [];
+let _thresholds = {};
 let _filteredData = [];
 let _sortField = 'ltv', _sortDir = 'desc';
 let _searchTerm = '';
+let _segment = 'all';
+let _audiences = [];
+let _limit = PAGE_SIZE;
+let _density = false;
+let _cssInjected = false;
+let _loaded = false;
 // The whole orders node is already downloaded for the table, so the Customer
 // Profile reuses it instead of paying for a second read.
 let _orderSnapshot = [];
+
+function _injectCss() {
+    if (_cssInjected) return;
+    _cssInjected = true;
+    const style = document.createElement('style');
+    style.id = 'custDashStyle';
+    style.textContent = CUSTOMER_DASHBOARD_CSS;
+    document.head.appendChild(style);
+}
 
 function fmtMoney(n) {
     const v = Number(n || 0);
@@ -34,74 +75,73 @@ async function _openProfile(phone) {
     }
 }
 
+/** Which KPI tile matches the CURRENT filter (the tile shows the active state). */
+function _activeKpiKey() {
+    if (_segment === 'all' && _audiences.length === 0) return 'guests';
+    if (_segment === 'all' && _audiences.length === 1 && _audiences[0] === 'active-30d') return 'active30';
+    if (_segment === 'all' && _audiences.length === 1 && _audiences[0] === 'new-30d') return 'new30';
+    if (_segment === 'at-risk' && _audiences.length === 0) return 'atrisk';
+    if (_segment === 'lapsed' && _audiences.length === 0) return 'lapsed';
+    if (_segment === 'champions' && _audiences.length === 0) return 'champions';
+    return null;
+}
+
+function _icons() {
+    if (typeof lucide !== 'undefined') {
+        try { lucide.createIcons(); } catch (_) { /* icons are cosmetic */ }
+    }
+}
+
 function _renderCustomerTable() {
     const tbody = document.getElementById('customerDataTableBody');
     const countEl = document.getElementById('custTableCount');
     if (!tbody) return;
 
-    let data = _customerData;
-    const term = _searchTerm.trim().toLowerCase();
-    if (term) {
-        data = data.filter(c =>
-            (c.name || '').toLowerCase().includes(term) ||
-            (c.displayPhone || '').includes(term) ||
-            (c.address || '').toLowerCase().includes(term)
-        );
-    }
-    _filteredData = data;
+    // Counts are measured over the SEARCH-matched guests, so a chip always
+    // says how many guests it would give you.
+    const searched = filterRows(_rows, { segment: 'all', audiences: [], term: _searchTerm, thresholds: _thresholds });
+    const counts = computeChipCounts(searched, _thresholds);
+    const tiles = computeKpiTiles(searched, _thresholds);
 
-    if (countEl) countEl.textContent = `${data.length} customer${data.length === 1 ? '' : 's'}`;
-
-    const sorted = [...data].sort((a, b) => {
-        let av = a[_sortField], bv = b[_sortField];
-        if (_sortField === 'orderCount' || _sortField === 'ltv' || _sortField === 'loyaltyPoints') { av = Number(av || 0); bv = Number(bv || 0); }
-        else { av = String(av || '').toLowerCase(); bv = String(bv || '').toLowerCase(); }
-        const cmp = av > bv ? 1 : av < bv ? -1 : 0;
-        return _sortDir === 'asc' ? cmp : -cmp;
+    const filtered = filterRows(_rows, {
+        segment: _segment, audiences: _audiences, term: _searchTerm, thresholds: _thresholds,
     });
+    const sorted = sortRows(filtered, _sortField, _sortDir);
+    _filteredData = sorted;
 
-    if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="mob-table-empty">${term ? 'No customers match your search.' : 'No customers found.'}</td></tr>`;
-        return;
+    const shown = Math.min(_limit, sorted.length);
+    const visible = sorted.slice(0, shown);
+
+    const kpiHost = document.getElementById('custKpis');
+    if (kpiHost) kpiHost.innerHTML = renderKpis(tiles, { kpi: _activeKpiKey() });
+    const filterHost = document.getElementById('custFilters');
+    if (filterHost) {
+        filterHost.innerHTML = renderFilters(counts, { segment: _segment, audiences: _audiences });
     }
 
-    tbody.innerHTML = sorted.map(c => {
-        const phone = c.phoneClean || '';
-        const waLink = phone.length >= 10
-            ? `<a href="https://wa.me/91${phone}" target="_blank" rel="noopener" class="mob-wa-link"><i data-lucide="message-circle" style="width:12px;height:12px;"></i> ${escapeHtml(c.displayPhone || '')}</a>`
-            : `<span class="mob-td-sub">${escapeHtml(c.displayPhone || '—')}</span>`;
-        const addr = c.address || '—';
-        const addrFull = c.addressFull || '';
-        const mapLink = c.locationLink
-            ? ` <a href="${escapeHtml(c.locationLink)}" target="_blank" rel="noopener" class="mob-map-link">MAP</a>`
-            : '';
-        const tier = c.loyaltyTier || 'bronze';
-        const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
-        const tierColor = tier === 'gold' ? '#c5a005' : tier === 'silver' ? '#a8a8a8' : '#8a6d3b';
-        // The WHOLE row opens the profile (only a customer with a usable
-        // phone can be opened - the profile is keyed by phone).
-        const rowProfile = phone.length === 10
-            ? ` data-cust-profile="${escapeHtml(phone)}" title="Open the full customer profile"`
-            : '';
-        return `<tr class="cp-row"${rowProfile}>
-            <td>
-                <div class="mob-cust-name">
-                    <span class="mob-cust-avatar">👤</span>
-                    <div>
-                        <div class="mob-td-strong"><button type="button" class="btn-text mob-td-strong" data-cust-profile="${escapeHtml(phone)}" title="Open the full customer profile">${escapeHtml(c.name || 'Anonymous')}</button></div>
-                        <div class="mob-td-sub">Joined: ${escapeHtml(c.joined || 'N/A')}</div>
-                    </div>
-                    ${phone.length === 10 ? '<i data-lucide="chevron-right" class="mob-row-go" aria-hidden="true"></i>' : ''}
-                </div>
-            </td>
-            <td>${waLink}${phone.length === 10 ? `<div><button type="button" class="mob-reset-lock" data-reset-lock="${escapeHtml(phone)}" title="Use when the customer lost or changed their phone: the next phone to open the app with this number becomes the owner.">Reset phone lock</button></div>` : ''}</td>
-            <td><span class="mob-addr-text" title="${escapeHtml(addrFull)}">${escapeHtml(addr)}</span>${mapLink}</td>
-            <td class="mob-th-center"><span class="mob-order-count">${c.orderCount || 0}</span><div class="mob-td-sub">purchases</div></td>
-            <td class="mob-th-right"><span class="mob-td-total">${fmtMoney(c.ltv || 0)}</span></td>
-            <td class="mob-th-center"><span style="color:${tierColor};font-weight:700;text-transform:uppercase;font-size:11px;">${tierLabel}</span><div class="mob-td-sub">${fmtMoney(c.loyaltyPoints || 0)} pts</div></td>
-        </tr>`;
-    }).join('');
+    if (countEl) countEl.textContent = `${sorted.length} guest${sorted.length === 1 ? '' : 's'}`;
 
+    if (!visible.length) {
+        if (!_rows.length) {
+            tbody.innerHTML = renderEmpty('empty-db');
+        } else {
+            // Offer the biggest segment as a way out of an empty filter.
+            let suggestion = null;
+            for (const chip of SEGMENT_CHIPS) {
+                if (chip.key === 'all') continue;
+                const c = counts.segments[chip.key] || 0;
+                if (c > 0 && (!suggestion || c > suggestion.count)) suggestion = { label: chip.label, count: c };
+            }
+            tbody.innerHTML = renderEmpty('no-match', { term: _searchTerm, suggestion });
+        }
+    } else {
+        tbody.innerHTML = visible.map(renderRow).join('');
+    }
+
+    const pager = document.getElementById('custPager');
+    if (pager) pager.innerHTML = renderPager(shown, sorted.length, PAGE_SIZE);
+
+    // The row click handler lives on the tbody (which survives re-renders).
     if (!tbody.dataset.lockWired) {
         tbody.dataset.lockWired = '1';
         tbody.addEventListener('click', async (e) => {
@@ -126,7 +166,20 @@ function _renderCustomerTable() {
                 return;
             }
 
-            // 3. The customer NAME button or ANYWHERE in the row -> the profile.
+            // 3. "Clear filters" from the empty state.
+            const clearBtn = e.target.closest('[data-cust-clear]');
+            if (clearBtn) {
+                _segment = 'all';
+                _audiences = [];
+                _searchTerm = '';
+                const searchEl = document.getElementById('customerSearch');
+                if (searchEl) searchEl.value = '';
+                _limit = PAGE_SIZE;
+                _renderCustomerTable();
+                return;
+            }
+
+            // 4. The customer NAME button or ANYWHERE in the row -> the profile.
             //    A control that is NOT the profile target (a future button in the
             //    row) keeps its own click.
             const clicked = e.target.closest('a, button, input, select, textarea, label');
@@ -143,11 +196,14 @@ function _renderCustomerTable() {
         });
     }
 
-    if (typeof lucide !== 'undefined') lucide.createIcons();
+    _icons();
 }
 
 export function filterCustomers(searchTerm) {
     _searchTerm = (searchTerm || '').trim();
+    _limit = PAGE_SIZE;
+    // Typing before the database arrived must not wipe the loading skeleton.
+    if (!_loaded) return;
     _renderCustomerTable();
 }
 
@@ -158,14 +214,19 @@ export async function loadCustomers() {
         return;
     }
 
-    tbody.innerHTML = `<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--mob-sub);font-weight:600;">Loading customers...</td></tr>`;
+    _injectCss();
+    initCustomerDashboard();
+    _loaded = false;
+    tbody.innerHTML = renderSkeleton(6);
     logger.info('CUSTOMERS', 'Loading customers from Firebase...');
 
     try {
-        const [custSnap, orderSnap, loySnap] = await Promise.all([
+        const [custSnap, orderSnap, loySnap, cfgSnap, optOutSnap] = await Promise.all([
             get(Outlet.ref("customers")),
             get(Outlet.ref("orders")),
-            get(Outlet.ref("loyalty/rankings"))
+            get(Outlet.ref("loyalty/rankings")),
+            get(Outlet.ref("loyalty/config")),
+            get(Outlet.ref("bot/promotions/optout")),
         ]);
         const orders = [];
         orderSnap.forEach(o => { const v = o.val(); if (v) orders.push({ ...v, _id: o.key }); });
@@ -177,38 +238,33 @@ export async function loadCustomers() {
         const customers = [];
         custSnap.forEach(child => {
             const c = child.val();
-            const phone = child.key;
-            // QR dine-in and app orders write `customerPhone`; bot/delivery
-            // orders write `phone`. Matching only `phone` silently dropped
-            // half the order history from this table.
-            const myOrders = orders.filter(o => normalizePhone(o.customerPhone || o.phone) === phone);
-            const orderCount = myOrders.length;
-            const ltv = myOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
-            const loy = loyalty[phone] || {};
-            customers.push({
-                name: c.name || 'Anonymous',
-                joined: c.registeredAt ? new Date(c.registeredAt).toLocaleDateString() : 'N/A',
-                displayPhone: phone,
-                phoneClean: phone.replace(/\D/g, "").slice(-10),
-                address: c.address ? (c.address.length > 30 ? c.address.substring(0, 30) + "..." : c.address) : "Counter Sale / Guest",
-                addressFull: c.address || '',
-                locationLink: c.locationLink || '',
-                orderCount, ltv,
-                loyaltyTier: loy.tier || 'bronze',
-                loyaltyPoints: loy.lifetimePoints || 0,
-                loyaltyRank: loy.rank
-            });
+            if (!c) return;
+            customers.push({ phone: child.key, data: c });
         });
 
-        _customerData = customers;
-        _renderCustomerTable();
+        const optOutPhones = [];
+        optOutSnap.forEach(child => { optOutPhones.push(child.key); });
 
+        const built = buildCustomerRows({
+            customers,
+            orders,
+            rankings: loyalty,
+            optOutPhones,
+            loyaltyConfig: cfgSnap.exists() ? cfgSnap.val() : null,
+            now: Date.now(),
+            storeName: state.storeName || '',
+        }, CALC);
+        _rows = built.rows;
+        _thresholds = built.thresholds;
+        _loaded = true;
+
+        _renderCustomerTable();
         initCustomerTable();
 
-        logger.success('CUSTOMERS', `Loaded ${customers.length} customers`);
+        logger.success('CUSTOMERS', `Loaded ${_rows.length} customers`);
     } catch (e) {
         console.error('[Customers] Load error:', e);
-        tbody.innerHTML = `<tr><td colspan="5" style="padding:40px;text-align:center;color:#ef4444;font-weight:600;">⚠️ Error loading customers</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="cust-empty"><p class="cust-empty-title">Could not load the customer database</p><p class="cust-empty-sub">Check your connection and try again.</p></td></tr>`;
     }
 }
 
@@ -225,13 +281,91 @@ export function initCustomerTable() {
                 _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
             } else {
                 _sortField = field;
-                _sortDir = field === 'orderCount' || field === 'ltv' ? 'desc' : 'asc';
+                _sortDir = (field === 'orderCount' || field === 'ltv' || field === 'lastVisit') ? 'desc' : 'asc';
             }
             ths.forEach(h => h.classList.remove('mob-sort-asc', 'mob-sort-desc'));
             th.classList.add(_sortDir === 'asc' ? 'mob-sort-asc' : 'mob-sort-desc');
             _renderCustomerTable();
         });
     });
+}
+
+/** Wire the filter chrome once (KPI tiles, chips, density, pager). */
+export function initCustomerDashboard() {
+    if (!_cssInjected) _injectCss();
+
+    const kpiHost = document.getElementById('custKpis');
+    if (kpiHost && !kpiHost.dataset.wired) {
+        kpiHost.dataset.wired = '1';
+        kpiHost.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-cust-kpi]');
+            if (!btn) return;
+            const key = btn.dataset.custKpi;
+            if (key === 'guests') { _segment = 'all'; _audiences = []; }
+            else if (key === 'active30') { _segment = 'all'; _audiences = ['active-30d']; }
+            else if (key === 'new30') { _segment = 'all'; _audiences = ['new-30d']; }
+            else if (key === 'atrisk') { _segment = 'at-risk'; _audiences = []; }
+            else if (key === 'lapsed') { _segment = 'lapsed'; _audiences = []; }
+            else if (key === 'champions') { _segment = 'champions'; _audiences = []; }
+            _limit = PAGE_SIZE;
+            _renderCustomerTable();
+        });
+    }
+
+    const filterHost = document.getElementById('custFilters');
+    if (filterHost && !filterHost.dataset.wired) {
+        filterHost.dataset.wired = '1';
+        filterHost.addEventListener('click', (e) => {
+            const seg = e.target.closest('[data-cust-segment]');
+            if (seg) {
+                _segment = seg.dataset.custSegment;
+                _limit = PAGE_SIZE;
+                _renderCustomerTable();
+                return;
+            }
+            const aud = e.target.closest('[data-cust-audience]');
+            if (aud) {
+                const key = aud.dataset.custAudience;
+                if (!AUDIENCE_CHIPS.some((c) => c.key === key)) return;
+                _audiences = _audiences.includes(key)
+                    ? _audiences.filter((k) => k !== key)
+                    : [..._audiences, key];
+                _limit = PAGE_SIZE;
+                _renderCustomerTable();
+            }
+        });
+    }
+
+    const pager = document.getElementById('custPager');
+    if (pager && !pager.dataset.wired) {
+        pager.dataset.wired = '1';
+        pager.addEventListener('click', (e) => {
+            const more = e.target.closest('#custLoadMore');
+            if (!more) return;
+            _limit += PAGE_SIZE;
+            _renderCustomerTable();
+        });
+    }
+
+    const densityBtn = document.getElementById('custDensityBtn');
+    if (densityBtn && !densityBtn.dataset.wired) {
+        densityBtn.dataset.wired = '1';
+        try { _density = localStorage.getItem(DENSITY_KEY) === 'dense'; } catch (_) { _density = false; }
+        const tab = document.getElementById('tab-customers');
+        if (tab) tab.classList.toggle('cust-dense', _density);
+        densityBtn.setAttribute('aria-pressed', _density ? 'true' : 'false');
+        const label = densityBtn.querySelector('span');
+        if (label) label.textContent = _density ? 'Comfortable' : 'Compact';
+        densityBtn.addEventListener('click', () => {
+            _density = !_density;
+            const t = document.getElementById('tab-customers');
+            if (t) t.classList.toggle('cust-dense', _density);
+            densityBtn.setAttribute('aria-pressed', _density ? 'true' : 'false');
+            const l = densityBtn.querySelector('span');
+            if (l) l.textContent = _density ? 'Comfortable' : 'Compact';
+            try { localStorage.setItem(DENSITY_KEY, _density ? 'dense' : 'roomy'); } catch (_) { /* private mode */ }
+        });
+    }
 }
 
 export async function downloadCustomerExcel() {
@@ -241,9 +375,14 @@ export async function downloadCustomerExcel() {
     const data = _filteredData.map(c => ({
         Customer: c.name || 'Anonymous',
         Phone: c.displayPhone || '',
-        Address: c.addressFull || c.address || '',
-        Orders: c.orderCount || 0,
-        'Total Value (₹)': c.ltv || 0
+        Address: c.address || '',
+        'Paid Orders': c.orderCount || 0,
+        'Total Value (₹)': c.ltv || 0,
+        'Last Visit': c.lastVisit || 'Never',
+        Segment: c.action.segment || '',
+        Loyalty: (c.loyalty.tier || '').toString(),
+        'Points to Spend': c.loyalty.points || 0,
+        'Promo Reach': c.consent.state || '',
     }));
 
     let XLSX;
@@ -292,7 +431,7 @@ export async function downloadCustomerPDF() {
     });
     const secY = reportKpis(doc, [
         ['TOTAL CUSTOMERS', String(rows.length)],
-        ['TOTAL ORDERS', totalOrders.toLocaleString('en-IN')],
+        ['PAID ORDERS', totalOrders.toLocaleString('en-IN')],
         ['TOTAL REVENUE', rs(totalRevenue)],
         ['AVG ORDER VALUE', aov]
     ], kpiY);
@@ -301,15 +440,16 @@ export async function downloadCustomerPDF() {
     const tableData = rows.map(c => [
         c.name || 'Anonymous',
         c.displayPhone || '',
-        c.addressFull || c.address || '—',
         String(c.orderCount || 0),
-        rs(c.ltv)
+        rs(c.ltv),
+        c.lastVisit || 'Never',
+        c.action.segment || '—',
     ]);
 
     doc.autoTable({
-        head: [['Customer', 'Phone', 'Address', 'Orders', 'Total Value']],
+        head: [['Customer', 'Phone', 'Paid orders', 'Total Value', 'Last visit', 'Segment']],
         body: tableData,
-        foot: [['Grand Total', `${rows.length} customers`, '', String(totalOrders), rs(totalRevenue)]],
+        foot: [['Grand Total', `${rows.length} customers`, String(totalOrders), rs(totalRevenue), '', '']],
         showFoot: 'lastPage',
         rowPageBreak: 'avoid',
         theme: 'plain',
@@ -321,11 +461,12 @@ export async function downloadCustomerPDF() {
         alternateRowStyles: { fillColor: [250, 250, 251] },
         footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 8.5 },
         columnStyles: {
-            0: { cellWidth: 40 },
-            1: { cellWidth: 30, halign: 'center' },
-            2: { cellWidth: 60 },
-            3: { cellWidth: 18, halign: 'center' },
-            4: { cellWidth: 34, halign: 'right' }
+            0: { cellWidth: 42 },
+            1: { cellWidth: 26, halign: 'center' },
+            2: { cellWidth: 20, halign: 'center' },
+            3: { cellWidth: 30, halign: 'right' },
+            4: { cellWidth: 26 },
+            5: { cellWidth: 26 }
         },
         margin: { top: 26, left: 14, right: 14, bottom: 18 },
         startY,

@@ -3434,9 +3434,10 @@
 
                 <div class="mob-card mob-table-card" style="margin:0;">
                     <div class="mob-section-head-row">
-                        <h3 class="mob-card-title">Customer Database</h3>
-                        <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
-                            <input type="text" id="customerSearch" placeholder="Search..." class="search-input-group" style="max-width:220px;" aria-label="Search customers">
+                        <h3 class="mob-card-title">Customer Database <span class="mob-table-count" id="custTableCount"></span></h3>
+                        <div class="cust-toolbar" style="display:flex; gap:8px; align-items:center; margin-left:auto;">
+                            <input type="text" id="customerSearch" placeholder="Search name, phone, address, dish..." class="search-input-group" style="max-width:220px;" aria-label="Search customers">
+                            <button type="button" id="custDensityBtn" class="cust-tool-btn" aria-pressed="false" title="Switch between comfortable and compact rows"><i data-lucide="rows-3" class="icon-18"></i><span>Compact</span></button>
                             <div class="mob-export-row" style="display:flex; gap:8px;">
                                 <button type="button" class="mob-export-banner mob-export-excel" data-action="custExportExcel" title="Export to Excel">
                                     <i data-lucide="file-spreadsheet" class="icon-18"></i>
@@ -3449,21 +3450,27 @@
                             </div>
                         </div>
                     </div>
+                    <div id="custKpis" class="cust-kpis"></div>
+                    <div id="custFilters" class="cust-filters"></div>
                     <div class="mob-table-scroll">
                         <table class="mob-data-table" id="customerDataTable">
                             <thead>
                                 <tr>
-                                    <th data-sort="name">Customer</th>
-                                    <th data-sort="displayPhone">Phone</th>
-                                    <th data-sort="address">Address</th>
-                                    <th data-sort="orderCount">Orders</th>
-                                    <th data-sort="ltv" class="mob-th-right">Value (₹)</th>
-                                    <th data-sort="loyaltyPoints">Loyalty</th>
+                                    <th data-sort="name" class="cust-col-cust">Customer</th>
+                                    <th data-sort="displayPhone" class="cust-col-phone">Phone</th>
+                                    <th data-sort="address" class="cust-col-addr">Address</th>
+                                    <th data-sort="lastVisit" class="cust-col-last">Last visit</th>
+                                    <th data-sort="orderCount" class="cust-col-orders">Orders</th>
+                                    <th data-sort="ltv" class="mob-th-right cust-col-value">Value (₹)</th>
+                                    <th data-sort="loyaltyPoints" class="cust-col-loyalty">Loyalty</th>
+                                    <th data-sort="segment" class="cust-col-segment">Segment</th>
+                                    <th class="cust-col-action">Next step</th>
                                 </tr>
                             </thead>
                             <tbody id="customerDataTableBody"></tbody>
                         </table>
                     </div>
+                    <div id="custPager" class="cust-pager"></div>
                 </div>
 
             </div>

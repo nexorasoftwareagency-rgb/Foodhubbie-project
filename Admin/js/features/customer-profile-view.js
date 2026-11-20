@@ -769,51 +769,59 @@ export function nextBestAction(p) {
     const paid = p.lifetime ? p.lifetime.paidCount : 0;
     const ordersWord = paid === 1 ? 'order' : 'orders';
 
-    let title; let sub; let msg;
+    let title; let sub; let msg; let short;
     switch (r.segment) {
         case 'lapsed':
             title = `No visit in ${num(days)} days`;
+            short = 'Win back';
             sub = `They used to visit every ~${num(gap)} days. A personal message brings most lapsed guests back.`;
             msg = `Hi ${first}, it's been a while - we'd love to welcome you back to ${store}. What can we get you today?`;
             break;
         case 'at-risk':
             title = `Going quiet - ${num(days)} days since the last visit`;
+            short = 'Reach out';
             sub = `They usually visit every ~${num(gap)} days. Reach out before they lapse.`;
             msg = `Hi ${first}, we miss you at ${store}! What would you like to order today?`;
             break;
         case 'attention':
             title = 'Visits have slowed down';
+            short = 'Check in';
             sub = `Last visit ${num(days)} days ago. A check-in usually brings the rhythm back.`;
             msg = `Hi ${first}, we miss you at ${store}! What would you like to order today?`;
             break;
         case 'dormant':
             title = `Long since the last visit (${num(days)} days)`;
+            short = 'Win back';
             sub = 'This guest has not ordered in a long time - worth one personal message.';
             msg = `Hi ${first}, it's been a while - we'd love to welcome you back to ${store}. What can we get you today?`;
             break;
         case 'champion':
             title = 'Your best guest - keep them close';
+            short = 'Thank them';
             sub = `${num(paid)} paid ${ordersWord}${p.loyalty.rank ? ` and rank #${num(p.loyalty.rank)} in the outlet` : ''}. Say thanks before they drift.`;
             msg = `Hi ${first}, great to see you again! Thank you for being our regular - what can we get you today?`;
             break;
         case 'loyal':
             title = 'Coming back regularly';
+            short = 'Keep up';
             sub = `Last visit ${num(days)} days ago. Keep the rhythm going with a personal message.`;
             msg = `Hi ${first}, great to see you again! What can we get you today?`;
             break;
         case 'potential':
         case 'promising':
             title = 'Just getting started';
+            short = 'Nudge';
             sub = `Only ${num(paid)} paid ${ordersWord} so far - the second visit is what makes a regular.`;
             msg = `Hi ${first}, thanks for trying ${store}! We'd love to see you again - what would you like next?`;
             break;
         default:
             title = 'No paid orders yet';
+            short = 'Welcome';
             sub = 'Nothing has been paid on this profile - check the Orders tab for what happened.';
             msg = `Hi ${first}, thanks for ordering from ${store}!`;
             break;
     }
-    return { tone: seg.tone, segment: seg.label, kicker: 'Recommended next step', title, sub, msg };
+    return { tone: seg.tone, segment: seg.label, kicker: 'Recommended next step', title, short, sub, msg };
 }
 
 export function renderHead(p) {
