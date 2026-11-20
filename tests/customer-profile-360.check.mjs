@@ -465,6 +465,21 @@ function series(count, gapDays, total = 200, endDaysAgo = 2, base = {}) {
     ok('the whole customer row opens the profile; links and other controls keep their own click');
 }
 {
+    // Owner directive (2026-11-20): the Customers nav item sits DIRECTLY below
+    // the Customer APP tab. The sidebar markup and TAB_DEFS (which also drives
+    // the staff role-grant list) must agree, or the two drift apart again.
+    const html = readFileSync(HTML_FILE, 'utf8');
+    const iApp = html.indexOf('id="menu-customer-app"');
+    const iCust = html.indexOf('id="menu-customers"');
+    const iDisc = html.indexOf('id="menu-discounts"');
+    assert.ok(iApp > -1 && iCust > iApp && iDisc > iCust, 'Customers sits directly below Customer APP in the sidebar');
+    const ui = readFileSync(join(root, 'Admin/js/ui.js'), 'utf8');
+    const dApp = ui.indexOf("['customer-app', 'Customer APP']");
+    const dCust = ui.indexOf("['customers', 'Customers']");
+    assert.ok(dApp > -1 && dCust > dApp, 'TAB_DEFS keeps Customers after Customer APP');
+    ok('the Customers nav item sits directly below the Customer APP tab');
+}
+{
     // The table header and the row cells must agree on the column order.
     const html = readFileSync(HTML_FILE, 'utf8');
     const headBlock = html.slice(html.indexOf('id="customerDataTable"'), html.indexOf('id="customerDataTableBody"'));

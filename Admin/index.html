@@ -529,6 +529,19 @@
 
                 </li>
 
+                <!-- Owner directive (2026-11-20): Customers sits DIRECTLY below
+                     Customer APP so the customer database lives next to the app
+                     that creates those customers. -->
+                <li id="menu-customers" title="View and Manage Customer Records">
+
+                    <button data-action="switchTab" data-tab="customers" class="nav-btn">
+
+                        <i data-lucide="users"></i> <span>Customers</span>
+
+                    </button>
+
+                </li>
+
                 <li id="menu-discounts" title="Schedule & Manage Discounts">
 
                     <button data-action="switchTab" data-tab="discounts" class="nav-btn">
@@ -572,16 +585,6 @@
                     <button data-action="switchTab" data-tab="riders" class="nav-btn">
 
                         <i data-lucide="bike"></i> <span>Riders</span>
-
-                    </button>
-
-                </li>
-
-                <li id="menu-customers" title="View and Manage Customer Records">
-
-                    <button data-action="switchTab" data-tab="customers" class="nav-btn">
-
-                        <i data-lucide="users"></i> <span>Customers</span>
 
                     </button>
 

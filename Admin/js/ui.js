@@ -68,9 +68,13 @@ export const TAB_DEFS = [
     ['discounts', 'Discounts'], ['menu', 'Menu'], ['categories', 'Categories'],
     ['combos', 'Combos'],
     ['inventory', 'Inventory'], ['riders', 'Riders'],
-    ['customers', 'Customers'], ['loyalty', 'Loyalty'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
+    ['loyalty', 'Loyalty'], ['chat', 'WhatsApp Chat'], ['reports', 'Reports'],
     ['riderAnalytics', 'Rider Analytics'], ['feedback', 'Feedback'], ['liveTracker', 'Live Tracker'],
     ['payments', 'Payments'], ['expenses', 'Expenses'], ['notifications', 'Notifications'], ['customer-app', 'Customer APP'],
+    // Owner directive (2026-11-20): Customers sits directly below Customer APP
+    // in the sidebar, so TAB_DEFS keeps the same order (the staff role-grant
+    // list is rendered from it and should read like the nav).
+    ['customers', 'Customers'],
     ['costs', 'Costs'], ['settings', 'Settings']
 ];
 const ALL_TABS = TAB_DEFS.map(t => t[0]);
