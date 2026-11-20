@@ -203,7 +203,7 @@
 
     <link rel="preconnect" href="https://foodhubbie-10.firebaseapp.com" crossorigin>
 
-    <link rel="modulepreload" href="js/main.js?v=5.4.8">
+    <link rel="modulepreload" href="js/main.js?v=5.4.9">
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 
@@ -7116,8 +7116,29 @@
 
     </div>
 
-    <div id="tableDrawerOverlay" class="drawer-overlay"></div>
+    <!-- CUSTOMER PROFILE 360 (Full-Page View) -->
 
+    <div id="customerProfileRoot">
+
+        <div id="customerProfileOverlay" class="drawer-overlay"></div>
+
+        <div id="customerProfileDrawer" class="drawer-content cp-drawer" role="dialog" aria-modal="true" aria-labelledby="custProfName">
+
+            <button type="button" class="cp-close" id="customerProfileClose" aria-label="Close customer profile">
+                <i data-lucide="x"></i>
+            </button>
+
+            <div class="cp-shell">
+                <div class="cp-head" id="customerProfileHead"></div>
+                <div class="cp-tabs" id="customerProfileTabs" role="tablist" aria-label="Customer profile sections"></div>
+                <div class="cp-body" id="customerProfileBody"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="tableDrawerOverlay" class="drawer-overlay"></div>
     <div id="tableDrawer" class="drawer-content table-drawer-content">
 
         <div class="table-drawer-header">
@@ -8738,7 +8759,7 @@
 
     <script type="module" src="js/bot-status.js?v=5.4.5"></script>
 
-    <script type="module" src="js/main.js?v=5.4.8"></script>
+    <script type="module" src="js/main.js?v=5.4.9"></script>
 
 <!-- RECEIPT PREVIEW MODAL -->
 

@@ -788,7 +788,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.addEventListener('keydown', async (e) => {
         if (e.key === 'Escape') {
             logger.info('KEYBOARD', 'Escape pressed');
-            const activeModal = document.querySelector('.modal.active:not(.hidden)');
+            // Only a modal that is actually RENDERED may swallow the Escape.
+            // #userManualModal keeps `.modal.active` while it is hidden with
+            // `display:none`, so a plain class query made every Escape close
+            // that invisible modal instead of the open drawer.
+            const activeModal = [...document.querySelectorAll('.modal.active:not(.hidden)')].find((m) => {
+                const st = getComputedStyle(m);
+                return st.display !== 'none' && st.visibility !== 'hidden' && m.getClientRects().length > 0;
+            });
             if (activeModal) {
                 if (activeModal._kbClose) {
                     activeModal._kbClose();

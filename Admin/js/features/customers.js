@@ -3,11 +3,17 @@ import { escapeHtml, showToast } from '../utils.js';
 import { logger } from '../utils/logger.js';
 import { loadJSPDF, reportHead, reportKpis, reportSection, reportContinued, reportFoot } from './printing.js';
 import { ensureXlsx } from '../xlsx.js';
+// Pure helper (no Firebase, no DOM): the same phone normalisation the
+// Customer Profile uses, so both pages count the same orders.
+import { normalizePhone } from './customer-profile-view.js';
 
 let _customerData = [];
 let _filteredData = [];
 let _sortField = 'ltv', _sortDir = 'desc';
 let _searchTerm = '';
+// The whole orders node is already downloaded for the table, so the Customer
+// Profile reuses it instead of paying for a second read.
+let _orderSnapshot = [];
 
 function fmtMoney(n) {
     const v = Number(n || 0);
@@ -63,7 +69,7 @@ function _renderCustomerTable() {
                 <div class="mob-cust-name">
                     <span class="mob-cust-avatar">👤</span>
                     <div>
-                        <div class="mob-td-strong">${escapeHtml(c.name || 'Anonymous')}</div>
+                        <div class="mob-td-strong"><button type="button" class="btn-text mob-td-strong" data-cust-profile="${escapeHtml(phone)}" title="Open the full customer profile">${escapeHtml(c.name || 'Anonymous')}</button></div>
                         <div class="mob-td-sub">Joined: ${escapeHtml(c.joined || 'N/A')}</div>
                     </div>
                 </div>
@@ -79,6 +85,22 @@ function _renderCustomerTable() {
     if (!tbody.dataset.lockWired) {
         tbody.dataset.lockWired = '1';
         tbody.addEventListener('click', async (e) => {
+            // Row name -> the full Customer Profile 360 drawer.
+            const profileBtn = e.target.closest('[data-cust-profile]');
+            if (profileBtn) {
+                e.preventDefault();
+                const ph = profileBtn.dataset.custProfile;
+                if (!ph) return;
+                try {
+                    const mod = await import('./customer-profile.js');
+                    mod.initCustomerProfile();
+                    await mod.openCustomerProfile(ph, { orders: _orderSnapshot });
+                } catch (err) {
+                    logger.warn('CUSTOMERS', 'open profile failed', err);
+                    showToast('Could not open the customer profile.', 'error');
+                }
+                return;
+            }
             const btn = e.target.closest('[data-reset-lock]');
             if (!btn) return;
             const ph = btn.dataset.resetLock;
@@ -121,7 +143,8 @@ export async function loadCustomers() {
             get(Outlet.ref("loyalty/rankings"))
         ]);
         const orders = [];
-        orderSnap.forEach(o => { orders.push(o.val()); });
+        orderSnap.forEach(o => { const v = o.val(); if (v) orders.push({ ...v, _id: o.key }); });
+        _orderSnapshot = orders;
 
         const loyalty = {};
         loySnap.forEach(l => { loyalty[l.key] = l.val(); });
@@ -130,7 +153,10 @@ export async function loadCustomers() {
         custSnap.forEach(child => {
             const c = child.val();
             const phone = child.key;
-            const myOrders = orders.filter(o => o.phone === phone);
+            // QR dine-in and app orders write `customerPhone`; bot/delivery
+            // orders write `phone`. Matching only `phone` silently dropped
+            // half the order history from this table.
+            const myOrders = orders.filter(o => normalizePhone(o.customerPhone || o.phone) === phone);
             const orderCount = myOrders.length;
             const ltv = myOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
             const loy = loyalty[phone] || {};

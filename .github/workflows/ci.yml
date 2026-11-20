@@ -44,6 +44,9 @@ jobs:
       - name: POS mobile guard (full-width picker, honest tile price, one-tap add)
         run: node tests/pos-mobile.check.cjs
 
+      - name: Customer Profile guard (paid-order basis, RFM yardsticks, staff-private notes)
+        run: node tests/customer-profile-360.check.mjs
+
       - name: Menu cart persistence guard
         run: node tests/menu-cart-refresh.check.cjs
 

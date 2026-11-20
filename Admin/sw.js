@@ -59,7 +59,7 @@ firebase.messaging().onBackgroundMessage((payload) => {
 // (settings subtab race fix + boot preload removal so settings.js evaluates
 // post-auth: js/ui.js). App code is network-first, so the bump mainly resets
 // the offline fallback.
-const CACHE_NAME = 'foodhubbie-erp-shell-v5.12.68';
+const CACHE_NAME = 'foodhubbie-erp-shell-v5.12.69';
 const ASSETS_TO_CACHE = [
   './index.html',
   './style.css?v=5.4.20',
@@ -73,7 +73,7 @@ const ASSETS_TO_CACHE = [
   './badge.png',
   './sw.js',
   './firebase-messaging-sw.js',
-  './js/main.js?v=5.4.8',
+  './js/main.js?v=5.4.9',
   './js/auth.js',
   './js/firebase.js',
   './js/state.js',
@@ -88,6 +88,8 @@ const ASSETS_TO_CACHE = [
   './js/features/riders.js',
   './js/features/catalog.js',
   './js/features/customers.js',
+  './js/features/customer-profile.js',
+  './js/features/customer-profile-view.js',
   './js/features/analytics.js',
   './js/features/analytics-mobile.js',
   './js/features/pos.js',

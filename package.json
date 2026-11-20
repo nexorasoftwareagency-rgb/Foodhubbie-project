@@ -16,6 +16,7 @@
     "test:session-lifecycle": "node tests/session-lifecycle.check.cjs",
     "test:kds": "node tests/kds-check.mjs",
     "test:pos-mobile": "node tests/pos-mobile.check.cjs",
+    "test:customer-profile-360": "node tests/customer-profile-360.check.mjs",
     "test:menu-cart": "node tests/menu-cart-refresh.check.cjs",
     "test:menu-legacy-qr": "node tests/menu-legacy-qr.check.cjs",
     "test:pin": "node tests/pin-crypto.check.mjs",
