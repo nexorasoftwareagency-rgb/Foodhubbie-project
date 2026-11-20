@@ -491,10 +491,16 @@ export function renderRow(r, opts = {}) {
     const phone = r.phone || '';
     const canOpen = /^\d{10}$/.test(phone);
     const selected = !!opts.selected && canOpen;
+    // The checkbox sits in a LABEL so the hit area can be 44x44 while the
+    // box itself stays 22px of paint (a 22px target is a tap miss on a
+    // phone). The label forwards the tap to the input, so the change event
+    // still fires exactly once.
     const sel = `<td class="cust-col-sel">
-        <input type="checkbox" class="cust-sel-box" data-cust-select="${esc(phone)}"
-            ${selected ? 'checked' : ''} ${canOpen ? '' : 'disabled'}
-            aria-label="Select ${esc(r.name || 'guest')}${canOpen ? '' : ' (no usable phone number)'}">
+        <label class="cust-sel-hit">
+            <input type="checkbox" class="cust-sel-box" data-cust-select="${esc(phone)}"
+                ${selected ? 'checked' : ''} ${canOpen ? '' : 'disabled'}
+                aria-label="Select ${esc(r.name || 'guest')}${canOpen ? '' : ' (no usable phone number)'}">
+        </label>
     </td>`;
     const waLink = canOpen
         ? `<a href="https://wa.me/91${esc(phone)}" target="_blank" rel="noopener" class="mob-wa-link"><i data-lucide="message-circle" style="width:12px;height:12px;"></i> ${esc(r.displayPhone)}</a>`
@@ -527,7 +533,7 @@ export function renderRow(r, opts = {}) {
                 <span class="mob-cust-avatar" aria-hidden="true">${esc(initialsOf(r.name))}</span>
                 <div class="cust-cust-id">
                     <div class="mob-td-strong"><button type="button" class="btn-text mob-td-strong" data-cust-profile="${esc(phone)}" title="Open the full customer profile">${esc(r.name)}</button></div>
-                    <div class="mob-td-sub cust-joined">Joined ${esc(r.joined)}${dup ? ' · ' + dup : ''}</div>
+                    <div class="mob-td-sub cust-joined"><span class="cust-joined-text">Joined ${esc(r.joined)}${dup ? ' · ' : ''}</span>${dup || ''}</div>
                     ${mobMeta}
                 </div>
                 ${canOpen ? '<i data-lucide="chevron-right" class="mob-row-go" aria-hidden="true"></i>' : ''}
@@ -732,6 +738,27 @@ export const CUSTOMER_DASHBOARD_CSS = `
     white-space: nowrap;
 }
 #tab-customers .mob-reset-lock:hover { color: var(--mob-blue); }
+/* Every control on this screen gets a visible focus ring - the sheet's close
+   button, the WhatsApp link and the repair link are all custom controls. */
+#tab-customers .mob-wa-link:focus-visible,
+#tab-customers .mob-reset-lock:focus-visible,
+#tab-customers .cust-sheet-close:focus-visible { outline: 2px solid var(--mob-blue); outline-offset: 2px; }
+/* Numbers that change in place must not jitter. */
+#tab-customers .cust-kpi-val,
+#tab-customers .mob-td-total,
+#tab-customers .mob-order-count { font-variant-numeric: tabular-nums; }
+/* The tap highlight is set on purpose (a subtle brand tint): the global
+   reset turns it off, so a touch has no feedback at all without this. */
+#tab-customers button,
+#tab-customers a,
+#tab-customers input,
+#tab-customers select { -webkit-tap-highlight-color: rgba(37, 99, 235, .18); }
+/* A pressed control must LOOK pressed (the tap highlight is only a tint). */
+#tab-customers .cust-kpi:active,
+#tab-customers .cust-chip:active,
+#tab-customers .cust-lb-btn:active,
+#tab-customers .cust-tool-btn:active,
+#tab-customers .cust-sheet-close:active { opacity: .85; }
 #tab-customers .cust-action-warn { color: #b45309; }
 #tab-customers .cust-action-bad { color: var(--mob-red); }
 #tab-customers .cust-action-ok { color: var(--mob-green); }
@@ -773,6 +800,9 @@ export const CUSTOMER_DASHBOARD_CSS = `
     width: 18px; height: 18px; min-width: 18px; min-height: 18px;
     accent-color: var(--mob-ink); cursor: pointer; margin: 0; vertical-align: middle;
 }
+/* The row checkbox is wrapped in a label: on a phone the label carries the
+   44x44 hit area while the box itself stays 22px of paint. */
+#tab-customers .cust-sel-hit { display: inline-flex; align-items: center; justify-content: center; }
 #tab-customers .cust-sel-box:focus-visible { outline: 2px solid var(--mob-blue); outline-offset: 2px; }
 #tab-customers .cust-sel-box:disabled { cursor: not-allowed; opacity: .35; }
 #tab-customers tr.cust-row-selected .cust-col-cust { background: #f8fafc; }
@@ -909,7 +939,7 @@ export const CUSTOMER_DASHBOARD_CSS = `
     #tab-customers .cust-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 4px 12px 10px; }
     #tab-customers .cust-kpi { min-height: 46px; padding: 6px 8px; border-radius: 10px; }
     #tab-customers .cust-kpi-val { font-size: 18px; }
-    #tab-customers .cust-kpi-label { font-size: 10.5px; line-height: 1.25; }
+    #tab-customers .cust-kpi-label { font-size: 12px; line-height: 1.25; }
 
     /* --- the filter chips move into a SHEET. Two scrolling rows of chips
        above the list cost 102px of an 844px screen and read like a third
@@ -931,6 +961,7 @@ export const CUSTOMER_DASHBOARD_CSS = `
         transition: transform .22s ease, visibility 0s linear .22s;
         max-height: 78vh;
         overflow-y: auto;
+        overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
     }
     #tab-customers.cust-filters-open .cust-filters {
@@ -1178,7 +1209,7 @@ export const CUSTOMER_DASHBOARD_CSS = `
         border-radius: 999px;
         background: var(--mob-blue);
         color: #fff;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 900;
     }
 
@@ -1200,15 +1231,38 @@ export const CUSTOMER_DASHBOARD_CSS = `
 
     /* --- the card's typography: nothing is clipped, a long name wraps. --- */
     #tab-customers .mob-cust-avatar { display: none; }
-    #tab-customers .cust-joined { display: none; }
+    #tab-customers .cust-joined-text { display: none; }
+    #tab-customers .cust-joined { display: block; }
+    #tab-customers .cust-dup { font-size: 12px; }
     #tab-customers .mob-row-go { display: none; }
     #tab-customers .cust-cust-id .mob-td-strong button { white-space: normal; overflow: visible; }
-    #tab-customers .cust-mob-meta { display: block; font-size: 11.5px; line-height: 1.45; color: var(--mob-sub); margin-top: 2px; }
+    #tab-customers .cust-mob-meta { display: block; font-size: 12px; line-height: 1.45; color: var(--mob-sub); margin-top: 2px; }
     #tab-customers .cust-last-mobile { display: inline; }
-    #tab-customers .cust-phone-line { flex-direction: row; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-    #tab-customers .mob-reset-lock { margin: 0; }
+    #tab-customers .cust-phone-line { flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
     #tab-customers .cust-reach { white-space: normal; overflow: visible; text-overflow: clip; margin-top: 0; }
-    #tab-customers .cust-action { white-space: normal; overflow: visible; text-overflow: clip; max-width: 100%; font-size: 12px; }
+    #tab-customers .cust-action { white-space: normal; overflow: visible; text-overflow: clip; max-width: 100%; font-size: 12.5px; }
+
+    /* --- a phone is read at arm's length: nothing on this screen is smaller
+       than 12px, and every control has a real hit area. --- */
+    #tab-customers .cust-pill,
+    #tab-customers.cust-dense .cust-pill { font-size: 12px; }
+    #tab-customers .cust-reach { font-size: 12px; }
+    #tab-customers .cust-chip-count { font-size: 12px; }
+    #tab-customers .cust-filter-label { font-size: 12px; }
+    #tab-customers .cust-sheet-title { font-size: 16px; }
+    #tab-customers .cust-batch-reach { font-size: 12px; }
+    /* The selection box is 22px of paint inside a 44x44 hit area (the label
+       forwards the tap to the input, so the change event still fires once). */
+    #tab-customers .cust-sel-hit { padding: 11px; margin: -11px; cursor: pointer; }
+    /* A phone number and a repair link are inline links: WCAG 2.2 asks for
+       24px minimum, the phone gets 28 and 32. */
+    #tab-customers .mob-wa-link { min-height: 28px; }
+    #tab-customers .mob-reset-lock {
+        font-size: 12.5px;
+        min-height: 32px;
+        padding: 4px 0;
+        margin: 0;
+    }
 
     /* --- the contextual action bar pins to the BOTTOM, clear of the nav.
        The STICKY box has to be the direct child of the card: a sticky box can

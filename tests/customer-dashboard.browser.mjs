@@ -386,6 +386,55 @@ try {
                 kpisRight: (() => { const e = q('#custKpis'); return e ? Math.round(e.getBoundingClientRect().right) : null; })(),
                 barRight: (() => { const e = q('#custListBar .cust-listbar-inner'); return e ? Math.round(e.getBoundingClientRect().right) : null; })(),
                 listRight: (() => { const e = q('#tab-customers .mob-table-scroll'); return e ? Math.round(e.getBoundingClientRect().right) : null; })(),
+                // --- the phone legibility + tap-target floor -----------------
+                // A phone is read at arm's length: nothing on this screen may
+                // be smaller than 12px.
+                smallText: (() => {
+                    const out = [];
+                    document.querySelectorAll('#tab-customers *').forEach((el) => {
+                        const r = el.getBoundingClientRect();
+                        if (!r.width || !r.height) return;
+                        const cs = getComputedStyle(el);
+                        if (cs.visibility === 'hidden' || cs.display === 'none') return;
+                        const t = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join(' ').trim();
+                        if (!t) return;
+                        const size = parseFloat(cs.fontSize);
+                        if (size >= 12) return;
+                        out.push(String(el.className).slice(0, 30) + ' ' + size + 'px "' + t.slice(0, 20) + '"');
+                    });
+                    return out;
+                })(),
+                // Every control must have a real hit area: 44px for a control,
+                // 24px for an inline link (WCAG 2.2 target size). A checkbox
+                // may sit in a label that carries the area.
+                smallTargets: (() => {
+                    const out = [];
+                    document.querySelectorAll('#tab-customers button, #tab-customers a[href], #tab-customers input, #tab-customers select').forEach((el) => {
+                        const r = el.getBoundingClientRect();
+                        if (!r.width || !r.height) return;
+                        const cs = getComputedStyle(el);
+                        if (cs.visibility === 'hidden' || cs.display === 'none') return;
+                        const inline = el.tagName === 'A' || el.classList.contains('mob-reset-lock');
+                        const need = inline ? 24 : 44;
+                        const hit = el.closest('label') || el;
+                        const hr = hit.getBoundingClientRect();
+                        if (hr.height >= need && hr.width >= need) return;
+                        out.push(String(el.className || el.tagName).slice(0, 30) + ' ' + Math.round(hr.width) + 'x' + Math.round(hr.height) + ' (needs ' + need + ')');
+                    });
+                    return out;
+                })(),
+                selHit: (() => {
+                    const l = q('#customerDataTableBody .cust-sel-hit');
+                    if (!l) return null;
+                    const r = l.getBoundingClientRect();
+                    return { w: Math.round(r.width), h: Math.round(r.height) };
+                })(),
+                waH: (() => { const e = q('#customerDataTableBody .mob-wa-link'); return e ? Math.round(e.getBoundingClientRect().height) : null; })(),
+                resetH: (() => { const e = q('#customerDataTableBody .mob-reset-lock'); return e ? Math.round(e.getBoundingClientRect().height) : null; })(),
+                dupVisible: (() => {
+                    const e = q('#customerDataTableBody .cust-dup');
+                    return e ? getComputedStyle(e).display !== 'none' : 'none';
+                })(),
             };
         });
 
@@ -425,6 +474,13 @@ try {
         assert.ok(card.kpisRight <= card.cardRight, 'the KPI strip stays inside the card (' + card.kpisRight + ' vs ' + card.cardRight + ')');
         assert.ok(card.barRight <= card.cardRight, 'the control bar stays inside the card (' + card.barRight + ' vs ' + card.cardRight + ')');
         assert.ok(card.listRight <= card.cardRight, 'the guest list stays inside the card (' + card.listRight + ' vs ' + card.cardRight + ')');
+        // --- the legibility + tap-target floor ---------------------------
+        assert.deepEqual(card.smallText, [], 'nothing on the phone is smaller than 12px: ' + card.smallText.join(' | '));
+        assert.deepEqual(card.smallTargets, [], 'every control has a real hit area: ' + card.smallTargets.join(' | '));
+        assert.ok(card.selHit && card.selHit.w >= 44 && card.selHit.h >= 44,
+            'the selection box has a 44x44 hit area (' + (card.selHit ? card.selHit.w + 'x' + card.selHit.h : 'missing') + ')');
+        assert.ok(card.waH >= 24, 'the WhatsApp link is at least 24px tall (' + card.waH + 'px)');
+        assert.ok(card.resetH >= 24, 'the repair link is at least 24px tall (' + card.resetH + 'px)');
         ok('a ' + w + 'px phone replaces the header strip with one control row and hides the chips');
 
         // --- the native picker really sorts -------------------------------
@@ -477,6 +533,23 @@ try {
                     return b ? getComputedStyle(b).display : 'none';
                 })(),
                 bodyClass: document.body.className,
+                // the sheet has its own text: it must clear the same floor
+                smallText: (() => {
+                    const out = [];
+                    f.querySelectorAll('*').forEach((el) => {
+                        const r = el.getBoundingClientRect();
+                        if (!r.width || !r.height) return;
+                        const cs = getComputedStyle(el);
+                        if (cs.visibility === 'hidden' || cs.display === 'none') return;
+                        const t = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join(' ').trim();
+                        if (!t) return;
+                        const size = parseFloat(cs.fontSize);
+                        if (size >= 12) return;
+                        out.push(String(el.className).slice(0, 30) + ' ' + size + 'px "' + t.slice(0, 20) + '"');
+                    });
+                    return out;
+                })(),
+                overscroll: getComputedStyle(f).overscrollBehavior,
             };
         });
         assert.ok(sheet.open, 'the Filters button opens the sheet at ' + w + 'px');
@@ -490,6 +563,8 @@ try {
         assert.equal(sheet.footerHit, 'clear-button', 'the sheet footer is not covered by the bottom nav');
         assert.equal(sheet.bannerDisplay, 'none', 'the demo banner steps aside for the sheet');
         assert.ok(/cust-sheet-open/.test(sheet.bodyClass), 'the body knows the sheet is open');
+        assert.deepEqual(sheet.smallText, [], 'nothing in the sheet is smaller than 12px: ' + sheet.smallText.join(' | '));
+        assert.ok(/contain/.test(sheet.overscroll || ''), 'the sheet contains its own scroll (' + sheet.overscroll + ')');
         ok('the filter sheet opens as a modal bottom sheet at ' + w + 'px');
 
         // A chip filters the list while the sheet stays open.

@@ -213,7 +213,7 @@
 
 <body>
 
-    <div id="alertContainer"></div>
+    <div id="alertContainer" role="status" aria-live="polite"></div>
 
     <input type="file" id="inventoryImportInput" accept=".csv,text/csv" style="display:none" aria-hidden="true">
 
@@ -3438,7 +3438,7 @@
                     <div class="mob-section-head-row">
                         <h3 class="mob-card-title">Customer Database <span class="mob-table-count" id="custTableCount"></span></h3>
                         <div class="cust-toolbar">
-                            <input type="text" id="customerSearch" placeholder="Search name, phone, address, dish..." class="search-input-group" style="max-width:220px;" aria-label="Search customers">
+                            <input type="text" id="customerSearch" placeholder="Search name, phone, address, dish…" class="search-input-group" style="max-width:220px;" aria-label="Search customers">
                             <button type="button" id="custDensityBtn" class="cust-tool-btn" aria-pressed="false" title="Switch between comfortable and compact rows" aria-label="Switch between comfortable and compact rows"><i data-lucide="rows-3" class="icon-18"></i><span class="cust-phone-hide">Compact</span></button>
                             <div class="mob-export-row" style="display:flex; gap:8px;">
                                 <button type="button" class="mob-export-banner mob-export-excel" data-action="custExportExcel" title="Export to Excel" aria-label="Export the customer list to Excel">

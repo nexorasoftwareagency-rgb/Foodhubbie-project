@@ -427,6 +427,49 @@ const sw = readFileSync(SW_FILE, 'utf8');
     ok('the controller wires the phone control bar, the sheet and the banner collision');
 }
 
+{
+    // ---------------------------------------------------------------------
+    // THE PHONE LEGIBILITY + TAP-TARGET FLOOR
+    //
+    // A phone is read at arm's length and tapped with a thumb. The audit
+    // measured a 22x22 checkbox, a 20px WhatsApp link, a 12px "Reset phone
+    // lock" link and six text sizes under 12px. The browser guard MEASURES
+    // the result; these guards pin the source that produced it.
+    // ---------------------------------------------------------------------
+    const css = (viewSrc.match(/CUSTOMER_DASHBOARD_CSS = `([\s\S]*?)`;/) || [])[1] || '';
+    // the row checkbox is wrapped in a label so the phone can give it a 44x44
+    // hit area while the box itself stays 22px of paint
+    const rowHtml = V.renderRow(byPhone('9000000201'));
+    assert.ok(/class="cust-sel-hit"/.test(rowHtml), 'the row checkbox is wrapped in a hit-area label');
+    assert.ok(/#tab-customers \.cust-sel-hit \{[^}]*padding: 11px;/.test(css), 'the checkbox hit area is padded to 44px');
+    assert.ok(/#tab-customers \.cust-sel-hit \{[^}]*margin: -11px;/.test(css), 'the padded hit area does not move the layout');
+    // the inline links clear the WCAG 2.2 target-size minimum (24px)
+    assert.ok(/#tab-customers \.mob-wa-link \{[^}]*min-height: 28px;/.test(css), 'the WhatsApp link is at least 24px tall');
+    assert.ok(/#tab-customers \.mob-reset-lock \{[^}]*min-height: 32px;/.test(css), 'the repair link is at least 24px tall');
+    assert.ok(/#tab-customers \.mob-reset-lock \{[^}]*font-size: 12\.5px;/.test(css), 'the repair link is readable');
+    // the type floor: the phone overrides every caption that was under 12px
+    for (const sel of ['cust-pill', 'cust-reach', 'cust-mob-meta', 'cust-chip-count', 'cust-filter-label', 'cust-batch-reach']) {
+        assert.ok(new RegExp('#tab-customers \\.' + sel + '[^{]*\\{[^}]*font-size: 12px;').test(css),
+            'the phone sets ' + sel + ' to 12px');
+    }
+    assert.ok(/#tab-customers \.cust-kpi-label \{[^}]*font-size: 12px;/.test(css), 'the KPI caption is 12px on a phone');
+    assert.ok(/#tab-customers \.cust-lb-badge \{[^}]*font-size: 12px;/.test(css), 'the filter-count badge is 12px on a phone');
+    // the sheet contains its own scroll, and every custom control has a
+    // visible focus ring
+    assert.ok(/overscroll-behavior: contain;/.test(css), 'the sheet contains its own scroll');
+    assert.ok(/#tab-customers \.mob-wa-link:focus-visible/.test(css), 'the WhatsApp link has a focus ring');
+    assert.ok(/#tab-customers \.mob-reset-lock:focus-visible/.test(css), 'the repair link has a focus ring');
+    assert.ok(/#tab-customers \.cust-sheet-close:focus-visible/.test(css), 'the sheet close button has a focus ring');
+    // the duplicate warning used to disappear with the folded columns
+    assert.ok(/class="cust-joined-text"/.test(rowHtml), 'the joined line is split so the duplicate badge can survive');
+    assert.ok(/#tab-customers \.cust-joined-text \{ display: none; \}/.test(css), 'the phone hides the joined date');
+    assert.ok(/#tab-customers \.cust-dup \{[^}]*font-size: 12px;/.test(css), 'the duplicate badge is readable on a phone');
+    // the web-interface rules that are cheap to honour
+    assert.ok(/id="alertContainer" role="status" aria-live="polite"/.test(html), 'the toast container announces itself');
+    assert.ok(/placeholder="Search name, phone, address, dish…"/.test(html), 'the placeholder ends with an ellipsis character');
+    ok('the phone legibility floor (12px text, 44px controls, 24px links) is pinned in the source');
+}
+
 console.log('\n' + n + ' checks passed');
 
 // ------------------------------------------------------ mutation self-test
