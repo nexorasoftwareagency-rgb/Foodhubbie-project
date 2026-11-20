@@ -351,6 +351,81 @@ const sw = readFileSync(SW_FILE, 'utf8');
     assert.ok(!/function money/.test(viewSrc), 'no private copy of the money formatter');
     ok('the new module is clean UTF-8 and reuses the shared money formatter');
 }
+{
+    // ---------------------------------------------------------------------
+    // THE PHONE LIST CONTROL BAR + THE FILTER SHEET
+    //
+    // The column headers used to become a scrolling strip of sort chips on a
+    // phone: it wrapped to two rows, cut mid-word ("Last…", "Orde…"),
+    // scrolled sideways and - being sticky INSIDE the table - floated over
+    // the first card. A phone now gets ONE control row (select-all, a NATIVE
+    // sort picker, a Filters button) and the filter chips live in a SHEET.
+    // ---------------------------------------------------------------------
+    for (const id of ['custListBar', 'custFiltersScrim']) {
+        assert.ok(html.includes(`id="${id}"`), 'the markup has #' + id);
+    }
+    assert.ok(/export function renderListBar/.test(viewSrc), 'the view layer renders the phone control bar');
+    assert.ok(/export const SORT_OPTIONS/.test(viewSrc), 'the sort options are a single list');
+    // Every sortable column of THIS table must be reachable from the native
+    // picker, in BOTH directions - a sort key that only the desktop header
+    // knows about would become unreachable on a phone.
+    const tableAt = html.indexOf('id="customerDataTable"');
+    const headBlock = html.slice(tableAt, html.indexOf('</thead>', tableAt));
+    const sortable = [...new Set([...headBlock.matchAll(/<th[^>]*data-sort="([^"]+)"/g)].map((m) => m[1]))];
+    const opts = V.SORT_OPTIONS || [];
+    for (const field of sortable) {
+        const dirs = opts.filter((o) => o.field === field).map((o) => o.dir).sort().join(',');
+        assert.equal(dirs, 'asc,desc', 'the sort picker covers ' + field + ' in both directions');
+    }
+    ok('the native sort picker covers every sortable column in both directions');
+    {
+        const css = (viewSrc.match(/CUSTOMER_DASHBOARD_CSS = `([\s\S]*?)`;/) || [])[1] || '';
+        assert.ok(/#tab-customers \.mob-data-table thead \{ display: none; \}/.test(css),
+            'the phone hides the table header (it was the broken sort strip)');
+        assert.ok(/#tab-customers \.cust-filters \{[^}]*position: fixed;/.test(css),
+            'the filter chips are a fixed bottom sheet on a phone');
+        assert.ok(/transform: translateY\(105%\);/.test(css), 'the sheet is parked off-screen until it is asked for');
+        assert.ok(/\.cust-filters-open \.cust-filters \{[^}]*transform: none;/.test(css), 'the sheet slides in when it opens');
+        assert.ok(/\.cust-filters-scrim \{[^}]*position: fixed;/.test(css), 'the sheet has a scrim');
+        assert.ok(/#tab-customers \.cust-lb-btn \{[^}]*min-height: 44px;/.test(css), 'the Filters button is a 44px tap target');
+        assert.ok(/\.cust-lb-all input\[type="checkbox"\] \{[^}]*width: 24px;/.test(css), 'the select-all box is a 24px box');
+        assert.ok(/\.cust-lb-all input\[type="checkbox"\] \{[^}]*padding: 0 !important;/.test(css),
+            'the global input padding cannot squash the checkbox');
+        assert.ok(/#tab-customers \.cust-batch-btn \{[^}]*min-height: 44px;/.test(css), 'the action buttons are 44px tall');
+        assert.ok(/grid-template-columns: 1fr 1fr;/.test(css), 'the two action buttons are equal columns');
+        // A forced width:100% on the phone card children made every one of
+        // them overflow the card by 12px on the right (the KPI tiles and the
+        // list were cut off on a phone).
+        assert.ok(/#tab-customers \.mob-table-card > \* \{ flex: none; width: auto; \}/.test(css),
+            'the phone card children keep their own margins instead of overflowing the card');
+        // The toolbar used to carry an inline style, which beat every CSS
+        // rule - the phone layout could not change its own head row.
+        assert.ok(!/class="cust-toolbar" style=/.test(html), 'the toolbar has no inline style (CSS owns the layout)');
+        ok('the phone control bar, the filter sheet and the action bar are sized for a thumb');
+    }
+    assert.ok(/#custSortSelect/.test(ctrl), 'the controller reads the native sort picker');
+    assert.ok(/_setFilterSheet\(true\)/.test(ctrl), 'the Filters button opens the sheet');
+    assert.ok(/cust-filters-open/.test(ctrl), 'the sheet state is a class on the tab');
+    assert.ok(/custFiltersScrim/.test(ctrl), 'the scrim closes the sheet');
+    assert.ok(/e\.key !== 'Escape'/.test(ctrl), 'Escape closes the sheet');
+    assert.ok(/custSelectAllMobile/.test(ctrl), 'the phone has its own select-all box');
+    assert.ok(/cust-batch-open/.test(ctrl), 'the action bar marks the body so the demo banner steps aside');
+    assert.ok(/cust-sheet-open/.test(ctrl), 'the sheet marks the body so the demo banner steps aside');
+    {
+        const css = (viewSrc.match(/CUSTOMER_DASHBOARD_CSS = `([\s\S]*?)`;/) || [])[1] || '';
+        // The tab pane is z-index 20 and the bottom nav is z-index 5000 in the
+        // same app shell: without a lift the nav paints over the sheet's
+        // footer and swallows the "Clear all" tap.
+        assert.ok(/#tab-customers\.cust-filters-open \{ z-index: 6000 !important; \}/.test(css),
+            'the sheet lifts the tab pane above the bottom nav');
+    }
+    const demo = readFileSync(join(root, 'Admin/js/demo-mode.js'), 'utf8');
+    assert.ok(/body\.cust-batch-open #demoModeBanner\{display:none !important\}/.test(demo),
+        'the demo banner hides while the action bar is open (they collided on a phone)');
+    assert.ok(/body\.cust-sheet-open #demoModeBanner\{display:none !important\}/.test(demo),
+        'the demo banner hides while the filter sheet is open (it is painted over the whole shell)');
+    ok('the controller wires the phone control bar, the sheet and the banner collision');
+}
 
 console.log('\n' + n + ' checks passed');
 

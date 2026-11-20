@@ -3432,25 +3432,28 @@
 
             <div id="tab-customers" class="tab-content hidden">
 
+                <div id="custFiltersScrim" class="cust-filters-scrim" aria-hidden="true"></div>
+
                 <div class="mob-card mob-table-card" style="margin:0;">
                     <div class="mob-section-head-row">
                         <h3 class="mob-card-title">Customer Database <span class="mob-table-count" id="custTableCount"></span></h3>
-                        <div class="cust-toolbar" style="display:flex; gap:8px; align-items:center; margin-left:auto;">
+                        <div class="cust-toolbar">
                             <input type="text" id="customerSearch" placeholder="Search name, phone, address, dish..." class="search-input-group" style="max-width:220px;" aria-label="Search customers">
-                            <button type="button" id="custDensityBtn" class="cust-tool-btn" aria-pressed="false" title="Switch between comfortable and compact rows"><i data-lucide="rows-3" class="icon-18"></i><span>Compact</span></button>
+                            <button type="button" id="custDensityBtn" class="cust-tool-btn" aria-pressed="false" title="Switch between comfortable and compact rows" aria-label="Switch between comfortable and compact rows"><i data-lucide="rows-3" class="icon-18"></i><span class="cust-phone-hide">Compact</span></button>
                             <div class="mob-export-row" style="display:flex; gap:8px;">
-                                <button type="button" class="mob-export-banner mob-export-excel" data-action="custExportExcel" title="Export to Excel">
+                                <button type="button" class="mob-export-banner mob-export-excel" data-action="custExportExcel" title="Export to Excel" aria-label="Export the customer list to Excel">
                                     <i data-lucide="file-spreadsheet" class="icon-18"></i>
-                                    <span>Excel</span>
+                                    <span class="cust-phone-hide">Excel</span>
                                 </button>
-                                <button type="button" class="mob-export-banner mob-export-pdf" data-action="custExportPDF" title="Export to PDF">
+                                <button type="button" class="mob-export-banner mob-export-pdf" data-action="custExportPDF" title="Export to PDF" aria-label="Export the customer list to PDF">
                                     <i data-lucide="file-text" class="icon-18"></i>
-                                    <span>PDF</span>
+                                    <span class="cust-phone-hide">PDF</span>
                                 </button>
                             </div>
                         </div>
                     </div>
                     <div id="custKpis" class="cust-kpis"></div>
+                    <div id="custListBar" class="cust-listbar"></div>
                     <div id="custFilters" class="cust-filters"></div>
                     <div id="custBatchBar"></div>
                     <div class="mob-table-scroll">

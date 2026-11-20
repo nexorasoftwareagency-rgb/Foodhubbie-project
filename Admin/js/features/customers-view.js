@@ -386,6 +386,62 @@ function initialsOf(name) {
     return parts.slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
+/**
+ * The phone list-control bar.
+ *
+ * The column headers used to become a scrolling strip of sort CHIPS on a
+ * phone: it wrapped to two rows, truncated mid-word ("Last…", "Orde…"),
+ * scrolled sideways and - being sticky INSIDE the table - floated over the
+ * first card. On a phone a header row is the wrong shape for a header.
+ *
+ * So the phone gets ONE purpose-built control row instead:
+ *   [ Select all ]  [ Sort ▾ (native picker) ]  [ Filters (n) ▾ ]
+ * The sort is a native <select> (the OS picker, full keyboard support, one
+ * option per field AND direction), and the filter chips move into a sheet
+ * that only opens when it is asked for.
+ */
+export const SORT_OPTIONS = [
+    { value: 'name:asc', field: 'name', dir: 'asc', label: 'Customer A-Z' },
+    { value: 'name:desc', field: 'name', dir: 'desc', label: 'Customer Z-A' },
+    { value: 'lastVisit:desc', field: 'lastVisit', dir: 'desc', label: 'Newest visit' },
+    { value: 'lastVisit:asc', field: 'lastVisit', dir: 'asc', label: 'Oldest visit' },
+    { value: 'orderCount:desc', field: 'orderCount', dir: 'desc', label: 'Most orders' },
+    { value: 'orderCount:asc', field: 'orderCount', dir: 'asc', label: 'Fewest orders' },
+    { value: 'ltv:desc', field: 'ltv', dir: 'desc', label: 'High value' },
+    { value: 'ltv:asc', field: 'ltv', dir: 'asc', label: 'Low value' },
+    { value: 'loyaltyPoints:desc', field: 'loyaltyPoints', dir: 'desc', label: 'Most points' },
+    { value: 'loyaltyPoints:asc', field: 'loyaltyPoints', dir: 'asc', label: 'Fewest points' },
+    { value: 'segment:asc', field: 'segment', dir: 'asc', label: 'Segment A-Z' },
+    { value: 'segment:desc', field: 'segment', dir: 'desc', label: 'Segment Z-A' },
+    { value: 'displayPhone:asc', field: 'displayPhone', dir: 'asc', label: 'Phone A-Z' },
+    { value: 'displayPhone:desc', field: 'displayPhone', dir: 'desc', label: 'Phone Z-A' },
+    { value: 'address:asc', field: 'address', dir: 'asc', label: 'Address A-Z' },
+    { value: 'address:desc', field: 'address', dir: 'desc', label: 'Address Z-A' },
+];
+
+/** The phone control row: select-all, the sort picker and the filter button. */
+export function renderListBar(state = {}) {
+    const {
+        sortField = 'ltv', sortDir = 'desc', segment = 'all', audiences = [],
+    } = state;
+    const active = (segment && segment !== 'all' ? 1 : 0) + (audiences || []).length;
+    const opts = SORT_OPTIONS.map((o) => `<option value="${esc(o.value)}"${o.field === sortField && o.dir === sortDir ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+    return `
+        <div class="cust-listbar-inner">
+            <label class="cust-lb-all">
+                <input type="checkbox" id="custSelectAllMobile" aria-label="Select the guests shown on this page" title="Select the guests shown on this page">
+                <span class="cust-lb-all-text"><span class="cust-lb-all-full">Select all</span><span class="cust-lb-all-short">All</span></span>
+            </label>
+            <label class="cust-lb-sort">
+                <select id="custSortSelect" aria-label="Sort the guests">${opts}</select>
+                <i data-lucide="chevron-down" class="cust-lb-chevron" aria-hidden="true"></i>
+            </label>
+            <button type="button" id="custFiltersBtn" class="cust-lb-btn" aria-expanded="false" aria-controls="custFilters">
+                <span>Filters</span>${active ? `<span class="cust-lb-badge">${esc(String(active))}</span>` : ''}
+            </button>
+        </div>`;
+}
+
 export function renderKpis(tiles, active) {
     return tiles.map((t) => `
         <button type="button" class="cust-kpi" data-cust-kpi="${esc(t.key)}"
@@ -399,6 +455,7 @@ export function renderKpis(tiles, active) {
 export function renderFilters(counts, state = {}) {
     const segment = state.segment || 'all';
     const audiences = new Set(state.audiences || []);
+    const matching = Number(state.matching || 0);
     const segChips = SEGMENT_CHIPS.map((chip) => `
         <button type="button" class="cust-chip" data-cust-segment="${esc(chip.key)}"
             aria-pressed="${segment === chip.key ? 'true' : 'false'}">${esc(chip.label)}
@@ -407,7 +464,14 @@ export function renderFilters(counts, state = {}) {
         <button type="button" class="cust-chip" data-cust-audience="${esc(chip.key)}"
             aria-pressed="${audiences.has(chip.key) ? 'true' : 'false'}">${esc(chip.label)}
             <span class="cust-chip-count">${esc(num(counts.audiences[chip.key] || 0))}</span></button>`).join('');
+    // The sheet chrome is MOBILE only (the desktop shows the chip rows inline).
     return `
+        <div class="cust-sheet-head">
+            <span class="cust-sheet-title">Filters</span>
+            <button type="button" class="cust-sheet-close" data-cust-filters-close aria-label="Close the filters">
+                <i data-lucide="x" class="icon-18" aria-hidden="true"></i>
+            </button>
+        </div>
         <div class="cust-filter-row">
             <span class="cust-filter-label">Segment</span>
             <div class="cust-chips" role="group" aria-label="Filter by segment">${segChips}</div>
@@ -415,6 +479,10 @@ export function renderFilters(counts, state = {}) {
         <div class="cust-filter-row">
             <span class="cust-filter-label">Audience</span>
             <div class="cust-chips" role="group" aria-label="Filter by audience">${audChips}</div>
+        </div>
+        <div class="cust-sheet-foot">
+            <button type="button" class="cust-tool-btn" data-cust-filters-clear>Clear all</button>
+            <button type="button" class="btn-primary cust-sheet-apply" data-cust-filters-close>Show ${esc(num(matching))} guest${matching === 1 ? '' : 's'}</button>
         </div>`;
 }
 
@@ -542,7 +610,7 @@ export function renderBatchBar(s = {}) {
         <div class="cust-batch-bar" role="region" aria-label="Actions for the selected guests">
             <div class="cust-batch-left">
                 <span class="cust-batch-count" role="status" aria-live="polite">${esc(num(selected))} guest${selected === 1 ? '' : 's'} selected</span>
-                <span class="cust-batch-matching">${esc(num(matching))} matching</span>
+                <span class="cust-batch-matching cust-phone-hide">${esc(num(matching))} matching</span>
                 ${allLine}
             </div>
             <div class="cust-batch-reach">
@@ -550,8 +618,8 @@ export function renderBatchBar(s = {}) {
                 <span title="Guests who opted in, are not opted out, and the outlet can send to">Up to ${esc(num(waReach))} can get WhatsApp</span>
             </div>
             <div class="cust-batch-actions">
-                <button type="button" class="btn-primary cust-batch-btn" data-cust-notify="push">Send app notification</button>
-                <button type="button" class="btn-secondary cust-batch-btn" data-cust-notify="wa">Send WhatsApp message</button>
+                <button type="button" class="btn-primary cust-batch-btn" data-cust-notify="push" title="Send an app notification to the selected guests"><span class="cust-phone-hide">Send app notification</span><span class="cust-phone-only">App push</span></button>
+                <button type="button" class="btn-secondary cust-batch-btn" data-cust-notify="wa" title="Send a WhatsApp message to the selected guests"><span class="cust-phone-hide">Send WhatsApp message</span><span class="cust-phone-only">WhatsApp</span></button>
                 <button type="button" class="cust-tool-btn" data-cust-clear-selection title="Clear the selection">Clear<span class="cust-phone-hide"> selection</span></button>
             </div>
         </div>`;
@@ -589,6 +657,16 @@ export const CUSTOMER_DASHBOARD_CSS = `
 #tab-customers .cust-kpi-label { font-size: 12px; font-weight: 700; color: var(--mob-sub); }
 
 #tab-customers .cust-filters { margin: 0 18px 14px; display: flex; flex-direction: column; gap: 8px; }
+/* The list-control bar and the filter SHEET are PHONE-only. On a desktop the
+   column headers sort the table and the chips sit inline, so both are hidden
+   there (the phone rules below turn them on). */
+#tab-customers .cust-toolbar { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+#tab-customers .cust-listbar,
+#tab-customers .cust-sheet-head,
+#tab-customers .cust-sheet-foot,
+#tab-customers .cust-filters-scrim { display: none; }
+/* The short phone labels for the action bar ("App push" / "WhatsApp"). */
+#tab-customers .cust-phone-only { display: none; }
 #tab-customers .cust-filter-row { display: flex; align-items: flex-start; gap: 10px; }
 #tab-customers .cust-filter-label { font-size: 11.5px; font-weight: 800; color: var(--mob-sub); padding-top: 6px; min-width: 58px; }
 #tab-customers .cust-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -784,8 +862,10 @@ export const CUSTOMER_DASHBOARD_CSS = `
    On a phone the table becomes a stack of CARDS:
      - every fact is on the card, nothing scrolls sideways
      - the card is the tap target for the Customer Profile
-     - the column headers become a scrolling strip of SORT CHIPS, so sorting
-       and the select-all checkbox survive the layout change
+     - the column headers are GONE: a phone gets ONE control row
+       ([ Select all ] [ Sort ] [ Filters ]) instead of a header strip
+     - the filter chips live in a SHEET that opens on demand, so two rows of
+       chips do not sit above the list
      - the contextual action bar pins to the BOTTOM, above the nav
    ========================================================================= */
 
@@ -798,24 +878,32 @@ export const CUSTOMER_DASHBOARD_CSS = `
         flex-direction: column;
         padding: 12px 0;
     }
-    #tab-customers .mob-table-card > * { flex: none; width: 100%; }
+    /* The width is NOT forced to 100%: these children carry their own
+       horizontal margins, and a forced width made them overflow the card by
+       12px on the right (the KPI tiles and the list were cut off). */
+    #tab-customers .mob-table-card > * { flex: none; width: auto; }
     #tab-customers .mob-section-head-row { order: 1; padding: 0 12px; }
     #tab-customers #custKpis { order: 2; }
-    #tab-customers #custFilters { order: 3; }
-    #tab-customers .mob-table-scroll { order: 4; }
-    #tab-customers #custPager { order: 5; }
-    #tab-customers #custBatchBar { order: 6; }
+    #tab-customers #custListBar { order: 3; }
+    #tab-customers #custFilters { order: 4; }
+    #tab-customers .mob-table-scroll { order: 5; }
+    #tab-customers #custPager { order: 6; }
+    #tab-customers #custBatchBar { order: 7; }
 
     /* --- the toolbar: the search on its own line, the tools on ONE row. --- */
     #tab-customers .mob-section-head-row { flex-wrap: wrap; gap: 8px; }
-    #tab-customers .cust-toolbar { margin-left: 0 !important; width: 100%; flex-wrap: wrap; gap: 8px; }
-    #tab-customers #customerSearch { flex: 1 1 100%; max-width: none !important; min-height: 42px; }
-    #tab-customers #custDensityBtn { min-height: 40px; }
-    #tab-customers .cust-toolbar .mob-export-row { margin: 0; flex: 0 0 auto; gap: 6px; }
+    #tab-customers .mob-section-head-row > h3 { order: 0; flex: 1 0 100%; min-width: 0; }
+    #tab-customers .cust-toolbar { display: contents; margin-left: 0; }
+    #tab-customers #customerSearch { order: 1; flex: 1 1 0; min-width: 100px; max-width: none !important; min-height: 44px; }
+    #tab-customers #custDensityBtn { order: 2; min-height: 44px; min-width: 44px; padding: 8px 10px; }
+    #tab-customers .cust-toolbar .mob-export-row { order: 2; margin: 0; flex: 0 0 auto; gap: 6px; }
     #tab-customers .cust-toolbar .mob-export-banner {
         flex: 0 0 auto; padding: 8px 12px; font-size: 12.5px;
         border-radius: 10px; box-shadow: none;
+        min-width: 44px; min-height: 44px;
     }
+    /* the tool labels are hidden on a phone - the icons carry them */
+    #tab-customers .cust-toolbar .cust-phone-hide { display: none; }
 
     /* --- KPI tiles: smaller, still three across. --- */
     #tab-customers .cust-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 4px 12px 10px; }
@@ -823,15 +911,99 @@ export const CUSTOMER_DASHBOARD_CSS = `
     #tab-customers .cust-kpi-val { font-size: 18px; }
     #tab-customers .cust-kpi-label { font-size: 10.5px; line-height: 1.25; }
 
-    /* --- ONE scrolling row per chip group, so the list stays reachable. --- */
-    #tab-customers .cust-filters { margin: 0 12px 10px; gap: 6px; }
-    #tab-customers .cust-filter-row { flex-direction: row; align-items: center; gap: 8px; }
+    /* --- the filter chips move into a SHEET. Two scrolling rows of chips
+       above the list cost 102px of an 844px screen and read like a third
+       chip system; the sheet only takes the screen when it is asked for. --- */
+    #tab-customers .cust-filters {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9300;
+        margin: 0;
+        padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+        gap: 10px;
+        background: #fff;
+        border-radius: 20px 20px 0 0;
+        box-shadow: 0 -14px 44px rgba(15, 23, 42, .3);
+        transform: translateY(105%);
+        visibility: hidden;
+        transition: transform .22s ease, visibility 0s linear .22s;
+        max-height: 78vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    #tab-customers.cust-filters-open .cust-filters {
+        transform: none;
+        visibility: visible;
+        transition: transform .22s ease, visibility 0s;
+    }
+    #tab-customers .cust-filters-scrim {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 9200;
+        background: rgba(15, 23, 42, .45);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .2s ease;
+    }
+    #tab-customers.cust-filters-open .cust-filters-scrim { opacity: 1; pointer-events: auto; }
+    /* The sheet is a MODAL, but it lives inside the tab pane (z-index 20)
+       while the bottom nav is z-index 5000 in the same app shell - so the nav
+       paints OVER the sheet and swallows the "Clear all" tap. Lift the pane
+       above the nav while the sheet is up; the scrim then dims the nav like
+       any other modal. */
+    #tab-customers.cust-filters-open { z-index: 6000 !important; }
+    #tab-customers .cust-sheet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 2px 0 4px;
+    }
+    #tab-customers .cust-sheet-title { font-size: 15px; font-weight: 900; color: var(--mob-ink); }
+    #tab-customers .cust-sheet-close {
+        appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0;
+        border: 1px solid var(--mob-border);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--mob-ink);
+        cursor: pointer;
+    }
+    #tab-customers .cust-sheet-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding-top: 6px;
+        border-top: 1px solid var(--mob-border);
+    }
+    #tab-customers .cust-sheet-apply {
+        min-height: 44px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 800;
+        padding: 10px 16px;
+    }
+    #tab-customers .cust-filter-row { flex-direction: column; align-items: stretch; gap: 6px; }
     #tab-customers .cust-filter-label { padding-top: 0; flex: 0 0 auto; min-width: 0; font-size: 11px; }
     #tab-customers .cust-chips {
-        flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px;
-        scrollbar-width: thin; -webkit-overflow-scrolling: touch;
+        flex-wrap: wrap;
+        overflow: visible;
+        padding-bottom: 0;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
     }
-    #tab-customers .cust-chip { font-size: 12px; padding: 5px 10px; }
+    #tab-customers .cust-chip { font-size: 12.5px; padding: 8px 12px; min-height: 44px; }
 
     /* --- the list: a stack of cards, no sideways scroll. --- */
     #tab-customers .mob-table-scroll {
@@ -872,51 +1044,143 @@ export const CUSTOMER_DASHBOARD_CSS = `
     /* a selected card says so */
     #tab-customers .mob-data-table tbody tr.cust-row-selected { background: #f0f9ff; box-shadow: inset 3px 0 0 var(--mob-blue); }
 
-    /* --- the column headers become a scrolling strip of SORT CHIPS: the
-       headers ARE the sort buttons, so sorting (and the select-all checkbox)
-       survives the card layout. --- */
-    #tab-customers .mob-data-table thead {
-        display: block;
-        position: sticky;
-        top: calc(var(--mobile-header-height, 60px) + var(--safe-top, 0px));
-        z-index: 5;
-        background: #fff;
-        border-bottom: 1px solid var(--mob-border);
-        border-radius: 11px 11px 0 0;
+    /* --- the column headers are GONE on a phone. A header row is the wrong
+       shape for a header on a 360px screen: it wrapped to two rows, cut
+       mid-word ("Last…", "Orde…"), scrolled sideways and - being sticky
+       INSIDE the table - floated over the first card.
+
+       Instead the phone gets ONE control row (renderListBar): a select-all
+       checkbox, a NATIVE sort picker and a Filters button that opens the
+       filter sheet. Sorting keeps a full keyboard + screen-reader story
+       because it is a real <select>, and the list starts ~100px higher. --- */
+    #tab-customers .mob-data-table thead { display: none; }
+
+    #tab-customers .cust-listbar { display: block; margin: 0 12px 10px; }
+    #tab-customers .cust-listbar-inner {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
     }
-    #tab-customers .mob-data-table thead tr {
-        display: flex;
-        gap: 6px;
-        padding: 8px 12px;
-        overflow-x: auto;
-        scrollbar-width: thin;
-        -webkit-overflow-scrolling: touch;
-    }
-    #tab-customers .mob-data-table thead th {
+    #tab-customers .cust-lb-all {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        flex: 0 0 auto;
-        position: static;
-        padding: 5px 10px;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 10px 0 6px;
         border: 1px solid var(--mob-border);
-        border-radius: 999px;
+        border-radius: 12px;
         background: #fff;
         color: var(--mob-ink);
-        font-size: 11.5px;
+        font-size: 12.5px;
         font-weight: 800;
-        white-space: nowrap;
-        text-transform: none;
         cursor: pointer;
+        white-space: nowrap;
     }
-    /* "Next step" is not a sort key - it must not look like one. */
-    #tab-customers .mob-data-table thead th:not([data-sort]):not(.cust-col-sel) { display: none; }
-    /* The Address column folds away on a phone, so its sort chip would be a
-       lie - unless it is the ACTIVE sort, which must never be hidden. */
-    #tab-customers .mob-data-table thead th[data-sort="address"]:not(.mob-sort-asc):not(.mob-sort-desc) { display: none; }
-    #tab-customers .mob-data-table thead th.cust-col-sel { width: auto; min-width: 0; padding: 4px 8px; }
-    #tab-customers .mob-data-table thead th.mob-sort-asc,
-    #tab-customers .mob-data-table thead th.mob-sort-desc { background: var(--mob-ink); border-color: var(--mob-ink); color: #fff; }
+    #tab-customers .cust-lb-all input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        box-sizing: border-box;
+        padding: 0 !important;
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        min-height: 24px;
+        margin: 0;
+        padding: 0;
+        border: 2px solid var(--mob-border);
+        border-radius: 7px;
+        background: #fff;
+        display: inline-grid;
+        place-content: center;
+        cursor: pointer;
+        flex: none;
+    }
+    #tab-customers .cust-lb-all input[type="checkbox"]::after {
+        content: "";
+        width: 13px;
+        height: 13px;
+        transform: scale(0);
+        transition: transform .12s ease;
+        box-shadow: inset 1em 1em #fff;
+        clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+    }
+    #tab-customers .cust-lb-all input[type="checkbox"]:checked,
+    #tab-customers .cust-lb-all input[type="checkbox"]:indeterminate {
+        background: var(--mob-blue);
+        border-color: var(--mob-blue);
+    }
+    #tab-customers .cust-lb-all input[type="checkbox"]:checked::after { transform: scale(1); }
+    #tab-customers .cust-lb-all input[type="checkbox"]:indeterminate::after {
+        transform: scale(1);
+        clip-path: inset(0 0 45% 0);
+        background: #fff;
+    }
+    #tab-customers .cust-lb-all:focus-within,
+    #tab-customers .cust-lb-btn:focus-visible,
+    #tab-customers .cust-lb-sort select:focus-visible {
+        outline: 2px solid var(--mob-blue);
+        outline-offset: 2px;
+    }
+    #tab-customers .cust-lb-all-short { display: none; }
+    @media (max-width: 400px) {
+        #tab-customers .cust-lb-all-full { display: none; }
+        #tab-customers .cust-lb-all-short { display: inline; }
+    }
+    #tab-customers .cust-lb-sort { position: relative; display: block; min-width: 0; }
+    #tab-customers .cust-lb-sort select {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 100%;
+        min-height: 44px;
+        padding: 8px 34px 8px 12px;
+        border: 1px solid var(--mob-border);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--mob-ink);
+        font-size: 13px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+    }
+    #tab-customers .cust-lb-chevron {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        pointer-events: none;
+        color: var(--mob-sub);
+    }
+    #tab-customers .cust-lb-btn {
+        appearance: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 44px;
+        padding: 8px 12px;
+        border: 1px solid var(--mob-border);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--mob-ink);
+        font-size: 13px;
+        font-weight: 800;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    #tab-customers .cust-lb-btn[aria-expanded="true"] { border-color: var(--mob-blue); color: var(--mob-blue); }
+    #tab-customers .cust-lb-badge {
+        display: inline-grid;
+        place-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: var(--mob-blue);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 900;
+    }
 
     /* --- where each cell lands on the card. --- */
     #tab-customers .cust-col-sel { grid-area: sel; position: static; width: auto; min-width: 0; padding: 2px 0 0 !important; }
@@ -966,7 +1230,7 @@ export const CUSTOMER_DASHBOARD_CSS = `
         padding: 10px 12px;
         border-radius: 14px;
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 1fr 1fr;
         grid-template-areas:
             "left clear"
             "reach reach"
@@ -982,10 +1246,12 @@ export const CUSTOMER_DASHBOARD_CSS = `
     #tab-customers .cust-batch-reach { grid-area: reach; font-size: 11.5px; gap: 8px; }
     #tab-customers .cust-batch-actions [data-cust-notify="push"] { grid-area: push; }
     #tab-customers .cust-batch-actions [data-cust-notify="wa"] { grid-area: wa; }
-    #tab-customers .cust-batch-actions [data-cust-clear-selection] { grid-area: clear; }
+    /* "Clear" hugs the right edge of the count row */
+    #tab-customers .cust-batch-actions [data-cust-clear-selection] { grid-area: clear; justify-self: end; }
     #tab-customers .cust-batch-btn { min-height: 44px; font-size: 12.5px; width: 100%; }
     #tab-customers .cust-batch-actions .cust-tool-btn { min-height: 36px; padding: 6px 10px; font-size: 12px; }
     #tab-customers .cust-phone-hide { display: none; }
+    #tab-customers .cust-phone-only { display: inline; }
     #tab-customers .cust-tool-btn { min-height: 40px; }
     #tab-customers .cust-pager { padding: 10px 12px 4px; }
 }`;

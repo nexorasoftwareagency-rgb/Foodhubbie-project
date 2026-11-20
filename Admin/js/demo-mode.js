@@ -83,6 +83,13 @@ const CSS = `
 /* The POS item sheet owns the screen: the banner must not sit on top of its
    price / "Add to Cart" footer (it is painted over the whole app shell). */
 body.pos-selection-mode #demoModeBanner{display:none !important}
+/* Same story in the Customers tab: the contextual action bar (selection ->
+   "Send notification" / "Send WhatsApp") pins to the bottom of a phone
+   screen, and the banner would sit on top of it. */
+body.cust-batch-open #demoModeBanner{display:none !important}
+/* Same story for the Customers filter sheet: it is a modal that owns the
+   screen, and the banner is painted over the whole app shell. */
+body.cust-sheet-open #demoModeBanner{display:none !important}
 `;
 
 function injectStyles() {

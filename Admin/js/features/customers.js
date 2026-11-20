@@ -25,7 +25,8 @@ import { tierForPoints } from '../../shared/loyalty-math.js';
 import {
     buildCustomerRows, filterRows, sortRows, computeKpiTiles, computeChipCounts,
     renderKpis, renderFilters, renderRow, renderEmpty, renderPager, renderBatchBar,
-    renderSkeleton, SEGMENT_CHIPS, AUDIENCE_CHIPS, CUSTOMER_DASHBOARD_CSS,
+    renderSkeleton, renderListBar, SORT_OPTIONS, SEGMENT_CHIPS, AUDIENCE_CHIPS,
+    CUSTOMER_DASHBOARD_CSS,
 } from './customers-view.js';
 import { evaluateBatch } from './notify-eligibility.js';
 
@@ -174,6 +175,10 @@ async function _openComposer() {
 function _renderBatchBar() {
     const host = document.getElementById('custBatchBar');
     if (!host) return;
+    // The demo banner sits at the bottom of a phone screen and would cover the
+    // action bar (the POS tab already does this - see demo-mode.js), so the
+    // banner steps aside while the bar is open.
+    document.body.classList.toggle('cust-batch-open', _selected.size > 0);
     if (!_selected.size) { host.innerHTML = ''; return; }
     const rows = _selectedRows();
     const reach = evaluateBatch(rows, _notifyCtx || {});
@@ -191,6 +196,38 @@ function _renderBatchBar() {
         canSelectAll: matching > selectedMatching,
         allMatchingSelected: matching > 0 && selectedMatching >= matching,
     });
+}
+
+/** Open / close the phone filter sheet (the desktop shows the chips inline). */
+function _setFilterSheet(open) {
+    const tab = document.getElementById('tab-customers');
+    if (!tab) return;
+    tab.classList.toggle('cust-filters-open', !!open);
+    // The body knows the sheet is up: the demo banner is painted over the
+    // whole app shell, so it would float on top of the sheet.
+    document.body.classList.toggle('cust-sheet-open', !!open);
+    const btn = document.getElementById('custFiltersBtn');
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    // While it is open the chips container IS a modal sheet, so it says so.
+    // Closed (or on a desktop, where the chips are inline) it is a plain group.
+    const host = document.getElementById('custFilters');
+    if (host) {
+        if (open) {
+            host.setAttribute('role', 'dialog');
+            host.setAttribute('aria-modal', 'true');
+            host.setAttribute('aria-label', 'Filters');
+        } else {
+            host.removeAttribute('role');
+            host.removeAttribute('aria-modal');
+            host.removeAttribute('aria-label');
+        }
+    }
+    if (open) {
+        const close = tab.querySelector('.cust-sheet-close');
+        if (close) close.focus({ preventScroll: true });
+    } else if (btn) {
+        btn.focus({ preventScroll: true });
+    }
 }
 
 function _icons() {
@@ -223,7 +260,19 @@ function _renderCustomerTable() {
     if (kpiHost) kpiHost.innerHTML = renderKpis(tiles, { kpi: _activeKpiKey() });
     const filterHost = document.getElementById('custFilters');
     if (filterHost) {
-        filterHost.innerHTML = renderFilters(counts, { segment: _segment, audiences: _audiences });
+        filterHost.innerHTML = renderFilters(counts, {
+            segment: _segment, audiences: _audiences, matching: sorted.length,
+        });
+    }
+    // The phone control row: select-all, the native sort picker and the
+    // Filters button. It is rendered (not wired per element) so a re-render
+    // can never leave a stale control behind.
+    const barHost = document.getElementById('custListBar');
+    if (barHost) {
+        barHost.innerHTML = renderListBar({
+            sortField: _sortField, sortDir: _sortDir,
+            segment: _segment, audiences: _audiences,
+        });
     }
 
     if (countEl) countEl.textContent = `${sorted.length} guest${sorted.length === 1 ? '' : 's'}`;
@@ -255,6 +304,14 @@ function _renderCustomerTable() {
         allBox.checked = selectable.length > 0 && selectedVisible === selectable.length;
         allBox.indeterminate = selectedVisible > 0 && selectedVisible < selectable.length;
         allBox.disabled = selectable.length === 0;
+        // The phone control row has its OWN select-all box (the table header
+        // is hidden on a phone), so it has to show the same state.
+        const mobBox = document.getElementById('custSelectAllMobile');
+        if (mobBox) {
+            mobBox.checked = allBox.checked;
+            mobBox.indeterminate = allBox.indeterminate;
+            mobBox.disabled = allBox.disabled;
+        }
     }
 
     _renderBatchBar();
@@ -447,6 +504,15 @@ export function initCustomerDashboard() {
     if (filterHost && !filterHost.dataset.wired) {
         filterHost.dataset.wired = '1';
         filterHost.addEventListener('click', (e) => {
+            // The sheet chrome: close, or clear every filter.
+            if (e.target.closest('[data-cust-filters-close]')) { _setFilterSheet(false); return; }
+            if (e.target.closest('[data-cust-filters-clear]')) {
+                _segment = 'all';
+                _audiences = [];
+                _limit = PAGE_SIZE;
+                _renderCustomerTable();
+                return;
+            }
             const seg = e.target.closest('[data-cust-segment]');
             if (seg) {
                 _segment = seg.dataset.custSegment;
@@ -464,6 +530,60 @@ export function initCustomerDashboard() {
                 _limit = PAGE_SIZE;
                 _renderCustomerTable();
             }
+        });
+    }
+
+    // The phone control row: the native sort picker, the select-all box and
+    // the Filters button. The host survives every re-render, so the listeners
+    // are delegated - a per-element listener would die with the element.
+    const barHost = document.getElementById('custListBar');
+    if (barHost && !barHost.dataset.wired) {
+        barHost.dataset.wired = '1';
+        barHost.addEventListener('change', async (e) => {
+            const sel = e.target.closest('#custSortSelect');
+            if (sel) {
+                const opt = SORT_OPTIONS.find((o) => o.value === sel.value);
+                if (!opt) return;
+                _sortField = opt.field;
+                _sortDir = opt.dir;
+                _limit = PAGE_SIZE;
+                _renderCustomerTable();
+                return;
+            }
+            const mobBox = e.target.closest('#custSelectAllMobile');
+            if (mobBox) {
+                const tbody = document.getElementById('customerDataTableBody');
+                const boxes = tbody ? tbody.querySelectorAll('[data-cust-select]:not([disabled])') : [];
+                for (const b of boxes) {
+                    const ph = b.dataset.custSelect;
+                    if (!ph) continue;
+                    if (mobBox.checked) _selected.add(ph);
+                    else _selected.delete(ph);
+                }
+                await _ensureNotifyCtx();
+                _renderCustomerTable();
+            }
+        });
+        barHost.addEventListener('click', (e) => {
+            if (e.target.closest('#custFiltersBtn')) _setFilterSheet(true);
+        });
+    }
+
+    // The scrim behind the filter sheet closes it (a tap outside dismisses).
+    const scrim = document.getElementById('custFiltersScrim');
+    if (scrim && !scrim.dataset.wired) {
+        scrim.dataset.wired = '1';
+        scrim.addEventListener('click', () => _setFilterSheet(false));
+    }
+
+    // Escape closes the sheet.
+    if (!document.documentElement.dataset.custSheetEsc) {
+        document.documentElement.dataset.custSheetEsc = '1';
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            const tab = document.getElementById('tab-customers');
+            if (!tab || !tab.classList.contains('cust-filters-open')) return;
+            _setFilterSheet(false);
         });
     }
 
