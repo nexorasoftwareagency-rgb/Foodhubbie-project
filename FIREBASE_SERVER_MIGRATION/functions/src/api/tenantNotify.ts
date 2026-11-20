@@ -31,6 +31,9 @@ const { prunePushInbox } = require(path.join(__dirname, '../vendor/shared/push-i
 
 const MAX_BODY_BYTES = 100 * 1024;
 const HISTORY_ROWS = 20;
+// A batch audience ("phones") is one request for a selected set of guests.
+// The cap keeps one request well inside the 100 KB body limit.
+const MAX_BATCH_PHONES = 500;
 
 const DASHBOARD_ORIGINS: Array<string | RegExp> = [
   'https://foodhubbie-admins.web.app',
@@ -61,7 +64,7 @@ async function logNotifySend(bid: string, oid: string, row: any): Promise<void> 
 async function handleNotify(req: any, res: any): Promise<void> {
   const { bid, oid, uid } = await tenantFromToken(req);
   const body = await readJsonBody(req, MAX_BODY_BYTES, 'Payload too large (max 100 KB)');
-  const { title, body: text, data = {}, testMode, audience, phone, type } = body || {};
+  const { title, body: text, data = {}, testMode, audience, phone, type, phones } = body || {};
 
   if (!title || !text) throw new HttpError(400, 'title and body are required');
   if (String(title).length > 100 || String(text).length > 300) {
@@ -72,6 +75,22 @@ async function handleNotify(req: any, res: any): Promise<void> {
   if (audience === 'phone' && !/^[6-9]\d{9}$/.test(cleanPhone)) {
     throw new HttpError(400, 'A valid phone is required for this audience');
   }
+  // Batch audience: a SELECTED set of guests (the Customers checklist). One
+  // request, one caps pass, one history row - never one request per guest.
+  let batchPhones: string[] | null = null;
+  if (audience === 'phones') {
+    const list = Array.isArray(phones) ? phones : [];
+    const clean = Array.from(new Set(
+      list
+        .map((p: any) => String(p == null ? '' : p).replace(/[^\d]/g, '').slice(-10))
+        .filter((p: string) => /^[6-9]\d{9}$/.test(p)),
+    ));
+    if (clean.length === 0) throw new HttpError(400, 'At least one valid phone is required for this audience');
+    if (clean.length > MAX_BATCH_PHONES) {
+      throw new HttpError(400, `Too many recipients (max ${MAX_BATCH_PHONES})`);
+    }
+    batchPhones = clean;
+  }
   const messageType = String(type || 'promo').slice(0, 20);
   const isTest = testMode === true || testMode === 'true' || data.testMode === 'true';
   const d = data || {};
@@ -79,8 +98,9 @@ async function handleNotify(req: any, res: any): Promise<void> {
   const historyRow = (sent: number, failed: number, inbox: number, total: number) => ({
     at: Date.now(),
     type: messageType,
-    audience: isTest ? 'test' : (audience === 'phone' ? 'phone' : 'all'),
+    audience: isTest ? 'test' : (audience === 'phone' ? 'phone' : (audience === 'phones' ? 'phones' : 'all')),
     ...(cleanPhone && audience === 'phone' && !isTest ? { phone: cleanPhone } : {}),
+    ...(batchPhones && !isTest ? { phones: batchPhones.length } : {}),
     title: String(title).slice(0, 100),
     sent, failed, inbox, total,
     test: isTest,
@@ -93,6 +113,11 @@ async function handleNotify(req: any, res: any): Promise<void> {
 
   if (audience === 'phone') {
     entries = entries.filter((e) => String(e.phone || '') === cleanPhone);
+  } else if (batchPhones) {
+    // A batch audience is a SELECTION: only the chosen guests are in it, and a
+    // subscription without a phone cannot match one.
+    const wanted = new Set(batchPhones);
+    entries = entries.filter((e) => wanted.has(String(e.phone || '')));
   }
   // Promotional sends honour the customer's offers preference. Existing records
   // created before consent existed are treated as opted in.

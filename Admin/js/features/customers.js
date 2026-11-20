@@ -13,7 +13,7 @@
 //   bot/promotions/optout   STOP opt-out markers (marketing consent)
 // ============================================================================
 
-import { Outlet, get, remove } from '../firebase.js';
+import { Outlet, get, remove, billingRef } from '../firebase.js';
 import { showToast } from '../utils.js';
 import { logger } from '../utils/logger.js';
 import { state } from '../state.js';
@@ -24,9 +24,10 @@ import { isBilledOrder } from '../../shared/cost-math.js';
 import { tierForPoints } from '../../shared/loyalty-math.js';
 import {
     buildCustomerRows, filterRows, sortRows, computeKpiTiles, computeChipCounts,
-    renderKpis, renderFilters, renderRow, renderEmpty, renderPager,
+    renderKpis, renderFilters, renderRow, renderEmpty, renderPager, renderBatchBar,
     renderSkeleton, SEGMENT_CHIPS, AUDIENCE_CHIPS, CUSTOMER_DASHBOARD_CSS,
 } from './customers-view.js';
+import { evaluateBatch } from './notify-eligibility.js';
 
 const CALC = { isBilledOrder, tierForPoints };
 const PAGE_SIZE = 50;
@@ -46,6 +47,13 @@ let _loaded = false;
 // The whole orders node is already downloaded for the table, so the Customer
 // Profile reuses it instead of paying for a second read.
 let _orderSnapshot = [];
+// The notification checklist selection. A Set of phone numbers, so it survives
+// paging, filtering and sorting.
+let _selected = new Set();
+// The notification context (device tokens, consent gates, promo state). It is
+// read ONCE, lazily, the first time a guest is selected - a list that is only
+// browsed never pays for it.
+let _notifyCtx = null;
 
 function _injectCss() {
     if (_cssInjected) return;
@@ -84,6 +92,105 @@ function _activeKpiKey() {
     if (_segment === 'lapsed' && _audiences.length === 0) return 'lapsed';
     if (_segment === 'champions' && _audiences.length === 0) return 'champions';
     return null;
+}
+
+// ------------------------------------------------------- notification context
+
+/**
+ * The facts the notification checklist needs: who has an app device, and
+ * whether this outlet can send WhatsApp messages at all.
+ *
+ * Every read is best-effort. A value we could not read stays `undefined`, and
+ * an unknown value never blocks a channel (the server and the bot re-check
+ * everything before a message leaves) - but a value we DID read and know is
+ * off is reported honestly.
+ */
+async function _ensureNotifyCtx() {
+    if (_notifyCtx) return _notifyCtx;
+    const ctx = {
+        subscriptions: {},
+        promoEnabled: undefined,
+        killSwitch: undefined,
+        transport: undefined,
+        tokenBalance: undefined,
+        storeName: state.storeName || '',
+    };
+    // Each read is independent: one unreadable node must not blank the others.
+    // `null` means "the read failed" (unknown), a real snapshot means known.
+    const safe = (p) => p.then((s) => s).catch(() => null);
+    const [subsSnap, enabledSnap, killSnap, transportSnap, tokenSnap] = await Promise.all([
+        safe(get(Outlet.ref('pushSubscriptions'))),
+        safe(get(Outlet.ref('bot/promotions/enabled'))),
+        safe(get(Outlet.ref('bot/promotions/killSwitch'))),
+        safe(get(Outlet.ref('bot/transport'))),
+        safe(get(billingRef('tokens/balance'))),
+    ]);
+
+    if (subsSnap) {
+        const subs = subsSnap.exists() ? (subsSnap.val() || {}) : {};
+        for (const s of Object.values(subs)) {
+            if (!s) continue;
+            const phone = String(s.phone || '').replace(/\D/g, '').slice(-10);
+            if (!/^[6-9]\d{9}$/.test(phone)) continue;
+            const cur = ctx.subscriptions[phone] || { hasToken: false, offers: true };
+            if (s.token) cur.hasToken = true;
+            // The server treats a subscription with no prefs as opted in.
+            if (s.prefs && s.prefs.offers === false) cur.offers = false;
+            ctx.subscriptions[phone] = cur;
+        }
+    }
+    // The bot reads an absent `enabled` node as ENABLED, so absent = on.
+    if (enabledSnap) ctx.promoEnabled = enabledSnap.exists() ? enabledSnap.val() !== false : true;
+    if (killSnap) ctx.killSwitch = killSnap.exists() ? killSnap.val() === true : false;
+    // An absent transport node means no WhatsApp connection at all.
+    if (transportSnap) ctx.transport = transportSnap.exists() ? String(transportSnap.val() || '') : '';
+    if (tokenSnap) ctx.tokenBalance = tokenSnap.exists() ? Number(tokenSnap.val() || 0) : 0;
+
+    ctx.storeName = state.storeName || ctx.storeName || '';
+    _notifyCtx = ctx;
+    return _notifyCtx;
+}
+
+/** The rows the selection currently points at (in table order). */
+function _selectedRows() {
+    return _rows.filter((r) => _selected.has(r.phone));
+}
+
+/** Open the shared composer for the selected guests. */
+async function _openComposer() {
+    const rows = _selectedRows();
+    if (!rows.length) { showToast('Select at least one guest first.', 'info'); return; }
+    try {
+        const ctx = await _ensureNotifyCtx();
+        const mod = await import('./notify-composer.js');
+        await mod.openNotifyComposer({ rows, ctx });
+    } catch (err) {
+        logger.warn('CUSTOMERS', 'composer failed to open', err);
+        showToast('Could not open the message composer.', 'error');
+    }
+}
+
+/** Render the contextual action bar (selection + honest reach counts). */
+function _renderBatchBar() {
+    const host = document.getElementById('custBatchBar');
+    if (!host) return;
+    if (!_selected.size) { host.innerHTML = ''; return; }
+    const rows = _selectedRows();
+    const reach = evaluateBatch(rows, _notifyCtx || {});
+    const matching = _filteredData.length;
+    // The selection survives a filter change, so "all matching" is judged
+    // against the MATCHING guests only - a guest selected under an older
+    // filter must not make the link look like it is already done.
+    const matchingPhones = new Set(_filteredData.map((r) => r.phone));
+    const selectedMatching = rows.filter((r) => matchingPhones.has(r.phone)).length;
+    host.innerHTML = renderBatchBar({
+        selected: _selected.size,
+        matching,
+        pushReach: reach.push.reachable,
+        waReach: reach.wa.reachable,
+        canSelectAll: matching > selectedMatching,
+        allMatchingSelected: matching > 0 && selectedMatching >= matching,
+    });
 }
 
 function _icons() {
@@ -135,8 +242,22 @@ function _renderCustomerTable() {
             tbody.innerHTML = renderEmpty('no-match', { term: _searchTerm, suggestion });
         }
     } else {
-        tbody.innerHTML = visible.map(renderRow).join('');
+        tbody.innerHTML = visible.map((r) => renderRow(r, { selected: _selected.has(r.phone) })).join('');
     }
+
+    // The header checkbox: checked when every visible row is selected,
+    // indeterminate when only some are. It never selects guests off-screen -
+    // that is the explicit "Select all N matching guests" link.
+    const allBox = document.getElementById('custSelectAll');
+    if (allBox) {
+        const selectable = visible.filter((r) => /^\d{10}$/.test(r.phone || ''));
+        const selectedVisible = selectable.filter((r) => _selected.has(r.phone)).length;
+        allBox.checked = selectable.length > 0 && selectedVisible === selectable.length;
+        allBox.indeterminate = selectedVisible > 0 && selectedVisible < selectable.length;
+        allBox.disabled = selectable.length === 0;
+    }
+
+    _renderBatchBar();
 
     const pager = document.getElementById('custPager');
     if (pager) pager.innerHTML = renderPager(shown, sorted.length, PAGE_SIZE);
@@ -144,6 +265,16 @@ function _renderCustomerTable() {
     // The row click handler lives on the tbody (which survives re-renders).
     if (!tbody.dataset.lockWired) {
         tbody.dataset.lockWired = '1';
+        tbody.addEventListener('change', async (e) => {
+            const box = e.target.closest('[data-cust-select]');
+            if (!box) return;
+            const ph = box.dataset.custSelect;
+            if (!ph) return;
+            if (box.checked) _selected.add(ph);
+            else _selected.delete(ph);
+            await _ensureNotifyCtx();
+            _renderCustomerTable();
+        });
         tbody.addEventListener('click', async (e) => {
             // 1. Links do their own thing (WhatsApp, MAP) - never open the profile.
             if (e.target.closest('a')) return;
@@ -347,8 +478,49 @@ export function initCustomerDashboard() {
         });
     }
 
-    const densityBtn = document.getElementById('custDensityBtn');
-    if (densityBtn && !densityBtn.dataset.wired) {
+    // The notification checklist: the contextual action bar.
+    const batchHost = document.getElementById('custBatchBar');
+    if (batchHost && !batchHost.dataset.wired) {
+        batchHost.dataset.wired = '1';
+        batchHost.addEventListener('click', async (e) => {
+            const all = e.target.closest('[data-cust-select-all-matching]');
+            if (all) {
+                for (const r of _filteredData) {
+                    if (/^\d{10}$/.test(r.phone || '')) _selected.add(r.phone);
+                }
+                _renderCustomerTable();
+                return;
+            }
+            const clear = e.target.closest('[data-cust-clear-selection]');
+            if (clear) {
+                _selected.clear();
+                _renderCustomerTable();
+                return;
+            }
+            if (e.target.closest('[data-cust-notify]')) await _openComposer();
+        });
+    }
+
+    // The header checkbox selects THIS PAGE only. Selecting every matching
+    // guest is an explicit, counted action (the "Select all N matching" link).
+    const allBox = document.getElementById('custSelectAll');
+    if (allBox && !allBox.dataset.wired) {
+        allBox.dataset.wired = '1';
+        allBox.addEventListener('change', async () => {
+            const tbody = document.getElementById('customerDataTableBody');
+            const boxes = tbody ? tbody.querySelectorAll('[data-cust-select]:not([disabled])') : [];
+            for (const b of boxes) {
+                const ph = b.dataset.custSelect;
+                if (!ph) continue;
+                if (allBox.checked) _selected.add(ph);
+                else _selected.delete(ph);
+            }
+            await _ensureNotifyCtx();
+            _renderCustomerTable();
+        });
+    }
+
+    const densityBtn = document.getElementById('custDensityBtn');    if (densityBtn && !densityBtn.dataset.wired) {
         densityBtn.dataset.wired = '1';
         try { _density = localStorage.getItem(DENSITY_KEY) === 'dense'; } catch (_) { _density = false; }
         const tab = document.getElementById('tab-customers');

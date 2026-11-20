@@ -519,6 +519,39 @@ export async function _preview() {
 
 /* ============ CAMPAIGN ACTIONS ============ */
 
+/**
+ * The ONE campaign shape.
+ *
+ * Two entry points launch campaigns: the Promotions tab and the Customers
+ * notification checklist. The document under `bot/promotions/campaigns/{id}`
+ * and the `bot/commands` payload are built HERE, so the two can never write a
+ * different shape than the bot reads.
+ */
+export function buildCampaignPayload(opts = {}) {
+    const {
+        recipients = [], template = '', waTemplateName = 'proactive_promo',
+        mediaUrl = null, greeting = false, menuText = null, menuImageUrl = null,
+        sendStopMsg = false, quietHours = null, requestedBy = 'admin',
+        status = 'running', runAt = null, campaignId = null,
+    } = opts;
+    const id = campaignId || ('c_' + Date.now().toString(36));
+    const campaignDoc = {
+        id, status, template, mediaUrl, waTemplateName, greeting,
+        menuText: menuText || null, menuImageUrl: menuImageUrl || null,
+        sendStopMsg, recipients, runAt, quietHours, requestedBy,
+        createdAt: new Date().toISOString(),
+    };
+    if (status === 'running') campaignDoc.startedAt = Date.now();
+    const command = {
+        action: 'SEND_PROMOTION',
+        campaignId: id,
+        template, mediaUrl, waTemplateName,
+        greeting, menuText: menuText || null, menuImageUrl: menuImageUrl || null,
+        sendStopMsg, recipients, quietHours, requestedBy,
+    };
+    return { campaignId: id, campaignDoc, command };
+}
+
 async function _launchCampaign() {
     const template = (document.getElementById('promoTemplate')?.value || '').trim();
     if (!template) { showToast('Please write a message first', 'warning'); return; }
@@ -569,10 +602,8 @@ async function _launchCampaign() {
     const quietHours = (mode === 'schedule' && !isNaN(quietStart) && !isNaN(quietEnd))
         ? { start: quietStart, end: quietEnd } : null;
 
-    const campaignId = 'c_' + Date.now().toString(36);
     const waTemplateName = document.getElementById('promoWaTemplate')?.value || 'proactive_promo';
-    const campaignDoc = {
-        id: campaignId,
+    const { campaignId, campaignDoc, command } = buildCampaignPayload({
         status: mode === 'schedule' ? 'scheduled' : 'running',
         template, mediaUrl: _mediaDataUrl || null,
         waTemplateName,
@@ -581,9 +612,7 @@ async function _launchCampaign() {
         sendStopMsg: sendStop,
         recipients,
         runAt, quietHours, requestedBy: window.currentAdmin?.uid || 'admin',
-        createdAt: new Date().toISOString(),
-    };
-    if (mode !== 'schedule') campaignDoc.startedAt = Date.now();
+    });
 
     const needed = recipients.length;
     const costInfo = `Estimated promo cost: ${needed} tokens × ₹${PROMO_RATE} = ₹${(needed * PROMO_RATE).toFixed(2)}`;
@@ -600,17 +629,7 @@ async function _launchCampaign() {
         showToast(`Scheduled ${campaignId} for ${formatDate(runAt)}`, 'success');
     } else {
         const cmdRef = push(tenantRef(_outlet(), 'bot/commands'));
-        await set(cmdRef, {
-            action: 'SEND_PROMOTION',
-            campaignId,
-            template, mediaUrl: _mediaDataUrl || null,
-            waTemplateName,
-            greeting, menuText: menuText || null,
-            menuImageUrl: _menuImageDataUrl || null,
-            sendStopMsg: sendStop,
-            recipients,
-            quietHours, requestedBy: campaignDoc.requestedBy
-        });
+        await set(cmdRef, command);
         showToast(`Campaign ${campaignId} launched`, 'success');
     }
     _switchMode('active');

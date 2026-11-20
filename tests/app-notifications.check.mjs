@@ -19,6 +19,10 @@ import { fileURLToPath } from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = fs.readFileSync(path.join(root, 'Admin/index.html'), 'utf8');
 const js = fs.readFileSync(path.join(root, 'Admin/js/features/app-notifications.js'), 'utf8');
+// The endpoint, the bearer token, the server-anchored IST clock and the POST
+// itself live in the SHARED notify client (the Customers notification
+// checklist is its second caller), so the clock checks read THAT file.
+const client = fs.readFileSync(path.join(root, 'Admin/js/features/notify-client.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'Admin/style.css'), 'utf8');
 
 let failed = 0;
@@ -76,9 +80,11 @@ t('every id the module looks up exists in the markup', () => {
 });
 
 t('the request carries type / audience / phone (server defaults would mis-bill the send)', () => {
-    assert.ok(/body:\s*JSON\.stringify\(\{[\s\S]*?\btype,/.test(js), 'type must be sent top-level');
+    assert.ok(/sendNotify\(\{[\s\S]*?\btype,/.test(js), 'type must be sent top-level');
     assert.ok(/audience:\s*aud === 'one' \? 'phone' : 'all'/.test(js), 'audience must be explicit');
     assert.ok(/aud === 'one' \? \{ phone \} : \{\}/.test(js), 'phone must travel with a single-customer send');
+    assert.ok(/body:\s*JSON\.stringify\(payload \|\| \{\}\)/.test(client), 'the shared client serialises the payload as-is');
+    assert.ok(/await sendNotify\(\{/.test(js), 'the tab sends through the shared client');
 });
 
 t('order updates are forced to one customer', () => {
@@ -107,13 +113,15 @@ t('result tone classes exist literally (PurgeCSS drops built-up names)', () => {
 
 t('quiet hours gate every marketing send, including one-customer', () => {
     const server = fs.readFileSync(path.join(root, 'bot-control-api/server.js'), 'utf8');
-    assert.ok(/return type !== 'order' && _isQuietHours\(\);/.test(js), '_quietBlocked must exempt only order type');
+    assert.ok(/return type !== 'order' && isQuietHours\(\);/.test(js), '_quietBlocked must exempt only order type');
     const one = js.match(/if \(aud === 'one'\) \{[\s\S]*?\n    \}/);
     assert.ok(one, 'one-customer branch exists');
     assert.ok(one[0].includes('_quietBlocked(type)'), 'one-customer branch must apply quiet hours (server gates every promo entry)');
     assert.ok(/\/\/ Broadcast[\s\S]{0,400}_quietBlocked\(type\)/.test(js), 'broadcast branch must apply quiet hours');
-    // Definition + the single helper call. A second direct call would bypass the gate.
-    assert.equal((js.match(/_isQuietHours\(\)/g) || []).length, 2, 'exactly one quiet-hours call site');
+    // Definition in the shared client + the single helper call. A second
+    // direct call would bypass the gate.
+    assert.equal((client.match(/isQuietHours\(\)/g) || []).length, 1, 'the shared client defines the helper once');
+    assert.equal((js.match(/isQuietHours\(\)/g) || []).length, 1, 'the tab calls the shared helper once');
     assert.ok(server.includes("notifyType = messageType === 'order' ? 'order' : 'promo'"), 'server quiet-gates every non-order type');
 });
 
@@ -270,11 +278,12 @@ t('CB2: the count is an upper bound ("up to") and the daily limit is stated', ()
 });
 
 t('CB3: quiet hours are anchored to the server clock, not the device clock', () => {
-    assert.ok(/async function _syncClock\(\)/.test(js), 'clock sync helper exists');
-    assert.ok(/payload\.iat/.test(js), 'the server clock comes from the Auth token iat claim');
-    assert.ok(/function _istHour\(\)[\s\S]{0,120}_clockSkewMs/.test(js), 'the IST hour uses the server offset');
-    assert.ok(!/getUTCHours\(\) \+ 5/.test(js), 'the old device-clock arithmetic must be gone');
-    assert.ok(/await _syncClock\(\);/.test(js), 'the pane syncs the clock before it evaluates a send');
+    assert.ok(/export async function syncServerClock\(\)/.test(client), 'clock sync helper exists in the shared client');
+    assert.ok(/payload\.iat/.test(client), 'the server clock comes from the Auth token iat claim');
+    assert.ok(/export function istHour\(\)[\s\S]{0,160}_clockSkewMs/.test(client), 'the IST hour uses the server offset');
+    assert.ok(!/getUTCHours\(\) \+ 5/.test(client), 'the old device-clock arithmetic must be gone');
+    assert.ok(!/getUTCHours\(\) \+ 5/.test(js), 'the old device-clock arithmetic must be gone from the tab');
+    assert.ok(/await syncServerClock\(\);/.test(js), 'the pane syncs the clock before it evaluates a send');
 });
 
 t('CB4: a test send says it ignores quiet hours and the daily limit', () => {

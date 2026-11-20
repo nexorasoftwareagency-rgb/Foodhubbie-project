@@ -228,7 +228,8 @@ const byPhone = (p) => rows.find((r) => r.phone === p);
 {
     const html = V.renderRow(byPhone('9000000201'));
     const cells = html.match(/<td/g) || [];
-    assert.equal(cells.length, 9, 'the row renders 9 cells');
+    assert.equal(cells.length, 10, 'the row renders 10 cells (the selection checkbox leads)');
+    assert.ok(/data-cust-select="9000000201"/.test(html), 'the row carries a selection checkbox');
     assert.ok(/₹600/.test(html), 'the value cell shows the paid value');
     assert.ok(/pts/.test(html), 'the loyalty cell says how many points can be spent');
     assert.ok(/points to spend/.test(html), 'the loyalty tooltip explains the spendable points');
@@ -281,20 +282,20 @@ const sw = readFileSync(SW_FILE, 'utf8');
     ok('the view layer stays node-importable (no ../../shared/* import)');
 }
 {
-    for (const id of ['custKpis', 'custFilters', 'custPager', 'custDensityBtn', 'custTableCount']) {
+    for (const id of ['custKpis', 'custFilters', 'custPager', 'custDensityBtn', 'custTableCount', 'custBatchBar', 'custSelectAll']) {
         assert.ok(html.includes(`id="${id}"`), 'the markup has #' + id);
     }
     const tableAt = html.indexOf('id="customerDataTable"');
     assert.ok(tableAt > 0, 'the customers table exists');
     const headBlock = html.slice(tableAt, html.indexOf('</thead>', tableAt));
     const heads = (headBlock.match(/<th[\s>]/g) || []).length;
-    assert.equal(heads, 9, 'the table header has 9 columns');
-    ok('the markup carries the KPI strip, the filter rows, the pager and a 9-column header');
+    assert.equal(heads, 10, 'the table header has 10 columns');
+    ok('the markup carries the KPI strip, the filter rows, the batch bar, the pager and a 10-column header');
 }
 {
     assert.ok(sw.includes("'./js/features/customers-view.js'"), 'the service worker precaches the new module');
     const shell = (sw.match(/foodhubbie-erp-shell-v([\d.]+)'/) || [])[1];
-    assert.ok(shell && shell !== '5.12.71', 'the service worker shell was bumped');
+    assert.ok(shell && shell !== '5.12.72', 'the service worker shell was bumped');
     ok('the service worker precaches customers-view.js under a bumped shell');
 }
 {

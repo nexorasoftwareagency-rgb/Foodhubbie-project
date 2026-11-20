@@ -50,6 +50,9 @@ jobs:
       - name: Customer Database guard (paid basis, filters, duplicate badge, pager)
         run: node tests/customer-dashboard.check.mjs
 
+      - name: Notification checklist guard (eligibility gates, one batch request, honest drafts)
+        run: node tests/notify-composer.check.mjs
+
       - name: Menu cart persistence guard
         run: node tests/menu-cart-refresh.check.cjs
 

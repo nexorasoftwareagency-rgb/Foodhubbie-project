@@ -19,6 +19,7 @@
     "test:customer-profile-360": "node tests/customer-profile-360.check.mjs",
     "test:customer-dashboard": "node tests/customer-dashboard.check.mjs",
     "test:customer-dashboard-browser": "node tests/customer-dashboard.browser.mjs",
+    "test:notify-composer": "node tests/notify-composer.check.mjs",
     "test:menu-cart": "node tests/menu-cart-refresh.check.cjs",
     "test:menu-legacy-qr": "node tests/menu-legacy-qr.check.cjs",
     "test:pin": "node tests/pin-crypto.check.mjs",

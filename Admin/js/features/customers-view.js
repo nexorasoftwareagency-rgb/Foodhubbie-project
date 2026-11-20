@@ -418,10 +418,16 @@ export function renderFilters(counts, state = {}) {
         </div>`;
 }
 
-/** One table row. The header in index.html must have the same 9 columns. */
-export function renderRow(r) {
+/** One table row. The header in index.html must have the same 10 columns. */
+export function renderRow(r, opts = {}) {
     const phone = r.phone || '';
     const canOpen = /^\d{10}$/.test(phone);
+    const selected = !!opts.selected && canOpen;
+    const sel = `<td class="cust-col-sel">
+        <input type="checkbox" class="cust-sel-box" data-cust-select="${esc(phone)}"
+            ${selected ? 'checked' : ''} ${canOpen ? '' : 'disabled'}
+            aria-label="Select ${esc(r.name || 'guest')}${canOpen ? '' : ' (no usable phone number)'}">
+    </td>`;
     const waLink = canOpen
         ? `<a href="https://wa.me/91${esc(phone)}" target="_blank" rel="noopener" class="mob-wa-link"><i data-lucide="message-circle" style="width:12px;height:12px;"></i> ${esc(r.displayPhone)}</a>`
         : `<span class="mob-td-sub">${esc(r.displayPhone || '—')}</span>`;
@@ -441,7 +447,8 @@ export function renderRow(r) {
         : '';
     const reach = REACH[r.consent.state] || REACH['not-set'];
     const rowProfile = canOpen ? ` data-cust-profile="${esc(phone)}" title="Open the full customer profile"` : '';
-    return `<tr class="cp-row"${rowProfile}>
+    return `<tr class="cp-row${selected ? ' cust-row-selected' : ''}"${rowProfile}>
+        ${sel}
         <td class="cust-col-cust">
             <div class="mob-cust-name">
                 <span class="mob-cust-avatar" aria-hidden="true">${esc(initialsOf(r.name))}</span>
@@ -471,7 +478,7 @@ export function renderRow(r) {
 export function renderSkeleton(rows = 6) {
     let out = '';
     for (let i = 0; i < rows; i++) {
-        out += `<tr class="cust-skel-row"><td colspan="9">
+        out += `<tr class="cust-skel-row"><td colspan="10">
             <span class="cust-skel" style="width:${28 + (i % 3) * 9}%"></span>
             <span class="cust-skel cust-skel-sm" style="width:${14 + (i % 4) * 7}%"></span>
         </td></tr>`;
@@ -482,7 +489,7 @@ export function renderSkeleton(rows = 6) {
 /** The empty states: an empty database and an empty filter result. */
 export function renderEmpty(kind, ctx = {}) {
     if (kind === 'empty-db') {
-        return `<tr><td colspan="9" class="cust-empty">
+        return `<tr><td colspan="10" class="cust-empty">
             <p class="cust-empty-title">No customer records yet</p>
             <p class="cust-empty-sub">A guest appears here as soon as they order through the QR menu, the customer app or WhatsApp. Share your Customer App link or print a table QR to get started.</p>
         </td></tr>`;
@@ -491,7 +498,7 @@ export function renderEmpty(kind, ctx = {}) {
         ? ` Try <strong>${esc(ctx.suggestion.label)}</strong> (${esc(num(ctx.suggestion.count))}) instead.`
         : '';
     const what = ctx.term ? ` matching “${esc(ctx.term)}”` : '';
-    return `<tr><td colspan="9" class="cust-empty">
+    return `<tr><td colspan="10" class="cust-empty">
         <p class="cust-empty-title">No guest${esc(what)}</p>
         <p class="cust-empty-sub">Nothing in the customer database matches this filter.${suggestion}</p>
         <button type="button" class="cust-tool-btn" data-cust-clear="1">Clear filters</button>
@@ -505,6 +512,44 @@ export function renderPager(shown, total, limit) {
     return `
         <span class="cust-pager-text">Showing ${esc(num(shown))} of ${esc(num(total))} guest${total === 1 ? '' : 's'}</span>
         ${more > 0 ? `<button type="button" class="cust-tool-btn" id="custLoadMore">Load ${esc(num(Math.min(limit, more)))} more</button>` : ''}`;
+}
+
+/**
+ * The contextual action bar. It appears the moment a guest is selected and
+ * stays put while the table scrolls - "what now?" must be one glance, not a
+ * hunt (bulk-action UX: the bar belongs next to the selection).
+ *
+ * The reach counts are honest UPPER BOUNDS computed from the same rules the
+ * server and the bot enforce (notify-eligibility.js).
+ */
+export function renderBatchBar(s = {}) {
+    const {
+        selected = 0, matching = 0, pushReach = 0, waReach = 0,
+        allMatchingSelected = false, canSelectAll = false,
+    } = s;
+    if (!selected) return '';
+    const allLine = allMatchingSelected
+        ? `<span class="cust-batch-all-note">All ${esc(num(matching))} matching guest${matching === 1 ? '' : 's'} selected</span>`
+        : (canSelectAll
+            ? `<button type="button" class="cust-batch-all-btn" data-cust-select-all-matching>Select all ${esc(num(matching))} matching guest${matching === 1 ? '' : 's'}</button>`
+            : '');
+    return `
+        <div class="cust-batch-bar" role="region" aria-label="Actions for the selected guests">
+            <div class="cust-batch-left">
+                <span class="cust-batch-count" role="status" aria-live="polite">${esc(num(selected))} guest${selected === 1 ? '' : 's'} selected</span>
+                <span class="cust-batch-matching">${esc(num(matching))} matching</span>
+                ${allLine}
+            </div>
+            <div class="cust-batch-reach">
+                <span title="Guests with an app device and offers on">Up to ${esc(num(pushReach))} can get a push</span>
+                <span title="Guests who opted in, are not opted out, and the outlet can send to">Up to ${esc(num(waReach))} can get WhatsApp</span>
+            </div>
+            <div class="cust-batch-actions">
+                <button type="button" class="btn-primary cust-batch-btn" data-cust-notify="push">Send app notification</button>
+                <button type="button" class="btn-secondary cust-batch-btn" data-cust-notify="wa">Send WhatsApp message</button>
+                <button type="button" class="cust-tool-btn" data-cust-clear-selection>Clear selection</button>
+            </div>
+        </div>`;
 }
 
 // ---------------------------------------------------------------------- CSS
@@ -634,6 +679,38 @@ export const CUSTOMER_DASHBOARD_CSS = `
 #tab-customers .cust-pager { display: flex; align-items: center; gap: 12px; padding: 12px 18px 4px; flex-wrap: wrap; }
 #tab-customers .cust-pager-text { font-size: 12.5px; font-weight: 700; color: var(--mob-sub); }
 
+/* ---- selection column + contextual batch bar (notification checklist) ---- */
+#tab-customers .cust-col-sel { width: 34px; min-width: 34px; text-align: center; padding-left: 10px !important; padding-right: 6px !important; }
+#tab-customers .cust-sel-box {
+    width: 18px; height: 18px; min-width: 18px; min-height: 18px;
+    accent-color: var(--mob-ink); cursor: pointer; margin: 0; vertical-align: middle;
+}
+#tab-customers .cust-sel-box:focus-visible { outline: 2px solid var(--mob-blue); outline-offset: 2px; }
+#tab-customers .cust-sel-box:disabled { cursor: not-allowed; opacity: .35; }
+#tab-customers tr.cust-row-selected .cust-col-cust { background: #f8fafc; }
+#tab-customers .cust-batch-bar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin: 0 18px 12px; padding: 10px 12px;
+    background: var(--mob-ink); color: #fff; border-radius: 12px;
+    position: sticky; top: 0; z-index: 6;
+}
+#tab-customers .cust-batch-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#tab-customers .cust-batch-count { font-size: 13px; font-weight: 800; }
+#tab-customers .cust-batch-matching { font-size: 12px; opacity: .72; }
+#tab-customers .cust-batch-all-btn {
+    appearance: none; border: 0; background: none; padding: 0;
+    color: #fff; font-size: 12px; font-weight: 800; text-decoration: underline;
+    cursor: pointer; min-height: 0;
+}
+#tab-customers .cust-batch-all-note { font-size: 12px; opacity: .72; }
+#tab-customers .cust-batch-reach { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; opacity: .82; }
+#tab-customers .cust-batch-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+#tab-customers .cust-batch-btn { min-height: 38px; font-size: 12.5px; font-weight: 800; border-radius: 10px; }
+#tab-customers .cust-batch-actions .cust-tool-btn { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.3); color: #fff; }
+#tab-customers .cust-batch-actions .cust-tool-btn:hover { background: rgba(255,255,255,.2); }
+#tab-customers .cust-batch-actions .btn-secondary { background: #fff; color: var(--mob-ink); }
+#tab-customers .cust-batch-actions .btn-primary { background: var(--mob-blue); color: #fff; }
+
 #tab-customers .cust-empty { text-align: center; padding: 34px 18px; white-space: normal; }
 #tab-customers .cust-empty-title { font-size: 15px; font-weight: 800; color: var(--mob-ink); margin: 0 0 6px; }
 #tab-customers .cust-empty-sub { font-size: 13px; color: var(--mob-sub); margin: 0 0 12px; line-height: 1.5; }
@@ -650,11 +727,11 @@ export const CUSTOMER_DASHBOARD_CSS = `
 #tab-customers .mob-data-table tbody td { padding-left: 12px; padding-right: 12px; }
 #tab-customers .mob-data-table tbody td { font-size: 13px; overflow: hidden; }
 #tab-customers .cust-col-cust { width: 22%; }
-#tab-customers .cust-col-phone { width: 12%; }
-#tab-customers .cust-col-addr { width: 10%; }
-#tab-customers .cust-col-last { width: 9%; }
+#tab-customers .cust-col-phone { width: 11%; }
+#tab-customers .cust-col-addr { width: 9%; }
+#tab-customers .cust-col-last { width: 8%; }
 #tab-customers .cust-col-orders { width: 6%; }
-#tab-customers .cust-col-value { width: 11%; }
+#tab-customers .cust-col-value { width: 10%; }
 #tab-customers .cust-col-loyalty { width: 9%; }
 #tab-customers .cust-col-segment { width: 9%; }
 #tab-customers .cust-col-action { width: 12%; }
@@ -684,7 +761,7 @@ export const CUSTOMER_DASHBOARD_CSS = `
 @media (max-width: 1400px) {
     #tab-customers .cust-col-addr { display: none; }
     #tab-customers .mob-data-table { min-width: 900px; }
-    #tab-customers .cust-col-cust { width: 24%; }
+    #tab-customers .cust-col-cust { width: 26%; }
     #tab-customers .cust-col-value { width: 12%; }
 }
 
@@ -702,19 +779,30 @@ export const CUSTOMER_DASHBOARD_CSS = `
     #tab-customers .cust-col-addr, #tab-customers .cust-col-loyalty,
     #tab-customers .cust-col-orders, #tab-customers .cust-col-last { display: none; }
     #tab-customers .mob-data-table { min-width: 620px; }
-    #tab-customers .cust-col-cust { width: 32%; }
-    #tab-customers .cust-col-phone { width: 20%; }
-    #tab-customers .cust-col-value { width: 18%; }
-    #tab-customers .cust-col-segment { width: 15%; }
-    #tab-customers .cust-col-action { width: 15%; }
+    #tab-customers .cust-col-cust { width: 30%; }
+    #tab-customers .cust-col-phone { width: 18%; }
+    #tab-customers .cust-col-value { width: 16%; }
+    #tab-customers .cust-col-segment { width: 14%; }
+    #tab-customers .cust-col-action { width: 14%; }
     #tab-customers .mob-cust-avatar { display: none; }
     #tab-customers .cust-joined { display: none; }
     #tab-customers .cust-last-mobile { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #tab-customers .cust-tool-btn { min-height: 44px; }
-    /* The customer cell stays pinned while the other columns scroll. */
-    #tab-customers .cust-col-cust { position: sticky; left: 0; z-index: 2; background: #fff; box-shadow: 1px 0 0 var(--mob-border); }
+    /* The checkbox and the customer cell stay pinned while the other columns
+       scroll - the selection affordance must never scroll out of reach. */
+    #tab-customers .cust-col-sel { position: sticky; left: 0; z-index: 3; background: #fff; }
+    #tab-customers thead .cust-col-sel { z-index: 4; }
+    #tab-customers .cust-col-cust { position: sticky; left: 34px; z-index: 2; background: #fff; box-shadow: 1px 0 0 var(--mob-border); }
     #tab-customers thead .cust-col-cust { z-index: 3; }
     #tab-customers .mob-data-table tbody tr:hover .cust-col-cust { background: var(--mob-bg); }
+    /* The batch bar stacks on a phone and sticks to the bottom, where a thumb
+       can reach it. */
+    #tab-customers .cust-batch-bar {
+        position: sticky; top: auto; bottom: 0; margin: 0 0 8px; border-radius: 0;
+        flex-direction: column; align-items: stretch; gap: 8px;
+    }
+    #tab-customers .cust-batch-actions { margin-left: 0; }
+    #tab-customers .cust-batch-btn { min-height: 44px; flex: 1 1 100%; }
     /* The toolbar wraps: search on its own line, the tools under it. */
     #tab-customers .mob-section-head-row { flex-wrap: wrap; gap: 10px; }
     #tab-customers .cust-toolbar { margin-left: 0 !important; width: 100%; flex-wrap: wrap; }

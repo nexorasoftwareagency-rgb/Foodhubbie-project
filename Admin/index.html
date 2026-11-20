@@ -3452,10 +3452,12 @@
                     </div>
                     <div id="custKpis" class="cust-kpis"></div>
                     <div id="custFilters" class="cust-filters"></div>
+                    <div id="custBatchBar"></div>
                     <div class="mob-table-scroll">
                         <table class="mob-data-table" id="customerDataTable">
                             <thead>
                                 <tr>
+                                    <th class="cust-col-sel"><input type="checkbox" id="custSelectAll" aria-label="Select the guests shown on this page"></th>
                                     <th data-sort="name" class="cust-col-cust">Customer</th>
                                     <th data-sort="displayPhone" class="cust-col-phone">Phone</th>
                                     <th data-sort="address" class="cust-col-addr">Address</th>
@@ -8770,6 +8772,69 @@
     <script type="module" src="js/bot-status.js?v=5.4.5"></script>
 
     <script type="module" src="js/main.js?v=5.4.9"></script>
+
+<!-- CUSTOMER NOTIFICATION CHECKLIST COMPOSER -->
+
+    <div id="notifyComposerModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="notifyComposerHeading">
+
+        <div class="modal-content glass-card notify-composer-modal">
+
+            <div class="modal-header">
+
+                <div>
+                    <p class="notify-eyebrow">Notify selected guests</p>
+                    <h2 id="notifyComposerHeading" class="modal-title">Compose a message</h2>
+                </div>
+
+                <button class="close-btn" type="button" data-notify-close aria-label="Close dialog" title="Close"><i data-lucide="x" class="icon-18"></i></button>
+
+            </div>
+
+            <div class="modal-body notify-composer-body">
+
+                <div class="notify-tabs" role="tablist" aria-label="Message channel">
+                    <button type="button" class="notify-tab" role="tab" data-notify-channel="push" aria-selected="true">Customer APP</button>
+                    <button type="button" class="notify-tab" role="tab" data-notify-channel="wa" aria-selected="false">WhatsApp</button>
+                </div>
+
+                <section id="notifyAudience" class="notify-audience" aria-label="Selected guests"></section>
+
+                <section id="notifyReach" class="notify-reach" role="status" aria-live="polite"></section>
+
+                <div class="notify-field notify-field-title">
+                    <label for="notifyTitleInput">Title <span class="notify-hint">(Customer APP only)</span></label>
+                    <input id="notifyTitleInput" class="notify-input" type="text" maxlength="100" placeholder="e.g. We miss you" autocomplete="off">
+                </div>
+
+                <div class="notify-field">
+                    <label for="notifyBodyInput">Message</label>
+                    <textarea id="notifyBodyInput" class="notify-input notify-textarea" maxlength="300" rows="4" placeholder="Write the message, or use Generate message to compose it from the guests' own details."></textarea>
+                    <div class="notify-field-foot">
+                        <button type="button" id="notifyGenerateBtn" class="cust-tool-btn"><i data-lucide="sparkles" class="icon-18"></i><span>Generate message</span></button>
+                        <span id="notifyCharCount" class="notify-hint">0 / 300</span>
+                    </div>
+                </div>
+
+                <div id="notifyWaRow" class="notify-field hidden">
+                    <label for="notifyWaTemplate">WhatsApp template</label>
+                    <select id="notifyWaTemplate" class="notify-input"></select>
+                    <label class="notify-check"><input type="checkbox" id="notifySendStop" checked> Add the &ldquo;Reply STOP to unsubscribe&rdquo; footer</label>
+                </div>
+
+            </div>
+
+            <div class="modal-footer notify-composer-foot">
+
+                <div id="notifyResult" class="notify-result" role="status" aria-live="polite"></div>
+
+                <button type="button" class="btn-secondary" data-notify-close>Cancel</button>
+                <button type="button" id="notifySendBtn" class="btn-primary">Send</button>
+
+            </div>
+
+        </div>
+
+    </div>
 
 <!-- RECEIPT PREVIEW MODAL -->
 

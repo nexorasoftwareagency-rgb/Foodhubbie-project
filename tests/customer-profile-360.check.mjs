@@ -459,7 +459,7 @@ function series(count, gapDays, total = 200, endDaysAgo = 2, base = {}) {
     // The phone match and the row markup live in the Customers view layer.
     const custView = readFileSync(CUST_VIEW_FILE, 'utf8');
     assert.ok(custView.includes('customerPhone || o.phone'), 'the table and the profile must match orders the same way');
-    assert.ok(/<tr class="cp-row"\$\{rowProfile\}>/.test(custView), 'the whole row carries the profile target');
+    assert.ok(/<tr class="cp-row[^"]*"\$\{rowProfile\}>/.test(custView), 'the whole row carries the profile target');
     assert.ok(custView.includes('data-cust-profile'), 'the row opens the profile');
     ok('the Customers table matches orders the same way as the profile');
 }
@@ -495,7 +495,7 @@ function series(count, gapDays, total = 200, endDaysAgo = 2, base = {}) {
     const cols = [...headBlock.matchAll(/data-sort="([^"]+)"/g)].map((m) => m[1]);
     assert.deepEqual(cols, ['name', 'displayPhone', 'address', 'lastVisit', 'orderCount', 'ltv', 'loyaltyPoints', 'segment'], 'the header columns: ' + cols);
     const custView = readFileSync(CUST_VIEW_FILE, 'utf8');
-    const rowStart = custView.indexOf('return `<tr class="cp-row"');
+    const rowStart = custView.indexOf('return `<tr class="cp-row');
     const rowEnd = custView.indexOf('</tr>`', rowStart);
     assert.ok(rowStart > 0 && rowEnd > rowStart, 'the row template was found');
     const row = custView.slice(rowStart, rowEnd);

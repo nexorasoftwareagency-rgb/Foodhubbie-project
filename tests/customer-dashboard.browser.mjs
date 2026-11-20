@@ -51,7 +51,7 @@ try {
     const heads = await page.locator('#customerDataTable thead th').allInnerTexts();
     const cells = await page.locator('#customerDataTableBody tr.cp-row').first().locator('td').count();
     assert.equal(heads.length, cells, 'the header and the row have the same number of columns');
-    assert.equal(heads.length, 9, 'the table has 9 columns');
+    assert.equal(heads.length, 10, 'the table has 10 columns (the selection checkbox leads)');
     ok('the header and the rows agree (' + heads.length + ' columns)');
 
     // The value cell is the money actually PAID, and the loyalty cell says how
@@ -61,10 +61,10 @@ try {
         const td = [...tr.querySelectorAll('td')].map((x) => x.innerText.replace(/\s+/g, ' ').trim());
         return td;
     });
-    assert.ok(/^₹/.test(firstRow[5] || ''), 'the Value column shows a rupee total: ' + firstRow[5]);
-    assert.ok(/pts/i.test(firstRow[6] || ''), 'the Loyalty column shows the spendable points: ' + firstRow[6]);
-    assert.ok(firstRow[7] && firstRow[7].length > 0, 'the Segment column carries a badge');
-    assert.ok(firstRow[8] && firstRow[8].length > 0, 'the Next-step column carries a pill');
+    assert.ok(/^₹/.test(firstRow[6] || ''), 'the Value column shows a rupee total: ' + firstRow[6]);
+    assert.ok(/pts/i.test(firstRow[7] || ''), 'the Loyalty column shows the spendable points: ' + firstRow[7]);
+    assert.ok(firstRow[8] && firstRow[8].length > 0, 'the Segment column carries a badge');
+    assert.ok(firstRow[9] && firstRow[9].length > 0, 'the Next-step column carries a pill');
     ok('the row shows the paid value, the spendable points, a segment and a next step');
 
     // ------------------------------------------------------------ the KPI strip
@@ -176,8 +176,97 @@ try {
     assert.ok(densePad < roomyPad, 'compact rows are tighter (' + densePad + ' vs ' + roomyPad + 'px)');
     ok('the density toggle tightens the rows and remembers the choice');
 
+    // ------------------------------------------------ the notification checklist
+    // NOTHING is sent here: the run must not push to a real device. The only
+    // thing this proves is the selection, the honest reach and the composer.
+    const notifyPosts = [];
+    page.on('request', (r) => {
+        if (r.method() === 'POST' && /tenant-api\/notify/.test(r.url())) notifyPosts.push(r.url());
+    });
+
+    assert.equal(await page.locator('#customerDataTableBody .cust-sel-box').count(), total, 'every row has a selection checkbox');
+    assert.equal(await page.locator('#custSelectAll').count(), 1, 'the table has a header checkbox');
+    assert.equal((await page.locator('#custBatchBar').innerText()).trim(), '', 'the batch bar is hidden without a selection');
+    ok('the selection column and the header checkbox are there, and the bar is hidden');
+
+    // Select ONE guest.
+    await page.locator('#customerDataTableBody .cust-sel-box:not([disabled])').first().check();
+    await page.waitForTimeout(400);
+    let barText = await page.locator('#custBatchBar').innerText();
+    assert.ok(/1 guest selected/.test(barText), 'the bar says one guest is selected: ' + barText.replace(/\s+/g, ' '));
+    assert.ok(/Up to \d+ can get a push/.test(barText), 'the bar states the push reach honestly');
+    assert.ok(/Up to \d+ can get WhatsApp/.test(barText), 'the bar states the WhatsApp reach honestly');
+    assert.ok(/Select all \d+ matching guests/.test(barText), 'the bar offers the WHOLE filtered set');
+    ok('selecting a guest opens the batch bar with the honest reach');
+
+    // Select ALL the matching guests (the explicit link, not the header box).
+    await page.click('#custBatchBar [data-cust-select-all-matching]');
+    await page.waitForTimeout(400);
+    barText = await page.locator('#custBatchBar').innerText();
+    assert.ok(new RegExp(total + ' guests selected').test(barText), 'every matching guest is selected: ' + barText.replace(/\s+/g, ' '));
+    assert.ok(/All \d+ matching guests selected/.test(barText), 'the bar says the whole set is selected');
+    ok('"select all N matching" selects the whole filtered set');
+
+    // The header checkbox is the CURRENT PAGE, and it is indeterminate when
+    // only some of the visible rows are selected.
+    await page.locator('#customerDataTableBody .cust-sel-box:not([disabled])').first().uncheck();
+    await page.waitForTimeout(300);
+    const headerState = await page.evaluate(() => {
+        const b = document.getElementById('custSelectAll');
+        return { checked: b.checked, indeterminate: b.indeterminate };
+    });
+    assert.equal(headerState.checked, false, 'the header checkbox is not fully checked');
+    assert.equal(headerState.indeterminate, true, 'the header checkbox is indeterminate when only some rows are selected');
+    ok('the header checkbox reflects a partial selection (indeterminate)');
+
+    // Open the composer for the APP push channel.
+    await page.click('#custBatchBar [data-cust-notify="push"]');
+    await page.waitForSelector('#notifyComposerModal.active', { timeout: 20000 });
+    const audience = await page.locator('#notifyAudience').innerText();
+    assert.ok(/selected guests/i.test(audience), 'the composer shows the selected guests');
+    assert.ok(/most ordered/i.test(audience), 'the composer shows what the guests actually ordered');
+    const reach = await page.locator('#notifyReach').innerText();
+    assert.ok(/Up to \d+ of \d+/.test(reach), 'the reach line is honest: ' + reach.replace(/\s+/g, ' ').slice(0, 80));
+    ok('the composer opens prefilled with the guests\' own details and an honest reach');
+
+    // Generate the message from the real guest data.
+    await page.click('#notifyGenerateBtn');
+    await page.waitForTimeout(400);
+    const title = await page.inputValue('#notifyTitleInput');
+    const body = await page.inputValue('#notifyBodyInput');
+    assert.ok(title.trim().length > 0, 'the generated draft has a title');
+    assert.ok(body.trim().length > 0, 'the generated draft has a message');
+    assert.ok(!body.includes('{name}'), 'a push body is ONE message for every device (no {name})');
+    assert.ok(!/discount|coupon|% off/i.test(body), 'the generated message never promises a discount');
+    ok('"Generate message" composes a real draft from the guests\' details');
+
+    // The WhatsApp channel states the outlet gate instead of pretending.
+    await page.click('#notifyComposerModal [data-notify-channel="wa"]');
+    await page.waitForTimeout(400);
+    const waReach = await page.locator('#notifyReach').innerText();
+    const waBtn = await page.locator('#notifySendBtn').innerText();
+    const waDisabled = await page.locator('#notifySendBtn').isDisabled();
+    if (/cannot send WhatsApp/i.test(waReach)) {
+        assert.equal(waDisabled, true, 'the send button is disabled while the outlet cannot send');
+        assert.ok(/unavailable/i.test(waBtn), 'the button says why: ' + waBtn);
+    }
+    ok('the WhatsApp channel states the outlet gate honestly');
+
+    // Close WITHOUT sending.
+    await page.click('#notifyComposerModal [data-notify-close]');
+    await page.waitForTimeout(300);
+    assert.equal(await page.locator('#notifyComposerModal.active').count(), 0, 'the composer closes');
+    assert.equal(notifyPosts.length, 0, 'the run sent NOTHING (no notify POST): ' + notifyPosts.join(', '));
+    ok('the composer closes and the run sent nothing');
+
+    // Clear the selection.
+    await page.click('#custBatchBar [data-cust-clear-selection]');
+    await page.waitForTimeout(300);
+    assert.equal((await page.locator('#custBatchBar').innerText()).trim(), '', 'the bar disappears when the selection is cleared');
+    ok('the selection can be cleared');
+
     // --------------------------------------------------------------- the profile
-    await page.locator('#customerDataTableBody tr.cp-row td:nth-child(1)').first().click();
+    await page.locator('#customerDataTableBody tr.cp-row td:nth-child(2)').first().click();
     await page.waitForSelector('#customerProfileDrawer.active', { timeout: 30000 });
     ok('clicking a row opens the Customer Profile 360');
     await page.keyboard.press('Escape');
@@ -259,22 +348,26 @@ try {
     ok('a 390px phone keeps five columns, a pinned customer cell and one-line chip groups');
 
     // The pin has to WORK, not just be declared: scroll the table sideways and
-    // the customer cell must stay at the left edge of the card.
+    // the SELECTION cell and the customer cell must stay at the left edge of
+    // the card.
     const pinned = await page.evaluate(async () => {
         const wrap = document.querySelector('#tab-customers .mob-table-scroll');
+        const sel = document.querySelector('#customerDataTableBody tr.cp-row td.cust-col-sel');
         const cell = document.querySelector('#customerDataTableBody tr.cp-row td.cust-col-cust');
         wrap.scrollLeft = 200;
         await new Promise((r) => requestAnimationFrame(r));
         await new Promise((r) => requestAnimationFrame(r));
         return {
             scrollLeft: Math.round(wrap.scrollLeft),
+            selLeft: Math.round(sel.getBoundingClientRect().left),
             cellLeft: Math.round(cell.getBoundingClientRect().left),
             wrapLeft: Math.round(wrap.getBoundingClientRect().left),
         };
     });
     assert.ok(pinned.scrollLeft > 0, 'the table really scrolls sideways on a phone: ' + pinned.scrollLeft + 'px');
-    assert.ok(Math.abs(pinned.cellLeft - pinned.wrapLeft) <= 2, 'the customer cell stays pinned while the table scrolls (' + pinned.cellLeft + ' vs ' + pinned.wrapLeft + ')');
-    ok('the customer cell stays pinned while the table scrolls sideways');
+    assert.ok(Math.abs(pinned.selLeft - pinned.wrapLeft) <= 2, 'the selection cell stays pinned while the table scrolls (' + pinned.selLeft + ' vs ' + pinned.wrapLeft + ')');
+    assert.ok(pinned.cellLeft > pinned.selLeft && pinned.cellLeft - pinned.selLeft < 60, 'the customer cell sits right after the pinned checkbox');
+    ok('the selection cell and the customer cell stay pinned while the table scrolls');
 
     // The last visit is not LOST on a phone - it moves under the name.
     const mobileLast = await page.locator('#customerDataTableBody tr.cp-row .cust-last-mobile').first().innerText();

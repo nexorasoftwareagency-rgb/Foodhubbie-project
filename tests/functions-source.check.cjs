@@ -184,6 +184,20 @@ ok(/HISTORY_ROWS = 20/.test(notify), 'keeps the newest 20 history rows per outle
 ok(/res\.json\(\{ ok: true, sent: successCount, failed: failureCount, total: tokens\.length, inbox: inboxCount \}\)/.test(notify),
     'response carries sent / failed / total / inbox (what the tab renders)');
 
+// The Customers notification checklist (2026-11-20) sends ONE request for a
+// SELECTED set of guests. The batch audience must be a real selection (not a
+// broadcast), de-duplicated, capped, and recorded in the history row.
+ok(/audience === 'phones'/.test(notify), 'the notify endpoint accepts a selected batch of phones');
+ok(/MAX_BATCH_PHONES = 500/.test(notify), 'the batch audience is capped at 500 phones');
+ok(/new Set\(\s*clean/.test(notify) || /new Set\(\n\s*list/.test(notify) || /Array\.from\(new Set\(/ .test(notify),
+    'the batch phone list is de-duplicated');
+ok(/Too many recipients \(max \$\{MAX_BATCH_PHONES\}\)/.test(notify), 'an oversized batch is refused with a clear error');
+ok(/wanted\.has\(String\(e\.phone/.test(notify), 'the subscriptions are filtered to the SELECTED phones');
+ok(/audience === 'phones' \? 'phones' : 'all'/.test(notify), 'the history row records the batch audience');
+ok(/phones: batchPhones\.length/.test(notify), 'the history row records how many guests were targeted');
+ok(!/audience === 'phones'[\s\S]{0,400}?batchPhones\.forEach/.test(notify),
+    'the batch is never sent one request per phone');
+
 // The caps must not drift from the bot module they mirror. Batch 23e moved them
 // out of tenantNotify.ts into a shared module so the notify endpoint and the
 // push relay cannot disagree.
@@ -221,11 +235,17 @@ ok(copyVendor.includes(`'shared/push-inbox.cjs'`), 'vendor list ships shared/pus
 ok(/vendor\/shared\/push-inbox\.cjs/.test(notify), 'the notify endpoint prunes with the vendored module');
 
 // Client + rules wiring, mirroring the media cutover.
+// The endpoint resolver lives in the SHARED notify client (the Customers
+// notification checklist is its second caller), so the guard reads THAT file.
 const appNotif = read('Admin/js/features/app-notifications.js');
-ok(/config\/notifyUrl/.test(appNotif), 'the dashboard reads config/notifyUrl');
-ok(/NOTIFY_URL/.test(appNotif) && /TUNNEL_URL/.test(appNotif)
-    && appNotif.indexOf('config/notifyUrl') < appNotif.indexOf('config/tunnelUrl'),
+const notifyClient = read('Admin/js/features/notify-client.js');
+ok(/config\/notifyUrl/.test(notifyClient), 'the dashboard reads config/notifyUrl');
+ok(/NOTIFY_URL/.test(notifyClient) && /TUNNEL_URL/.test(notifyClient)
+    && notifyClient.indexOf('config/notifyUrl') < notifyClient.indexOf('config/tunnelUrl'),
     'notifyUrl wins over tunnelUrl, which stays as the fallback');
+ok(/from '\.\/notify-client\.js'/.test(appNotif), 'the Customer APP tab uses the shared notify client');
+ok(!/function _notifyBase/.test(appNotif) && !/function _getAdminAuthToken/.test(appNotif),
+    'the Customer APP tab keeps no private copy of the endpoint or the token');
 const notifyUrlRule = dbRules?.rules?.config?.notifyUrl?.['.read'];
 ok(!!notifyUrlRule && /sign_in_provider != 'anonymous'/.test(String(notifyUrlRule)),
     'database.rules.json grants the non-anonymous read on config/notifyUrl',

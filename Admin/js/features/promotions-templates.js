@@ -407,8 +407,8 @@ function replaceWithPlaceholder(select, text) {
  *  moment Meta answers. A 4xx means this outlet genuinely has no usable WABA,
  *  so the picker says so instead of offering names that were never approved
  *  for it. */
-export async function loadApprovedWaTemplates(bid, oid) {
-  const select = document.getElementById('promoWaTemplate');
+export async function loadApprovedWaTemplates(bid, oid, targetSelect) {
+  const select = targetSelect || document.getElementById('promoWaTemplate');
   if (!select) return;
 
   // Preserve the current selection across the rebuild.

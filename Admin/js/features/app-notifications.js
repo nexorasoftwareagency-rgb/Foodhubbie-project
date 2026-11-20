@@ -25,6 +25,12 @@ import { loadLucide } from '../ui.js';
 import { logger } from '../utils/logger.js';
 import { appLink } from '../../shared/app-link.js';
 import { logChange } from './audit-trail.js';
+// The notify endpoint has a second caller now (the Customers notification
+// checklist), so the URL, the bearer token, the server-anchored IST clock and
+// the POST itself live in notify-client.js instead of being copied.
+import {
+    syncServerClock, istHour, isQuietHours, adminAuthToken, notifyBase, sendNotify,
+} from './notify-client.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -59,7 +65,7 @@ export async function initPushUI() {
     logger.info('APP-NOTIF', 'Initialising push notification UI…');
     _wireOnce();
     renderAppLink();
-    await _syncClock();
+    await syncServerClock();
     await checkDevice();
     await loadPushSubscriptions();
     await loadHistory();
@@ -733,48 +739,15 @@ function _phone() {
 
 /**
  * Quiet hours belong to the SERVER (functions/src/shared/notify/caps.ts:
- * 21:00-09:00 IST, promo/offer only). The browser clock can be wrong - a
- * device 12 hours out would silently block a morning send or let a night
- * send through - so the IST hour is anchored to the Firebase Auth token's
- * issued-at claim, which is the server's own clock. The device clock is only
- * the fallback (no token yet).
- */
-const IST_OFFSET_MS = 5 * 3600000 + 30 * 60000;
-let _clockSkewMs = 0;
-
-async function _syncClock() {
-    try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const token = await user.getIdToken();
-        const part = String(token || '').split('.')[1];
-        if (!part) return;
-        const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-        const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
-        const payload = JSON.parse(atob(padded));
-        if (Number.isFinite(payload.iat)) _clockSkewMs = payload.iat * 1000 - Date.now();
-    } catch (e) {
-        // Keep the device clock - the server is the authority in any case.
-    }
-}
-
-/** The current IST hour (0-23), anchored to the server clock when known. */
-function _istHour() {
-    return new Date(Date.now() + _clockSkewMs + IST_OFFSET_MS).getUTCHours();
-}
-
-function _isQuietHours() {
-    const h = _istHour();
-    return h >= 21 || h < 9;
-}
-
-/**
+ * 21:00-09:00 IST, promo/offer only) and the IST hour is anchored to the
+ * server clock in notify-client.js.
+ *
  * Marketing types pause at night for EVERY audience: the server runs the
- * cap/quiet-hours check per recipient (bot-control-api notifyType = 'promo'),
- * including single-customer sends. Only transactional order updates pass.
+ * cap/quiet-hours check per recipient (notifyType = 'promo'), including
+ * single-customer sends. Only transactional order updates pass.
  */
 function _quietBlocked(type) {
-    return type !== 'order' && _isQuietHours();
+    return type !== 'order' && isQuietHours();
 }
 
 /**
@@ -1067,41 +1040,27 @@ async function _sendPushNotification() {
     }
 
     try {
-        const token = await _getAdminAuthToken();
-        if (!token) throw new Error('Not authenticated');
-
-        const url = `${await _notifyBase()}/tenant-api/notify`;
-        const resp = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                title,
-                body,
-                // type must be top-level: the server defaults an absent type to
-                // 'promo', which would filter by offers consent and quiet hours
-                // even for a transactional order update.
+        const result = await sendNotify({
+            title,
+            body,
+            // type must be top-level: the server defaults an absent type to
+            // 'promo', which would filter by offers consent and quiet hours
+            // even for a transactional order update.
+            type,
+            // Test mode must not carry an audience: an order-type send forces
+            // the one-customer audience, and the server rejects an empty
+            // phone before it even reaches the test-mode branch.
+            ...(testMode ? {} : {
+                audience: aud === 'one' ? 'phone' : 'all',
+                ...(aud === 'one' ? { phone } : {}),
+            }),
+            testMode,
+            data: {
+                testMode: testMode ? 'true' : 'false',
                 type,
-                // Test mode must not carry an audience: an order-type send forces
-                // the one-customer audience, and the server rejects an empty
-                // phone before it even reaches the test-mode branch.
-                ...(testMode ? {} : {
-                    audience: aud === 'one' ? 'phone' : 'all',
-                    ...(aud === 'one' ? { phone } : {}),
-                }),
-                testMode,
-                data: {
-                    testMode: testMode ? 'true' : 'false',
-                    type,
-                    typeLabel: TYPE_INFO[type]?.label || type,
-                }
-            })
+                typeLabel: TYPE_INFO[type]?.label || type,
+            }
         });
-
-        const result = await resp.json().catch(() => ({}));
-        if (!resp.ok) throw new Error(result.error || `Send failed (${resp.status})`);
 
         const sent = Number(result.sent || 0);
         const failed = Number(result.failed || 0);
@@ -1165,31 +1124,7 @@ async function _sendPushNotification() {
     }
 }
 
-function _getAdminAuthToken() {
-    return auth.currentUser ? auth.currentUser.getIdToken() : Promise.resolve(null);
-}
+// The notify endpoint (URL, bearer token, server-anchored IST clock and the
+// POST itself) lives in notify-client.js - the Customers notification
+// checklist is its second caller.
 
-// ponytail: single consumer - cache on window; promote to shared config when a second caller appears
-//
-// Batch 23d-2: the send route now lives on Cloud Functions (`tenantNotify`).
-// `config/notifyUrl` is the switch; when it is absent (or the function is
-// deleted) the dashboard falls back to the control API on `config/tunnelUrl`,
-// exactly as before.
-async function _notifyBase() {
-    if (window.NOTIFY_URL) return window.NOTIFY_URL;
-    try {
-        const snap = await get(ref(db, 'config/notifyUrl'));
-        const url = snap.val();
-        if (url) {
-            window.NOTIFY_URL = url;
-            return url;
-        }
-    } catch { /* fall through to the legacy control API */ }
-    if (window.TUNNEL_URL) return window.TUNNEL_URL;
-    try {
-        const snap = await get(ref(db, 'config/tunnelUrl'));
-        const url = snap.val();
-        if (url) window.TUNNEL_URL = url;
-    } catch { /* fall through -> hosting origin 404 with honest error */ }
-    return window.TUNNEL_URL || '';
-}
