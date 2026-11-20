@@ -446,6 +446,11 @@ export function renderRow(r, opts = {}) {
         ? `<span class="cust-dup" title="${r.duplicate.count} customer records share the name “${esc(r.name)}”${r.duplicate.kind === 'both' ? ' and the same address' : ''}. Open one and check before you merge anything.">Possible duplicate</span>`
         : '';
     const reach = REACH[r.consent.state] || REACH['not-set'];
+    const tierLabel = r.loyalty.tier.charAt(0).toUpperCase() + r.loyalty.tier.slice(1);
+    // On a phone the table becomes a stack of CARDS, and the card has to carry
+    // the facts the folded columns would have shown: the last visit, the paid
+    // order count and the loyalty tier. One line, straight under the name.
+    const mobMeta = `<div class="cust-mob-meta"><span class="cust-last-mobile">Last visit ${esc(r.lastVisit)}</span> · ${esc(num(r.orderCount))} orders · ${esc(tierLabel)}</div>`;
     const rowProfile = canOpen ? ` data-cust-profile="${esc(phone)}" title="Open the full customer profile"` : '';
     return `<tr class="cp-row${selected ? ' cust-row-selected' : ''}"${rowProfile}>
         ${sel}
@@ -455,12 +460,12 @@ export function renderRow(r, opts = {}) {
                 <div class="cust-cust-id">
                     <div class="mob-td-strong"><button type="button" class="btn-text mob-td-strong" data-cust-profile="${esc(phone)}" title="Open the full customer profile">${esc(r.name)}</button></div>
                     <div class="mob-td-sub cust-joined">Joined ${esc(r.joined)}${dup ? ' · ' + dup : ''}</div>
-                    <div class="mob-td-sub cust-last-mobile">Last visit ${esc(r.lastVisit)}</div>
+                    ${mobMeta}
                 </div>
                 ${canOpen ? '<i data-lucide="chevron-right" class="mob-row-go" aria-hidden="true"></i>' : ''}
             </div>
         </td>
-        <td class="cust-col-phone">${waLink}${canOpen ? `<div><button type="button" class="mob-reset-lock" data-reset-lock="${esc(phone)}" title="Use when the customer lost or changed their phone: the next phone to open the app with this number becomes the owner.">Reset phone lock</button></div>` : ''}</td>
+        <td class="cust-col-phone"><div class="cust-phone-line">${waLink}${canOpen ? `<button type="button" class="mob-reset-lock" data-reset-lock="${esc(phone)}" title="Use when the customer lost or changed their phone: the next phone to open the app with this number becomes the owner.">Reset phone lock</button>` : ''}</div></td>
         <td class="cust-col-addr"><span class="mob-addr-text" title="${esc(r.address)}">${esc(addr)}</span>${mapLink}</td>
         <td class="cust-col-last">
             <span class="cust-last">${esc(r.lastVisit)}</span>
@@ -468,7 +473,7 @@ export function renderRow(r, opts = {}) {
         </td>
         <td class="mob-th-center cust-col-orders"><span class="mob-order-count">${esc(num(r.orderCount))}</span><div class="mob-td-sub">paid</div></td>
         <td class="mob-th-right cust-col-value"><span class="mob-td-total">${esc(money(r.ltv))}</span></td>
-        <td class="mob-th-center cust-col-loyalty">${pill(r.loyalty.tier.charAt(0).toUpperCase() + r.loyalty.tier.slice(1), r.loyalty.tier === 'gold' ? 'gold' : r.loyalty.tier === 'silver' ? 'neutral' : 'bronze')}<div class="mob-td-sub" title="${esc(num(r.loyalty.points))} points to spend${r.loyalty.lifetimePoints ? ` · ${esc(num(r.loyalty.lifetimePoints))} lifetime points` : ''}">${esc(num(r.loyalty.points))} pts</div></td>
+        <td class="mob-th-center cust-col-loyalty">${pill(tierLabel, r.loyalty.tier === 'gold' ? 'gold' : r.loyalty.tier === 'silver' ? 'neutral' : 'bronze')}<div class="mob-td-sub" title="${esc(num(r.loyalty.points))} points to spend${r.loyalty.lifetimePoints ? ` · ${esc(num(r.loyalty.lifetimePoints))} lifetime points` : ''}">${esc(num(r.loyalty.points))} pts</div></td>
         <td class="cust-col-segment">${pill(r.action.segment, r.action.tone)}<div class="cust-reach cust-reach-${esc(reach.tone)}" title="${esc(r.consent.detail || '')}">${esc(reach.label)}</div></td>
         <td class="cust-col-action"><span class="cust-action cust-action-${esc(r.action.tone)}" title="${esc(r.action.title + (r.action.sub ? ' — ' + r.action.sub : ''))}">${esc(r.action.short || r.action.title)}</span></td>
     </tr>`;
@@ -531,7 +536,7 @@ export function renderBatchBar(s = {}) {
     const allLine = allMatchingSelected
         ? `<span class="cust-batch-all-note">All ${esc(num(matching))} matching guest${matching === 1 ? '' : 's'} selected</span>`
         : (canSelectAll
-            ? `<button type="button" class="cust-batch-all-btn" data-cust-select-all-matching>Select all ${esc(num(matching))} matching guest${matching === 1 ? '' : 's'}</button>`
+            ? `<button type="button" class="cust-batch-all-btn" data-cust-select-all-matching title="Select all ${esc(num(matching))} matching guest${matching === 1 ? '' : 's'}">Select all ${esc(num(matching))}<span class="cust-phone-hide"> matching guest${matching === 1 ? '' : 's'}</span></button>`
             : '');
     return `
         <div class="cust-batch-bar" role="region" aria-label="Actions for the selected guests">
@@ -547,7 +552,7 @@ export function renderBatchBar(s = {}) {
             <div class="cust-batch-actions">
                 <button type="button" class="btn-primary cust-batch-btn" data-cust-notify="push">Send app notification</button>
                 <button type="button" class="btn-secondary cust-batch-btn" data-cust-notify="wa">Send WhatsApp message</button>
-                <button type="button" class="cust-tool-btn" data-cust-clear-selection>Clear selection</button>
+                <button type="button" class="cust-tool-btn" data-cust-clear-selection title="Clear the selection">Clear<span class="cust-phone-hide"> selection</span></button>
             </div>
         </div>`;
 }
@@ -656,6 +661,11 @@ export const CUSTOMER_DASHBOARD_CSS = `
 #tab-customers .cust-last { font-size: 13px; font-weight: 700; color: var(--mob-ink); }
 #tab-customers .cust-dup { color: #b45309; font-weight: 800; }
 #tab-customers .cust-cust-id { min-width: 0; }
+/* The phone line (WhatsApp link + the repair link) stacks on a desktop row and
+   runs as ONE line on a phone card. */
+#tab-customers .cust-phone-line { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+/* The phone card's summary line - only ever shown on a phone. */
+#tab-customers .cust-mob-meta { display: none; }
 
 #tab-customers .cust-tool-btn {
     appearance: none;
@@ -765,46 +775,217 @@ export const CUSTOMER_DASHBOARD_CSS = `
     #tab-customers .cust-col-value { width: 12%; }
 }
 
-@media (max-width: 640px) {
-    #tab-customers .cust-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    #tab-customers .cust-kpi { min-height: 52px; padding: 8px 10px; }
-    #tab-customers .cust-kpi-val { font-size: 19px; }
-    /* One SCROLLING row per chip group - the table has to stay reachable. */
+/* ============================================================================
+   Customers tab — MOBILE REDESIGN
+   The Customers table was a spreadsheet: on a phone the value, the segment and
+   the next step all fell off the right edge, the phone number was clipped and
+   the contextual action bar was unreachable behind the bottom nav.
+
+   On a phone the table becomes a stack of CARDS:
+     - every fact is on the card, nothing scrolls sideways
+     - the card is the tap target for the Customer Profile
+     - the column headers become a scrolling strip of SORT CHIPS, so sorting
+       and the select-all checkbox survive the layout change
+     - the contextual action bar pins to the BOTTOM, above the nav
+   ========================================================================= */
+
+@media (max-width: 768px) {
+
+    /* --- the card around the list becomes a flex column, so the contextual
+       action bar can sit UNDER the list (where a thumb reaches it). --- */
+    #tab-customers .mob-table-card {
+        display: flex;
+        flex-direction: column;
+        padding: 12px 0;
+    }
+    #tab-customers .mob-table-card > * { flex: none; width: 100%; }
+    #tab-customers .mob-section-head-row { order: 1; padding: 0 12px; }
+    #tab-customers #custKpis { order: 2; }
+    #tab-customers #custFilters { order: 3; }
+    #tab-customers .mob-table-scroll { order: 4; }
+    #tab-customers #custPager { order: 5; }
+    #tab-customers #custBatchBar { order: 6; }
+
+    /* --- the toolbar: the search on its own line, the tools on ONE row. --- */
+    #tab-customers .mob-section-head-row { flex-wrap: wrap; gap: 8px; }
+    #tab-customers .cust-toolbar { margin-left: 0 !important; width: 100%; flex-wrap: wrap; gap: 8px; }
+    #tab-customers #customerSearch { flex: 1 1 100%; max-width: none !important; min-height: 42px; }
+    #tab-customers #custDensityBtn { min-height: 40px; }
+    #tab-customers .cust-toolbar .mob-export-row { margin: 0; flex: 0 0 auto; gap: 6px; }
+    #tab-customers .cust-toolbar .mob-export-banner {
+        flex: 0 0 auto; padding: 8px 12px; font-size: 12.5px;
+        border-radius: 10px; box-shadow: none;
+    }
+
+    /* --- KPI tiles: smaller, still three across. --- */
+    #tab-customers .cust-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 4px 12px 10px; }
+    #tab-customers .cust-kpi { min-height: 46px; padding: 6px 8px; border-radius: 10px; }
+    #tab-customers .cust-kpi-val { font-size: 18px; }
+    #tab-customers .cust-kpi-label { font-size: 10.5px; line-height: 1.25; }
+
+    /* --- ONE scrolling row per chip group, so the list stays reachable. --- */
+    #tab-customers .cust-filters { margin: 0 12px 10px; gap: 6px; }
     #tab-customers .cust-filter-row { flex-direction: row; align-items: center; gap: 8px; }
-    #tab-customers .cust-filter-label { padding-top: 0; flex: 0 0 auto; }
-    #tab-customers .cust-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
-    /* Five columns on a phone: identity, phone, value, segment, next step.
-       Address / loyalty / orders / last visit live in the profile, and the
-       last visit moves under the customer name. */
-    #tab-customers .cust-col-addr, #tab-customers .cust-col-loyalty,
-    #tab-customers .cust-col-orders, #tab-customers .cust-col-last { display: none; }
-    #tab-customers .mob-data-table { min-width: 620px; }
-    #tab-customers .cust-col-cust { width: 30%; }
-    #tab-customers .cust-col-phone { width: 18%; }
-    #tab-customers .cust-col-value { width: 16%; }
-    #tab-customers .cust-col-segment { width: 14%; }
-    #tab-customers .cust-col-action { width: 14%; }
+    #tab-customers .cust-filter-label { padding-top: 0; flex: 0 0 auto; min-width: 0; font-size: 11px; }
+    #tab-customers .cust-chips {
+        flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px;
+        scrollbar-width: thin; -webkit-overflow-scrolling: touch;
+    }
+    #tab-customers .cust-chip { font-size: 12px; padding: 5px 10px; }
+
+    /* --- the list: a stack of cards, no sideways scroll. --- */
+    #tab-customers .mob-table-scroll {
+        max-height: none;
+        overflow: visible;
+        margin: 0 12px;
+        border: 1px solid var(--mob-border);
+        border-radius: 12px;
+        background: #fff;
+    }
+    #tab-customers .mob-data-table { display: block; min-width: 0; width: 100%; table-layout: auto; }
+    #tab-customers .mob-data-table tbody { display: block; }
+    #tab-customers .mob-data-table tbody tr {
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "sel name value"
+            "sel phone value"
+            "sel tags act";
+        align-items: start;
+        gap: 4px 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--mob-border);
+        background: #fff;
+    }
+    #tab-customers .mob-data-table tbody tr:last-child { border-bottom: none; border-radius: 0 0 11px 11px; }
+    #tab-customers .mob-data-table tbody td {
+        display: block;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+    }
+    /* the empty state and the skeleton span the whole card */
+    #tab-customers .mob-data-table tbody td[colspan] { grid-column: 1 / -1; }
+    /* a selected card says so */
+    #tab-customers .mob-data-table tbody tr.cust-row-selected { background: #f0f9ff; box-shadow: inset 3px 0 0 var(--mob-blue); }
+
+    /* --- the column headers become a scrolling strip of SORT CHIPS: the
+       headers ARE the sort buttons, so sorting (and the select-all checkbox)
+       survives the card layout. --- */
+    #tab-customers .mob-data-table thead {
+        display: block;
+        position: sticky;
+        top: calc(var(--mobile-header-height, 60px) + var(--safe-top, 0px));
+        z-index: 5;
+        background: #fff;
+        border-bottom: 1px solid var(--mob-border);
+        border-radius: 11px 11px 0 0;
+    }
+    #tab-customers .mob-data-table thead tr {
+        display: flex;
+        gap: 6px;
+        padding: 8px 12px;
+        overflow-x: auto;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+    }
+    #tab-customers .mob-data-table thead th {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex: 0 0 auto;
+        position: static;
+        padding: 5px 10px;
+        border: 1px solid var(--mob-border);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--mob-ink);
+        font-size: 11.5px;
+        font-weight: 800;
+        white-space: nowrap;
+        text-transform: none;
+        cursor: pointer;
+    }
+    /* "Next step" is not a sort key - it must not look like one. */
+    #tab-customers .mob-data-table thead th:not([data-sort]):not(.cust-col-sel) { display: none; }
+    /* The Address column folds away on a phone, so its sort chip would be a
+       lie - unless it is the ACTIVE sort, which must never be hidden. */
+    #tab-customers .mob-data-table thead th[data-sort="address"]:not(.mob-sort-asc):not(.mob-sort-desc) { display: none; }
+    #tab-customers .mob-data-table thead th.cust-col-sel { width: auto; min-width: 0; padding: 4px 8px; }
+    #tab-customers .mob-data-table thead th.mob-sort-asc,
+    #tab-customers .mob-data-table thead th.mob-sort-desc { background: var(--mob-ink); border-color: var(--mob-ink); color: #fff; }
+
+    /* --- where each cell lands on the card. --- */
+    #tab-customers .cust-col-sel { grid-area: sel; position: static; width: auto; min-width: 0; padding: 2px 0 0 !important; }
+    #tab-customers .cust-sel-box { width: 22px; height: 22px; min-width: 22px; min-height: 22px; }
+    #tab-customers .cust-col-cust { grid-area: name; position: static; width: auto; box-shadow: none; }
+    #tab-customers .cust-col-phone { grid-area: phone; width: auto; }
+    #tab-customers .cust-col-value { grid-area: value; width: auto; text-align: right; align-self: start; }
+    #tab-customers .cust-col-segment { grid-area: tags; width: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    #tab-customers .cust-col-action { grid-area: act; width: auto; text-align: right; align-self: center; }
+    /* the select chip in the sort strip keeps its own padding */
+    #tab-customers .mob-data-table thead th.cust-col-sel { width: auto; min-width: 0; padding: 4px 8px !important; }
+    /* the folded columns stay folded on the card too */
+    #tab-customers .mob-data-table tbody .cust-col-addr,
+    #tab-customers .mob-data-table tbody .cust-col-last,
+    #tab-customers .mob-data-table tbody .cust-col-orders,
+    #tab-customers .mob-data-table tbody .cust-col-loyalty { display: none; }
+
+    /* --- the card's typography: nothing is clipped, a long name wraps. --- */
     #tab-customers .mob-cust-avatar { display: none; }
     #tab-customers .cust-joined { display: none; }
-    #tab-customers .cust-last-mobile { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #tab-customers .cust-tool-btn { min-height: 44px; }
-    /* The checkbox and the customer cell stay pinned while the other columns
-       scroll - the selection affordance must never scroll out of reach. */
-    #tab-customers .cust-col-sel { position: sticky; left: 0; z-index: 3; background: #fff; }
-    #tab-customers thead .cust-col-sel { z-index: 4; }
-    #tab-customers .cust-col-cust { position: sticky; left: 34px; z-index: 2; background: #fff; box-shadow: 1px 0 0 var(--mob-border); }
-    #tab-customers thead .cust-col-cust { z-index: 3; }
-    #tab-customers .mob-data-table tbody tr:hover .cust-col-cust { background: var(--mob-bg); }
-    /* The batch bar stacks on a phone and sticks to the bottom, where a thumb
-       can reach it. */
-    #tab-customers .cust-batch-bar {
-        position: sticky; top: auto; bottom: 0; margin: 0 0 8px; border-radius: 0;
-        flex-direction: column; align-items: stretch; gap: 8px;
+    #tab-customers .mob-row-go { display: none; }
+    #tab-customers .cust-cust-id .mob-td-strong button { white-space: normal; overflow: visible; }
+    #tab-customers .cust-mob-meta { display: block; font-size: 11.5px; line-height: 1.45; color: var(--mob-sub); margin-top: 2px; }
+    #tab-customers .cust-last-mobile { display: inline; }
+    #tab-customers .cust-phone-line { flex-direction: row; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    #tab-customers .mob-reset-lock { margin: 0; }
+    #tab-customers .cust-reach { white-space: normal; overflow: visible; text-overflow: clip; margin-top: 0; }
+    #tab-customers .cust-action { white-space: normal; overflow: visible; text-overflow: clip; max-width: 100%; font-size: 12px; }
+
+    /* --- the contextual action bar pins to the BOTTOM, clear of the nav.
+       The STICKY box has to be the direct child of the card: a sticky box can
+       only travel inside its own parent's box, and the wrapper around the bar
+       is exactly as tall as the bar - so the stickiness lives on the wrapper
+       and the bar itself is a plain grid inside it. --- */
+    #tab-customers #custBatchBar {
+        position: sticky;
+        top: auto;
+        bottom: calc(var(--bottom-nav-height, 65px) + var(--safe-bottom, 0px));
+        z-index: 900;
+        margin: 8px 12px 0;
     }
-    #tab-customers .cust-batch-actions { margin-left: 0; }
-    #tab-customers .cust-batch-btn { min-height: 44px; flex: 1 1 100%; }
-    /* The toolbar wraps: search on its own line, the tools under it. */
-    #tab-customers .mob-section-head-row { flex-wrap: wrap; gap: 10px; }
-    #tab-customers .cust-toolbar { margin-left: 0 !important; width: 100%; flex-wrap: wrap; }
-    #tab-customers #customerSearch { flex: 1 1 100%; max-width: none !important; }
+    #tab-customers .cust-batch-bar {
+        position: static;
+        top: auto;
+        bottom: auto;
+        margin: 0;
+        padding: 10px 12px;
+        border-radius: 14px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "left clear"
+            "reach reach"
+            "push wa";
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, .25);
+    }
+    /* the actions row becomes three grid items, so "Clear" can sit next to the
+       count instead of taking a whole row of its own */
+    #tab-customers .cust-batch-actions { display: contents; }
+    #tab-customers .cust-batch-left { grid-area: left; gap: 8px; }
+    #tab-customers .cust-batch-reach { grid-area: reach; font-size: 11.5px; gap: 8px; }
+    #tab-customers .cust-batch-actions [data-cust-notify="push"] { grid-area: push; }
+    #tab-customers .cust-batch-actions [data-cust-notify="wa"] { grid-area: wa; }
+    #tab-customers .cust-batch-actions [data-cust-clear-selection] { grid-area: clear; }
+    #tab-customers .cust-batch-btn { min-height: 44px; font-size: 12.5px; width: 100%; }
+    #tab-customers .cust-batch-actions .cust-tool-btn { min-height: 36px; padding: 6px 10px; font-size: 12px; }
+    #tab-customers .cust-phone-hide { display: none; }
+    #tab-customers .cust-tool-btn { min-height: 40px; }
+    #tab-customers .cust-pager { padding: 10px 12px 4px; }
 }`;

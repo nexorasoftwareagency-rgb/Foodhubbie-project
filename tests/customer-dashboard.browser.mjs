@@ -272,18 +272,6 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(400);
 
-    // ------------------------------------------------------------- the phone size
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.waitForTimeout(400);
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    assert.ok(overflow <= 2, 'the page does not scroll sideways on a phone: ' + overflow + 'px');
-    const kpiCols = await page.evaluate(() => {
-        const g = getComputedStyle(document.querySelector('#custKpis')).gridTemplateColumns;
-        return g.split(' ').filter(Boolean).length;
-    });
-    assert.ok(kpiCols === 3, 'the KPI strip folds to 3 columns on a phone: ' + kpiCols);
-    ok('the dashboard fits a 390px phone (no sideways scroll, 3-column KPIs)');
-
     // ---------------------------------------------------- the responsive layout
     // A laptop: the table has to FIT its card (no horizontal scroll) and no
     // customer name may be cut, and the Address column folds away first.
@@ -308,71 +296,130 @@ try {
     assert.equal(laptop.addr, 'none', 'the Address column folds away on a laptop');
     ok('a 1280px laptop shows every column it can without clipping a name');
 
-    // A phone: five columns (identity, phone, value, segment, next step), the
-    // customer cell pinned while the rest scrolls, and the chips in ONE
-    // scrolling row so the table stays reachable.
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.waitForTimeout(400);
-    const phone = await page.evaluate(() => {
-        const q = (s) => document.querySelector(s);
-        const disp = (s) => { const el = q(s); return el ? getComputedStyle(el).display : 'missing'; };
-        const chips = q('#custFilters .cust-chips');
-        const row = q('#custFilters .cust-filter-row');
-        return {
-            cust: disp('#customerDataTable thead .cust-col-cust'),
-            phone: disp('#customerDataTable thead .cust-col-phone'),
-            addr: disp('#customerDataTable thead .cust-col-addr'),
-            last: disp('#customerDataTable thead .cust-col-last'),
-            orders: disp('#customerDataTable thead .cust-col-orders'),
-            value: disp('#customerDataTable thead .cust-col-value'),
-            loyalty: disp('#customerDataTable thead .cust-col-loyalty'),
-            segment: disp('#customerDataTable thead .cust-col-segment'),
-            action: disp('#customerDataTable thead .cust-col-action'),
-            sticky: getComputedStyle(q('#customerDataTableBody tr.cp-row td.cust-col-cust')).position,
-            chipsScroll: chips ? chips.scrollWidth > chips.clientWidth : false,
-            chipRowH: row ? Math.round(row.getBoundingClientRect().height) : 0,
-        };
-    });
-    assert.equal(phone.addr, 'none', 'the Address column is gone on a phone');
-    assert.equal(phone.last, 'none', 'the Last visit column is gone on a phone');
-    assert.equal(phone.orders, 'none', 'the Orders column is gone on a phone');
-    assert.equal(phone.loyalty, 'none', 'the Loyalty column is gone on a phone');
-    assert.notEqual(phone.cust, 'none', 'the Customer column stays');
-    assert.notEqual(phone.phone, 'none', 'the Phone column stays');
-    assert.notEqual(phone.value, 'none', 'the Value column stays');
-    assert.notEqual(phone.segment, 'none', 'the Segment column stays');
-    assert.notEqual(phone.action, 'none', 'the Next step column stays');
-    assert.equal(phone.sticky, 'sticky', 'the customer cell is pinned while the table scrolls');
-    assert.ok(phone.chipsScroll, 'the chip row scrolls sideways on a phone');
-    assert.ok(phone.chipRowH < 90, 'the chip groups stay on ONE line each (' + phone.chipRowH + 'px)');
-    ok('a 390px phone keeps five columns, a pinned customer cell and one-line chip groups');
+    // ------------------------------------------------------------- the phone size
+    // A phone gets CARDS, not a squeezed table: every guest is a card, the
+    // list never scrolls sideways, the column headers become a strip of sort
+    // chips and the contextual action bar floats above the bottom nav.
+    for (const [w, h] of [[390, 844], [360, 800], [320, 720]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(450);
 
-    // The pin has to WORK, not just be declared: scroll the table sideways and
-    // the SELECTION cell and the customer cell must stay at the left edge of
-    // the card.
-    const pinned = await page.evaluate(async () => {
-        const wrap = document.querySelector('#tab-customers .mob-table-scroll');
-        const sel = document.querySelector('#customerDataTableBody tr.cp-row td.cust-col-sel');
-        const cell = document.querySelector('#customerDataTableBody tr.cp-row td.cust-col-cust');
-        wrap.scrollLeft = 200;
-        await new Promise((r) => requestAnimationFrame(r));
-        await new Promise((r) => requestAnimationFrame(r));
-        return {
-            scrollLeft: Math.round(wrap.scrollLeft),
-            selLeft: Math.round(sel.getBoundingClientRect().left),
-            cellLeft: Math.round(cell.getBoundingClientRect().left),
-            wrapLeft: Math.round(wrap.getBoundingClientRect().left),
-        };
-    });
-    assert.ok(pinned.scrollLeft > 0, 'the table really scrolls sideways on a phone: ' + pinned.scrollLeft + 'px');
-    assert.ok(Math.abs(pinned.selLeft - pinned.wrapLeft) <= 2, 'the selection cell stays pinned while the table scrolls (' + pinned.selLeft + ' vs ' + pinned.wrapLeft + ')');
-    assert.ok(pinned.cellLeft > pinned.selLeft && pinned.cellLeft - pinned.selLeft < 60, 'the customer cell sits right after the pinned checkbox');
-    ok('the selection cell and the customer cell stay pinned while the table scrolls');
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        assert.ok(overflow <= 2, 'the page does not scroll sideways at ' + w + 'px: ' + overflow + 'px');
 
-    // The last visit is not LOST on a phone - it moves under the name.
-    const mobileLast = await page.locator('#customerDataTableBody tr.cp-row .cust-last-mobile').first().innerText();
-    assert.ok(/Last visit/i.test(mobileLast), 'the phone shows the last visit under the name: ' + mobileLast);
-    ok('the phone carries the last visit under the customer name');
+        const card = await page.evaluate(() => {
+            const q = (s) => document.querySelector(s);
+            const disp = (s) => { const el = q(s); return el ? getComputedStyle(el).display : 'missing'; };
+            const area = (s) => { const el = q(s); return el ? getComputedStyle(el).gridArea : 'missing'; };
+            const wrap = q('#tab-customers .mob-table-scroll');
+            const headTr = q('#customerDataTable thead tr');
+            const chips = q('#custFilters .cust-chips');
+            const chipRow = q('#custFilters .cust-filter-row');
+            const row = q('#customerDataTableBody tr.cp-row');
+            const nameBtn = row && row.querySelector('.cust-col-cust .mob-td-strong button');
+            const meta = row && row.querySelector('.cust-mob-meta');
+            const box = q('#custSelectAll');
+            return {
+                wrapScroll: wrap ? wrap.scrollWidth - wrap.clientWidth : -1,
+                tableDisplay: disp('#customerDataTable'),
+                tbodyDisplay: disp('#customerDataTableBody'),
+                rowDisplay: disp('#customerDataTableBody tr.cp-row'),
+                areaSel: area('#customerDataTableBody tr.cp-row td.cust-col-sel'),
+                areaCust: area('#customerDataTableBody tr.cp-row td.cust-col-cust'),
+                areaPhone: area('#customerDataTableBody tr.cp-row td.cust-col-phone'),
+                areaValue: area('#customerDataTableBody tr.cp-row td.cust-col-value'),
+                areaSegment: area('#customerDataTableBody tr.cp-row td.cust-col-segment'),
+                areaAction: area('#customerDataTableBody tr.cp-row td.cust-col-action'),
+                addr: disp('#customerDataTableBody tr.cp-row td.cust-col-addr'),
+                last: disp('#customerDataTableBody tr.cp-row td.cust-col-last'),
+                orders: disp('#customerDataTableBody tr.cp-row td.cust-col-orders'),
+                loyalty: disp('#customerDataTableBody tr.cp-row td.cust-col-loyalty'),
+                headDisplay: disp('#customerDataTable thead'),
+                headTrDisplay: disp('#customerDataTable thead tr'),
+                headScrolls: headTr ? headTr.scrollWidth > headTr.clientWidth : false,
+                headChips: [...document.querySelectorAll('#customerDataTable thead th')]
+                    .filter((th) => getComputedStyle(th).display !== 'none')
+                    .map((th) => (th.textContent || '').trim().replace(/\s+/g, ' ')),
+                selectAll: !!box && getComputedStyle(box).display !== 'none' && box.getBoundingClientRect().width > 0,
+                metaText: meta ? meta.innerText.replace(/\s+/g, ' ').trim() : 'missing',
+                metaDisplay: disp('#customerDataTableBody tr.cp-row .cust-mob-meta'),
+                nameClipped: nameBtn ? nameBtn.scrollWidth > nameBtn.clientWidth + 1 : null,
+                chipsScroll: chips ? chips.scrollWidth > chips.clientWidth : false,
+                chipRowH: chipRow ? Math.round(chipRow.getBoundingClientRect().height) : 0,
+                kpiCols: getComputedStyle(q('#custKpis')).gridTemplateColumns.split(' ').filter(Boolean).length,
+            };
+        });
+
+        assert.ok(card.wrapScroll <= 1, 'the list does not scroll sideways at ' + w + 'px: ' + card.wrapScroll + 'px');
+        assert.equal(card.tableDisplay, 'block', 'the table becomes a stack of cards at ' + w + 'px');
+        assert.equal(card.tbodyDisplay, 'block', 'the rows are blocks at ' + w + 'px');
+        assert.equal(card.rowDisplay, 'grid', 'each guest is a card grid at ' + w + 'px');
+        assert.equal(card.areaSel, 'sel', 'the checkbox sits in the card gutter');
+        assert.equal(card.areaCust, 'name', 'the name is the card heading');
+        assert.equal(card.areaPhone, 'phone', 'the phone sits under the name');
+        assert.equal(card.areaValue, 'value', 'the value is the card corner');
+        assert.equal(card.areaSegment, 'tags', 'the segment sits in the card footer');
+        assert.equal(card.areaAction, 'act', 'the next step sits in the card footer');
+        assert.equal(card.addr, 'none', 'the Address cell folds away');
+        assert.equal(card.last, 'none', 'the Last visit cell folds away');
+        assert.equal(card.orders, 'none', 'the Orders cell folds away');
+        assert.equal(card.loyalty, 'none', 'the Loyalty cell folds away');
+
+        assert.equal(card.headDisplay, 'block', 'the headers become a strip');
+        assert.equal(card.headTrDisplay, 'flex', 'the header strip is a row of chips');
+        assert.ok(card.headScrolls, 'the sort strip scrolls sideways');
+        assert.ok(card.headChips.includes('Customer'), 'the sort strip keeps the sort keys: ' + card.headChips.join(' / '));
+        assert.ok(!card.headChips.includes('Address'), 'the folded Address column offers no sort chip');
+        assert.ok(!card.headChips.includes('Next step'), 'the next step is not a sort key');
+        assert.ok(card.selectAll, 'the select-all checkbox stays in the strip');
+
+        assert.equal(card.metaDisplay, 'block', 'the card summary line is visible');
+        assert.ok(/Last visit/i.test(card.metaText), 'the card carries the last visit: ' + card.metaText);
+        assert.ok(/orders/i.test(card.metaText), 'the card carries the paid order count: ' + card.metaText);
+        assert.equal(card.nameClipped, false, 'no customer name is clipped on a card');
+        assert.ok(card.chipsScroll, 'the chip row scrolls sideways');
+        assert.ok(card.chipRowH < 90, 'the chip groups stay on ONE line each (' + card.chipRowH + 'px)');
+        assert.equal(card.kpiCols, 3, 'the KPI strip folds to 3 columns');
+        ok('a ' + w + 'px phone shows cards (no sideways scroll, sort strip, card facts)');
+
+        // The contextual action bar is a FLOATING bar: it must be on screen
+        // without scrolling and it must clear the bottom nav.
+        await page.locator('#customerDataTableBody .cust-sel-box:not([disabled])').first().check();
+        await page.waitForTimeout(450);
+        const bar = await page.evaluate(() => {
+            const wrap = document.querySelector('#custBatchBar');
+            const inner = document.querySelector('#custBatchBar .cust-batch-bar');
+            const nav = document.querySelector('.bottom-nav');
+            const wr = wrap.getBoundingClientRect();
+            const nr = nav ? nav.getBoundingClientRect() : null;
+            return {
+                wrapperPos: getComputedStyle(wrap).position,
+                bottom: Math.round(wr.bottom),
+                navTop: nr ? Math.round(nr.top) : null,
+                clearsNav: nr ? wr.bottom <= nr.top + 1 : false,
+                onScreen: wr.top < window.innerHeight && wr.bottom > 0,
+                text: inner ? inner.innerText.replace(/\s+/g, ' ').trim() : '',
+            };
+        });
+        assert.equal(bar.wrapperPos, 'sticky', 'the action bar is a sticky box');
+        assert.ok(bar.clearsNav, 'the action bar clears the bottom nav (' + bar.bottom + ' vs ' + bar.navTop + ')');
+        assert.ok(bar.onScreen, 'the action bar is on screen without scrolling');
+        assert.ok(/Up to \d+ can get a push/.test(bar.text), 'the action bar states the push reach honestly');
+        assert.ok(/Up to \d+ can get WhatsApp/.test(bar.text), 'the action bar states the WhatsApp reach honestly');
+        assert.ok(/Select all \d+/.test(bar.text), 'the action bar offers the whole filtered set');
+        ok('a ' + w + 'px phone floats the action bar above the bottom nav');
+
+        // The card itself is the tap target for the profile.
+        await page.locator('#customerDataTableBody tr.cp-row .mob-td-strong button').first().click();
+        await page.waitForSelector('#customerProfileDrawer.active', { timeout: 30000 });
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+
+        // Clear the selection again (the next width starts clean).
+        await page.click('#custBatchBar [data-cust-clear-selection]');
+        await page.waitForTimeout(250);
+    }
+
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(300);

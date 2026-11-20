@@ -299,6 +299,43 @@ const sw = readFileSync(SW_FILE, 'utf8');
     ok('the service worker precaches customers-view.js under a bumped shell');
 }
 {
+    // The phone card layout is pure CSS, and ONE typo in a selector id killed
+    // a whole layout once (`#tab-customyers`): the rules parsed, the media
+    // query matched, and not one of them applied. Every selector must use the
+    // REAL tab id, and every id the CSS targets must exist in the markup.
+    const css = (viewSrc.match(/CUSTOMER_DASHBOARD_CSS = `([\s\S]*?)`;/) || [])[1] || '';
+    assert.ok(css.length > 1000, 'the Customers CSS lives in the view module');
+    const tabIds = [...new Set(css.match(/#tab-custom[\w-]*/g) || [])];
+    assert.deepEqual(tabIds, ['#tab-customers'], 'every Customers CSS selector uses the real tab id: ' + tabIds.join(', '));
+    const htmlIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
+    // a hex colour is not an id
+    const usedIds = [...new Set((css.match(/#[a-zA-Z][\w-]*/g) || []).map((s) => s.slice(1)))]
+        .filter((id) => !/^[0-9a-f]{3,8}$/i.test(id));
+    const missing = usedIds.filter((id) => !htmlIds.has(id));
+    assert.deepEqual(missing, [], 'every id the Customers CSS targets exists in the markup: ' + missing.join(', '));
+    assert.ok(/@media \(max-width: 768px\)/.test(css), "the phone layout uses the Admin's own 768px breakpoint");
+    ok('the Customers CSS has no dead selectors (one typo id killed a whole phone layout once)');
+}
+{
+    // The contextual action bar is a FLOATING bar on a phone. The sticky box
+    // has to be the direct child of the card: a sticky box can only travel
+    // inside its own parent's box, and the wrapper around the bar is exactly
+    // as tall as the bar itself - so the stickiness lives on the wrapper.
+    const css = (viewSrc.match(/CUSTOMER_DASHBOARD_CSS = `([\s\S]*?)`;/) || [])[1] || '';
+    assert.ok(/#tab-customers #custBatchBar \{[^}]*position: sticky;/.test(css), 'the action bar WRAPPER is the sticky box');
+    assert.ok(/#tab-customers \.cust-batch-bar \{[^}]*position: static;/.test(css), 'the bar itself is a plain grid inside the sticky wrapper');
+    ok('the phone action bar sticks to the bottom through its wrapper');
+}
+{
+    // The phone card carries the facts the folded columns would have shown.
+    const rowHtml = V.renderRow(byPhone('9000000201'));
+    assert.ok(/class="cust-mob-meta"/.test(rowHtml), 'the row carries a mobile summary line');
+    assert.ok(/Last visit/.test(rowHtml), 'the mobile summary line carries the last visit');
+    assert.ok(/orders/.test(rowHtml), 'the mobile summary line carries the paid order count');
+    assert.ok(/Bronze|Silver|Gold/.test(rowHtml), 'the mobile summary line carries the loyalty tier');
+    ok('the row markup carries the phone summary line (last visit, orders, tier)');
+}
+{
     assert.ok(/PAGE_SIZE = 50/.test(ctrl), 'the pager page size is defined');
     assert.ok(/localStorage\.setItem\(DENSITY_KEY/.test(ctrl), 'the density toggle is remembered');
     assert.ok(/DENSITY_KEY = 'fh:custDensity'/.test(ctrl), 'the density key is namespaced');
