@@ -1,6 +1,6 @@
 # PLAN — Customer Notification Checklist (Admin → Customers tab)
 
-**Status:** proposed — research + UX plan, awaiting owner approval before any build.
+**Status:** **BUILT AND LIVE** — approved by the owner, then implemented (commit `cef85ef`, deployed `hosting:admin` + `functions:tenantNotify`). The plan below is the approved design; the "as built" notes are in `PROJECT_LEDGER.md` → `LEDGER CLOSE - 20261120-notification-checklist`.
 **Date:** 2026-11-20 · **Author:** coding agent · **Scope:** Admin dashboard only (no rules change unless stated).
 
 ---
