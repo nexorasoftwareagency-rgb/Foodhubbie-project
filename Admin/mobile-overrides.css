@@ -4054,3 +4054,245 @@
     #reportPrintArea td { padding: 1.8mm 1.5mm; border-bottom: 0.5pt solid #ddd; color: #000; }
     #reportPrintArea td.rp-num, #reportPrintArea td.rp-money { text-align: right; font-variant-numeric: tabular-nums; }
 }
+
+/* ======================================================================
+   PHONE FLOOR — touch targets + focus rings + layout fixes
+   Applied after every tab-specific override so nothing interactive drops
+   below 44px on a phone.
+   ====================================================================== */
+@media (max-width: 768px) {
+
+  /* ---------- TYPE FLOOR: nothing readable smaller than 12px ---------- */
+
+/* Mobile header role chip + outlet badge */
+.mobile-role-chip,
+.outlet-badge,
+#mobileOutletBadge { font-size: 12px !important; }
+
+/* Bottom nav labels */
+.bottom-nav .nav-item { font-size: 12px !important; }
+
+/* Order status badges */
+.status-badge-v4 { font-size: 12px !important; }
+
+/* Order time / sub-labels */
+.time, .sub { font-size: 12px !important; }
+
+/* Demo banner text */
+#demoModeBanner .dmb-text b { font-size: 12px !important; }
+#demoModeBanner .dmb-text span { font-size: 12px !important; }
+#demoModeBanner .dmb-exit { font-size: 12px !important; }
+
+/* Table / card data labels */
+.mobile-card-table td::before { font-size: 12px !important; }
+.dish-price-row { font-size: 12px !important; }
+.glass-table th { font-size: 12px !important; }
+#trackerStats { font-size: 12px !important; }
+.premium-table-v4 th { font-size: 12px !important; }
+.premium-table-v4 td { font-size: 12px !important; }
+.tab-content .premium-row-v4 td[data-label]:before { font-size: 12px !important; }
+.tab-content .premium-row-v4 td[data-label="Address"],
+.tab-content .premium-row-v4 td[data-label="Details"] { font-size: 12px !important; }
+.kpi-info .lbl { font-size: 12px !important; }
+
+/* Kitchen display status text */
+.live-text,
+.kds-column-header span { font-size: 12px !important; }
+
+/* Live tracker text */
+.tracker-last-updated { font-size: 12px !important; }
+
+/* KDS count badges */
+.kds-count { font-size: 12px !important; }
+
+/* Walk-in end-shift button */
+.btn-text-warning { font-size: 12px !important; }
+
+/* Dashboard KPI stat labels */
+.kpi-stat__label { font-size: 12px !important; }
+
+/* Walk-in / POS dish cards */
+#tab-walkin .walkin-dish-card h5,
+#tab-walkin .walkin-dish-card .dish-price { font-size: 12px !important; }
+
+/* Menu dish cards */
+#tab-menu .price-chip-v4 .size,
+#tab-menu .price-chip-v4 .price { font-size: 12px !important; }
+#tab-menu .dish-info h4 { font-size: 12px !important; }
+#tab-menu-browser .browser-dish-category { font-size: 12px !important; }
+
+/* Rider analytics KPI labels */
+#tab-riderAnalytics .kpi-card-v4 .lbl { font-size: 12px !important; }
+
+/* Customers map link */
+#tab-customers .mob-map-link { font-size: 12px !important; }
+
+/* Reports / analytics KPI trend, donut, legend */
+.mob-kpi-trend { font-size: 12px !important; }
+.mob-donut-label { font-size: 12px !important; }
+.mob-legend-pct { font-size: 12px !important; }
+.mob-data-table thead th { font-size: 12px !important; }
+.mob-td-sub { font-size: 12px !important; }
+.mob-outlet-chip { font-size: 12px !important; }
+.mob-badge { font-size: 12px !important; }
+
+/* Generic muted / small text across tabs (promotions, customer-app, tables, etc.) */
+.text-muted-small { font-size: 12px !important; }
+.text-muted { font-size: 12px !important; }
+
+/* Generic badges and pills */
+.badge { font-size: 12px !important; }
+.cat-kpi-pill { font-size: 12px !important; }
+.trend-badge { font-size: 12px !important; }
+.outlet-status-pill { font-size: 12px !important; }
+
+/* Costs / settings labels */
+.cost-detail-label { font-size: 12px !important; }
+.form-label-small { font-size: 12px !important; }
+.fs-10 { font-size: 12px !important; }
+
+/* Discounts badges / chips / small text */
+.discount-card .discount-type-badge,
+.discount-card .badge,
+.discount-card code,
+.discount-card .text-muted-small { font-size: 12px !important; }
+.discount-recent-row { font-size: 12px !important; }
+.drcr-customer, .drcr-order, .drcr-channel,
+.drcr-channel .channel-chip { font-size: 12px !important; }
+
+/* Inventory menu grid */
+#inventoryMenuGrid .dish-info h4,
+#inventoryMenuGrid .avail-label,
+#inventoryMenuGrid .stock-label { font-size: 12px !important; }
+
+/* WhatsApp bot analytics */
+.wa-breakdown-label, .wa-trend-bar-val, .wa-trend-bar-date { font-size: 12px !important; }
+
+/* Expenses */
+.expense-today-total .label,
+.expense-category-chip,
+.expense-category-chip .chip-amount { font-size: 12px !important; }
+.ecat-sys, .ecat-pct, .ecat-hint { font-size: 12px !important; }
+.exp-cat-tile, .rr-report-item .rr-lock { font-size: 12px !important; }
+
+/* Login overlay labels and links (visible in demo mode) */
+#authOverlay label { font-size: 12px !important; }
+#authOverlay a { min-height: 24px !important; }
+
+/* All inline links need 24px height (WCAG 2.2 AA target size minimum) */
+a { display: inline-block !important; min-height: 24px !important; }
+
+/* Walk-in form input width */
+#tab-walkin input.form-input.flex-1 { min-width: 44px !important; width: auto !important; }
+
+/* Riders tab dash/empty state text */
+#tab-riders span, #tab-riders div { font-size: 12px !important; }
+
+/* Touch target floor rules... (rest unchanged) */
+
+  /* POS back button (mobile) */
+  [data-action="switchTab"][data-tab="dashboard"].btn-text.mobile-only {
+    min-height: 44px !important; min-width: 44px !important;
+  }
+
+  /* Modal / drawer close buttons */
+  .modal-header .close-btn {
+    min-height: 44px !important; min-width: 44px !important;
+    width: 44px !important; height: 44px !important;
+  }
+  .dw-close {
+    min-height: 44px !important; min-width: 44px !important;
+    width: 44px !important; height: 44px !important;
+  }
+  .selection-panel-v4 .close-btn {
+    min-height: 44px !important; min-width: 44px !important;
+    width: 44px !important; height: 44px !important;
+  }
+
+  /* Walk-in header back button */
+  .walkin-picker .panel-header .btn-text.mobile-only {
+    min-height: 44px !important; min-width: 44px !important;
+  }
+  #walkinDishSearch { min-height: 44px !important; height: 44px !important; }
+
+  /* Category tabs */
+  .category-tab { min-height: 44px !important; }
+
+  /* Dish action buttons */
+  .dish-actions .delete-btn {
+    min-height: 44px !important; min-width: 44px !important;
+    width: 44px !important; height: 44px !important;
+  }
+  #tab-menu .btn-show-dish-modal { min-height: 44px !important; }
+  #tab-menu .btn-action-v4 {
+    min-height: 44px !important; min-width: 44px !important;
+    width: 44px !important; height: 44px !important;
+  }
+
+  /* Analytics inputs */
+  #tab-riderAnalytics .report-date-input { min-height: 44px !important; }
+
+  /* Rider analytics generate buttons */
+  #tab-riderAnalytics .btn-primary.report-gen-btn,
+  #tab-riderAnalytics .btn-secondary.report-gen-btn {
+    min-height: 44px !important; min-width: 44px !important;
+  }
+
+  /* Inline links need 24px height (WCAG 2.2 AA target size minimum) */
+  #tab-customers .mob-wa-link,
+  #tab-customers .mob-reset-lock { min-height: 24px !important; }
+
+  /* Rider action buttons */
+  .rider-act-btn {
+    min-height: 44px !important; min-width: 44px !important;
+    width: 44px !important; height: 44px !important;
+  }
+
+  /* Expense category icon buttons */
+  .ecat-icon-btn {
+    min-height: 44px !important; min-width: 44px !important;
+    width: 44px !important; height: 44px !important;
+  }
+
+  /* Inventory stock adjust buttons */
+  #inventoryMenuGrid .stock-adjust-btn {
+    min-height: 44px !important; min-width: 44px !important;
+    width: 44px !important; height: 44px !important;
+  }
+
+  /* ---------- FOCUS RINGS ---------- */
+  button:focus-visible, [data-action]:focus-visible, [data-tab]:focus-visible,
+  .btn-primary:focus-visible, .btn-secondary:focus-visible,
+  .category-tab:focus-visible, .pos-dish-btn-v4:focus-visible,
+  .rider-act-btn:focus-visible, .ecat-icon-btn:focus-visible,
+  .exp-cat-tile:focus-visible {
+    outline: 3px solid var(--primary) !important;
+    outline-offset: 2px !important;
+  }
+
+  /* ---------- LAYOUT FIXES ---------- */
+  /* Don't clip overflowing report / table content on mobile */
+  .report-table-container,
+  .table-responsive { overflow-x: auto !important; }
+
+  /* Allow bottom-nav icons to be part of a 44px target (the whole item is the target) */
+  .bottom-nav .nav-item i { width: 24px !important; height: 24px !important; }
+
+  /* Stock badge minimum readable size */
+  .stock-badge { font-size: 10px !important; padding: 4px 8px !important; }
+
+  /* Menu category / dish badges on very small screens */
+  #tab-menu .stock-badge,
+  #tab-menu .dish-category-badge,
+  #tab-menu .notif-time-badge-premium { font-size: 10px !important; }
+
+  /* Rider status pill spans (from live/kitchen tab) */
+  .rider-status-pill-v4 span { font-size: 12px !important; }
+
+  /* Login overlay diagnostic button (renders outside #tab-tables) */
+  #diagnosticBtn { font-size: 12px !important; }
+
+  /* Catch-all for tables/costs tabs - any remaining small text */
+  #tab-tables *, #tab-costs * { font-size: 12px !important; }
+  #tab-tables span, #tab-tables div, #tab-costs span, #tab-costs div { font-size: 12px !important; }
+}
