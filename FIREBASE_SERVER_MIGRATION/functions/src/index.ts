@@ -78,9 +78,10 @@ export { transportSwitch } from './api/transportSwitch';
 
 // RTDB Triggers (Event-Driven)
 export { onOrderStatusChange } from './triggers/onOrderStatusChange';
-// Batch: EC2 retirement — drains the webhookInbox queue that whatsappWebhook
-// writes to, and enqueues processInboundMessage tasks. Config flag:
-// config/webhookInbox/enabled === true. Demo hard-skipped.
+// Batch 23m: drains the webhookInbox queue that whatsappWebhook writes to and
+// runs the real inbound handler (`bot/inbound-flow.js`, vendored) — greeting,
+// menu CTA, webview token, opt-out, strikes/freeze, rate limit, chat log.
+// Config flag: config/webhookInbox/enabled === true. Demo hard-skipped.
 export { onWebhookInboxMessage } from './triggers/webhookInbox';
 // Sends WhatsApp "NEW ORDER" alert to outlet admins when status flips to Placed.
 // Config flag: config/orderStatusAlert/enabled === true. Demo hard-skipped.

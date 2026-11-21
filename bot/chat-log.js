@@ -2,71 +2,27 @@
 /**
  * chat-log.js — WhatsApp conversation persistence for the Admin Chat tab.
  *
- * Writes every customer<->bot message under `chats/{customerId}/{meta,messages}`
- * (tenant-scoped via resolvePath). Best-effort ONLY: never throws, never blocks
- * the order flow — mirrors the G5 quota counter pattern (bot/index.js:1039).
+ * The writer itself is `bot/chat-log-core.js` (socket-free, shared byte-for-byte
+ * with Cloud Functions since the inbound handler moved there). This file only
+ * binds the bot process's own database handle, which is NOT vendorable
+ * (`./firebase` loads a service-account file).
  *
- * thread key = last-10-digits of the sender JID, same convention as
- * customers/{cleanPhone} and the promo opt-out keys, so a Baileys JID
- * (9197...@s.whatsapp.net) and a Meta `from` (9197...) map to one thread.
- * Caveat: last-10-digits drops the country code — a +1 and +91 customer
- * with the same local number would share a thread. Matches the existing
- * customers/{cleanPhone} convention; revisit only if non-IN numbers appear.
+ * Writes every customer<->bot message under `chats/{customerId}/{meta,messages}`
+ * (tenant-scoped via resolvePath) plus the flat `chatMeta/{customerId}` mirror.
+ * Best-effort ONLY: never throws, never blocks the order flow.
  */
 
 const { db, resolvePath } = require('./firebase');
+const { createChatLog, customerIdFromJid } = require('./chat-log-core');
 
-/** Last-10-digits thread key for a JID. */
-function customerIdFromJid(jid) {
-    if (!jid) return null;
-    const digits = String(jid).replace(/[^0-9]/g, '');
-    return digits.length >= 10 ? digits.slice(-10) : null;
-}
-
-/**
- * Persist one message + bump the thread meta.
- * @param {object} o { outlet, jid, msgId, from: 'customer'|'bot', text, name? }
- */
-async function logChatMessage(o) {
-    try {
-        const { outlet, jid, msgId, from, text, name } = o;
-        if (!jid || !msgId || !from) return;
-        const customerId = customerIdFromJid(jid);
-        if (!customerId) return;
-        const ts = Date.now();
-        const cleanText = (text || '').trim() || '<media>';
-        const base = resolvePath(`chats/${customerId}`, outlet);
-        // Meta message IDs are `wamid.XXX` — Firebase keys can't contain ".". 
-        // Replace dots (and other reserved chars) with "_" so the key stays valid.
-        const safeMsgId = String(msgId).replace(/[.#$\[\]]/g, '_');
-        // Message record (idempotent by msgId).
-        await db.ref(`${base}/messages/${safeMsgId}`).set({
-            from, text: cleanText, ts, type: 'text'
-        });
-        // Thread meta — unread only counts customer->bot messages.
-        const applied = await db.ref(`${base}/meta`).transaction((cur) => {
-            const meta = cur || {};
-            const next = {
-                name: name || meta.name || '',
-                phone: jid,
-                lastTs: ts,
-                lastText: cleanText,
-                lastDir: from,
-                unread: (meta.unread || 0) + (from === 'customer' ? 1 : 0)
-            };
-            return next;
-        });
-        // Flat meta mirror. The Admin Chat LIST reads only this node (~400 B a
-        // thread); querying `chats` instead drags every message body along —
-        // measured live at 257 KB of messages vs 9.4 KB of meta per Admin open.
-        // Written here because every customer<->bot message is what bumps it.
-        // `chats/{id}/meta` keeps being written for cached older shells.
-        const mirrored = applied && applied.snapshot ? applied.snapshot.val() : null;
-        if (mirrored) await db.ref(resolvePath(`chatMeta/${customerId}`, outlet)).set(mirrored);
-    } catch (err) {
-        // Best-effort — chat persistence must never break the order flow.
-        console.warn(`[CHAT-LOG] write failed (best-effort): ${err.message || err}`);
-    }
+/** @param {object} o { outlet, jid, msgId, from: 'customer'|'bot', text, name? } */
+function logChatMessage(o) {
+  const outlet = (o && o.outlet) || 'pizza';
+  return createChatLog({
+    db,
+    resolvePath: (p) => resolvePath(p, outlet),
+    log: (...a) => console.warn(...a),
+  }).logChatMessage(o);
 }
 
 module.exports = { logChatMessage, customerIdFromJid };

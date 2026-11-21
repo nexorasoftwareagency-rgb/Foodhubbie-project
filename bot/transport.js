@@ -12,26 +12,7 @@ const { formatJid } = require('./utils');
 const waSend = require('./whatsapp-send');
 const { db, getData, resolvePath } = require('./firebase');
 const { resolveBusinessIdFor } = require('./helpers/outlet-resolution');
-const { canSend, DEFAULT_RATE_TABLE } = require('../shared/meta-cost-math');
-// Template names whose approved body lives on the WABA in MARKETING category —
-// classified as MARKETING for cost math when no caller supplies templateCategory.
-// Add new marketing shells here once approved; existing callers need no change.
-const MARKETING_TEMPLATE_NAMES = new Set([
-  'proactive_promo',
-  'promo_hinglish_discount',
-  'promo_hinglish_festive',
-  'promo_hinglish_offer',
-  'promo_hinglish_winback',
-  // CTA-button shells submitted 2026-11-08 — same single-{{1}} body shape as the
-  // Hinglish shells, plus a static URL button and an Unsubscribe quick reply.
-  // Buttons are template-level, so they render with no send-time change.
-  'promo_cta_flash',
-  'promo_cta_cart',
-  'promo_cta_winback',
-  'promo_cta_birthday',
-  'promo_cta_weekend',
-  'promo_cta_newitem',
-]);
+const { createMetaCost } = require('./meta-cost');
 
 async function getTransportMode(outlet) {
   const remote = await getData('bot/transport', outlet).catch(() => null);
@@ -57,40 +38,12 @@ function toPlainPhone(jid) {
   return String(jid).split('@')[0];
 }
 
-// --- Meta cost emitter (S1 shared credit liability) ---
-// Records the actual Meta cost of every successful meta-transport send into
-// walletBilling/{bid}/{oid}/metaUsage/{YYYY-MM}. The _metaCostGuard (below)
-// reads this node for balancePaise/metaUsage and arms only when a balance
-// snapshot exists. A balance publisher in bot-control-api writes balancePaise
-// (starting credit minus accumulated cost) so the guard can block sends when
-// caps/thresholds are hit. Never blocks the send itself — fire-and-forget.
-async function recordMetaCost(to, category) {
-  try {
-    const businessId = resolveBusinessIdFor(outlet);
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istDate = new Date(Date.now() + istOffset);
-    const monthKey = istDate.toISOString().split('T')[0].slice(0, 7); // YYYY-MM
-    const dayKey = istDate.toISOString().split('T')[0]; // YYYY-MM-DD
-    const costPaise = Math.round(Number(DEFAULT_RATE_TABLE[category] || DEFAULT_RATE_TABLE.utility || 0));
-    const path = `walletBilling/${businessId}/${outlet}/metaUsage/${monthKey}`;
-    await db.ref(path).transaction((curr) => {
-      const c = curr || { billableMessages: {}, totalCostPaise: 0, dailyCostPaise: {} };
-      c.billableMessages = c.billableMessages || {};
-      const cat = String(category).toLowerCase();
-      c.billableMessages[cat] = (c.billableMessages[cat] || 0) + 1;
-      c.totalCostPaise = (c.totalCostPaise || 0) + costPaise;
-      c.dailyCostPaise = c.dailyCostPaise || {};
-      c.dailyCostPaise[dayKey] = (c.dailyCostPaise[dayKey] || 0) + costPaise;
-      c.lastSentAt = now.toISOString();
-      c.updatedAt = now.toISOString();
-      return c;
-    }).catch(() => {});
-  } catch (e) {
-    // Fails open — cost recording is informational, never blocks a send.
-    console.warn('[META-COST] record failed:', e.message);
-  }
-}
+// --- Meta cost (S1 shared credit liability) ---
+// The recorder + spend guard live once in `bot/meta-cost.js` (socket-free, also
+// vendored into Cloud Functions). The old in-file recorder called
+// `resolveBusinessIdFor(outlet)` from module scope, where `outlet` does not
+// exist: it threw on its first line inside its own catch and never wrote a
+// single usage row. One implementation, two runners.
 
 /**
  * Meta Cloud API transport. Returns an object shaped like a Baileys `sock` so
@@ -103,6 +56,12 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
   let inboxRef = null;
   let inboxHandler = null;
   let started = false;
+  const cost = createMetaCost({
+    db,
+    bid: resolveBusinessIdFor(outlet),
+    oid: outlet,
+    log: (...a) => console.warn(...a),
+  });
 
   // An entry older than this is not worth replaying: Meta retries a webhook for
   // ~7 days, and a 6-hour-old "menu" tap has no value. Bounds queue catch-up.
@@ -157,17 +116,17 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       if (!to) throw new Error(`Invalid JID: ${jid}`);
       const text = content.text ?? content.caption ?? '';
       // Cost guard: stop before sending if caps/wallet block this send.
-      if (await _metaCostGuard(to)) {
+      if (await cost.guard(to)) {
         return { key: { id: 'blocked' }, blocked: true };
       }
       if (content.image && typeof content.image === 'string' && content.image.startsWith('http')) {
         const result = await waSend.sendWhatsAppImage(phoneNumberId, accessToken, to, content.image, text);
-        recordMetaCost(to, 'utility').catch(() => {});
+        cost.record('utility').catch(() => {});
         return result;
       }
       if (content.image && content.image.url) {
         const result = await waSend.sendWhatsAppImage(phoneNumberId, accessToken, to, content.image.url, text);
-        recordMetaCost(to, 'utility').catch(() => {});
+        cost.record('utility').catch(() => {});
         return result;
       }
       if (content.image) {
@@ -176,24 +135,24 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       }
       const result = waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, text);
       // Record cost after a successful send — never delays the send itself.
-      recordMetaCost(to, 'utility').catch(() => {});
+      cost.record('utility').catch(() => {});
       return result;
     },
     // Interactive URL button (replaces plain links in chat). Falls back to plain text if Meta rejects.
     async sendButton(jid, opts) {
       const to = toPlainPhone(jid);
       if (!to) throw new Error(`Invalid JID: ${jid}`);
-      if (await _metaCostGuard(to)) {
+      if (await cost.guard(to)) {
         return { key: { id: 'blocked' }, blocked: true };
       }
       try {
         const result = await waSend.sendWhatsAppUrlButton(phoneNumberId, accessToken, to, opts);
-        recordMetaCost(to, 'utility').catch(() => {});
+        cost.record('utility').catch(() => {});
         return result;
       } catch (e) {
         console.warn(`[META-TRANSPORT] Button send failed for ${jid}: ${e.message}; sending text fallback`);
         const result = await waSend.sendWhatsAppMessage(phoneNumberId, accessToken, to, `${opts.body}\n------------------------\n${opts.url}`);
-        recordMetaCost(to, 'utility').catch(() => {});
+        cost.record('utility').catch(() => {});
         return result;
       }
     },
@@ -218,10 +177,8 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       // bill on the plan rate instead of being misclassified as UTILITY. Callers
       // may still pass opts.templateCategory for template names added after this
       // list is built, otherwise the allowlist is the only arbiter.
-      const category =
-        (opts.templateCategory ||
-          MARKETING_TEMPLATE_NAMES.has(String(opts.name)) ? 'MARKETING' : 'utility');
-      if (await _metaCostGuard(to, category)) {
+      const category = cost.categoryForTemplate(opts.name, opts.templateCategory);
+      if (await cost.guard(to, category)) {
         return { key: { id: 'blocked' }, blocked: true };
       }
       const result = await waSend.sendWhatsAppTemplate(phoneNumberId, accessToken, to, {
@@ -229,7 +186,7 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
         language: opts.language || 'en',
         components
       });
-      recordMetaCost(to, category).catch(() => {});
+      cost.record(category).catch(() => {});
       return result;
     },
     async readMessages() { /* no-op: Meta API has no read receipts */ },
@@ -294,51 +251,6 @@ function createMetaTransport({ outlet, phoneNumberId, accessToken, redisUrl }) {
       started = false;
     }
   };
-
-  // --- Meta cost guard (S1 shared credit liability) ---
-  // Armed ONLY when the billing node carries a numeric `balancePaise` snapshot.
-  // `walletBilling/{bid}/{oid}` is a payments/charges ledger, not a stored
-  // balance, so a missing snapshot must mean "not armed" — reading it as 0
-  // would block every send. The emitter that writes balancePaise/metaUsage
-  // lands with the S1 shared-credit work.
-  // ponytail: one read per outbound message on the meta transport; upgrade to
-  // a cached balance when the writer exists.
-  async function _metaCostGuard(to, category = 'utility') {
-    try {
-      const businessId = resolveBusinessIdFor(outlet);
-      const path = `walletBilling/${businessId}/${outlet}`;
-      const billing = (await db.ref(path).once('value')).val() || {};
-      const balancePaise = Number(billing.balancePaise);
-      if (!Number.isFinite(balancePaise)) return false;
-      const metaUsage = billing.metaUsage || {};
-      const messageCaps = billing.messageCaps || { monthlyPaise: 500000 }; // default ₹5,000/mo
-      const thresholdPaise = Number(billing.metaSpendThresholdPaise) || 10000;
-      const blocked = !canSend({
-        metaUsage,
-        messageCaps,
-        metaSpendThresholdPaise: thresholdPaise,
-        currentWalletBalancePaise: balancePaise,
-        category
-      });
-      if (blocked) {
-        console.warn(`[META-COST-GUARD] Blocked ${category} to ${to} — balance ${balancePaise}p < ${thresholdPaise}p or cap hit`);
-        // Log for admin visibility (never exposed to the customer).
-        await db.ref(`${path}/blocked`).push({
-          to,
-          category,
-          walletBalancePaise: balancePaise,
-          thresholdPaise,
-          metaUsage,
-          at: new Date().toISOString()
-        }).catch(() => {});
-      }
-      return blocked;
-    } catch (e) {
-      // Fails open: never block on cost-guard error
-      console.warn('[META-COST-GUARD] Error (fails open):', e.message);
-      return false;
-    }
-  }
 
   return sock;
 }

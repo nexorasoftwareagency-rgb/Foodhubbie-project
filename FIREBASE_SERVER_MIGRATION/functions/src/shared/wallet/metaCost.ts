@@ -1,44 +1,48 @@
 /**
- * Meta Cost Tracking
- * Records Meta WhatsApp API costs per outlet
+ * Meta Cost Tracking — a thin binding over the ONE cost recorder.
+ *
+ * The recorder is `bot/meta-cost.js`, copied byte-for-byte into `lib/vendor/`
+ * (see `scripts/copy-vendor.cjs`), so the WhatsApp transport, this task-queue
+ * caller and the dashboards all bill at the same rate table
+ * (`shared/meta-cost-math.js`: ₹0.115 utility/auth/service · ₹0.86 marketing).
+ *
+ * Two bugs lived in the previous version of this file:
+ *   1. hard-coded rates (`template/text -> 115`, everything else `86`), which
+ *      drifted from the shared table the moment the rate card changed;
+ *   2. it decremented `walletBilling/{bid}/{oid}/balancePaise` itself, racing
+ *      `metaCostPublisher`, which DERIVES that node as
+ *      `START_PAISE - metaUsage[month].totalCostPaise`. One node, one writer:
+ *      the publisher owns `balancePaise`, so this function only records usage.
  */
 
-import { getDB, walletBillingRef } from '../firebase/admin';
+import * as path from 'path';
+import { getDB } from '../firebase/admin';
+
+/* eslint-disable @typescript-eslint/no-var-requires */
+const { createMetaCost } = require(path.join(__dirname, '../../vendor/bot/meta-cost.js'));
+/* eslint-enable @typescript-eslint/no-var-requires */
 
 /**
- * Record Meta API cost for an outlet
+ * Record one delivered Meta send.
+ *
+ * @param type     the wire type the caller sent (`text`, `template`, …) — kept
+ *                 for call-site compatibility; the rate comes from `category`.
+ * @param category `utility` (default) or `marketing`. A marketing template must
+ *                 be named as such by the caller: this layer has the send type,
+ *                 not the template name.
  */
 export async function recordMetaCost(
   businessId: string,
   outlet: string,
-  type: string
+  type: string,
+  category: 'utility' | 'marketing' = 'utility',
 ): Promise<void> {
   try {
-    const db = getDB();
-    const now = Date.now();
-    const costPaise = type === 'template' ? 115 : type === 'text' ? 115 : 86; // Approximate paise
-
-    // Update metaUsage in walletBilling
-    const monthKey = new Date(now).toISOString().slice(0, 7);
-    const usageRef = walletBillingRef(businessId, outlet, 'metaUsage', monthKey);
-
-    await usageRef.transaction((current: any) => {
-      const c = current || { billableMessages: {}, totalCostPaise: 0, lastSentAt: null, updatedAt: null };
-      c.billableMessages[type] = (c.billableMessages[type] || 0) + 1;
-      c.totalCostPaise += costPaise;
-      c.lastSentAt = new Date(now).toISOString();
-      c.updatedAt = new Date(now).toISOString();
-      return c;
-    });
-
-    // Update balancePaise
-    const balanceRef = walletBillingRef(businessId, outlet, 'balancePaise');
-    await balanceRef.transaction((current: any) => {
-      const val = typeof current === 'number' ? current : 0;
-      return Math.max(0, val - costPaise);
-    });
+    const cost = createMetaCost({ db: getDB(), bid: businessId, oid: outlet });
+    await cost.record(category);
   } catch (error) {
-    console.error('[MetaCost] Failed to record cost', { error: (error as Error).message });
+    // Cost recording is informational — never fail a send because of it.
+    console.error('[MetaCost] Failed to record cost', { type, error: (error as Error).message });
   }
 }
 

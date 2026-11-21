@@ -824,20 +824,90 @@ These are **real, actionable items** in THIS repo based on the audits.
 - **Next:** (1) Meta console: verify `META_CONFIG_ID=1089451087291012` is v4/system-user (dashboard-only); (2) run real-number display-name test under Foodhubbie's WABA (e.g. "Roshani Pizza"); (3) Phase 4: migrate live pizza from Baileys to meta transport once its WABA/display-name is approved; (4) Phase 5: Solution Partner / Tech Provider / App Review tracks (long lead — start now)
 
 
-## Phase 4 — Pizza Migration Prep (ready to execute once Meta console steps clear)
+## Phase 4 — WhatsApp bot on Firebase Functions (owner directive 2026-11-20)
 
-**What needs to happen when pizza moves from Baileys → meta:**
+**Supersedes the earlier "Pizza Migration Prep" table.** The owner ruled out Baileys ("We will not use Whatsapp Bailey"), so the EC2 socket worker is no longer part of the target architecture and pizza cuts over straight to a Functions-hosted Cloud API bot. Recorded conflict: `AGENTS.md` Key Decisions still says "EC2 is RETAINED PERMANENTLY as a deliberately scoped socket host" (2026-11-17). That decision assumed the box was the only way to hold a socket — with Baileys gone it has no workload left except the pm2 control plane and the Graph provisioning routes. **Owner to confirm the reversal before 4e deletes anything.**
 
-| Step | Who | What |
-|------|-----|------|
-| Meta approves display name for pizza number | You (Meta console) | Test number real-name under Foodhubbie WABA |
-| Add real number to WABA | You (Meta console) | WhatsApp Manager → Add phone number → SMS/voice OTP → register |
-| Create `whatsapp` node on pizza outlet | Code | `businesses/roshani-pizza/outlets/pizza/whatsapp` = `{ phoneNumberId, wabaId, status: 'active', ... }` via `/api/whatsapp/numbers/.../register` |
-| Set `bot.transport = 'meta'` | Code | orchestrator `desiredState()` picks up `status:'active'` and starts meta worker |
-| Verify pizza bot online | Code | `bot.transport` = `meta`, `botStatus` = online, sends via system-user token |
-| Decommission Baileys session | Code | Remove `session_data_pizza` dir, stop Baileys worker |
+### Already deployed and working on Functions (verified 2026-11-20 against `functions:list`, 34 v2)
 
-**Files already ready for this:** `waLinkSuccess()` handles steps 3-4 automatically when the number is registered. No new code needed — just execute through the existing Path B wizard or direct Graph API calls.
+`whatsappWebhook`, `processInboundMessage`, `sendOutboundMessage`, `metaCostPublisher`, `onWebOrderPlaced` + `onOrderCancelledCompensate`, the loyalty relay trio, the three push-relay triggers, both rider triggers, `dailySettlement`, `demoReseed`, `walletGateReconcile`, `tenantMedia` / `tenantNotify` / `tenantOnboarding`. Relay flags live and `true` in `/config`: `pushRelay`, `orderFinalizer`, `loyaltyRelay`, `riderRelay`.
+
+### Four functions are exported in source but NOT deployed
+
+`onWebhookInboxMessage`, `promoScheduler`, `dailyReports`, `onOrderStatusAlert`. All four are flag-gated (default false = no-op), so deploying them changes no live behaviour. **`onWebhookInboxMessage` is the drain for `webhookInbox`** — without it an inbound Cloud API message is stored and never processed.
+
+### 🔴 The real blocker: the cloud inbound handler is a different product
+
+`taskqueue/processInboundMessage.ts` (497 lines) implements `START → MENU_BROWSING → CART_REVIEW → CHECKOUT → PAYMENT` with a **text** menu, `order <dish>`, a text cart and COD/UPI.
+
+The live bot (`bot/index.js` 2632-2692) implements `START → AWAITING_ORDER_INTENT → WEBVIEW`: greeting image + Hinglish welcome + menu image + an interactive **"Order Now" URL button** pointing at `delivery.html` with a per-phone webview token. The customer then orders in the webview (real cart, GST, delivery slab fee, coupons, reward tender, stock). There is no text cart and no text checkout.
+
+Flipping pizza to the Functions handler today would replace the working ordering experience with a stub that cannot charge GST, apply a delivery fee, redeem a reward or deduct stock. **Do not deploy `processInboundMessage` as-is.**
+
+### 🔴 Phase 4a-0 — HARD PREREQUISITE: the system user owns no assets (verified 2026-11-20)
+
+`debug_token` on the deployed `META_SYSTEM_USER_TOKEN` (and `WA_PERMANENT_TOKEN` — both secrets resolve to the same value):
+
+```
+type: SYSTEM_USER          is_valid: true      expires_at: 0 (never)
+app: Foodhubbie (1894358871543574)
+scopes: business_management, whatsapp_business_management,
+        whatsapp_business_messaging, manage_app_solution,
+        whatsapp_business_manage_events
+granular_scopes: business_management =>        (EMPTY)
+                 whatsapp_business_management =>  (EMPTY)
+                 whatsapp_business_messaging =>   (EMPTY)
+issued_at: 2026-11-09
+```
+
+Every granular scope has an **empty asset list**, and `GET /me/businesses` returns `[]`. Consequences, all reproduced against Graph:
+- `GET /2589174454849821` → `(#100) Object ... does not exist, cannot be loaded due to missing permissions`
+- `GET /2589174454849821/phone_numbers` → same
+- `GET /1211796118690392` (the phone number id on the pizza `bot` node) → same
+
+So **the platform currently has no working WhatsApp Cloud API credential**, despite the token being valid, never-expiring and correctly scoped. The system user was re-created on 2026-11-09 (after the 2026-11-08 template submission succeeded), and nobody re-assigned the assets to it.
+
+**Fix (Meta dashboard, Business Manager admin, ~2 min):** Business Settings → Users → System users → `Conversions API System User` → Add assets →
+- WhatsApp Accounts → `2589174454849821` → **Full control**
+- Apps → `Foodhubbie` → **Full control** (or Manage app)
+
+No new token is needed — the existing secret starts working the moment the assets are assigned. Verify with `GET /{WABA}/message_templates?access_token=…` returning the 17 templates.
+
+This is why nothing WhatsApp-Cloud-API can be tested end to end yet, including the functions already deployed.
+
+### Phase 4a — Inbound parity (the actual work)
+
+Same pattern as batches 23b / 23f / 23g, which already proved it: extract the socket-free logic into a shared module, vendor it into the Functions bundle, run it from both runners.
+
+- New `bot/inbound-flow.js` → `createInboundHandler({ db, transport, outlet, resolvePath, ... })`, moving the ~60-line state machine plus `sendOrderFlow`, `resendMenuCTA`, `sendOrderCTA`, `getOrCreateWebviewToken`, `isShopOpen`, the wallet gate, blocklist, strike tracker, opt-out and the channel guard.
+- `bot/transport.js` already shapes the Meta transport like a Baileys `sock` (`sendMessage`, `sendButton`, `sendTemplate`), so the extracted code runs unchanged on both — no second implementation.
+- Session state moves from `bot/session_data_*` files to RTDB (the port already has `shared/session.ts`; keep it, drop the text-cart steps).
+- Retire `MENU_BROWSING` / `CART_REVIEW` / `CHECKOUT` / `PAYMENT` entirely rather than porting them — they are not a product that ships.
+- Media is safe: Meta cannot send base64, but since batch 15 every image is a Storage URL, and `sendImage` already falls back to text for a non-URL.
+
+### Phase 4b — Callback flip (single URL per app)
+
+Meta allows **one** callback URL per app, so the flip cuts EC2 inbound. Deploy and verify the Functions webhook with synthetic signed payloads first, then flip, then watch `webhookInbox` drain. Set `config/webhookInbox/enabled = true` at the same time.
+
+### Phase 4c — Per-number onboarding
+
+Blocked on the Meta console (owner): business verification → Tech Provider / App Review → per-number display-name approval → add number to WABA `2589174454849821` → register → `waLinkSuccess()` writes `whatsapp/{phoneNumberId,wabaId,status}`.
+
+### Phase 4d — Cost tracking drift (fix before real numbers send)
+
+Two writers publish `walletBilling/{bid}/{oid}/balancePaise`:
+- EC2 `bot-control-api/meta-cost-publisher.js` — accurate (`shared/meta-cost-math.js` rate table, service free tier).
+- Cloud `scheduled/metaCostPublisher.ts` — `START_PAISE = 100000` and a flat `115 / 115 / 86` paise per type from `shared/wallet/metaCost.ts`, which ignores the 1,000 free service messages/month and the marketing 86.31 paise rate.
+
+The box is down, so the cloud one is the live writer today. When EC2 returns this is a two-writer violation; and the cloud maths under-models the free tier. Port the rate table into `shared/wallet/metaCost.ts` and delete the EC2 publisher rather than running both.
+
+### Phase 4e — EC2 retirement (only after 4b is stable for a week)
+
+Delete `bot/` Baileys worker files, `webhook-server/`, the EC2 meta-cost publisher, the 4 superseded timers, and the `server` DOI. Keep the Graph provisioning routes until onboarding no longer needs them, or move them to a Function.
+
+### Companion mode (unchanged by any of this)
+
+Coexistence between the WhatsApp Business App and Cloud API is a WABA/number feature configured in WhatsApp Manager (QR scan, one linked device). The webhook receiver's location — EC2 or Functions — has no bearing on it. See `docs/PLON-PATH-B-COMPANION-MODE.md`.
 
 ## Item Progress Workflow Example
 

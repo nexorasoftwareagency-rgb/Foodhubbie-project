@@ -43,16 +43,21 @@ function signatureMatches(appSecret: string, rawBody: Buffer, header: string): b
 }
 
 /**
- * Enqueue onto the outlet's webhookInbox. The bot's meta transport drains it
- * with a child_added listener and deletes each entry after dispatching, so a
- * bot outage leaves a bounded backlog instead of dropping messages.
+ * Enqueue onto the outlet's webhookInbox. The `onWebhookInboxMessage` trigger
+ * drains it and deletes each entry after handling it, so a Functions outage
+ * leaves a bounded backlog instead of dropping messages.
+ *
+ * `profileName` is the sender's WhatsApp display name (`contacts[].profile.name`);
+ * it never rides on the message itself, and the greeting uses it ("Namaste Ravi
+ * ji"), so it is captured here rather than looked up per trigger.
  */
-async function enqueueInbox(bid: string, oid: string, message: any): Promise<void> {
+async function enqueueInbox(bid: string, oid: string, message: any, profileName?: string): Promise<void> {
   const db = getDB();
   await db.ref(`businesses/${bid}/outlets/${oid}/webhookInbox`).push({
     message,
     receivedAt: Date.now(),
     source: 'meta-webhook',
+    ...(profileName ? { profileName } : {}),
   });
   logger.info('[Webhook] Queued to webhookInbox', { bid, oid, messageId: message?.id });
 }
@@ -191,6 +196,7 @@ export const whatsappWebhook = onRequest({
           continue;
         }
         const { businessId: bid, outletId: oid } = routing;
+        const contacts: any[] = Array.isArray(change.contacts) ? change.contacts : [];
 
         for (const message of messages) {
           // ---------- Coexistence detection (business_app origin) ----------
@@ -200,8 +206,12 @@ export const whatsappWebhook = onRequest({
               .catch((err: any) => logger.warn('[COEXISTENCE] record failed', { error: err.message }));
           }
 
-          // ---------- Enqueue for the bot (RTDB webhookInbox) ----------
-          await enqueueInbox(bid, oid, message);
+          // Display name rides on `contacts`, matched to this sender.
+          const contact = contacts.find((c) => String(c?.wa_id) === String(message.from)) || contacts[0];
+          const profileName = contact?.profile?.name ? String(contact.profile.name) : undefined;
+
+          // ---------- Enqueue for the inbound handler (RTDB webhookInbox) ----------
+          await enqueueInbox(bid, oid, message, profileName);
           routed++;
         }
       }

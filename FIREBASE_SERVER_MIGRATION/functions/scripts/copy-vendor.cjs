@@ -69,6 +69,15 @@ const FILES = [
     // port it replaces is deleted in the same batch.
     'shared/cost-math.js',
     'shared/meta-cost-math.js',
+    // Batch 23m: the inbound WhatsApp handler. `inbound-flow.js` is the state
+    // machine, `whatsapp-send.js` the Graph senders (pure fetch), `meta-cost.js`
+    // the spend recorder/guard and `chat-log-core.js` the Admin Chat writer. A
+    // stale copy here would answer real customers with different copy — or with
+    // the old text-menu product this batch exists to keep out.
+    'bot/inbound-flow.js',
+    'bot/whatsapp-send.js',
+    'bot/meta-cost.js',
+    'bot/chat-log-core.js',
 ];
 
 // Module-type markers. `functions/package.json` has no "type", so a .js file is
@@ -205,6 +214,49 @@ function verifyLoad() {
     const identical = { subtotal: 697, discount: 70, discountId: 'd', deliveryFee: 20, total: 678.35, tax: 31.35, taxItems: [{ name: 'GST', rate: 5, amount: 31.35 }], inventoryDeducted: { a: 2 } };
     const cmp = finalizerMod.compareFinalization({ ...identical, tender: { amountPaise: 20000 }, discountUsageRecorded: true }, { ...identical, loyaltyTender: { amountPaise: 20000 }, discountUsageRecorded: true });
     if (!cmp || cmp.matched !== true) problems.push('compareFinalization did not match an identical record: ' + JSON.stringify(cmp));
+
+    // Batch 23m: the inbound WhatsApp handler. Every one of these modules is
+    // required at message time, so a broken graph must fail the BUILD, not the
+    // first customer. The classification check is the money: a promo template
+    // billed as utility under-records a 7.5x rate and drains the shared credit
+    // line every number draws from (Meta error 131042).
+    const inbound = require(abs('bot/inbound-flow.js'));
+    const cost = require(abs('bot/meta-cost.js'));
+    const chatLog = require(abs('bot/chat-log-core.js'));
+    const sender = require(abs('bot/whatsapp-send.js'));
+    if (typeof inbound.createInboundFlow !== 'function') problems.push('createInboundFlow is not exported');
+    if (typeof chatLog.createChatLog !== 'function' || typeof chatLog.customerIdFromJid !== 'function') {
+        problems.push('bot/chat-log-core.js did not load (createChatLog/customerIdFromJid)');
+    }
+    if (typeof sender.sendWhatsAppMessage !== 'function' || typeof sender.sendWhatsAppUrlButton !== 'function'
+        || typeof sender.sendWhatsAppImage !== 'function' || typeof sender.sendWhatsAppTemplate !== 'function') {
+        problems.push('bot/whatsapp-send.js did not load (one of the four Graph senders is missing)');
+    }
+    if (typeof cost.createMetaCost !== 'function') {
+        problems.push('createMetaCost is not exported');
+    } else {
+        const rates = require(abs('shared/meta-cost-math.js')).DEFAULT_RATE_TABLE;
+        if (!rates || rates.utility !== 115 || rates.marketing !== 86) {
+            problems.push('shared/meta-cost-math.js rates drifted: ' + JSON.stringify(rates));
+        }
+        const marketing = cost.MARKETING_TEMPLATE_NAMES;
+        for (const name of ['proactive_promo', 'promo_hinglish_offer', 'promo_cta_flash']) {
+            if (!marketing || !marketing.has(name)) problems.push(`${name} is no longer classified MARKETING`);
+        }
+        const fakeDb = { ref: () => ({ once: async () => ({ val: () => null }), transaction: async () => ({}) }) };
+        const built = cost.createMetaCost({ db: fakeDb, bid: 'b', oid: 'o' });
+        if (built.categoryForTemplate('promo_cta_flash') !== 'marketing') {
+            problems.push('categoryForTemplate no longer classifies promo_cta_flash as marketing');
+        }
+        if (built.categoryForTemplate('rider_assigned') !== 'utility') {
+            problems.push('categoryForTemplate misclassifies a utility template');
+        }
+    }
+    if (typeof chatLog.customerIdFromJid === 'function'
+        && chatLog.customerIdFromJid('919724649971@s.whatsapp.net') !== '9724649971') {
+        problems.push('customerIdFromJid no longer keys the thread by last-10-digits');
+    }
+
     return problems;
 }
 
