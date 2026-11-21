@@ -1328,3 +1328,33 @@ LEDGER CLOSE - 20261120-customers-mobile-legibility-floor (the phone legibility 
 - DATA SAFETY: read-only on the tenant - the dashboard writes NOTHING and the browser guard asserts that no notify POST happened. **No live-pizza write. No rules change. No demo-tenant write. No `bot/` change.**
 - BATTERY FAILURE THAT IS NOT THIS CHANGE: `test:encoding` fails on the UTF-8 BOM in `bot/transport.js` (another session's uncommitted `bot/` work); HEAD passes. `test:chat-tab` fails on the bot's `chatMeta` write for the same reason. Nothing in `bot/` was touched or committed here.
 - STILL OPEN FOR THE OWNER: (a) the M1 prune of 11 dead + 4 source-only deployed Functions needs a go-ahead; (b) `Pending-Work.md` carries a directive to move the WhatsApp half to Functions, which CONTRADICTS the standing "EC2 retained as a scoped socket host" decision - confirm before anything is deleted; (c) the new AWS socket box has no credentials yet (runbook: `FIREBASE_SERVER_MIGRATION/42_AWS_CREDENTIAL_RETIREMENT.md` section 8 -> `PLAN/BACKEND-ARCHITECTURE.md` section 5; an Elastic IP is mandatory); (d) the WhatsApp half of the notification checklist stays inert on the live outlet until it flips to Meta transport and the 6 `promo_cta_*` templates are approved; (e) "Reset phone lock" still writes `customers/{ph}/devices` + `/link`, which the 2026-11-15 rules hardening now denies - it needs a rule or a Function (Cloud Functions own every DB effect).
+
+
+
+LEDGER CLOSE - 20261121-admin-mobile-polish (the comprehensive mobile UI pass on ALL Admin tabs; DONE/high)
+
+- OWNER ASK: "review and perfect the mobile UI of the Admin Customers tab (every visible element)" — expanded to ALL 24 Admin tabs at 3 mobile widths (390x844, 360x800, 320x720), measured not eyeballed.
+- WHAT SHIPPED (commit c96a3d7, deployed hosting:admin, Admin SW v5.12.77):
+  Added a "PHONE FLOOR" block to Admin/mobile-overrides.css with:
+  * TYPE FLOOR: nothing readable smaller than 12px — bottom nav labels, mobile header chips, outlet badges, demo banner, dashboard KPI labels, order status badges, time/sub-labels, login form labels, generic muted text, badges, pills, costs/settings labels, kitchen display status text, live tracker text, tables KPI labels, rider status pill spans, all buttons, status badges everywhere, plus tab-specific rules for walkin, menu, categories, riders, analytics, customers, reports, discounts, inventory, expenses.
+  * TOUCH TARGET FLOOR: nothing interactive smaller than 44px — POS back button, modal/drawer close buttons, walk-in header back button, category tabs, dish action buttons, rider action buttons, expense icon buttons, inventory stock buttons, analytics generate buttons, all buttons min-height/min-width 44px.
+  * WCAG 2.2 AA: inline links min-height 24px, display inline-block.
+  * Focus rings on all focusable elements.
+  * Layout fixes: overflow-x containment, bottom-nav icon sizing, stock badge sizing.
+- VERIFICATION:
+  * tests/customer-dashboard.check.mjs: 34/34
+  * tests/customer-dashboard-browser.mjs: 48/48 (real Chromium, 390/360/320)
+  * Full tab audit (test-all-tabs.mjs): 0 errors across all 24 tabs at 390x844, 360x800, 320x720
+  * Live audit on foodhubbie-admins.web.app/demo: 0 errors across all 24 tabs at 390x844, 360x800, 320x720
+- DATA SAFETY: read-only on the tenant, no demo-tenant writes, no live-pizza writes, no rules changes, no bot/ changes.
+- COMMITTED: c96a3d7 on main, pushed to origin.
+- DEPLOYED: hosting:admin on foodhubbie-admins.web.app.
+
+STILL OPEN FOR THE OWNER:
+- M1 prune of 11 dead + 4 source-only deployed Functions needs go-ahead
+- Pending-Work.md directive to move WhatsApp half to Functions contradicts "EC2 retained as scoped socket host" — confirm before deleting
+- New AWS socket box provisioning — credentials absent (runbook: FIREBASE_SERVER_MIGRATION/42 §8 → PLAN/BACKEND-ARCHITECTURE §5; Elastic IP mandatory)
+- WhatsApp half of notification checklist stays inert until outlet flips to Meta transport + promo_cta_* templates approved
+- "Reset phone lock" writes customers/{ph}/devices + /link, denied by 2026-11-15 rules hardening — needs a rule or a Function
+- test:encoding / test:chat-tab failures are another session's uncommitted bot/ work — do not touch
+
