@@ -4295,4 +4295,14 @@ a { display: inline-block !important; min-height: 24px !important; }
   /* Catch-all for tables/costs tabs - any remaining small text */
   #tab-tables *, #tab-costs * { font-size: 12px !important; }
   #tab-tables span, #tab-tables div, #tab-costs span, #tab-costs div { font-size: 12px !important; }
+
+  /* Customers tab search input width */
+  #customerSearch { min-width: 120px !important; width: 120px !important; flex-shrink: 0 !important; }
+  #tab-customers input { min-width: 120px !important; width: 120px !important; flex-shrink: 0 !important; }
+
+  /* Settings tab labels */
+  #tab-settings label { font-size: 12px !important; }
+  #tab-settings span { font-size: 12px !important; }
+  #tab-settings div { font-size: 12px !important; }
+  #tab-settings * { font-size: 12px !important; }
 }
