@@ -794,6 +794,8 @@ These are **real, actionable items** in THIS repo based on the audits.
 | Whole-Process Restart (Graceful SIGTERM) | ✅ `done` |
 | Daily Outbound Tracking (OutboundTracker) | ✅ `done` |
 | Phase 5 Runtime Test | ✅ `done` (11/11 notification + 7/7 rules) |
+| Phase 4a — inbound parity on Functions (batch 23m) | ✅ `done` (`8c894ff`, live 15/15) |
+| Batch 23n — order alerts + daily reports on Cloud API | ✅ `done` (`0724be7`, live 24/24) |
 
 ---
 ## 🔲 Multi-bot Tenancy — Per-Restaurant WhatsApp Numbers, All Billed to Foodhubbie's Meta Account
@@ -828,21 +830,67 @@ These are **real, actionable items** in THIS repo based on the audits.
 
 **Supersedes the earlier "Pizza Migration Prep" table.** The owner ruled out Baileys ("We will not use Whatsapp Bailey"), so the EC2 socket worker is no longer part of the target architecture and pizza cuts over straight to a Functions-hosted Cloud API bot. Recorded conflict: `AGENTS.md` Key Decisions still says "EC2 is RETAINED PERMANENTLY as a deliberately scoped socket host" (2026-11-17). That decision assumed the box was the only way to hold a socket — with Baileys gone it has no workload left except the pm2 control plane and the Graph provisioning routes. **Owner to confirm the reversal before 4e deletes anything.**
 
-### Already deployed and working on Functions (verified 2026-11-20 against `functions:list`, 34 v2)
+### Already deployed and working on Functions (verified 2026-11-22 against `functions:list`, 37 v2)
 
-`whatsappWebhook`, `processInboundMessage`, `sendOutboundMessage`, `metaCostPublisher`, `onWebOrderPlaced` + `onOrderCancelledCompensate`, the loyalty relay trio, the three push-relay triggers, both rider triggers, `dailySettlement`, `demoReseed`, `walletGateReconcile`, `tenantMedia` / `tenantNotify` / `tenantOnboarding`. Relay flags live and `true` in `/config`: `pushRelay`, `orderFinalizer`, `loyaltyRelay`, `riderRelay`.
+`whatsappWebhook`, `onWebhookInboxMessage`, `onOrderStatusAlert`, `dailyReports`, `metaCostPublisher`, `onWebOrderPlaced` + `onOrderCancelledCompensate`, the loyalty relay trio, the three push-relay triggers, both rider triggers, `dailySettlement`, `demoReseed`, `walletGateReconcile`, `tenantMedia` / `tenantNotify` / `tenantOnboarding`. Relay flags live and `true` in `/config`: `pushRelay`, `orderFinalizer`, `loyaltyRelay`, `riderRelay`; the three socket-independent WhatsApp paths (`webhookInbox`, `orderStatusAlert`, `dailyReports`) ship **flag-off** and no-op until an owner sets them.
 
-### Four functions are exported in source but NOT deployed
+`processInboundMessage` and `sendOutboundMessage` are still deployed but **superseded** — both are on the M1 deletion list (see 4a-2).
 
-`onWebhookInboxMessage`, `promoScheduler`, `dailyReports`, `onOrderStatusAlert`. All four are flag-gated (default false = no-op), so deploying them changes no live behaviour. **`onWebhookInboxMessage` is the drain for `webhookInbox`** — without it an inbound Cloud API message is stored and never processed.
+### ✅ 4a DONE — real inbound parity shipped and deployed (batch 23m, commit `8c894ff`)
 
-### 🔴 The real blocker: the cloud inbound handler is a different product
+The cloud inbound handler is no longer a different product. `bot/inbound-flow.js` is the live bot's state machine extracted socket-free — same `START → AWAITING_ORDER_INTENT → WEBVIEW` shape, same constants (greeting/order-intent regexes, 3 strikes / 30 min freeze, strike continuity 15 min, 40/min rate limit, 5-minute token reuse), same channel guard / blocklist / opt-out / auto-rejection / shop-closed / wallet-gate ordering. `onWebhookInboxMessage` is deployed and calls it **directly** (no Cloud Tasks: the old `enqueueTask` → `processInboundMessage` path is deliberately unused). Its self-check is 12/12.
 
-`taskqueue/processInboundMessage.ts` (497 lines) implements `START → MENU_BROWSING → CART_REVIEW → CHECKOUT → PAYMENT` with a **text** menu, `order <dish>`, a text cart and COD/UPI.
+Also extracted in the same batch:
 
-The live bot (`bot/index.js` 2632-2692) implements `START → AWAITING_ORDER_INTENT → WEBVIEW`: greeting image + Hinglish welcome + menu image + an interactive **"Order Now" URL button** pointing at `delivery.html` with a per-phone webview token. The customer then orders in the webview (real cart, GST, delivery slab fee, coupons, reward tender, stock). There is no text cart and no text checkout.
+- **`bot/meta-cost.js`** → `createMetaCost({db,bid,oid,now,log})` — the one cost recorder + spend guard, vendored and shared by the Functions transport. Fixed three real defects in the old bot code: `recordMetaCost` called `resolveBusinessIdFor(outlet)` from module scope (a `ReferenceError` swallowed by its own catch, so it **never wrote a row**); `billableMessages`/`dailyCostPaise` were objects, making `canSend`'s `Number()` **NaN** (the daily + per-message caps were dead); rates now come from `shared/meta-cost-math.js` instead of being restated.
+- **`bot/chat-log-core.js`** + `bot/chat-log.js` reduced to a thin binding, so the inbound flow's chat hook runs in the cloud. `bot/index.js` is untouched and still calls `logChatMessage({outlet,…})`.
+- **`bot/transport.js`** rewired onto `bot/meta-cost.js` (module-level duplicate deleted) — and a latent precedence bug fixed: `opts.templateCategory || MARKETING_TEMPLATE_NAMES.has(…) ? 'MARKETING' : 'utility'` billed **any** template as MARKETING whenever `templateCategory` was set.
+- **`functions/src/shared/whatsapp/factory.ts`** — `makeMetaTransport` (sock-shaped over the vendored send + cost modules), `makeInboundFlow`, and (batch 23n) `tenantCredentials` / `makeTenantTransport` / `tenantAlertRecipients`.
+- **`functions/scripts/copy-vendor.cjs`** → **22 modules / 363.3 KB** with build-time load, rate-table (115/86) and template-classification assertions.
 
-Flipping pizza to the Functions handler today would replace the working ordering experience with a stub that cannot charge GST, apply a delivery fee, redeem a reward or deduct stock. **Do not deploy `processInboundMessage` as-is.**
+**Rollout order is load-bearing: `config/webhookInbox/enabled` FIRST, Meta callback SECOND.** With the flag off an inbox entry is orphaned — no later write re-fires the `onValueCreated` trigger — so flipping the flag afterwards does not retroactively drain it.
+
+### ✅ 23n DONE — order alerts + daily reports are on the Cloud API (commit `0724be7`)
+
+The two WhatsApp sends that still needed the socket now run without it:
+
+- **`onOrderStatusAlert`** — `onValueWritten` on the finalizer's **`stockDeducted` leaf** (not `status`: a payment mirror, a KOT stamp or `_fcmSent` must not wake it, and the body then always carries corrected money). Web sources only, demo skipped, `config/orderStatusAlert` gated, `_adminWaNotified` claimed by cold-tx transaction. **The transport is built BEFORE the claim**, so a tenant with no number does not burn the claim. Body is `notifyAdmin('NEW')` verbatim (item lines with size, total, loyalty tender payable, `⚠️ CHECK PRICES`).
+- **`dailyReports`** — `onSchedule('30 1,21 * * *', Asia/Kolkata)`; the 01:30 run is the catch-up and targets the previous IST day. Bounds are **ISO strings** because `orders.createdAt` is an ISO string (live-verified), the revenue basis is `costMath.isBilledOrder`, and the per-outlet claim `meta/dailyReports/last/{bid}/{oid}` is written **only when `sent > 0`** so a total send failure is retried by the next run.
+- **`promoScheduler` DELETED, never deployed** — it ported only "which campaigns are due" and handed recipients to `sendOutboundMessage`; the real engine is ~700 lines (`bot/promotions.js`: pacing, opt-out, prepaid tokens, template shells, pause reasons) and promos remain `transport-blocked`. It becomes its own batch once Meta is the only transport. `tests/promo-scheduler.check.cjs` deleted with it. **Weekly/monthly WhatsApp reports are deliberately NOT scheduled** — in the bot they were reachable only through the `bot/commands` listener and nothing in Admin ever wrote those actions; porting a schedule would be a new product, not parity.
+- `shared/orders/handlers.ts` deleted (verified unimported).
+
+Both are deployed and **inert**: `config/orderStatusAlert` and `config/dailyReports` are absent, no outlet has `metaUsage`, and pizza has 0 `_adminWaNotified` orders.
+
+### Proven live (not just guarded)
+
+**23m — `%TEMP%/opencode/e2e-23m-inbound.cjs`, 15/15** against the real deployed webhook and the real RTDB trigger: GET verify challenge · wrong verify token 403 · bad signature acks 200 and writes nothing · a signed POST lands exactly one inbox entry (`message.from`, `id`, `profileName`, `source:'meta-webhook'`, numeric `receivedAt`) · flag off leaves the entry untouched · **flag on drains the new entry while a pre-flip entry is provably NOT drained** (the orphan trade-off, observed rather than assumed) · a tenant with no `whatsapp` node leaves no chat state · a blocklisted sender drains with **zero** Meta usage · an unblocked `START` drains. Cloud Logging then shows the whole inbound leg: `[Inbound] [IN] 91****0001@s.whatsapp.net: "START"` → `WhatsApp send failed: … Object with ID '123456789' does not exist` (code 100 / subcode 33).
+
+**23n — three harness passes, 24/24 checks, every fixture restored byte-identically:**
+
+- flag off → silent; flag on + **no** `whatsapp` node → **no claim burned** (the transport-before-claim fix, proven rather than asserted); flag on + a temporary `whatsapp` node → claim written and the Graph send attempted; a `stockDeducted` true→false→true replay → the claim holds, no second send; a `source:'QR'` order → ignored; the demo tenant → hard-skipped; flag removed → silent again.
+- `dailyReports` via a real `gcloud scheduler jobs run` (same delivery path as the cron): flag off → no pass; flag on → `[DailyReports] Pass complete` with the correct `targetDate`; with the e2e outlet briefly registered in `outletIndex`, the indexed ISO-string range query found **exactly 3** of 4 seeded orders (the 5-day-old one excluded), revenue `333.00` = 111+222 with the cancelled 999 never counted, store name branded from `settings/Store`, recipients resolved over the tenant transport, `sent: 0` → **no claim written**; with a claim already holding the date → `skippedAlreadySent: 1` and the claim not rewritten.
+
+Two harness bugs found and fixed on the way, both worth remembering:
+
+1. **`stockDeducted:false` is not inert while the finalizer relay is on** — the order is simply an unfinalized web order, so the cloud finalizer finalises it seconds later and the alert then fires *correctly*. To test the `after !== true` gate in isolation the order needs a fresh `finalizeClaim` (5-minute hold) — no flag has to be touched.
+2. **`outletIndex` is the canonical real-outlet registry**; the e2e tenant is deliberately absent, so an unregistered outlet reports `skippedNoOrders` and never reaches the per-outlet body. Register it temporarily, then remove it.
+
+
+### ✅ 4a-2 — "The real blocker" is closed; what remains is `bot/commands`
+
+The old `taskqueue/processInboundMessage.ts` (text menu / `order <dish>` / text cart / COD) is **superseded and must never be deployed**; it and `sendOutboundMessage` are still deployed and remain on the M1 deletion list.
+
+What still dies with EC2 is the **`bot/commands` listener** — six client senders queue commands nothing consumes while the box is down:
+
+| Caller | Command |
+|---|---|
+| `Admin/js/features/chat.js:538` | `SEND_GENERIC_MESSAGE` (operator reply) |
+| `Admin/js/features/analytics-mobile.js:629` | `SEND_GENERIC_MESSAGE` (send report) |
+| `Admin/js/features/riders.js:514` | rider message |
+| `Admin/js/features/rider-analytics.js:308` | rider message |
+| `Admin/js/features/promotions.js:631/652` + `notify-composer.js:350` | `SEND_PROMOTION` |
+
+A small trigger on `bot/commands/{id}` handling **`SEND_GENERIC_MESSAGE` only** closes the Chat tab and the Analytics button; promotions wait for the promotions batch (they are `transport-blocked` anyway). Do not port the promotions half into it.
 
 ### 🔴 Phase 4a-0 — HARD PREREQUISITE: the system user owns no assets (verified 2026-11-20)
 
@@ -873,37 +921,43 @@ So **the platform currently has no working WhatsApp Cloud API credential**, desp
 
 No new token is needed — the existing secret starts working the moment the assets are assigned. Verify with `GET /{WABA}/message_templates?access_token=…` returning the 17 templates.
 
-This is why nothing WhatsApp-Cloud-API can be tested end to end yet, including the functions already deployed.
+This is why nothing WhatsApp-Cloud-API can be **delivered** yet. Everything up to the Graph call is proven: synthetic signed webhooks land and drain (23m, 15/15), the inbound handler composes and hands a message to Graph, and Cloud Logging shows `WhatsApp send failed: Object with ID '123456789' does not exist` (code 100 / subcode 33) — the only thing standing between the deployed path and a real customer message is the asset assignment below.
 
-### Phase 4a — Inbound parity (the actual work)
-
-Same pattern as batches 23b / 23f / 23g, which already proved it: extract the socket-free logic into a shared module, vendor it into the Functions bundle, run it from both runners.
-
-- New `bot/inbound-flow.js` → `createInboundHandler({ db, transport, outlet, resolvePath, ... })`, moving the ~60-line state machine plus `sendOrderFlow`, `resendMenuCTA`, `sendOrderCTA`, `getOrCreateWebviewToken`, `isShopOpen`, the wallet gate, blocklist, strike tracker, opt-out and the channel guard.
-- `bot/transport.js` already shapes the Meta transport like a Baileys `sock` (`sendMessage`, `sendButton`, `sendTemplate`), so the extracted code runs unchanged on both — no second implementation.
-- Session state moves from `bot/session_data_*` files to RTDB (the port already has `shared/session.ts`; keep it, drop the text-cart steps).
-- Retire `MENU_BROWSING` / `CART_REVIEW` / `CHECKOUT` / `PAYMENT` entirely rather than porting them — they are not a product that ships.
-- Media is safe: Meta cannot send base64, but since batch 15 every image is a Storage URL, and `sendImage` already falls back to text for a non-URL.
+### ✅ Phase 4a — Inbound parity DONE (batch 23m, see the top of this section)
 
 ### Phase 4b — Callback flip (single URL per app)
 
-Meta allows **one** callback URL per app, so the flip cuts EC2 inbound. Deploy and verify the Functions webhook with synthetic signed payloads first, then flip, then watch `webhookInbox` drain. Set `config/webhookInbox/enabled = true` at the same time.
+Meta allows **one** callback URL per app, so the flip cuts EC2 inbound. The receiver is already deployed and live-proven with synthetic signed payloads (23m 15/15), so the flip is a console change plus one flag.
+
+**Order is not negotiable:**
+1. `config/webhookInbox/enabled = true` **first**.
+2. Point the WABA callback at `https://us-central1-foodhubbie-10.cloudfunctions.net/whatsappWebhook` with `WA_VERIFY_TOKEN` **second**.
+3. Then set `config/orderStatusAlert` and `config/dailyReports` once a tenant has a real number.
+
+Flipping in the other order orphans every entry that arrives while the flag is off — nothing re-fires the `onValueCreated` trigger, so those messages are lost, not queued.
 
 ### Phase 4c — Per-number onboarding
 
 Blocked on the Meta console (owner): business verification → Tech Provider / App Review → per-number display-name approval → add number to WABA `2589174454849821` → register → `waLinkSuccess()` writes `whatsapp/{phoneNumberId,wabaId,status}`.
 
-### Phase 4d — Cost tracking drift (fix before real numbers send)
+### Phase 4d — Cost tracking drift (partly done; two items left)
 
-Two writers publish `walletBilling/{bid}/{oid}/balancePaise`:
-- EC2 `bot-control-api/meta-cost-publisher.js` — accurate (`shared/meta-cost-math.js` rate table, service free tier).
-- Cloud `scheduled/metaCostPublisher.ts` — `START_PAISE = 100000` and a flat `115 / 115 / 86` paise per type from `shared/wallet/metaCost.ts`, which ignores the 1,000 free service messages/month and the marketing 86.31 paise rate.
+**Done:** `functions/src/shared/wallet/metaCost.ts` is now a thin binding over the vendored `bot/meta-cost.js`, so the rate table is `shared/meta-cost-math.js` (₹0.115 utility/auth/service, ₹0.8631 marketing) on both runners, and it **no longer writes `balancePaise`**. One node, one writer: `scheduled/metaCostPublisher.ts` derives `balancePaise = START_PAISE − metaUsage[month].totalCostPaise` every 15 min and nothing else writes it.
 
-The box is down, so the cloud one is the live writer today. When EC2 returns this is a two-writer violation; and the cloud maths under-models the free tier. Port the rate table into `shared/wallet/metaCost.ts` and delete the EC2 publisher rather than running both.
+**Left (fix before real numbers send):**
+
+1. **`START_PAISE = 100000` is a placeholder** — ₹1,000 per outlet per month invented to make the node non-zero. It is not the Foodhubbie Meta credit line and it is not per-outlet spend. Decide the real model (one shared platform credit line, or a per-outlet budget) before a number goes live, or every tenant's wallet will show a number that means nothing.
+2. **Delete EC2 `bot-control-api/meta-cost-publisher.js`** rather than running two `balancePaise` writers when the box returns. The cloud publisher is the live one today.
+
+Note the deliberate direction of error in `bot/meta-cost.js`: in-window replies are recorded at the **utility** rate (₹0.115), not the free service tier. Over-recording blocks a tenant early; under-recording drains the shared credit line and fails everyone with Meta error 131042.
 
 ### Phase 4e — EC2 retirement (only after 4b is stable for a week)
 
 Delete `bot/` Baileys worker files, `webhook-server/`, the EC2 meta-cost publisher, the 4 superseded timers, and the `server` DOI. Keep the Graph provisioning routes until onboarding no longer needs them, or move them to a Function.
+
+**Not yet FREE to delete:** the `bot/commands` listener (see 4a-2). Until `SEND_GENERIC_MESSAGE` runs on a Function, Chat replies and the Analytics "send report" button queue into a node nothing consumes. `SEND_PROMOTION` can wait — promos are `transport-blocked` on Baileys and the promotions engine is its own batch.
+
+Retiring the box also needs the owner to confirm the reversal of the 2026-11-17 "EC2 RETAINED PERMANENTLY" decision, since `PLAN/BACKEND-ARCHITECTURE.md` and `AGENTS.md` both still state it.
 
 ### Companion mode (unchanged by any of this)
 
