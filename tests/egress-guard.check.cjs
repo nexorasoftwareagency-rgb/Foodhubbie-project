@@ -34,7 +34,6 @@ const stripComments = (s) =>
 const FILES = [
   'FIREBASE_SERVER_MIGRATION/functions/src/triggers/webhookInbox.ts',
   'FIREBASE_SERVER_MIGRATION/functions/src/triggers/orderStatusAlert.ts',
-  'FIREBASE_SERVER_MIGRATION/functions/src/scheduled/promoScheduler.ts',
   'FIREBASE_SERVER_MIGRATION/functions/src/scheduled/dailyReports.ts',
   'FIREBASE_SERVER_MIGRATION/functions/src/taskqueue/processInboundMessage.ts',
   'FIREBASE_SERVER_MIGRATION/functions/src/shared/session.ts',
@@ -75,9 +74,6 @@ for (const file of FILES) {
     allClean = false;
   } else {
     ok(`${file}: no whole businesses tree read`, true);
-    pass++; // already counted by ok, adjust
-    pass--; // ok() increments, we want to count it once
-    // Actually ok() already increments pass, so don't double-count
   }
 
   if (bidOnlyRead) {
@@ -85,18 +81,27 @@ for (const file of FILES) {
     allClean = false;
   } else {
     ok(`${file}: businesses/{bid} always has /outlets/{oid}`, true);
-    pass--;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Additional: verify index.ts exports all new functions
+// Additional: verify index.ts exports the new functions, and that the
+// superseded Cloud-Tasks drafts are gone rather than silently shipped.
 // ---------------------------------------------------------------------------
 const indexSrc = read('FIREBASE_SERVER_MIGRATION/functions/src/index.ts');
 ok('index.ts exports onWebhookInboxMessage', /onWebhookInboxMessage/.test(indexSrc));
 ok('index.ts exports onOrderStatusAlert', /onOrderStatusAlert/.test(indexSrc));
-ok('index.ts exports promoScheduler', /promoScheduler/.test(indexSrc));
 ok('index.ts exports dailyReports', /dailyReports/.test(indexSrc));
+ok('promoScheduler deleted, not exported',
+  !/export\s*\{[^}]*promoScheduler/.test(indexSrc) &&
+  !fs.existsSync(path.join(ROOT, 'FIREBASE_SERVER_MIGRATION/functions/src/scheduled/promoScheduler.ts')));
+ok('the dead shared/orders/handlers.ts module is gone',
+  !fs.existsSync(path.join(ROOT, 'FIREBASE_SERVER_MIGRATION/functions/src/shared/orders/handlers.ts')));
+ok('no batch-23m/23n drain enqueues a Cloud Task',
+  !['FIREBASE_SERVER_MIGRATION/functions/src/triggers/webhookInbox.ts',
+    'FIREBASE_SERVER_MIGRATION/functions/src/triggers/orderStatusAlert.ts',
+    'FIREBASE_SERVER_MIGRATION/functions/src/scheduled/dailyReports.ts']
+    .some((f) => /enqueueTask|sendOutboundMessage/.test(stripComments(read(f)))));
 
-console.log(`\negress guard ${pass}/${FILES.length + 4} passed${process.exitCode === 1 ? ' — FAILED' : ''}`);
+console.log(`\negress guard ${pass}/${FILES.length * 2 + 6} passed${process.exitCode === 1 ? ' — FAILED' : ''}`);
 process.exit(process.exitCode || 0);

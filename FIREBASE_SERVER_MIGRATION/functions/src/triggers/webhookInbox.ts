@@ -87,9 +87,18 @@ export const onWebhookInboxMessage = onValueWritten(
     await initializeAdmin();
 
     // 1. Config flag gate — unreadable means "stay off".
+    //
+    // Off means the EC2 Baileys worker owns this queue (it drains it with a
+    // `child_added` listener), so the cloud must NOT delete the entry: whoever
+    // deletes first wins and the loser never sees the message.
+    //
+    // The trade-off is that an entry written while the flag is off is ORPHANED —
+    // no later write re-fires this trigger, so flipping the flag does not
+    // retroactively drain it. That is why the rollout order is flag FIRST, Meta
+    // callback SECOND: with the flag already true, nothing is ever orphaned.
     try {
       const flagSnap = await getDB().ref(RELAY_FLAG).once('value');
-      if (flagSnap.val() !== true) return; // leave the entry for the flip
+      if (flagSnap.val() !== true) return;
     } catch {
       return;
     }

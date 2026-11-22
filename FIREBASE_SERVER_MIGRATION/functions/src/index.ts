@@ -60,12 +60,19 @@ export { demoReseed } from './scheduled/demoReseed';
 // job rebuilds every armed outlet's order-fee index exactly and sweeps gate +
 // summary for unarmed outlets; the triggers below keep it fresh between passes.
 export { walletGateReconcile } from './scheduled/walletGateReconcile';
-// Batch: EC2 retirement — promo campaign scheduler. Picks up scheduled
-// campaigns whose runAt is due and enqueues send tasks. Config flag:
-// config/promoScheduler/enabled === true. Demo hard-skipped.
-export { promoScheduler } from './scheduled/promoScheduler';
-// Sends daily/weekly/monthly sales reports to outlet admins via WhatsApp.
-// Config flag: config/dailyReports/enabled === true. Demo hard-skipped.
+// promoScheduler was DELETED in batch 23n (never deployed). It ported only the
+// "which campaigns are due" half of `bot/promotions.js` and handed every
+// recipient to the `sendOutboundMessage` task queue — which is the superseded
+// product on a taskQueue path that still falls back to the wrong
+// `foodhubbie-prod` project. The real engine (pacing, opt-out, prepaid tokens,
+// template shells, pause reasons) is ~700 lines and promotions are
+// `transport-blocked` on the live transport, so the campaign loop moves to the
+// cloud as its own batch once the Meta transport is the only path. Do not
+// re-add a stub here: a schedulable stub that silently sends nothing is worse
+// than an absent one.
+// Batch 23n: daily/weekly/monthly sales summary over the Cloud API (the bot's
+// `sendDailyReportSafely` was socket-only). Config flag:
+// config/dailyReports/enabled === true. Demo hard-skipped.
 export { dailyReports } from './scheduled/dailyReports';
 
 // Callable Functions (Admin/Client)
@@ -83,8 +90,11 @@ export { onOrderStatusChange } from './triggers/onOrderStatusChange';
 // menu CTA, webview token, opt-out, strikes/freeze, rate limit, chat log.
 // Config flag: config/webhookInbox/enabled === true. Demo hard-skipped.
 export { onWebhookInboxMessage } from './triggers/webhookInbox';
-// Sends WhatsApp "NEW ORDER" alert to outlet admins when status flips to Placed.
-// Config flag: config/orderStatusAlert/enabled === true. Demo hard-skipped.
+// Batch 23n: WhatsApp "NEW ORDER" alert to the outlet's own team, parity with
+// the bot's `alertAdminFinalizedWebOrder`. Fires on the finalizer's
+// `stockDeducted` leaf (once per order, after the money is final) and claims
+// `_adminWaNotified` before sending. Config flag:
+// config/orderStatusAlert/enabled === true. Demo hard-skipped.
 export { onOrderStatusAlert } from './triggers/orderStatusAlert';
 // Batch 23c: runs the bot's own web/app order finalizer in DRY-RUN against live
 // orders and compares its verdict with what the bot actually produced. It never

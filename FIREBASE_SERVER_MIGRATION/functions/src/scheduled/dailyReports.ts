@@ -1,30 +1,78 @@
 /**
- * dailyReports — Scheduled Cloud Function (batch: EC2 retirement)
+ * dailyReports — the outlet's end-of-day WhatsApp sales summary.
  *
- * Sends daily/weekly/monthly sales reports to outlet admins via WhatsApp.
- * Replaces the EC2 bot's sendDailyReportSafely() heartbeat
- * (bot/index.js:2108) and reports.js.
+ * Parity port of the bot's `sendDailyReport` (`bot/reports.js`) driven by the
+ * heartbeat at `bot/index.js:2120`: 21:30 IST, plus a 01:30 IST catch-up for
+ * YESTERDAY when the 21:30 pass never happened. Both lived in the Baileys
+ * worker's `setInterval`, so with the box down the owner has not received a
+ * report since 2026-11-11. Batch 23n moves the same summary onto the Cloud API.
  *
- * Runs at 21:30 IST daily (Asia/Kolkata), with weekly (Sunday) and monthly
- * (1st) variants derived from the same cron by checking day-of-week/day-of-month.
- * maxInstances: 1 to prevent overlapping runs.
+ * ONE function, two cron minutes (`30 1,21 * * *` Asia/Kolkata): at 01:30 the
+ * target date is yesterday, at 21:30 it is today. A per-outlet claim
+ * (`meta/dailyReports/last/{bid}/{oid}`) makes the pair idempotent — the
+ * catch-up never re-sends a report the evening pass already delivered, and a
+ * manual re-run of the job cannot bill twice for the same day.
  *
- * Config flag: config/dailyReports/enabled === true (default false = no-op)
- * Demo tenant (foodhubbie-demo) is hard-skipped.
+ * DEVIATIONS FROM THE BOT (deliberate, recorded):
+ *  - Sales are counted with the shared `isBilledOrder` rule (the predicate Admin
+ *    Costs and Supreme bill with), so a cancelled/refunded order is never
+ *    reported as revenue. The bot summed `total` for Delivered/Confirmed/Paid,
+ *    which counted a refunded bill as sales.
+ *  - Orders are read with the indexed `createdAt` range query instead of
+ *    downloading the whole `orders` node (batches 19/20 egress rule). Note the
+ *    stored field is an ISO STRING, so the range bounds are ISO strings too.
+ *  - An outlet with zero orders in the day is SKIPPED (logged, not sent): a
+ *    "no sales" WhatsApp message is a billable utility message that tells the
+ *    owner nothing the dashboard does not already show.
+ *  - Weekly/monthly reports are NOT scheduled. In the bot those two senders
+ *    were reachable only through the `bot/commands` listener
+ *    (`SEND_WEEKLY_REPORT` / `SEND_MONTHLY_REPORT`) and nothing in Admin ever
+ *    wrote those actions — `weeklyReportSent`/`monthlyReportSent` were declared
+ *    and reset but never set. Porting a schedule for a message nobody has ever
+ *    received would be a new product, not a parity port.
+ *
+ * Config flag: config/dailyReports/enabled === true (absent = no-op, the bot
+ * keeps the job). Demo tenant hard-skipped.
  */
 
+import * as path from 'path';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
 import { initializeAdmin, getDB } from '../shared/firebase/admin';
-import { enqueueTask } from '../shared/utils/taskQueue';
-import { getISTDateInfo, getISTStartOfDay, addISTDays, getISOWeekKey } from '../shared/utils/dates';
+import { getISTDateInfo, addISTDays } from '../shared/utils/dates';
+import { makeTenantTransport, tenantAlertRecipients } from '../shared/whatsapp/factory';
+
+/* eslint-disable @typescript-eslint/no-var-requires */
+const costMath = require(path.join(__dirname, '../vendor/shared/cost-math.js'));
+/* eslint-enable @typescript-eslint/no-var-requires */
 
 const DEMO_BUSINESS_ID = 'foodhubbie-demo';
 const RELAY_FLAG = 'config/dailyReports/enabled';
+const CLAIM_ROOT = 'meta/dailyReports/last';
+
+/** IST midnight -> {start,end} epoch ms for one `YYYY-MM-DD` day. */
+export function istDayBounds(dateStr: string): { start: number; end: number } {
+  const start = new Date(`${dateStr}T00:00:00.000+05:30`).getTime();
+  return { start, end: start + 24 * 60 * 60 * 1000 - 1 };
+}
+
+/** `2026-11-21` -> `21 November 2026` (the bot's `toLocaleDateString('en-IN')`). */
+function displayDate(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00.000+05:30`);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function maskPhone(v: string): string {
+  const d = String(v || '').replace(/\D/g, '');
+  if (d.length < 6) return '***';
+  return `${d.slice(0, 2)}****${d.slice(-4)}`;
+}
 
 export const dailyReports = onSchedule(
   {
-    schedule: '30 16 * * *', // 21:30 IST = 16:30 UTC
+    // 01:30 and 21:30 IST. 21:30 is the bot's own send time; 01:30 is the
+    // bot's "if the bot was off at 21:30" catch-up for the previous day.
+    schedule: '30 1,21 * * *',
     timeZone: 'Asia/Kolkata',
     region: 'us-central1',
     memory: '256MiB',
@@ -33,7 +81,9 @@ export const dailyReports = onSchedule(
     secrets: ['FIREBASE_DATABASE_URL', 'WA_PERMANENT_TOKEN'],
   },
   async () => {
-    // Config flag gate
+    await initializeAdmin();
+
+    // Config flag gate — unreadable means "stay off" (the bot keeps the job).
     try {
       const flagSnap = await getDB().ref(RELAY_FLAG).once('value');
       if (flagSnap.val() !== true) return;
@@ -41,164 +91,163 @@ export const dailyReports = onSchedule(
       return;
     }
 
-    initializeAdmin().catch(() => {});
     const db = getDB();
     const now = Date.now();
     const ist = getISTDateInfo(new Date(now));
-    const todayStr = ist.dateStr;
-    const dayOfWeek = ist.dayOfWeek; // 0=Sunday
-    const dayOfMonth = ist.dayOfMonth;
 
-    // Determine report type
-    let reportType: 'daily' | 'weekly' | 'monthly' = 'daily';
-    let periodStart: number;
-    let periodLabel: string;
+    // 01:30 run = yesterday's report; 21:30 run = today's.
+    const isCatchUp = ist.hour === 1;
+    const targetDate = isCatchUp
+      ? getISTDateInfo(addISTDays(new Date(now), -1)).dateStr
+      : ist.dateStr;
+    const { start, end } = istDayBounds(targetDate);
+    const startIso = new Date(start).toISOString();
+    const endIso = new Date(end).toISOString();
 
-    if (dayOfMonth === 1) {
-      reportType = 'monthly';
-      periodStart = getISTStartOfDay(addISTDays(new Date(now), -30)).getTime();
-      periodLabel = `${ist.monthKey}`;
-    } else if (dayOfWeek === 0) {
-      // Sunday — weekly
-      reportType = 'weekly';
-      periodStart = getISTStartOfDay(addISTDays(new Date(now), -7)).getTime();
-      const weekKey = getISOWeekKey(new Date(now));
-      periodLabel = `Week ${weekKey}`;
-    } else {
-      reportType = 'daily';
-      periodStart = getISTStartOfDay(new Date(now)).getTime();
-      periodLabel = todayStr;
-    }
-
-    // Read outlet index (small read: ~40 outlets max)
+    // The canonical real-outlet registry (~40 entries, one small read).
     const indexSnap = await db.ref('outletIndex').once('value');
     const index = indexSnap.val() || {};
 
-    let outletsProcessed = 0;
+    let outletsSeen = 0;
+    let skippedNoOrders = 0;
+    let skippedAlreadySent = 0;
     let reportsSent = 0;
 
     for (const [oid, meta] of Object.entries(index)) {
       const bid = typeof meta === 'string' ? meta : (meta as any)?.bid;
       if (!bid || bid === DEMO_BUSINESS_ID) continue;
-
-      outletsProcessed++;
+      outletsSeen++;
 
       try {
-        // Read orders created in the report period (indexed query by createdAt)
-        const ordersSnap = await db.ref(`businesses/${bid}/outlets/${oid}/orders`)
+        // Idempotency: one report per outlet per target date.
+        const claimRef = db.ref(`${CLAIM_ROOT}/${bid}/${oid}`);
+        const claimSnap = await claimRef.once('value').catch(() => null);
+        const claim = (claimSnap && claimSnap.val()) || {};
+        if (claim.dateStr === targetDate) {
+          skippedAlreadySent++;
+          continue;
+        }
+
+        // Indexed range query — never the whole orders node.
+        const ordersSnap = await db
+          .ref(`businesses/${bid}/outlets/${oid}/orders`)
           .orderByChild('createdAt')
-          .startAt(periodStart)
-          .endAt(now)
+          .startAt(startIso)
+          .endAt(endIso)
           .once('value');
         const orders = ordersSnap.val() || {};
 
-        // Compute totals
         let orderCount = 0;
-        let totalSales = 0;
-        let totalTax = 0;
-        let totalDiscount = 0;
-        let totalDeliveryFee = 0;
-        const bySource: Record<string, number> = {};
+        let cancelledCount = 0;
+        let revenue = 0;
         const byStatus: Record<string, number> = {};
 
-        for (const [orderId, order] of Object.entries(orders)) {
-          const o = order as any;
+        for (const raw of Object.values(orders)) {
+          const o = raw as any;
           if (!o || !o.createdAt) continue;
-          const createdAt = Number(o.createdAt);
-          if (createdAt < periodStart || createdAt > now) continue;
+          const at = Date.parse(o.createdAt);
+          if (!Number.isFinite(at) || at < start || at > end) continue;
 
           orderCount++;
-          totalSales += Number(o.total || 0);
-          totalTax += Number(o.tax || 0);
-          totalDiscount += Number(o.discount || 0);
-          totalDeliveryFee += Number(o.deliveryFee || 0);
-
-          const src = o.source || 'other';
-          bySource[src] = (bySource[src] || 0) + 1;
-
-          const st = String(o.status || 'Placed').toLowerCase();
+          const st = String(o.status || 'Unknown');
           byStatus[st] = (byStatus[st] || 0) + 1;
+
+          if (!costMath.isBilledOrder(o)) {
+            if (st.toLowerCase() === 'cancelled' || st.toLowerCase() === 'refunded') cancelledCount++;
+            continue;
+          }
+          revenue += Number(o.total || 0) || 0;
         }
 
-        // Read store name for branding
+        if (orderCount === 0) {
+          skippedNoOrders++;
+          continue;
+        }
+
         let storeName = oid;
         try {
-          const storeSnap = await db.ref(`businesses/${bid}/outlets/${oid}/settings/Store/storeName`).once('value');
+          const storeSnap = await db
+            .ref(`businesses/${bid}/outlets/${oid}/settings/Store/storeName`)
+            .once('value');
           if (storeSnap.exists()) storeName = String(storeSnap.val());
         } catch {
-          // use oid as fallback
+          // oid is an acceptable name
         }
 
-        // Format report text
-        const sourceLine = Object.entries(bySource)
-          .map(([s, c]) => `  ${s}: ${c}`)
-          .join('\n') || '  none';
-        const statusLine = Object.entries(byStatus)
-          .map(([s, c]) => `  ${s}: ${c}`)
-          .join('\n') || '  none';
-
-        const emoji = reportType === 'daily' ? '📊' : reportType === 'weekly' ? '📈' : '🗓️';
+        const breakdown =
+          Object.entries(byStatus)
+            .map(([s, c]) => `      ▫️ ${s}: ${c}`)
+            .join('\n') || '      ▫️ none';
 
         const body =
-          `${emoji} *${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report*\n` +
-          `*${storeName}* — ${periodLabel}\n\n` +
-          `Orders: ${orderCount}\n` +
-          `Sales: ₹${totalSales.toFixed(2)}\n` +
-          `Tax: ₹${totalTax.toFixed(2)}\n` +
-          `Discount: ₹${totalDiscount.toFixed(2)}\n` +
-          `Delivery Fee: ₹${totalDeliveryFee.toFixed(2)}\n\n` +
-          `*By Channel:*\n${sourceLine}\n\n` +
-          `*By Status:*\n${statusLine}`;
+          `📊 *${storeName.toUpperCase()} — DAILY SALES REPORT*\n` +
+          `------------------------\n` +
+          `📅 Sales Date: *${displayDate(targetDate)}*\n` +
+          `----------------------------\n` +
+          `   📦 Total Orders: ${orderCount}\n` +
+          `   💰 Real Sales: ₹${revenue.toLocaleString('en-IN')}\n` +
+          `   📊 Breakdown:\n${breakdown}\n` +
+          (cancelledCount
+            ? `   ⚠️ Cancelled/Refunded: ${cancelledCount} (not counted in sales)\n`
+            : '') +
+          `\n------------------------\n` +
+          `💵 *TOTAL REVENUE:* ₹${revenue.toLocaleString('en-IN')}\n` +
+          `📦 *TOTAL ORDERS:* ${orderCount}\n` +
+          `------------------------\n` +
+          `_Sent automatically by ${storeName} Bot_`;
 
-        // Get admin JIDs for this outlet
-        const adminsSnap = await db.ref('admins').once('value');
-        const admins = adminsSnap.val() || {};
-        const adminEntries = Object.entries(admins)
-          .filter(([, a]: any) => !!a && !!a.whatsappJid)
-          .filter(
-            ([, a]: any) =>
-              a.isSuper === true ||
-              a.isSupreme === true ||
-              !a.outlet ||
-              String(a.outlet) === oid,
-          )
-          .map(([, a]: any) => ({ waJid: a.whatsappJid, name: a.name || a.email || a.uid }));
-
-        if (adminEntries.length === 0) continue;
-
-        const correlationId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-
-        // Enqueue outbound WhatsApp text to each admin
-        await Promise.all(
-          adminEntries.map((entry) => {
-            if (!entry.waJid) return Promise.resolve();
-            return enqueueTask('sendOutboundMessage', {
-              to: entry.waJid,
-              outlet: oid,
-              businessId: bid,
-              type: 'text',
-              text: body,
-              correlationId,
-              _logChat: true,
+        const recipients = await tenantAlertRecipients(bid, oid);
+        const { transport } = await makeTenantTransport(bid, oid, { log: () => {} });
+        let sent = 0;
+        for (const to of recipients) {
+          try {
+            await transport.sendMessage(to, { text: body });
+            sent++;
+          } catch (e: any) {
+            logger.warn('[DailyReports] send failed', {
+              oid,
+              to: maskPhone(to),
+              error: e && e.message,
             });
-          }),
-        );
+          }
+        }
 
-        reportsSent += adminEntries.length;
+        // Claim only after at least one copy left; a total failure must be
+        // retried by the next run rather than silently marked "sent".
+        if (sent > 0) {
+          await claimRef
+            .set({ dateStr: targetDate, at: Date.now(), orders: orderCount, revenue, sent, by: 'cloud' })
+            .catch(() => {});
+        }
 
-        logger.info('[DailyReports] Report queued', {
-          bid, oid, storeName, reportType, periodLabel,
-          orderCount, totalSales: totalSales.toFixed(2), recipients: adminEntries.length,
+        reportsSent += sent;
+        logger.info('[DailyReports] Report sent', {
+          bid,
+          oid,
+          storeName,
+          targetDate,
+          catchUp: isCatchUp,
+          orderCount,
+          revenue: revenue.toFixed(2),
+          recipients: recipients.length,
+          sent,
         });
       } catch (err) {
-        logger.error(`[DailyReports] Outlet ${oid} error`, {
+        // A tenant with no number connected throws here — skip it, never fail
+        // the whole pass for every other outlet.
+        logger.warn(`[DailyReports] Outlet ${oid} skipped`, {
           error: (err as Error).message,
         });
       }
     }
 
     logger.info('[DailyReports] Pass complete', {
-      outletsProcessed, reportsSent, reportType, periodLabel,
+      targetDate,
+      catchUp: isCatchUp,
+      outletsSeen,
+      skippedNoOrders,
+      skippedAlreadySent,
+      reportsSent,
     });
   },
 );

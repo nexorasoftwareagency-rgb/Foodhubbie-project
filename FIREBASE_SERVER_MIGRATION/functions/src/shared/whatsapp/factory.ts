@@ -159,6 +159,69 @@ export function makeMetaTransport(o: MetaTransportOptions) {
   return sock;
 }
 
+/**
+ * Resolve ONE tenant's Cloud API credentials from its own `whatsapp` node.
+ * Throws when the outlet has no number connected or the platform token is
+ * missing — a half-configured tenant must never send from another's number.
+ */
+async function tenantCredentials(bid: string, oid: string) {
+  const db = getDB();
+  const waSnap = await db.ref(`businesses/${bid}/outlets/${oid}/whatsapp`).once('value');
+  const wa = (waSnap && waSnap.val()) || {};
+  const phoneNumberId = String(wa.phoneNumberId || '').trim();
+  const accessToken = String(process.env.WA_PERMANENT_TOKEN || '').trim();
+  if (!phoneNumberId) throw new Error(`whatsapp number not connected for ${bid}/${oid}`);
+  if (!accessToken) throw new Error('WA_PERMANENT_TOKEN is not set');
+  return { wa, phoneNumberId, accessToken };
+}
+
+export interface TenantTransportOptions {
+  log?: Log;
+}
+
+/**
+ * The tenant's Cloud API transport for OUTBOUND-ONLY callers (the admin
+ * "new order" alert and the daily report). Same validation as the inbound
+ * path, no state machine.
+ */
+export async function makeTenantTransport(bid: string, oid: string, opts: TenantTransportOptions = {}) {
+  const log: Log = opts.log || ((...a: any[]) => console.log(...a));
+  const { wa, phoneNumberId, accessToken } = await tenantCredentials(bid, oid);
+  return { transport: makeMetaTransport({ bid, oid, phoneNumberId, accessToken, log }), whatsapp: wa };
+}
+
+/**
+ * Who a platform WhatsApp alert goes to, in the bot's own order
+ * (`bot/index.js getReportRecipients`): the developer number first, then the
+ * outlet's own report contact — `settings/Delivery/reportPhone`, falling back
+ * to `settings/Store.phone` (live pizza has neither `phone`; it keeps the
+ * number in `whatsappNumber`). Digits only, deduped, and the developer entry
+ * survives even when the store has no contact on file.
+ */
+export async function tenantAlertRecipients(bid: string, oid: string): Promise<string[]> {
+  const db = getDB();
+  const [storeSnap, deliverySnap] = await Promise.all([
+    db.ref(`businesses/${bid}/outlets/${oid}/settings/Store`).once('value').catch(() => null),
+    db.ref(`businesses/${bid}/outlets/${oid}/settings/Delivery`).once('value').catch(() => null),
+  ]);
+  const store = (storeSnap && storeSnap.val()) || {};
+  const delivery = (deliverySnap && deliverySnap.val()) || {};
+  const digits = (v: any) => {
+    const d = String(v || '').replace(/\D/g, '');
+    return d.length >= 10 && d.length <= 15 ? d : '';
+  };
+  const out: string[] = [];
+  const push = (v: any) => {
+    const d = digits(v);
+    if (d && !out.includes(d)) out.push(d);
+  };
+  push(DEVELOPER_NUMBER);
+  push(delivery.reportPhone);
+  push(store.phone);
+  push(store.whatsappNumber);
+  return out;
+}
+
 export interface InboundFlowOptions {
   log?: Log;
   now?: () => number;
@@ -187,17 +250,12 @@ export async function makeInboundFlow(bid: string, oid: string, opts: InboundFlo
     return `businesses/${bid}/outlets/${oid}/${clean}`;
   };
 
-  const [waSnap, storeSnap] = await Promise.all([
-    db.ref(resolvePath('whatsapp')).once('value'),
+  const [creds, storeSnap] = await Promise.all([
+    tenantCredentials(bid, oid),
     db.ref(resolvePath('settings/Store')).once('value').catch(() => null),
   ]);
-  const wa = (waSnap && waSnap.val()) || {};
+  const { wa, phoneNumberId, accessToken } = creds;
   const store = (storeSnap && storeSnap.val()) || {};
-
-  const phoneNumberId = String(wa.phoneNumberId || '').trim();
-  const accessToken = String(process.env.WA_PERMANENT_TOKEN || '').trim();
-  if (!phoneNumberId) throw new Error(`whatsapp number not connected for ${bid}/${oid}`);
-  if (!accessToken) throw new Error('WA_PERMANENT_TOKEN is not set');
 
   const transport = makeMetaTransport({ bid, oid, phoneNumberId, accessToken, log });
   const chatLog = createChatLog({ db, resolvePath, now: opts.now, log });

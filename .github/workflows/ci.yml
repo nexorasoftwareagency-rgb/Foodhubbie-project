@@ -129,9 +129,6 @@ jobs:
       - name: Order status alert guard (admin WhatsApp NEW ORDER alert)
         run: node tests/order-status-alert.check.cjs
 
-      - name: Promo scheduler guard (due campaigns, caps, demo skip)
-        run: node tests/promo-scheduler.check.cjs
-
       - name: Daily reports guard (sales report computation, formatting)
         run: node tests/daily-reports.check.cjs
 
