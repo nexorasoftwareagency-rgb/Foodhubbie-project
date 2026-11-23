@@ -796,6 +796,8 @@ These are **real, actionable items** in THIS repo based on the audits.
 | Phase 5 Runtime Test | ✅ `done` (11/11 notification + 7/7 rules) |
 | Phase 4a — inbound parity on Functions (batch 23m) | ✅ `done` (`8c894ff`, live 15/15) |
 | Batch 23n — order alerts + daily reports on Cloud API | ✅ `done` (`0724be7`, live 24/24) |
+| Batch 23o — operator replies (`bot/commands`) on Cloud API | ✅ `done` (`b357e35`, live 36/36) |
+| Batch 23p — coexistence echoes (Business App replies) | ✅ `done` (`98f4dbc`, live 33/33 + UI 17/17) |
 
 ---
 ## 🔲 Multi-bot Tenancy — Per-Restaurant WhatsApp Numbers, All Billed to Foodhubbie's Meta Account
@@ -891,6 +893,20 @@ Two harness bugs found and fixed on the way, both worth remembering:
 2. **`outletIndex` is the canonical real-outlet registry**; the e2e tenant is deliberately absent, so an unregistered outlet reports `skippedNoOrders` and never reaches the per-outlet body. Register it temporarily, then remove it.
 
 
+### ✅ 23p DONE — Business App replies reach the Admin Chat thread (commit `98f4dbc`)
+
+Path B (every restaurant number on Foodhubbie's WABA) only works if the owner can still answer guests from the WhatsApp Business App on their phone — that is **coexistence** — and it had a hole. Coexistence delivers staff replies in a **separate change**: `field: 'smb_message_echoes'`, `value.message_echoes[]` with `from` = the BUSINESS number, `to` = the customer, and **`value.messages = []` always**. The webhook returned early on `messages.length === 0`, so the owner's reply left no trace in the Admin Chat thread and an operator answered the same guest a second time; and because an echo's `from` is the business's own number, feeding it to `enqueueInbox` would hand the bot its own number as a customer — it answers itself in a loop and burns sends (the 23m channel-guard lesson one layer up).
+
+- **Branch order in `whatsappWebhook.ts`**: template status → statuses → **`message_echoes`** → `messages`. Routing comes from **`phoneNumberIndex/{metadata.phone_number_id}`** (an echo's `from` cannot identify the tenant); an unrouted phone id logs and writes nothing.
+- **Per echo**: `revoke` / `edit` / `type:'reaction'` skipped (not new messages — the dashboard keeps the original so one tap cannot erase what an operator already read), no `to` skipped, otherwise `chatLog.logChatMessage({ jid: to, msgId: id, from: 'app', text: echoText(echo) })`. `echoText` reuses the inbound extractor's fallbacks (`text.body` → `image/video/document.caption` → `button.text` → `interactive.{button,list}_reply.title` → `location` → `<media>`) because a WhatsApp message does not always carry `text.body`. The branch `continue`s **only** when `change.messages` is empty, so a batched payload still routes its customer messages.
+- **`from:'app'` in the one writer `bot/chat-log-core.js`** is **outgoing and clears `unread`** (the staff who sent it have read the thread; a stale badge sends the operator in to answer twice — a `bot` reply deliberately keeps `unread` as-is). `lastDir:'app'`, and the `chatMeta` mirror is written from the same transaction snapshot.
+- **Coexistence is now observable**: an echo is the definitive signal, so the branch calls `recordCoexistence()` → `whatsapp/coexistence = {mode:'business_app', lastSeenAt}`. The weaker `origin.type === 'business_app'` inbound signal shares the same helper.
+- **Admin**: `isApp = m.from === 'app'`, `isOut = isBot || isApp` → an outgoing bubble with a green **"via app"** pill (`.chat-src-app`), preview counts `app` as outgoing, no unread badge. `database.rules.json` message `.validate` now allows `'customer' | 'bot' | 'app'` (without it every echo write is a permission denial).
+- Guard `tests/coexistence-echo.check.cjs` **32/32** (`npm run test:coexistence-echo`, CI step) + mutation self-test; `tests/chat-tab.check.cjs` was repointed at `bot/chat-log-core.js` (it still read the 15-line binding).
+- **Live E2E 33/33** (signed POST against the deployed function, e2e tenant, thread `9000000042`: echo stored `from:'app'`, unread 2 → 0, mirror equal, never in `webhookInbox`, coexistence recorded, all text shapes resolve, revoke/edit/reaction write nothing, unsigned POST dropped, an echo batched WITH a customer message still enqueues exactly one customer inbox row) + **live UI 17/17** on the deployed `/demo` (`.out` bubble, one "via app" pill, ticks, no badge, 0 console errors). Deployed `functions:whatsappWebhook` + `database` + `hosting:admin` (`98f4dbc.20261123T113002Z`, shell `v5.12.78`, `chat.css?v=5.3.35`); **38 v2**.
+
+**No real echo has been observed yet** — the system user still owns zero Meta assets, so no number is live on this WABA and no coexistence session exists to echo. The proof path is a signed synthetic POST byte-identical to Meta's shape; the first real echo arrives the moment a number is paired.
+
 ### ✅ 4a-2 — CLOSED by batch 23o: `SEND_GENERIC_MESSAGE` is cloud-owned
 
 The old `taskqueue/processInboundMessage.ts` (text menu / `order <dish>` / text cart / COD) is **superseded and must never be deployed**; it and `sendOutboundMessage` are still deployed and remain on the M1 deletion list.
@@ -977,6 +993,8 @@ Retiring the box also needs the owner to confirm the reversal of the 2026-11-17 
 ### Companion mode (unchanged by any of this)
 
 Coexistence between the WhatsApp Business App and Cloud API is a WABA/number feature configured in WhatsApp Manager (QR scan, one linked device). The webhook receiver's location — EC2 or Functions — has no bearing on it. See `docs/PLON-PATH-B-COMPANION-MODE.md`.
+
+**The echo half is now wired (batch 23p, commit `98f4dbc`):** when the owner answers a guest from the Business App on their phone, Meta delivers it as a `smb_message_echoes` change and the webhook now records it in the Admin Chat thread as an outgoing **"via app"** bubble (and stamps `whatsapp/coexistence`). Without that, the dashboard could not see the owner's reply and an operator would answer the same guest twice. Proven with a signed synthetic POST (33/33) + the deployed UI (17/17); the first **real** echo is the moment a number is paired.
 
 ## Item Progress Workflow Example
 
