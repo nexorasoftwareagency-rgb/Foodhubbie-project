@@ -514,6 +514,13 @@ function initCommandListener(sock) {
                 });
                 console.log(`[Promo] Campaign ${cmd.campaignId} dispatched`);
             } else if (cmd.action === "SEND_GENERIC_MESSAGE") {
+                // Batch 23o: the cloud trigger drains these while the flag is on.
+                // Return (not `snap.ref.remove()`) so the command stays queued for
+                // it — the remove below is shared by every branch.
+                if (await isBotCommandRelayEnabled()) {
+                    console.log(`[Bot] SEND_GENERIC_MESSAGE left for the cloud relay`);
+                    return;
+                }
                 const jid = formatJid(cmd.phone);
                 if (jid) {
                     if (isJidFrozen(jid)) {
@@ -1000,6 +1007,26 @@ async function isRiderRelayEnabled() {
         return _riderRelayCache.on;
     } catch {
         _riderRelayCache = { at: Date.now(), on: false }; // unreadable = bot owns it
+        return false;
+    }
+}
+
+// Batch 23o: operator replies (Admin Chat tab, Analytics/Riders service messages)
+// are handled by the Cloud Functions trigger while `config/botCommands/enabled`
+// is exactly `true`. This gate covers ONLY the SEND_GENERIC_MESSAGE branch:
+// campaigns and the report actions are still this listener's job (the cloud
+// trigger deliberately does not implement them), so gating the whole listener
+// would silently kill promotions. The `remove()` below runs after the branch
+// chain, so the branch must `return` to leave the command for the trigger.
+let _botCommandRelayCache = { at: 0, on: false };
+async function isBotCommandRelayEnabled() {
+    if (Date.now() - _botCommandRelayCache.at < 30000) return _botCommandRelayCache.on;
+    try {
+        const snap = await db.ref('config/botCommands/enabled').once('value');
+        _botCommandRelayCache = { at: Date.now(), on: snap.val() === true };
+        return _botCommandRelayCache.on;
+    } catch {
+        _botCommandRelayCache = { at: Date.now(), on: false }; // unreadable = bot owns it
         return false;
     }
 }

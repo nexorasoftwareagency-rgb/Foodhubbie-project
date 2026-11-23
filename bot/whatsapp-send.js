@@ -30,7 +30,20 @@ async function _postToGraph(phoneNumberId, accessToken, body, { retried = false 
       return _postToGraph(phoneNumberId, accessToken, body, { retried: true });
     }
     console.error('WhatsApp send failed:', JSON.stringify(data));
-    throw new Error(data.error?.message || `WhatsApp send failed (${status})`);
+    // Keep the Graph error code on the Error (batch 23o). A caller has to tell
+    // "outside the 24h customer-service window" (131047) from a real failure:
+    // it is the one case where a free-form reply must be retried as an approved
+    // template. The message string is unchanged, so every existing caller and
+    // its template->text fallback behave exactly as before.
+    const err = new Error(data.error?.message || `WhatsApp send failed (${status})`);
+    err.status = status;
+    if (data.error) {
+      err.code = data.error.code;
+      err.subcode = data.error.error_subcode;
+      err.details = data.error.error_data?.details;
+      err.fbtraceId = data.error.fbtrace_id;
+    }
+    throw err;
   }
   return data;
 }

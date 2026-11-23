@@ -132,6 +132,9 @@ jobs:
       - name: Daily reports guard (sales report computation, formatting)
         run: node tests/daily-reports.check.cjs
 
+      - name: Bot command queue guard (operator replies leave from Functions)
+        run: node tests/bot-commands.check.cjs
+
       - name: RTDB egress guard (no whole-businesses-tree reads in new functions)
         run: node tests/egress-guard.check.cjs
 

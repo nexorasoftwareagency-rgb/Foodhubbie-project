@@ -222,6 +222,38 @@ export async function tenantAlertRecipients(bid: string, oid: string): Promise<s
   return out;
 }
 
+/**
+ * The ONE tenant path rule - identical to `bot/firebase.js resolvePath`: the
+ * four platform-level nodes stay at the root, everything else is tenant-scoped.
+ * Get this wrong and a greeting reads a profile that does not exist (or writes
+ * a webview token to a phantom node) while every other check still passes, so
+ * it lives in exactly one place and every caller shares it.
+ */
+export function tenantPathResolver(bid: string, oid: string) {
+  const ROOT_NODES = ['admins', 'migrationStatus', 'logs', 'phoneNumberIndex'];
+  return (p: string) => {
+    const clean = String(p || '');
+    const root = clean.split('/')[0];
+    if (root === 'businesses' || ROOT_NODES.includes(root)) return clean;
+    return `businesses/${bid}/outlets/${oid}/${clean}`;
+  };
+}
+
+/**
+ * The Admin Chat tab writer for ONE tenant. Same bytes the bot writes from
+ * `bot/chat-log.js`: `chats/{customerId}/{meta,messages}` plus the flat
+ * `chatMeta` mirror the list queries. Best-effort by construction (the core
+ * never throws), so a caller may await it without risking the send.
+ */
+export function makeTenantChatLog(bid: string, oid: string, opts: { now?: () => number; log?: Log } = {}) {
+  return createChatLog({
+    db: getDB(),
+    resolvePath: tenantPathResolver(bid, oid),
+    now: opts.now,
+    log: opts.log || ((...a: any[]) => console.warn(...a)),
+  });
+}
+
 export interface InboundFlowOptions {
   log?: Log;
   now?: () => number;
@@ -236,19 +268,7 @@ export interface InboundFlowOptions {
 export async function makeInboundFlow(bid: string, oid: string, opts: InboundFlowOptions = {}) {
   const db = getDB();
   const log: Log = opts.log || ((...a: any[]) => console.log(...a));
-  /**
-   * Same rule as `bot/firebase.js resolvePath`: the four platform-level nodes
-   * stay at the root, everything else is tenant-scoped. Get this wrong and the
-   * greeting reads a profile that does not exist (or writes a webview token to a
-   * phantom node) while every other check still passes.
-   */
-  const ROOT_NODES = ['admins', 'migrationStatus', 'logs', 'phoneNumberIndex'];
-  const resolvePath = (p: string) => {
-    const clean = String(p || '');
-    const root = clean.split('/')[0];
-    if (root === 'businesses' || ROOT_NODES.includes(root)) return clean;
-    return `businesses/${bid}/outlets/${oid}/${clean}`;
-  };
+  const resolvePath = tenantPathResolver(bid, oid);
 
   const [creds, storeSnap] = await Promise.all([
     tenantCredentials(bid, oid),

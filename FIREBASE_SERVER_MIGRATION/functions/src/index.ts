@@ -96,6 +96,14 @@ export { onWebhookInboxMessage } from './triggers/webhookInbox';
 // `_adminWaNotified` before sending. Config flag:
 // config/orderStatusAlert/enabled === true. Demo hard-skipped.
 export { onOrderStatusAlert } from './triggers/orderStatusAlert';
+// Batch 23o: the dashboard's `bot/commands` queue — the Admin Chat tab (and the
+// Analytics/Riders service messages) write `SEND_GENERIC_MESSAGE` there and the
+// bot's socket-only listener drained it. This ports ONLY that branch: text
+// first, the approved template only on Graph 131047 (outside the 24h window),
+// RTDB-backed freeze, real chat row with the Graph message id. `SEND_PROMOTION`
+// and the report actions are deliberately left untouched for their own batches.
+// Config flag: config/botCommands/enabled === true. Demo hard-skipped.
+export { onBotCommand } from './triggers/botCommands';
 // Batch 23c: runs the bot's own web/app order finalizer in DRY-RUN against live
 // orders and compares its verdict with what the bot actually produced. It never
 // writes to an order, a stock count, a reward or a billing row — only to
