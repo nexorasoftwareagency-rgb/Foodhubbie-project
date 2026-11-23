@@ -608,7 +608,7 @@
                 },
                 "messages": {
                   "$msgId": {
-                    ".validate": "newData.hasChildren(['from','text','ts','type']) && (newData.child('from').val() == 'customer' || newData.child('from').val() == 'bot') && newData.child('ts').isNumber()"
+                    ".validate": "newData.hasChildren(['from','text','ts','type']) && (newData.child('from').val() == 'customer' || newData.child('from').val() == 'bot' || newData.child('from').val() == 'app') && newData.child('ts').isNumber()"
                   }
                 }
               }

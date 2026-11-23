@@ -35,7 +35,10 @@ const html = read('Admin/index.html');
 const contacts = read('Admin/js/chat-contacts.js');
 const math = read('Admin/js/chat-contacts-math.js');
 const settings = read('Admin/js/features/settings.js');
-const chatLog = read('bot/chat-log.js');
+// The WRITER, not the binding: since batch 23m the persistence lives in
+// `bot/chat-log-core.js` (socket-free, shared with Cloud Functions) and
+// `bot/chat-log.js` only supplies the bot's database handle.
+const chatLog = read('bot/chat-log-core.js');
 const botUtils = read('bot/utils.js');
 const rules = JSON.parse(read('database.rules.json'));
 const OUTLET_RULES = rules.rules.businesses['$businessId'].outlets['$outletId'];

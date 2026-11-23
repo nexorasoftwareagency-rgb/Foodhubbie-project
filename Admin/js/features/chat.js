@@ -7,9 +7,11 @@
  *          { name, phone, lastTs, lastText, lastDir, unread }
  *        businesses/{bid}/outlets/{oid}/chats/{customerId}/
  *          meta/     same shape (dual-written; still read by cached older shells)
- *          messages/{msgId} { from: 'customer'|'bot', text, ts, type }
- * Written by the bot (bot/chat-log.js). This module is read-only + reply:
- * replies go through the EXISTING `bot/commands` channel
+ *          messages/{msgId} { from: 'customer'|'bot'|'app', text, ts, type }
+ *          'app' = the restaurant replied from the WhatsApp Business App
+ *                  (coexistence echo, written by the webhook — batch 23p)
+ * Written by the bot (bot/chat-log.js) and the WhatsApp webhook. This module is
+ * read-only + reply: replies go through the EXISTING `bot/commands` channel
  * (action: SEND_GENERIC_MESSAGE) — no new send path (see bot/index.js:301).
  *
  * NEVER listen to `chats` for the thread list: a query there returns every
@@ -276,7 +278,7 @@ function _renderThreadList() {
         const name = _displayName(t.id, t.meta);
         const meta = t.meta;
         const lastText = meta.lastText || '';
-        const lastDir = meta.lastDir === 'bot' ? '➤ ' : '';
+        const lastDir = (meta.lastDir === 'bot' || meta.lastDir === 'app') ? '➤ ' : '';
         const unread = Number(meta.unread || 0);
         const hue = _avatarHue(t.id);
         const tagHtml = (t.state.labels || []).map(lid => {
@@ -406,6 +408,12 @@ function _renderThreadView() {
             lastDay = day;
         }
         const isBot = m.from === 'bot';
+        // A reply typed on the restaurant's own phone (coexistence) is outgoing
+        // too — but it was not the bot, so it is labelled. Without the label the
+        // dashboard operator reads the thread, sees no bot reply, and answers
+        // again.
+        const isApp = m.from === 'app';
+        const isOut = isBot || isApp;
         // A pending bubble is a command that was QUEUED, not a message that
         // was sent — it must never carry the delivered ✓✓ ticks.
         const isPending = m.pending === true;
@@ -413,13 +421,16 @@ function _renderThreadView() {
             ? (demo
                 ? '<span class="chat-msg-state chat-msg-state--demo">demo — not delivered</span>'
                 : `<span class="chat-msg-state ${online ? 'chat-msg-state--sending' : 'chat-msg-state--queued'}">${online ? 'sending…' : 'queued'}</span>`)
-            : (isBot ? ' <span class="chat-ticks">✓✓</span>' : '');
+            : (isOut ? ' <span class="chat-ticks">✓✓</span>' : '');
+        const src = isApp
+            ? '<span class="chat-src-app" title="Sent from the WhatsApp Business App">via app</span>'
+            : '';
         const body = m.type === 'location'
             ? '<i data-lucide="map-pin" class="icon-16"></i> Location shared'
             : (m.text || '<media>');
-        html += `<div class="chat-bubble-row ${isBot ? 'out' : 'in'}${isPending ? ' chat-bubble-pending' : ''}">
+        html += `<div class="chat-bubble-row ${isOut ? 'out' : 'in'}${isPending ? ' chat-bubble-pending' : ''}">
             <div class="chat-bubble">${escapeHtml(body)}
-                <span class="chat-msg-time">${escapeHtml(_timeLabel(m.ts))}${state}</span>
+                <span class="chat-msg-time">${src}${escapeHtml(_timeLabel(m.ts))}${state}</span>
             </div>
         </div>`;
     }

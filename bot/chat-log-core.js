@@ -41,7 +41,12 @@ function createChatLog({ db, resolvePath, now = () => Date.now(), log = () => {}
 
   /**
    * Persist one message + bump the thread meta.
-   * @param {object} o { jid, msgId, from: 'customer'|'bot', text, name? }
+   * @param {object} o { jid, msgId, from: 'customer'|'bot'|'app', text, name? }
+   *
+   * `from:'app'` = the restaurant replied from the WhatsApp Business App
+   * (coexistence echo). It is an OUTGOING message and it clears `unread`: the
+   * staff who sent it have plainly read the thread, and a stale badge would send
+   * the dashboard operator in to answer a customer twice.
    */
   async function logChatMessage(o) {
     try {
@@ -57,7 +62,9 @@ function createChatLog({ db, resolvePath, now = () => Date.now(), log = () => {}
       const safeMsgId = String(msgId).replace(/[.#$\[\]]/g, '_');
       // Message record (idempotent by msgId).
       await db.ref(`${base}/messages/${safeMsgId}`).set({ from, text: cleanText, ts, type: 'text' });
-      // Thread meta — unread only counts customer->bot messages.
+      // Thread meta — unread only counts customer->bot messages. A reply from
+      // the phone (from:'app') clears it; a bot reply leaves it (an automated
+      // message does not mean a human read the thread).
       const applied = await db.ref(`${base}/meta`).transaction((cur) => {
         const meta = cur || {};
         return {
@@ -66,7 +73,9 @@ function createChatLog({ db, resolvePath, now = () => Date.now(), log = () => {}
           lastTs: ts,
           lastText: cleanText,
           lastDir: from,
-          unread: (meta.unread || 0) + (from === 'customer' ? 1 : 0),
+          unread: from === 'customer'
+            ? (meta.unread || 0) + 1
+            : (from === 'app' ? 0 : (meta.unread || 0)),
         };
       });
       // Flat meta mirror. `chats/{id}/meta` keeps being written for cached

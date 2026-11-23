@@ -428,6 +428,24 @@
     font-weight: 700;
 }
 
+/* A reply typed on the restaurant's own phone (WhatsApp Business App
+   coexistence). Outgoing like a bot reply, but named so the dashboard
+   operator knows the customer has already been answered. */
+.chat-src-app {
+    display: inline-block;
+    margin-right: 5px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(37, 211, 102, .18);
+    color: #15803d;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    line-height: 1.5;
+    text-transform: uppercase;
+    vertical-align: bottom;
+}
+
 /* ── Bot liveness strip + queued-bubble state ───────────────────────────────
    A reply written from this panel is a COMMAND in bot/commands: it only
    reaches WhatsApp when the worker is alive. The strip says so plainly and

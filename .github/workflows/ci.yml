@@ -135,6 +135,9 @@ jobs:
       - name: Bot command queue guard (operator replies leave from Functions)
         run: node tests/bot-commands.check.cjs
 
+      - name: Coexistence echo guard (Business App replies reach the chat thread, never the inbox)
+        run: node tests/coexistence-echo.check.cjs
+
       - name: RTDB egress guard (no whole-businesses-tree reads in new functions)
         run: node tests/egress-guard.check.cjs
 

@@ -7,8 +7,16 @@
  *       1. X-Hub-Signature-256 verified over req.rawBody with META_APP_SECRET
  *       2. message_template_status_update → persist to businesses/{bid}/outlets/{oid}/whatsapp/templates
  *       3. statuses → logged only
- *       4. phoneNumberIndex/{phoneNumberId} → RTDB webhookInbox under the outlet
- *       5. coexistence (origin.type === 'business_app') → record on the outlet's whatsapp/coexistence
+ *       4. smb_message_echoes (coexistence) → Admin Chat thread, from:'app' — NEVER the inbox
+ *       5. phoneNumberIndex/{phoneNumberId} → RTDB webhookInbox under the outlet
+ *       6. coexistence (origin.type === 'business_app') → record on the outlet's whatsapp/coexistence
+ *
+ * Coexistence (batch 23p): with the number on the WhatsApp Business App AND the
+ * Cloud API, a message the restaurant sends from the phone comes back as
+ * `message_echoes` — not as a customer message. It must reach the Admin Chat
+ * thread (so the dashboard does not show the customer as unanswered and the
+ * operator does not reply twice) and must NEVER reach `webhookInbox`, or the
+ * bot would run its inbound state machine on the business's own number.
  *
  * NOTE: the bot runs on EC2. This function cannot reach its Redis (port 8443 is
  * not exposed and Redis has no password), so it enqueues each routed message
@@ -20,6 +28,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import crypto from 'crypto';
 import { initializeAdmin, getDB } from '../shared/firebase/admin';
+import { makeTenantChatLog } from '../shared/whatsapp/factory';
 
 initializeAdmin().catch(err => {
   logger.error('[Webhook] Admin init failed', { error: err.message });
@@ -60,6 +69,41 @@ async function enqueueInbox(bid: string, oid: string, message: any, profileName?
     ...(profileName ? { profileName } : {}),
   });
   logger.info('[Webhook] Queued to webhookInbox', { bid, oid, messageId: message?.id });
+}
+
+/**
+ * Record that the number is on the WhatsApp Business App AND the Cloud API.
+ * Read by the Supreme WhatsApp card. An echo is the definitive proof; an
+ * inbound message carrying `origin.type === 'business_app'` is the weaker one.
+ * Best-effort: never fails the webhook.
+ */
+function recordCoexistence(bid: string, oid: string): void {
+  getDB()
+    .ref(`businesses/${bid}/outlets/${oid}/whatsapp/coexistence`)
+    .update({ mode: 'business_app', lastSeenAt: Date.now() })
+    .catch((err: any) => logger.warn('[COEXISTENCE] record failed', { error: err.message }));
+}
+
+/**
+ * Readable text of a business-app echo, for the Admin Chat thread only.
+ * Same fallbacks as the inbound extractor: a WhatsApp message does not always
+ * carry `text.body` — a photo carries a caption, a template quick reply carries
+ * `button.text`, an interactive reply carries `interactive.{button,list}_reply`.
+ * Anything else becomes `<media>` inside the chat log.
+ */
+function echoText(echo: any): string {
+  const m = echo || {};
+  return String(
+    m.text?.body
+    || m.image?.caption
+    || m.video?.caption
+    || m.document?.caption
+    || m.button?.text
+    || m.interactive?.button_reply?.title
+    || m.interactive?.list_reply?.title
+    || (m.location ? 'Location shared' : '')
+    || '',
+  ).trim();
 }
 
 export const whatsappWebhook = onRequest({
@@ -181,8 +225,53 @@ export const whatsappWebhook = onRequest({
           continue;
         }
 
-        const phoneNumberId = change.metadata?.phone_number_id;
+        // ---------- Coexistence: staff replies sent from the WhatsApp Business App ----------
+        // `smb_message_echoes` carries `value.message_echoes` and an EMPTY
+        // `messages` array. These are the restaurant's own outbound messages:
+        // log them into the Admin Chat thread (`from:'app'`) and stop here.
+        // Enqueuing one would hand the business's own number to the inbound state
+        // machine as if a customer had written — the bot would answer itself.
         const messages: any[] = Array.isArray(change.messages) ? change.messages : [];
+        const echoes: any[] = Array.isArray(change.message_echoes) ? change.message_echoes : [];
+        if (echoes.length > 0) {
+          const echoPhoneId = change.metadata?.phone_number_id;
+          const echoRouting = echoPhoneId
+            ? (await db.ref(`phoneNumberIndex/${echoPhoneId}`).once('value')).val()
+            : null;
+          if (!echoRouting?.businessId || !echoRouting?.outletId) {
+            logger.warn('[ECHO] No routing for phone_number_id', { phoneNumberId: echoPhoneId });
+            continue;
+          }
+          const ebid = echoRouting.businessId;
+          const eoid = echoRouting.outletId;
+
+          // An echo is the definitive proof coexistence is ON.
+          recordCoexistence(ebid, eoid);
+
+          const chatLog = makeTenantChatLog(ebid, eoid, { log: (...a: any[]) => logger.warn(...a) });
+          let logged = 0;
+          for (const echo of echoes) {
+            // revoke = staff deleted a message on the phone, edit = it changed.
+            // Neither is a new message; the thread keeps the original (best-effort
+            // tab — WhatsApp itself shows "This message was deleted"). Reactions
+            // are not messages either.
+            if (echo?.revoke || echo?.edit || echo?.type === 'reaction') continue;
+            const to = echo?.to ? String(echo.to) : '';
+            if (!to) {
+              logger.warn('[ECHO] Missing `to` — cannot thread', { id: echo?.id });
+              continue;
+            }
+            const msgId = echo?.id || `echo_${echo?.timestamp || Date.now()}`;
+            await chatLog.logChatMessage({ jid: to, msgId, from: 'app', text: echoText(echo) });
+            logged++;
+          }
+          logger.info('[ECHO] Business-app messages logged', { bid: ebid, oid: eoid, count: logged });
+          // Echoes travel in their own change with no `messages` — but if Meta
+          // ever batches both, the customer messages below must still be routed.
+          if (messages.length === 0) continue;
+        }
+
+        const phoneNumberId = change.metadata?.phone_number_id;
         if (!phoneNumberId || messages.length === 0) {
           logger.warn('[Webhook] Missing phoneNumberId or message — nothing to route');
           continue;
@@ -200,11 +289,7 @@ export const whatsappWebhook = onRequest({
 
         for (const message of messages) {
           // ---------- Coexistence detection (business_app origin) ----------
-          if (message.origin?.type === 'business_app') {
-            db.ref(`businesses/${bid}/outlets/${oid}/whatsapp/coexistence`)
-              .update({ mode: 'business_app', lastSeenAt: Date.now() })
-              .catch((err: any) => logger.warn('[COEXISTENCE] record failed', { error: err.message }));
-          }
+          if (message.origin?.type === 'business_app') recordCoexistence(bid, oid);
 
           // Display name rides on `contacts`, matched to this sender.
           const contact = contacts.find((c) => String(c?.wa_id) === String(message.from)) || contacts[0];
