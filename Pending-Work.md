@@ -830,9 +830,9 @@ These are **real, actionable items** in THIS repo based on the audits.
 
 **Supersedes the earlier "Pizza Migration Prep" table.** The owner ruled out Baileys ("We will not use Whatsapp Bailey"), so the EC2 socket worker is no longer part of the target architecture and pizza cuts over straight to a Functions-hosted Cloud API bot. Recorded conflict: `AGENTS.md` Key Decisions still says "EC2 is RETAINED PERMANENTLY as a deliberately scoped socket host" (2026-11-17). That decision assumed the box was the only way to hold a socket — with Baileys gone it has no workload left except the pm2 control plane and the Graph provisioning routes. **Owner to confirm the reversal before 4e deletes anything.**
 
-### Already deployed and working on Functions (verified 2026-11-22 against `functions:list`, 37 v2)
+### Already deployed and working on Functions (verified 2026-11-23 against `functions:list`, 38 v2)
 
-`whatsappWebhook`, `onWebhookInboxMessage`, `onOrderStatusAlert`, `dailyReports`, `metaCostPublisher`, `onWebOrderPlaced` + `onOrderCancelledCompensate`, the loyalty relay trio, the three push-relay triggers, both rider triggers, `dailySettlement`, `demoReseed`, `walletGateReconcile`, `tenantMedia` / `tenantNotify` / `tenantOnboarding`. Relay flags live and `true` in `/config`: `pushRelay`, `orderFinalizer`, `loyaltyRelay`, `riderRelay`; the three socket-independent WhatsApp paths (`webhookInbox`, `orderStatusAlert`, `dailyReports`) ship **flag-off** and no-op until an owner sets them.
+`whatsappWebhook`, `onWebhookInboxMessage`, `onOrderStatusAlert`, `dailyReports`, `onBotCommand`, `metaCostPublisher`, `onWebOrderPlaced` + `onOrderCancelledCompensate`, the loyalty relay trio, the three push-relay triggers, both rider triggers, `dailySettlement`, `demoReseed`, `walletGateReconcile`, `tenantMedia` / `tenantNotify` / `tenantOnboarding`. Relay flags live and `true` in `/config`: `pushRelay`, `orderFinalizer`, `loyaltyRelay`, `riderRelay`; the four socket-independent WhatsApp paths (`webhookInbox`, `orderStatusAlert`, `dailyReports`, `botCommands`) ship **flag-off** and no-op until an owner sets them.
 
 `processInboundMessage` and `sendOutboundMessage` are still deployed but **superseded** — both are on the M1 deletion list (see 4a-2).
 
@@ -861,6 +861,21 @@ The two WhatsApp sends that still needed the socket now run without it:
 
 Both are deployed and **inert**: `config/orderStatusAlert` and `config/dailyReports` are absent, no outlet has `metaUsage`, and pizza has 0 `_adminWaNotified` orders.
 
+### ✅ 23o DONE — operator replies (`bot/commands`) are on the Cloud API (commit `b357e35`)
+
+`bot/commands` was the last pure-HTTP path that still needed the socket: the Admin Chat tab, analytics "send report", `riders.js` and `rider-analytics.js` all queue `SEND_GENERIC_MESSAGE`, and only the bot's `child_added` consumed it — so with the box down an operator's reply sat queued for ever and the Chat tab kept showing it as pending.
+
+- **`onBotCommand`** — `onValueCreated` on `bot/commands/{commandId}`, `us-central1` / 256 MiB / 60 s / nodejs22, secrets `FIREBASE_DATABASE_URL` + `WA_PERMANENT_TOKEN`, gated on `config/botCommands/enabled === true`. **`SEND_GENERIC_MESSAGE` only**: `SEND_PROMOTION` (the ~700-line campaign engine) and the report actions (no client writer exists) are left untouched, never consumed, never deleted.
+- Order of operations is load-bearing: demo skip → action filter → `initializeAdmin()` → flag → unusable `formatJid` **removed** → freeze read `bot/chatState/{phone10}/frozenUntil` (RTDB-backed; a Function has no process Map) → **transport built BEFORE the claim** (a tenant with no `whatsapp` node must not burn the reply) → cold-seeded `_claimedAt` transaction → send → chat row → tombstone.
+- **Text first, template only on Graph `131047`.** The old bot sent `proactive_promo` first whenever the socket was `meta:`, billing MARKETING (~₹0.86) for a free-form reply the 24 h service window allows at ~₹0.115. `bot/whatsapp-send.js` `_postToGraph` now keeps `err.status`/`code`/`subcode`/`details`/`fbtraceId` (message string unchanged), which is what makes `131047` detectable.
+- The outbound row is persisted with the **real** Graph id `messages[0].id` through the vendored `bot/chat-log-core.js` (`chats/{id}/messages/{wamid with dots→_}` + the `chatMeta` mirror), because `makeMetaTransport` writes no chat rows and `chat.js` renders an optimistic bubble.
+- **Success leaves a tombstone** (`_doneAt`/`_via` kept, `phone`/`message` nulled) — deleting the node would let a late duplicate re-create the claim and send twice. A failure keeps `_lastError`/`_failedAt` and is never auto-retried.
+- `bot/index.js` gained `isBotCommandRelayEnabled()` and gates **the branch, not the listener**, returning before the shared `snap.ref.remove()` — gating the listener would silently kill campaigns.
+
+Guard `tests/bot-commands.check.cjs` **41/41** (+ mutation self-test); **live E2E 36/36** on the e2e tenant (flag-off silence · no claim without a transport · claim + real Graph attempt · `SEND_PROMOTION` untouched · demo skipped · stubbed-200 tombstone with the real `wamid` · replay → zero HTTP calls · `131047` → template fallback · cost-guard block · frozen chat · unusable phone · re-created claimed command). Fixtures byte-identical, `config/botCommands` left **absent**.
+
+Two real defects found while shipping: the trigger's vendored path was `path.join(__dirname,'../../vendor')` (a trigger compiles to `lib/triggers/`, so it resolved to the nonexistent `functions/vendor` — `tsc` stayed green and the whole bundle failed to load), now `../vendor` and the guard pins it; and Graph error codes were being dropped (§ above).
+
 ### Proven live (not just guarded)
 
 **23m — `%TEMP%/opencode/e2e-23m-inbound.cjs`, 15/15** against the real deployed webhook and the real RTDB trigger: GET verify challenge · wrong verify token 403 · bad signature acks 200 and writes nothing · a signed POST lands exactly one inbox entry (`message.from`, `id`, `profileName`, `source:'meta-webhook'`, numeric `receivedAt`) · flag off leaves the entry untouched · **flag on drains the new entry while a pre-flip entry is provably NOT drained** (the orphan trade-off, observed rather than assumed) · a tenant with no `whatsapp` node leaves no chat state · a blocklisted sender drains with **zero** Meta usage · an unblocked `START` drains. Cloud Logging then shows the whole inbound leg: `[Inbound] [IN] 91****0001@s.whatsapp.net: "START"` → `WhatsApp send failed: … Object with ID '123456789' does not exist` (code 100 / subcode 33).
@@ -876,21 +891,21 @@ Two harness bugs found and fixed on the way, both worth remembering:
 2. **`outletIndex` is the canonical real-outlet registry**; the e2e tenant is deliberately absent, so an unregistered outlet reports `skippedNoOrders` and never reaches the per-outlet body. Register it temporarily, then remove it.
 
 
-### ✅ 4a-2 — "The real blocker" is closed; what remains is `bot/commands`
+### ✅ 4a-2 — CLOSED by batch 23o: `SEND_GENERIC_MESSAGE` is cloud-owned
 
 The old `taskqueue/processInboundMessage.ts` (text menu / `order <dish>` / text cart / COD) is **superseded and must never be deployed**; it and `sendOutboundMessage` are still deployed and remain on the M1 deletion list.
 
-What still dies with EC2 is the **`bot/commands` listener** — six client senders queue commands nothing consumes while the box is down:
+`bot/commands` is now drained by `onBotCommand` (batch 23o, § above). Only the campaigns half remains on the socket:
 
-| Caller | Command |
-|---|---|
-| `Admin/js/features/chat.js:538` | `SEND_GENERIC_MESSAGE` (operator reply) |
-| `Admin/js/features/analytics-mobile.js:629` | `SEND_GENERIC_MESSAGE` (send report) |
-| `Admin/js/features/riders.js:514` | rider message |
-| `Admin/js/features/rider-analytics.js:308` | rider message |
-| `Admin/js/features/promotions.js:631/652` + `notify-composer.js:350` | `SEND_PROMOTION` |
+| Caller | Command | Owner today |
+|---|---|---|
+| `Admin/js/features/chat.js:538` | `SEND_GENERIC_MESSAGE` (operator reply) | **Functions** (`onBotCommand`, flag-gated) |
+| `Admin/js/features/analytics-mobile.js:629` | `SEND_GENERIC_MESSAGE` (send report) | **Functions** |
+| `Admin/js/features/riders.js:514` | rider message | **Functions** |
+| `Admin/js/features/rider-analytics.js:308` | rider message | **Functions** |
+| `Admin/js/features/promotions.js:631/652` + `notify-composer.js:350` | `SEND_PROMOTION` | still the bot (promotions batch) |
 
-A small trigger on `bot/commands/{id}` handling **`SEND_GENERIC_MESSAGE` only** closes the Chat tab and the Analytics button; promotions wait for the promotions batch (they are `transport-blocked` anyway). Do not port the promotions half into it.
+The campaigns half deliberately stays out of `onBotCommand`: the real engine is ~700 lines (pacing, opt-out, prepaid tokens, Hinglish shells, pause reasons) and a stub that "sends to everyone" is the top ban trigger. While `config/botCommands` is off, the bot keeps the whole branch; once it is on, the bot stands down for `SEND_GENERIC_MESSAGE` only.
 
 ### 🔴 Phase 4a-0 — HARD PREREQUISITE: the system user owns no assets (verified 2026-11-20)
 
@@ -932,7 +947,7 @@ Meta allows **one** callback URL per app, so the flip cuts EC2 inbound. The rece
 **Order is not negotiable:**
 1. `config/webhookInbox/enabled = true` **first**.
 2. Point the WABA callback at `https://us-central1-foodhubbie-10.cloudfunctions.net/whatsappWebhook` with `WA_VERIFY_TOKEN` **second**.
-3. Then set `config/orderStatusAlert` and `config/dailyReports` once a tenant has a real number.
+3. Then set `config/orderStatusAlert`, `config/dailyReports` and `config/botCommands` once a tenant has a real number (each independent).
 
 Flipping in the other order orphans every entry that arrives while the flag is off — nothing re-fires the `onValueCreated` trigger, so those messages are lost, not queued.
 
@@ -955,7 +970,7 @@ Note the deliberate direction of error in `bot/meta-cost.js`: in-window replies 
 
 Delete `bot/` Baileys worker files, `webhook-server/`, the EC2 meta-cost publisher, the 4 superseded timers, and the `server` DOI. Keep the Graph provisioning routes until onboarding no longer needs them, or move them to a Function.
 
-**Not yet FREE to delete:** the `bot/commands` listener (see 4a-2). Until `SEND_GENERIC_MESSAGE` runs on a Function, Chat replies and the Analytics "send report" button queue into a node nothing consumes. `SEND_PROMOTION` can wait — promos are `transport-blocked` on Baileys and the promotions engine is its own batch.
+**Deletion is no longer blocked by `bot/commands`:** batch 23o moved `SEND_GENERIC_MESSAGE` (Chat replies + the Analytics "send report" button) to `onBotCommand`, so with the flag on nothing an operator does queues into a node nobody consumes. The `bot/commands` **listener** still has exactly one job — `SEND_PROMOTION` — so it goes with the promotions batch, not before. `SEND_PROMOTION` can wait: promos are `transport-blocked` on Baileys and the promotions engine is its own batch.
 
 Retiring the box also needs the owner to confirm the reversal of the 2026-11-17 "EC2 RETAINED PERMANENTLY" decision, since `PLAN/BACKEND-ARCHITECTURE.md` and `AGENTS.md` both still state it.
 
