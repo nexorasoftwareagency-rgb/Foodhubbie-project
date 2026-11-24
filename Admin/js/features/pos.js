@@ -1,4 +1,4 @@
-/**
+﻿/**
  * FoodHubbie ERP | POS (WALK-IN) MODULE
  * Handles walk-in sales, menu selection, cart management, and receipt generation.
  */
@@ -84,21 +84,21 @@ function _updateTableNoBadge() {
         const badge = document.createElement('span');
         badge.className = 'table-no-badge table-no-unknown';
         badge.title = 'Table not found';
-        badge.textContent = '❓ Unknown table';
+        badge.textContent = 'â“ Unknown table';
         input.parentElement?.appendChild(badge);
         return;
     }
 
     const meta = {
-        free:     { label: 'Free',     cls: 'table-no-free',   emoji: '✅' },
-        occupied: { label: 'Occupied', cls: 'table-no-occupied', emoji: '⚠️' },
-        billing:  { label: 'Billing',  cls: 'table-no-billing', emoji: '🧾' },
-        disabled: { label: 'Disabled', cls: 'table-no-disabled', emoji: '🚫' }
-    }[t.status] || { label: 'Unknown', cls: 'table-no-unknown', emoji: '❓' };
+        free:     { label: 'Free',     cls: 'table-no-free',   emoji: 'âœ…' },
+        occupied: { label: 'Occupied', cls: 'table-no-occupied', emoji: 'âš ï¸' },
+        billing:  { label: 'Billing',  cls: 'table-no-billing', emoji: 'ðŸ§¾' },
+        disabled: { label: 'Disabled', cls: 'table-no-disabled', emoji: 'ðŸš«' }
+    }[t.status] || { label: 'Unknown', cls: 'table-no-unknown', emoji: 'â“' };
 
     const badge = document.createElement('span');
     badge.className = `table-no-badge ${meta.cls}`;
-    badge.title = `Table ${t.number} — ${meta.label}`;
+    badge.title = `Table ${t.number} â€” ${meta.label}`;
     badge.textContent = `${meta.emoji} ${meta.label}`;
     input.parentElement?.appendChild(badge);
 }
@@ -110,11 +110,7 @@ function _wireTableNoValidation() {
     const input = document.getElementById('walkinTableNo');
     if (!input) return;
 
-    // Remove any existing listener by cloning (simple approach)
-    const newInput = input.cloneNode(true);
-    input.parentNode.replaceChild(newInput, input);
-
-    newInput.addEventListener('input', () => {
+    input.addEventListener('input', () => {
         _updateTableNoBadge();
     });
 
@@ -127,7 +123,7 @@ function _wireTableNoValidation() {
         btn.addEventListener('click', () => {
             const next = _getNextFreeTable();
             if (next) {
-                newInput.value = next.number;
+                input.value = next.number;
                 _updateTableNoBadge();
                 ui.showToast('Table ' + next.number + ' assigned', 'success');
             } else {
@@ -168,7 +164,7 @@ export async function loadWalkinMenu() {
     if (_connUnsub) { _connUnsub(); _connUnsub = null; }
 
     if (!isConnected()) {
-        grid.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">📡</div><h4>Waiting for connection</h4><p>The POS menu will load automatically when the connection is restored.</p></div>';
+        grid.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">ðŸ“¡</div><h4>Waiting for connection</h4><p>The POS menu will load automatically when the connection is restored.</p></div>';
         if (!_connUnsub) _connUnsub = onConnectionChange(function _retryPos(online) {
             if (!online) return;
             if (_connUnsub) { _connUnsub(); _connUnsub = null; }
@@ -179,14 +175,14 @@ export async function loadWalkinMenu() {
 
     try {
         // Role gate: switchTab already enforced canAccessTab('walkin') to reach
-        // this view — re-check here (direct calls), then auto sign-in the logged-in
+        // this view â€” re-check here (direct calls), then auto sign-in the logged-in
         // user for attribution + discount ceiling. No Counter PIN prompt at start.
         if (!canAccessTab('walkin')) {
-            grid.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">🚫</div><h4>Access Denied</h4><p>Your role does not have access to the POS.</p></div>';
+            grid.innerHTML = '<div class="offline-placeholder"><div class="offline-icon">ðŸš«</div><h4>Access Denied</h4><p>Your role does not have access to the POS.</p></div>';
             return;
         }
         // Unconditional re-sign: sessionStorage can hold a stale uid from a
-        // previous login on this tab (shared till) — always trust current user.
+        // previous login on this tab (shared till) â€” always trust current user.
         if (state.adminData?.uid) {
             sessionStorage.setItem('counterStaffUid', state.adminData.uid);
         }
@@ -304,7 +300,7 @@ export function filterWalkinByCategory(category, el) {
 
 /**
  * Applies search and category filters to the menu
- * When "Combos" is the active category, no dishes are shown — combos are
+ * When "Combos" is the active category, no dishes are shown â€” combos are
  * rendered separately by renderWalkinDishGrid. When a specific dish category
  * is active, combos are hidden (they only show under "All" or "Combos").
  */
@@ -336,7 +332,7 @@ export function applyWalkinFilters() {
  * The price a tile advertises.
  *
  * A dish with size variants is sold at a different amount per size, so the
- * tile may only advertise the CHEAPEST one — and it has to say so ("₹69+").
+ * tile may only advertise the CHEAPEST one â€” and it has to say so ("â‚¹69+").
  * The old code showed `dish.price` (the base price) next to a sheet that
  * preselected a DIFFERENT size, so the cashier could charge a different
  * amount than the tile showed. `from: true` means "starts at".
@@ -416,7 +412,7 @@ export function renderWalkinDishGrid(dishes) {
                 <div class="dish-visual">
                     <img src="${escapeHtml(d.image || 'assets/images/placeholder-dish.png')}" alt="${escapeHtml(d.name)}" loading="lazy">
                     <div class="dish-overlay" aria-hidden="true">
-                        <span class="price-chip">₹${price}${from ? '+' : ''}</span>
+                        <span class="price-chip">â‚¹${price}${from ? '+' : ''}</span>
                     </div>
                     ${oosOverlay}
                 </div>
@@ -439,7 +435,7 @@ export async function openPOSSelectionModal(dishId) {
     const dish = state.allWalkinDishes.find(d => d.id === dishId);
     if (!dish) return;
     if (dish.stock === false) {
-        ui.showToast(t('inv.unavailable', '📦 Item is currently unavailable'), 'warning');
+        ui.showToast(t('inv.unavailable', 'ðŸ“¦ Item is currently unavailable'), 'warning');
         return;
     }
 
@@ -475,8 +471,8 @@ export async function openPOSSelectionModal(dishId) {
         sizes = { "- Default -": dish.price || 0 };
     }
 
-    // The tile advertises the CHEAPEST size ("₹69+"), so the sheet must open
-    // on that same size — otherwise the first "Add to Cart" silently charges
+    // The tile advertises the CHEAPEST size ("â‚¹69+"), so the sheet must open
+    // on that same size â€” otherwise the first "Add to Cart" silently charges
     // a different amount than the price on the tile.
     const advertised = posPriceInfo(dish).price;
     const sizeEntries = Object.entries(sizes);
@@ -498,7 +494,7 @@ export async function openPOSSelectionModal(dishId) {
         card.setAttribute('data-price', price);
         card.innerHTML = `
             <span class="size-name">${escapeHtml(name)}</span>
-            <span class="size-price">₹${Number(price).toLocaleString()}</span>
+            <span class="size-price">â‚¹${Number(price).toLocaleString()}</span>
         `;
         sizeGrid.appendChild(card);
     });
@@ -524,7 +520,7 @@ export async function openPOSSelectionModal(dishId) {
                     <div class="custom-checkbox" aria-hidden="true"></div>
                     <span class="addon-name">${escapeHtml(name)}</span>
                 </div>
-                <span class="addon-price">+₹${Number(price).toLocaleString()}</span>
+                <span class="addon-price">+â‚¹${Number(price).toLocaleString()}</span>
             `;
             addonsList.appendChild(item);
         });
@@ -592,7 +588,7 @@ export function hidePOSSelectionModal() {
 }
 
 export function selectPOSSize(name, price, el) {
-    logger.info('POS', `Selecting Size: ${name} (Price: ₹${price})`);
+    logger.info('POS', `Selecting Size: ${name} (Price: â‚¹${price})`);
     document.querySelectorAll('.size-card').forEach(c => {
         c.classList.remove('active');
         c.setAttribute('aria-pressed', 'false');
@@ -664,7 +660,7 @@ function addSimpleDishToCart(dish) {
         haptic(20);
         playSuccessSound();
         logger.success('POS', `Quick add: ${dish.name}`, { cartKey, price });
-        ui.showToast(`Added ${dish.name} · ₹${price.toLocaleString()}`, 'success');
+        ui.showToast(`Added ${dish.name} Â· â‚¹${price.toLocaleString()}`, 'success');
     } catch (error) {
         logger.error('POS', `Quick add error: ${error.message}`, error);
         ui.showToast('Failed to add to cart', 'error');
@@ -740,7 +736,7 @@ export function walkinQtyChange(cartKey, delta) {
     if (state.walkinCart[cartKey]) {
         const oldQty = state.walkinCart[cartKey].qty;
         state.walkinCart[cartKey].qty = Math.max(1, state.walkinCart[cartKey].qty + delta);
-        logger.info('POS', `Cart qty: ${oldQty} → ${state.walkinCart[cartKey].qty} for ${state.walkinCart[cartKey].name}`);
+        logger.info('POS', `Cart qty: ${oldQty} â†’ ${state.walkinCart[cartKey].qty} for ${state.walkinCart[cartKey].name}`);
         renderWalkinCart();
     }
 }
@@ -772,7 +768,7 @@ export async function clearWalkinCart({ confirm = true } = {}) {
     if (document.getElementById('walkinTableNo')) document.getElementById('walkinTableNo').value = "";
     if (document.getElementById('walkinCustNote')) document.getElementById('walkinCustNote').value = "";
     if (document.getElementById('walkinDiscountRow')) document.getElementById('walkinDiscountRow').classList.add('hidden');
-    if (document.getElementById('walkinDiscountVal')) document.getElementById('walkinDiscountVal').innerText = "-₹0";
+    if (document.getElementById('walkinDiscountVal')) document.getElementById('walkinDiscountVal').innerText = "-â‚¹0";
     if (document.getElementById('walkinDiscount')) document.getElementById('walkinDiscount').value = "0";
     if (document.getElementById('walkinCouponCode')) document.getElementById('walkinCouponCode').value = "";
     if (document.getElementById('walkinCouponHint'))  document.getElementById('walkinCouponHint').classList.add('hidden');
@@ -791,7 +787,7 @@ export async function renderWalkinCart() {
     const list = document.getElementById("walkinCartItems");
     if (!list) return;
 
-    // Chips re-render independently — a cold-cache discount read must never
+    // Chips re-render independently â€” a cold-cache discount read must never
     // delay painting the cart rows.
     _renderDiscountPresets().catch(() => {});
 
@@ -825,7 +821,7 @@ export async function renderWalkinCart() {
                     <div class="identity-info-v4 flex-1">
                         <span class="name font-700 fs-14">${escapeHtml(item.name)} <span class="text-muted font-normal fs-11">(${escapeHtml(item.size)})</span></span>
                         ${addonText}
-                        <div class="fs-12 color-primary font-700 mt-4">₹${item.price.toLocaleString()} <span class="text-muted font-normal">per item</span></div>
+                        <div class="fs-12 color-primary font-700 mt-4">â‚¹${item.price.toLocaleString()} <span class="text-muted font-normal">per item</span></div>
                     </div>
                     <div class="identity-info-v4 text-right ml-10">
                         <div class="qty-control-v4 mb-4" role="group" aria-label="Quantity for ${escapeHtml(item.name)}">
@@ -837,7 +833,7 @@ export async function renderWalkinCart() {
                                 <i data-lucide="plus"></i>
                             </button>
                         </div>
-                        <div class="font-800 fs-15 color-dark">₹${itemTotal.toLocaleString()}</div>
+                        <div class="font-800 fs-15 color-dark">â‚¹${itemTotal.toLocaleString()}</div>
                     </div>
                 </div>
                 <div class="flex-row mt-8 border-t-ghost pt-8">
@@ -880,7 +876,7 @@ export async function renderWalkinCart() {
     } else if (state.walkinDiscount === 0 && state.walkinAutoDiscount === null) {
         try {
             const items = Object.values(state.walkinCart);
-            // Exclude combo lines from discount matching — they already have their discount baked into unitPrice
+            // Exclude combo lines from discount matching â€” they already have their discount baked into unitPrice
             const nonCombo = items.filter(i => i.size !== 'Combo');
             const evalResult = await evaluateDiscount({
                 customer: null, subtotal, couponCode: state.walkinCouponCode || null,
@@ -894,7 +890,7 @@ export async function renderWalkinCart() {
                 discountLabel = evalResult.label;
             } else if (pinnedId && state.walkinPinnedDiscountId === pinnedId) {
                 // The pinned offer stopped qualifying (cart shrank, cap hit by
-                // another terminal, window closed) — drop it rather than show a
+                // another terminal, window closed) â€” drop it rather than show a
                 // discount submit will refuse.
                 state.walkinPinnedDiscountId = null;
                 console.warn('[POS] Pinned offer no longer applies:', pinnedId);
@@ -906,7 +902,7 @@ export async function renderWalkinCart() {
     const de = _dineinSettings;
     const taxRates = (de.taxRates && Array.isArray(de.taxRates) && de.taxRates.length > 0) ? de.taxRates : (de.taxEnabled !== false ? [{ name: de.taxName || 'GST', rate: typeof de.taxRate === 'number' ? de.taxRate : 5 }] : []);
     const scPct = typeof de.serviceChargeRate === 'number' ? de.serviceChargeRate : 0;
-    // GST is charged on the net taxable value (after trade discounts — CGST Sec 15(3)(a)),
+    // GST is charged on the net taxable value (after trade discounts â€” CGST Sec 15(3)(a)),
     // via the shared money-math (identical to menu checkout + bot re-verify).
     const roundedDiscount = Math.max(0, Math.round(discountValue));
     const totals = computeOrderTotals({ subtotal, discount: roundedDiscount, taxRates, serviceChargeEnabled: de.serviceChargeEnabled === true, serviceChargeRate: scPct });
@@ -916,19 +912,19 @@ export async function renderWalkinCart() {
     const sc = totals.serviceCharge;
     const finalTotal = totals.total;
 
-    document.getElementById("walkinSubtotal").innerText = `₹${subtotal.toLocaleString()}`;
+    document.getElementById("walkinSubtotal").innerText = `â‚¹${subtotal.toLocaleString()}`;
 
     const discRow = document.getElementById("walkinDiscountRow");
     const discVal = document.getElementById("walkinDiscountVal");
     if (discountValue > 0) {
         if (discRow) discRow.classList.remove('hidden');
-        // Show the offer name when we have one — a capped percentage would
+        // Show the offer name when we have one â€” a capped percentage would
         // otherwise print "10%"-style text next to an amount that isn't 10%.
         if (discVal) discVal.innerText = state.walkinDiscountPct > 0
-            ? `-₹${roundedDiscount.toLocaleString()} (${state.walkinDiscountPct}%)`
+            ? `-â‚¹${roundedDiscount.toLocaleString()} (${state.walkinDiscountPct}%)`
             : discountLabel
-            ? `-₹${roundedDiscount.toLocaleString()} (${discountLabel})`
-            : `-₹${roundedDiscount.toLocaleString()}`;
+            ? `-â‚¹${roundedDiscount.toLocaleString()} (${discountLabel})`
+            : `-â‚¹${roundedDiscount.toLocaleString()}`;
     } else {
         if (discRow) discRow.classList.add('hidden');
     }
@@ -936,17 +932,17 @@ export async function renderWalkinCart() {
     // Tax & Service Charge display
     const taxRows = document.getElementById("walkinTaxRows");
     if (taxRows) {
-        taxRows.innerHTML = taxItems.map(t => `<div class="flex-between mb-8"><span class="text-muted-small font-800">${escapeHtml(t.name)} (${t.rate}%)</span><span class="font-800">₹${t.amount.toLocaleString()}</span></div>`).join('');
+        taxRows.innerHTML = taxItems.map(t => `<div class="flex-between mb-8"><span class="text-muted-small font-800">${escapeHtml(t.name)} (${t.rate}%)</span><span class="font-800">â‚¹${t.amount.toLocaleString()}</span></div>`).join('');
         taxRows.classList.toggle('hidden', tax === 0);
     }
     const scRow = document.getElementById("walkinServiceChargeRow");
     const scVal = document.getElementById("walkinServiceChargeVal");
     const scLabel = document.getElementById("walkinServiceChargeLabel");
     if (scRow) scRow.classList.toggle('hidden', sc === 0);
-    if (scVal) scVal.innerText = `₹${sc.toLocaleString()}`;
+    if (scVal) scVal.innerText = `â‚¹${sc.toLocaleString()}`;
     if (scLabel && de.serviceChargeName) scLabel.innerText = de.serviceChargeName + (de.serviceChargeRate ? ` (${de.serviceChargeRate}%)` : '');
 
-    document.getElementById("walkinTotal").innerText = `₹${finalTotal.toLocaleString()}`;
+    document.getElementById("walkinTotal").innerText = `â‚¹${finalTotal.toLocaleString()}`;
 
     // Ensure manual discount input updates correctly
     const discountInput = document.getElementById('walkinDiscount');
@@ -998,7 +994,7 @@ export function updateMobileCartSummaryState(count, total) {
         const countElem = document.getElementById('mobileCartCount');
         const totalElem = document.getElementById('mobileCartTotal');
         if (countElem) countElem.innerText = `${count} Items`;
-        if (totalElem) totalElem.innerText = `₹${total.toLocaleString()}`;
+        if (totalElem) totalElem.innerText = `â‚¹${total.toLocaleString()}`;
     } else {
         summary.classList.add('hidden');
         summary.setAttribute('data-tab', 'walkin');
@@ -1119,7 +1115,7 @@ export async function applyWalkinCoupon() {
         if (!evalResult) {
             state.walkinAutoDiscount = null;
             state.walkinCouponCode = null;
-            if (hint) { hint.classList.remove('hidden'); hint.innerText = `❌ Code "${code}" is not valid or doesn't apply to this cart.`; }
+            if (hint) { hint.classList.remove('hidden'); hint.innerText = `âŒ Code "${code}" is not valid or doesn't apply to this cart.`; }
             if (clear) clear.classList.add('hidden');
             renderWalkinCart();
             return;
@@ -1129,7 +1125,7 @@ export async function applyWalkinCoupon() {
         state.walkinPinnedDiscountId = null; // coupon takes over from any pinned offer
         if (hint) {
             hint.classList.remove('hidden');
-            hint.innerText = `✅ Applied: ${evalResult.label} (saved ₹${evalResult.amount.toLocaleString()})`;
+            hint.innerText = `âœ… Applied: ${evalResult.label} (saved â‚¹${evalResult.amount.toLocaleString()})`;
         }
         if (clear) clear.classList.remove('hidden');
         renderWalkinCart();
@@ -1152,16 +1148,16 @@ export function clearWalkinCoupon() {
 }
 
 /**
- * Active Offers panel — lets staff see every currently-running,
+ * Active Offers panel â€” lets staff see every currently-running,
  * POS-eligible discount/coupon at a glance and apply a coupon in one
  * tap, instead of needing the customer to already know (or the staff to
- * remember) the exact code. "You ran a promotion so we came" → staff
+ * remember) the exact code. "You ran a promotion so we came" â†’ staff
  * opens this, finds it, taps Apply.
  *
  * Reuses applyWalkinCoupon()'s existing validated flow for coupon-type
  * discounts (manual-discount conflict check, cart-empty check, customer
  * lookup, evaluateDiscount, usage recording on checkout) rather than
- * duplicating any of it — this panel is just a friendlier way to fill
+ * duplicating any of it â€” this panel is just a friendlier way to fill
  * in the same coupon-code input.
  */
 function _walkinSubtotal() {
@@ -1172,11 +1168,11 @@ let _presetsSeq = 0;
 
 /**
  * Render dynamic discount preset chips from eligible POS discounts.
- * Replaces hardcoded chips — only shows discounts that are actually
+ * Replaces hardcoded chips â€” only shows discounts that are actually
  * applicable to this outlet/channel. Coupon-type discounts are excluded
  * here (they live in the offers panel / coupon input).
  *
- * A chip pins the offer's ID (nothing else) — the amount is re-evaluated by
+ * A chip pins the offer's ID (nothing else) â€” the amount is re-evaluated by
  * the shared rules engine on every cart render and at submit, so maxCap,
  * category scope, minSubtotal, schedule and redemption limits all apply.
  */
@@ -1212,19 +1208,19 @@ export async function _renderDiscountPresets() {
             const isPct = d.mode === 'percent';
             const label = isPct
                 ? `${Number(d.value).toFixed(d.value % 1 === 0 ? 0 : 1)}%`
-                : `₹${Number(d.value).toLocaleString()}`;
-            const cap = d.maxCap ? ` (cap ₹${Number(d.maxCap).toLocaleString()})` : '';
-            const min = d.minSubtotal ? ` · min ₹${Number(d.minSubtotal).toLocaleString()}` : '';
+                : `â‚¹${Number(d.value).toLocaleString()}`;
+            const cap = d.maxCap ? ` (cap â‚¹${Number(d.maxCap).toLocaleString()})` : '';
+            const min = d.minSubtotal ? ` Â· min â‚¹${Number(d.minSubtotal).toLocaleString()}` : '';
             const active = pinnedId === d.id;
             // An already-applied offer stays tappable (tap = remove) even if the
-            // cart shrank below its minimum — otherwise it could never be undone.
+            // cart shrank below its minimum â€” otherwise it could never be undone.
             const disabled = !!d.minSubtotal && subtotal < d.minSubtotal && !active;
             return `
                 <button type="button" class="chip btn-discount-preset${disabled ? ' disabled' : ''}${active ? ' active' : ''}"
                     data-action="applyWalkinDiscount"
                     data-id="${escapeHtml(d.id)}"
                     aria-pressed="${active ? 'true' : 'false'}"
-                    title="${escapeHtml(d.name || '')}${cap}${min}${disabled ? ' — add more to cart to qualify' : active ? ' — applied (tap to remove)' : ' — tap to apply'}"
+                    title="${escapeHtml(d.name || '')}${cap}${min}${disabled ? ' â€” add more to cart to qualify' : active ? ' â€” applied (tap to remove)' : ' â€” tap to apply'}"
                     ${disabled ? 'disabled' : ''}>
                     ${label}${cap}
                 </button>`;
@@ -1246,7 +1242,7 @@ export async function toggleWalkinOffersPanel() {
     }
     panel.classList.remove('hidden');
     if (btn) btn.setAttribute('aria-expanded', 'true');
-    panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">Loading offers…</div>';
+    panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">Loading offersâ€¦</div>';
     await _renderWalkinOffers();
 }
 
@@ -1267,18 +1263,18 @@ async function _renderWalkinOffers() {
     const list = await getEligibleOffersForDisplay(all, { channel: 'pos', now, cart: Object.values(state.walkinCart) });
 
     if (list.length === 0) {
-        panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
+        panel.innerHTML = '<div class="text-muted-small" style="padding:10px;">No active offers right now. <button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts â†’</button></div>';
         return;
     }
 
     panel.innerHTML = list.map(d => {
         const valueLabel = d.mode === 'percent'
             ? `${Number(d.value).toFixed(d.value % 1 === 0 ? 0 : 1)}% off`
-            : `₹${Number(d.value).toFixed(0)} off`;
-        const capLabel = d.maxCap ? ` (cap ₹${Number(d.maxCap).toFixed(0)})` : '';
-        const minLabel = d.minSubtotal ? ` · min ₹${Number(d.minSubtotal).toFixed(0)}` : '';
+            : `â‚¹${Number(d.value).toFixed(0)} off`;
+        const capLabel = d.maxCap ? ` (cap â‚¹${Number(d.maxCap).toFixed(0)})` : '';
+        const minLabel = d.minSubtotal ? ` Â· min â‚¹${Number(d.minSubtotal).toFixed(0)}` : '';
         const used = d.stats?.usedCount || 0;
-        const usedLabel = used > 0 ? ` · used ${used}${d.globalLimit ? `/${d.globalLimit}` : ''}×` : '';
+        const usedLabel = used > 0 ? ` Â· used ${used}${d.globalLimit ? `/${d.globalLimit}` : ''}Ã—` : '';
 
         if (d.type === 'coupon') {
             const meetsMin = !d.minSubtotal || subtotal >= d.minSubtotal;
@@ -1286,26 +1282,26 @@ async function _renderWalkinOffers() {
             return `
                 <div class="walkin-offer-item${meetsMin ? '' : ' walkin-offer-disabled'}">
                     <div class="walkin-offer-info">
-                        <div class="walkin-offer-name"><code>${escapeHtml(d.couponCode)}</code> — ${escapeHtml(d.name || '')}</div>
+                        <div class="walkin-offer-name"><code>${escapeHtml(d.couponCode)}</code> â€” ${escapeHtml(d.name || '')}</div>
                         <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel}</div>
                     </div>
-                    <button type="button" class="chip walkin-offer-apply-btn" data-action="applyOfferFromPanel" data-code="${escapeHtml(d.couponCode)}" ${meetsMin ? '' : 'disabled'} title="${meetsMin ? 'Apply this code' : `Add ₹${shortfall} more to qualify`}">
-                        ${meetsMin ? 'Apply' : `+₹${shortfall} to use`}
+                    <button type="button" class="chip walkin-offer-apply-btn" data-action="applyOfferFromPanel" data-code="${escapeHtml(d.couponCode)}" ${meetsMin ? '' : 'disabled'} title="${meetsMin ? 'Apply this code' : `Add â‚¹${shortfall} more to qualify`}">
+                        ${meetsMin ? 'Apply' : `+â‚¹${shortfall} to use`}
                     </button>
                 </div>`;
         }
 
-        // global / category / firstOrder discounts auto-apply at checkout —
+        // global / category / firstOrder discounts auto-apply at checkout â€”
         // shown for visibility only, no Apply button (there's nothing to click).
         const typeLabel = d.type === 'firstOrder' ? 'New customer' : d.type === 'category' ? 'Category' : 'Storewide';
         return `
             <div class="walkin-offer-item walkin-offer-auto">
                 <div class="walkin-offer-info">
                     <div class="walkin-offer-name">${escapeHtml(d.name || typeLabel)} <span class="badge badge-info walkin-offer-auto-badge">auto</span></div>
-                    <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel} · applies automatically if eligible</div>
+                    <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel} Â· applies automatically if eligible</div>
                 </div>
             </div>`;
-    }).join('') + '<div class="walkin-offers-manage-row"><button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts →</button></div>';
+    }).join('') + '<div class="walkin-offers-manage-row"><button type="button" data-action="switchTab" data-tab="discounts" class="walkin-offers-manage-link">Manage discounts â†’</button></div>';
 }
 
 export function applyOfferFromPanel(code) {
@@ -1401,14 +1397,14 @@ export async function submitWalkinSale() {
             const dish = freshDishes[item.id];
             if (!dish) throw new Error(`Item '${item.name}' is no longer available.`);
 
-            // Combo lines carry a baked (discounted) unit price — validate against
+            // Combo lines carry a baked (discounted) unit price â€” validate against
             // the current dish base price and keep the baked price as-is.
             if (item.comboId) {
                 const basePrice = Number(dish.price ?? (dish.sizes ? Object.values(dish.sizes)[0] : 0)) || 0;
                 const original = Math.round(basePrice * item.qty * 100) / 100;
                 item.comboLineOriginal = original;
                 if (!(item.price > 0 && item.price <= original)) {
-                    throw new Error(`Combo price for '${item.name}' is invalid — re-add the combo.`);
+                    throw new Error(`Combo price for '${item.name}' is invalid â€” re-add the combo.`);
                 }
                 validatedSubtotal += (item.price * item.qty);
                 continue;
@@ -1494,7 +1490,7 @@ export async function submitWalkinSale() {
                 if (evalResult && evalResult.amount > 0) {
                     discountValue = evalResult.amount;
                     discountId = evalResult.discount.id;
-                    // Offer name beats "10%" — a capped percent would otherwise
+                    // Offer name beats "10%" â€” a capped percent would otherwise
                     // record a rate that doesn't match the amount given.
                     discountLabel = evalResult.label || evalResult.discount.name || 'Discount';
                     discountSource = evalResult.source;
@@ -1516,7 +1512,7 @@ export async function submitWalkinSale() {
         discountValue = Math.max(0, Math.round(discountValue));
         const isManualDiscount = discountSource === 'manual:flat' || discountSource === 'manual:percent';
 
-        // GST on the net taxable value after discount (CGST Sec 15(3)(a)) —
+        // GST on the net taxable value after discount (CGST Sec 15(3)(a)) â€”
         // shared money-math, identical to the menu checkout and bot re-verify.
         const totals = computeOrderTotals({ subtotal, discount: discountValue, taxRates, serviceChargeEnabled: scEnabled, serviceChargeRate: scPct });
         const taxItems = totals.taxItems;
@@ -1590,24 +1586,41 @@ export async function submitWalkinSale() {
         if (tableNo) {
             try {
                 const t = _getTableByNumber(tableNo);
-                if (t) {
-                    // Mark table as occupied
-                    await update(Outlet.ref(`tables/${t.id}`), { status: 'occupied', updatedAt: Date.now() });
-                    // Create a table session linked to this order
-                    const sessRef = push(Outlet.ref('tableSessions'));
-                    await set(sessRef, {
-                        id: sessRef.key,
-                        tableId: t.id,
-                        tableNumber: tableNo,
-                        orders: { [orderId]: true },
-                        status: 'active',
-                        openedAt: serverTimestamp(),
-                        source: 'POS'
-                    });
-                    // Link session back to the order
-                    await update(Outlet.ref(`orders/${orderId}`), { tableId: t.id, sessionId: sessRef.key });
-                    logger.firebase('POS', 'Table ' + tableNo + ' marked occupied, session ' + sessRef.key + ' created');
+                if (!t) {
+                    ui.showToast("Table " + tableNo + " not found", "error");
+                    return;
                 }
+                if (t.status !== 'free') {
+                    const meta = { occupied: 'Occupied', billing: 'Billing', disabled: 'Disabled' }[t.status] || t.status;
+                    ui.showToast("Table " + tableNo + " is " + meta.toLowerCase(), "error");
+                    return;
+                }
+
+                // ATOMIC claim: only claim if still free (RTDB transaction prevents double-booking)
+                const txResult = await runTransaction(Outlet.ref(`tables/${t.id}`), (current) => {
+                    if (!current || current.status !== 'free') return; // Abort - table taken by another cashier
+                    return { status: 'occupied', updatedAt: Date.now() };
+                });
+
+                if (!txResult.snapshot || txResult.snapshot.val()?.status !== 'occupied') {
+                    ui.showToast("Table " + tableNo + " was just taken by another cashier", "error");
+                    return;
+                }
+
+                // Create table session linked to this order
+                const sessRef = push(Outlet.ref('tableSessions'));
+                await set(sessRef, {
+                    id: sessRef.key,
+                    tableId: t.id,
+                    tableNumber: tableNo,
+                    orders: { [orderId]: true },
+                    status: 'active',
+                    openedAt: serverTimestamp(),
+                    source: 'POS'
+                });
+                // Link session back to the order
+                await update(Outlet.ref(`orders/${orderId}`), { tableId: t.id, sessionId: sessRef.key });
+                logger.firebase('POS', 'Table ' + tableNo + ' marked occupied, session ' + sessRef.key + ' created');
             } catch (e) {
                 logger.warn('POS', 'Table session creation failed: ' + e.message);
                 // Non-fatal: order is already saved
@@ -1620,7 +1633,7 @@ export async function submitWalkinSale() {
         logger.info('POS', 'Stock deducted');
 
         // 2b. Record discount usage + mark first-order as consumed (best-effort).
-        // The sale is already written — if usage recording fails, warn the cashier
+        // The sale is already written â€” if usage recording fails, warn the cashier
         // so the discount isn't silently under-tracked (limits/caps could be exceeded).
         if (discountId && discountValue > 0) {
             try {
@@ -1636,7 +1649,7 @@ export async function submitWalkinSale() {
                 });
             } catch (e) {
                 console.warn('[POS] recordDiscountUsage failed:', e?.message || e);
-                ui.showToast('Discount usage not recorded — this discount may be reusable.', 'warning');
+                ui.showToast('Discount usage not recorded â€” this discount may be reusable.', 'warning');
             }
         }
 
@@ -1681,19 +1694,19 @@ export async function submitWalkinSale() {
 
         playSuccessSound();
         ui.showToast(`Sale #${orderId} completed!`, "success");
-        logAudit("Sales", `POS Sale Recorded: #${orderId}`, `Total: ₹${total}`);
-        logger.success('POS', `Sale completed: #${orderId} (Total: ₹${total}, ${state.walkinPayMethod || 'Cash'})`);
+        logAudit("Sales", `POS Sale Recorded: #${orderId}`, `Total: â‚¹${total}`);
+        logger.success('POS', `Sale completed: #${orderId} (Total: â‚¹${total}, ${state.walkinPayMethod || 'Cash'})`);
 
-        // 4. Print Receipt (best-effort — a printer failure must not fail the sale)
+        // 4. Print Receipt (best-effort â€” a printer failure must not fail the sale)
         printOrderReceipt(orderData).catch(e => console.warn('[POS] receipt print failed:', e?.message || e));
         logger.info('POS', 'Receipt printed');
 
-        // 4. Reset (no confirm — the sale is already written)
+        // 4. Reset (no confirm â€” the sale is already written)
         clearWalkinCart({ confirm: false });
 
     } catch (e) {
         if (savedOrderId) {
-            // Order already written — never invite a retry that duplicates it.
+            // Order already written â€” never invite a retry that duplicates it.
             logger.error('POS', `Sale #${savedOrderId} saved, post-sale step failed: ${e.message}`, e);
             ui.showToast(`Sale #${savedOrderId} was saved, but a follow-up step failed: ${e.message}`, "warning");
             clearWalkinCart({ confirm: false });
@@ -1769,7 +1782,7 @@ export async function openCartAddonPicker(cartKey) {
                     <div class="custom-checkbox ${isChecked ? 'checked' : ''}"></div>
                     <span class="addon-name">${escapeHtml(name)}</span>
                 </div>
-                <span class="addon-price">+₹${Number(price).toLocaleString()}</span>
+                <span class="addon-price">+â‚¹${Number(price).toLocaleString()}</span>
             `;
             addonsList.appendChild(item);
         });
@@ -1813,7 +1826,7 @@ function _comboTilesHtml() {
             const d = state.allWalkinDishes.find(x => x.id === it.dishId);
             return `${d ? d.name : it.dishId} x${it.qty || 1}`;
         }).join(', ');
-        const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
+        const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `â‚¹${c.discountValue} OFF`;
         const originalTotal = (c.items || []).reduce((s, it) => {
             const d = state.allWalkinDishes.find(x => x.id === it.dishId);
             return s + ((d ? (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0) * (it.qty || 1));
@@ -1821,13 +1834,13 @@ function _comboTilesHtml() {
         const comboPrice = comboPriceTotal(originalTotal, c.discountType, c.discountValue);
         return `
         <div class="pos-combo-tile" role="button" data-action="addComboToWalkinCart" data-id="${c.id}" style="grid-column:1/-1;display:flex;gap:12px;align-items:center;padding:12px;border:2px solid var(--accent);border-radius:12px;background:linear-gradient(135deg,#fff8f5,#fff);cursor:pointer;">
-            <div style="flex-shrink:0;width:52px;height:52px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;">🏷️</div>
+            <div style="flex-shrink:0;width:52px;height:52px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;">ðŸ·ï¸</div>
             <div style="flex:1;min-width:0;">
                 <div style="font-weight:800;font-size:14px;">${escapeHtml(c.name)}</div>
                 <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(dishNames)}</div>
                 <div style="display:flex;align-items:center;gap:8px;margin-top:3px;">
-                    <span style="font-size:11px;color:var(--text-muted);text-decoration:line-through;">₹${originalTotal}</span>
-                    <span style="font-size:15px;font-weight:800;color:var(--accent);">₹${comboPrice}</span>
+                    <span style="font-size:11px;color:var(--text-muted);text-decoration:line-through;">â‚¹${originalTotal}</span>
+                    <span style="font-size:15px;font-weight:800;color:var(--accent);">â‚¹${comboPrice}</span>
                     <span style="font-size:10px;font-weight:700;background:#fff0e6;color:#b45309;border-radius:6px;padding:2px 6px;">${disc}</span>
                 </div>
             </div>
@@ -1880,7 +1893,7 @@ export function addComboToWalkinCart(comboId) {
     if (added > 0) {
         renderWalkinCart();
         haptic(20);
-        ui.showToast(`${combo.name} added — ${added} item${added > 1 ? 's' : ''}`, 'success');
+        ui.showToast(`${combo.name} added â€” ${added} item${added > 1 ? 's' : ''}`, 'success');
     } else {
         ui.showToast('Combo dishes unavailable', 'warning');
     }
@@ -1890,11 +1903,11 @@ export function addComboToWalkinCart(comboId) {
  * Keyboard shortcuts for the POS counter workflow.
  * Active only when the Walk-in (POS) tab is visible and no dialog/panel is open.
  *
- *   Enter  → submit sale (if cart non-empty; never while a button/tile has focus)
- *   Esc    → close selection modal / offers panel
- *   c      → clear cart (if cart non-empty)
- *   ?      → show shortcut hints (toast)
- *   Arrows → navigate dish grid (when focused on a dish tile)
+ *   Enter  â†’ submit sale (if cart non-empty; never while a button/tile has focus)
+ *   Esc    â†’ close selection modal / offers panel
+ *   c      â†’ clear cart (if cart non-empty)
+ *   ?      â†’ show shortcut hints (toast)
+ *   Arrows â†’ navigate dish grid (when focused on a dish tile)
  *
  * Ignored while typing, with any modifier held (Ctrl+C must stay copy),
  * while the selection modal / offers panel is open, and on key repeat.
@@ -1916,7 +1929,7 @@ export function _initPosKeyboardShortcuts() {
 
     document.addEventListener('keydown', (e) => {
         if (e.defaultPrevented || e.repeat) return;
-        // Never eat browser/OS combos — Ctrl/Cmd+C is copy, not "clear cart".
+        // Never eat browser/OS combos â€” Ctrl/Cmd+C is copy, not "clear cart".
         if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (!posTabActive()) return;
 
@@ -2017,7 +2030,7 @@ export function _initPosKeyboardShortcuts() {
             case 'c':
                 e.preventDefault();
                 if (Object.values(state.walkinCart).length > 0) {
-                    // clearWalkinCart is async (confirm dialog) — toast only if it really cleared.
+                    // clearWalkinCart is async (confirm dialog) â€” toast only if it really cleared.
                     Promise.resolve(clearWalkinCart()).then(() => {
                         if (Object.values(state.walkinCart).length === 0) {
                             ui.showToast('Cart cleared', 'warning');
@@ -2027,10 +2040,11 @@ export function _initPosKeyboardShortcuts() {
                 break;
             case '?':
                 e.preventDefault();
-                ui.showToast('POS shortcuts: Enter = submit sale · Esc = close · c = clear cart · ? = help · Arrows = navigate dishes', 'info');
+                ui.showToast('POS shortcuts: Enter = submit sale Â· Esc = close Â· c = clear cart Â· ? = help Â· Arrows = navigate dishes', 'info');
                 break;
         }
     });
 }
+
 
 

@@ -968,6 +968,55 @@ export async function updateStatus(id, status) {
     const isCancelling = status === "Cancelled";
     const canCancel = isCancelling && !["Delivered", "Served"].includes(currentStatus);
 
+    // Release table on cancellation: free the table and close the session
+    if (isCancelling && canCancel) {
+        try {
+            const { Outlet, get, update, set, ref, push } = await import('../firebase.js');
+            const orderTableId = order.tableId;
+            const orderTableNo = order.tableNo;
+
+            // Find the table by ID or number
+            let tableRef = null;
+            let tableId = orderTableId;
+
+            if (orderTableId) {
+                const tSnap = await get(Outlet.ref(`tables/${orderTableId}`));
+                if (tSnap.exists()) {
+                    tableRef = Outlet.ref(`tables/${orderTableId}`);
+                    tableId = orderTableId;
+                }
+            }
+
+            // If not found by ID, search by table number
+            if (!tableRef && orderTableNo) {
+                const tablesSnap = await get(Outlet.ref("tables"));
+                const tables = tablesSnap.val() || {};
+                const found = Object.entries(tables).find(([id, t]) => t && String(t.number) === String(orderTableNo));
+                if (found) {
+                    tableId = found[0];
+                    tableRef = Outlet.ref(`tables/${tableId}`);
+                }
+            }
+
+            if (tableRef) {
+                await update(tableRef, { status: 'free', currentSession: null, updatedAt: Date.now() });
+                logger.firebase('ORDERS', `Table ${orderTableNo || orderTableId} freed on order cancellation`);
+            }
+
+            // Close the session if linked
+            if (order.sessionId) {
+                await set(Outlet.ref(`tableSessions/${order.sessionId}`), {
+                    status: 'closed',
+                    closedAt: Date.now()
+                });
+                logger.firebase('ORDERS', `Session ${order.sessionId} closed on order cancellation`);
+            }
+        } catch (e) {
+            logger.warn('ORDERS', 'Table release on cancellation failed: ' + e.message);
+            // Non-fatal: order cancellation proceeds
+        }
+    }
+
     // Rule 2: Allow ONLY the exact next step in the sequence
     const isNextStep = nextLevel === currentLevel + 1;
 
