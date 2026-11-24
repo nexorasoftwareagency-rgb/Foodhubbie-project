@@ -4,10 +4,10 @@
  */
 
 import { state } from '../state.js';
-import { db, auth, Outlet, tenantRef, serverTimestamp, get, set, runTransaction, ref, isConnected, onConnectionChange } from '../firebase.js';
+import { db, auth, Outlet, tenantRef, serverTimestamp, get, set, runTransaction, ref, update, push, isConnected, onConnectionChange } from '../firebase.js';
 import { standardizeOrderData, haptic, escapeHtml, playSuccessSound, logAudit, gateManualDiscountPin, clearCounterStaffSession, getCounterStaffUid } from '../utils.js';
 import { autoDeductStock } from './inventory.js';
-import { ui, loadLucide, canAccessTab } from '../ui.js';
+import { ui, loadLucide, canAccessTab, switchTab } from '../ui.js';
 import { printOrderReceipt } from './printing.js';
 import { t } from '../l10n.js';
 import { evaluateDiscount, recordDiscountUsage, clearDiscountCache, getAllDiscounts, getEligibleOffersForDisplay } from './discount-evaluator.js';
@@ -17,6 +17,7 @@ import { computeOrderTotals } from '../../shared/money-math.js';
 
 let _connUnsub = null;
 let _dineinSettings = {};
+let _tablesByNumber = {}; // table number -> { id, number, status, capacity }
 
 /**
  * D4 wallet gate validation for POS
@@ -33,6 +34,125 @@ async function assertWalletGate() {
         throw err;
     }
     return gate; // 'low' or null/undefined = open
+}
+
+/**
+ * Loads the tables node and builds a number->table map for assign-table validation.
+ * Also sets up a live listener so status changes (occupied/billing) are reflected instantly.
+ */
+async function _loadTablesForWalkin() {
+    const { Outlet, get, onValue } = await import('../firebase.js');
+    try {
+        const snap = await get(Outlet.ref("tables"));
+        const tables = snap.val() || {};
+        _tablesByNumber = {};
+        Object.values(tables).forEach(t => {
+            if (t && t.number) _tablesByNumber[String(t.number)] = t;
+        });
+        logger.info('POS', `Loaded ${Object.keys(_tablesByNumber).length} tables for assign-table validation`);
+    } catch (e) {
+        logger.warn('POS', 'Failed to load tables for validation', e);
+    }
+
+    // Live listener: refresh status badges if table status changes while POS is open
+    try {
+        const tSnap = await get(Outlet.ref("tables"));
+        const tables = tSnap.val() || {};
+        _tablesByNumber = {};
+        Object.values(tables).forEach(t => {
+            if (t && t.number) _tablesByNumber[String(t.number)] = t;
+        });
+        _updateTableNoBadge();
+    } catch (e) { /* best-effort */ }
+}
+
+/**
+ * Builds and shows a status badge next to the walkinTableNo input.
+ */
+function _updateTableNoBadge() {
+    const input = document.getElementById('walkinTableNo');
+    if (!input) return;
+    // Remove any existing badge
+    const oldBadge = input.parentElement?.querySelector('.table-no-badge');
+    if (oldBadge) oldBadge.remove();
+
+    const val = input.value.trim();
+    if (!val) return;
+
+    const t = _tablesByNumber[val];
+    if (!t) {
+        const badge = document.createElement('span');
+        badge.className = 'table-no-badge table-no-unknown';
+        badge.title = 'Table not found';
+        badge.textContent = '❓ Unknown table';
+        input.parentElement?.appendChild(badge);
+        return;
+    }
+
+    const meta = {
+        free:     { label: 'Free',     cls: 'table-no-free',   emoji: '✅' },
+        occupied: { label: 'Occupied', cls: 'table-no-occupied', emoji: '⚠️' },
+        billing:  { label: 'Billing',  cls: 'table-no-billing', emoji: '🧾' },
+        disabled: { label: 'Disabled', cls: 'table-no-disabled', emoji: '🚫' }
+    }[t.status] || { label: 'Unknown', cls: 'table-no-unknown', emoji: '❓' };
+
+    const badge = document.createElement('span');
+    badge.className = `table-no-badge ${meta.cls}`;
+    badge.title = `Table ${t.number} — ${meta.label}`;
+    badge.textContent = `${meta.emoji} ${meta.label}`;
+    input.parentElement?.appendChild(badge);
+}
+
+/**
+ * Wires input validation + status badge on walkinTableNo.
+ */
+function _wireTableNoValidation() {
+    const input = document.getElementById('walkinTableNo');
+    if (!input) return;
+
+    // Remove any existing listener by cloning (simple approach)
+    const newInput = input.cloneNode(true);
+    input.parentNode.replaceChild(newInput, input);
+
+    newInput.addEventListener('input', () => {
+        _updateTableNoBadge();
+    });
+
+    // Initial badge
+    _updateTableNoBadge();
+
+    // Wire up the Assign Next Free Table button
+    const btn = document.getElementById('btnAssignNextTable');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            const next = _getNextFreeTable();
+            if (next) {
+                newInput.value = next.number;
+                _updateTableNoBadge();
+                ui.showToast('Table ' + next.number + ' assigned', 'success');
+            } else {
+                ui.showToast('No free tables available', 'warning');
+            }
+        });
+    }
+}
+
+
+/**
+ * Returns the table record for a given table number, or null.
+ */
+function _getTableByNumber(number) {
+    return _tablesByNumber[String(number)] || null;
+}
+
+/**
+ * Returns the next free table number, or null if none available.
+ */
+function _getNextFreeTable() {
+    const tables = Object.values(_tablesByNumber)
+        .filter(t => t.status === 'free')
+        .sort((a, b) => Number(a.number) - Number(b.number));
+    return tables[0] || null;
 }
 
 /**
@@ -98,9 +218,15 @@ export async function loadWalkinMenu() {
         // Cache dine-in settings for tax/SC display
         try { const s = await get(Outlet.ref("dineinSettings")); _dineinSettings = s.val() || {}; } catch (e) {}
 
+        // Load tables for assign-table validation
+        try { await _loadTablesForWalkin(); } catch (e) { logger.warn('POS', 'Tables load failed', e); }
+
         renderWalkinCategoryTabs();
         applyWalkinFilters();
         logger.success('POS', 'Walkin menu loaded');
+
+        // Wire table number input validation + status badge
+        _wireTableNoValidation();
 
     } catch (e) {
         logger.error('POS', `Menu load error: ${e.message}`, e);
@@ -883,10 +1009,13 @@ export function updateMobileCartSummaryState(count, total) {
 /**
  * Toggles the full-screen cart sheet on mobile
  */
-export function toggleMobileCart() {
+export async function toggleMobileCart() {
+    // Switch to walkin tab first if not already there, so the cart sheet is visible
+    await switchTab('walkin');
+
     const cart = document.querySelector('.walkin-cart');
     if (!cart) return;
-    
+
     haptic(10);
     cart.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1222,6 +1351,20 @@ export async function submitWalkinSale() {
     const tableNo = document.getElementById("walkinTableNo")?.value.trim() || "";
     const note = document.getElementById("walkinCustNote").value.trim() || "";
     const combinedNote = tableNo ? `[Table: ${tableNo}] ${note}` : note;
+    
+    // Validate table assignment if a table number is provided
+    if (tableNo) {
+        const t = _getTableByNumber(tableNo);
+        if (!t) {
+            ui.showToast("Table " + tableNo + " not found", "error");
+            return;
+        }
+        if (t.status !== 'free') {
+            const meta = { occupied: 'Occupied', billing: 'Billing', disabled: 'Disabled' }[t.status] || t.status;
+            ui.showToast("Table " + tableNo + " is " + meta.toLowerCase(), "error");
+            return;
+        }
+    }
     const btn = document.getElementById('walkinSubmitBtn');
 
     // In-flight guard: Enter is a direct call, so the disabled button alone
@@ -1442,6 +1585,34 @@ export async function submitWalkinSale() {
         await set(Outlet.ref(`orders/${orderId}`), orderData);
         savedOrderId = orderId;
         logger.firebase('POS', `Order saved: ${orderId}`);
+
+        // 1b. Table assignment: mark table occupied + create tableSessions entry
+        if (tableNo) {
+            try {
+                const t = _getTableByNumber(tableNo);
+                if (t) {
+                    // Mark table as occupied
+                    await update(Outlet.ref(`tables/${t.id}`), { status: 'occupied', updatedAt: Date.now() });
+                    // Create a table session linked to this order
+                    const sessRef = push(Outlet.ref('tableSessions'));
+                    await set(sessRef, {
+                        id: sessRef.key,
+                        tableId: t.id,
+                        tableNumber: tableNo,
+                        orders: { [orderId]: true },
+                        status: 'active',
+                        openedAt: serverTimestamp(),
+                        source: 'POS'
+                    });
+                    // Link session back to the order
+                    await update(Outlet.ref(`orders/${orderId}`), { tableId: t.id, sessionId: sessRef.key });
+                    logger.firebase('POS', 'Table ' + tableNo + ' marked occupied, session ' + sessRef.key + ' created');
+                }
+            } catch (e) {
+                logger.warn('POS', 'Table session creation failed: ' + e.message);
+                // Non-fatal: order is already saved
+            }
+        }
 
         // 2. Auto-deduct inventory
         logger.info('POS', 'Auto-deducting stock...');
