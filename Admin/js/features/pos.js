@@ -332,7 +332,7 @@ export function applyWalkinFilters() {
  * The price a tile advertises.
  *
  * A dish with size variants is sold at a different amount per size, so the
- * tile may only advertise the CHEAPEST one â€” and it has to say so ("â‚¹69+").
+ * tile may only advertise the CHEAPEST one â€” and it has to say so ("₹69+").
  * The old code showed `dish.price` (the base price) next to a sheet that
  * preselected a DIFFERENT size, so the cashier could charge a different
  * amount than the tile showed. `from: true` means "starts at".
@@ -412,7 +412,7 @@ export function renderWalkinDishGrid(dishes) {
                 <div class="dish-visual">
                     <img src="${escapeHtml(d.image || 'assets/images/placeholder-dish.png')}" alt="${escapeHtml(d.name)}" loading="lazy">
                     <div class="dish-overlay" aria-hidden="true">
-                        <span class="price-chip">â‚¹${price}${from ? '+' : ''}</span>
+                        <span class="price-chip">₹${price}${from ? '+' : ''}</span>
                     </div>
                     ${oosOverlay}
                 </div>
@@ -471,7 +471,7 @@ export async function openPOSSelectionModal(dishId) {
         sizes = { "- Default -": dish.price || 0 };
     }
 
-    // The tile advertises the CHEAPEST size ("â‚¹69+"), so the sheet must open
+    // The tile advertises the CHEAPEST size ("₹69+"), so the sheet must open
     // on that same size â€” otherwise the first "Add to Cart" silently charges
     // a different amount than the price on the tile.
     const advertised = posPriceInfo(dish).price;
@@ -494,7 +494,7 @@ export async function openPOSSelectionModal(dishId) {
         card.setAttribute('data-price', price);
         card.innerHTML = `
             <span class="size-name">${escapeHtml(name)}</span>
-            <span class="size-price">â‚¹${Number(price).toLocaleString()}</span>
+            <span class="size-price">₹${Number(price).toLocaleString()}</span>
         `;
         sizeGrid.appendChild(card);
     });
@@ -520,7 +520,7 @@ export async function openPOSSelectionModal(dishId) {
                     <div class="custom-checkbox" aria-hidden="true"></div>
                     <span class="addon-name">${escapeHtml(name)}</span>
                 </div>
-                <span class="addon-price">+â‚¹${Number(price).toLocaleString()}</span>
+                <span class="addon-price">+₹${Number(price).toLocaleString()}</span>
             `;
             addonsList.appendChild(item);
         });
@@ -588,7 +588,7 @@ export function hidePOSSelectionModal() {
 }
 
 export function selectPOSSize(name, price, el) {
-    logger.info('POS', `Selecting Size: ${name} (Price: â‚¹${price})`);
+    logger.info('POS', `Selecting Size: ${name} (Price: ₹${price})`);
     document.querySelectorAll('.size-card').forEach(c => {
         c.classList.remove('active');
         c.setAttribute('aria-pressed', 'false');
@@ -660,7 +660,7 @@ function addSimpleDishToCart(dish) {
         haptic(20);
         playSuccessSound();
         logger.success('POS', `Quick add: ${dish.name}`, { cartKey, price });
-        ui.showToast(`Added ${dish.name} Â· â‚¹${price.toLocaleString()}`, 'success');
+        ui.showToast(`Added ${dish.name} Â· ₹${price.toLocaleString()}`, 'success');
     } catch (error) {
         logger.error('POS', `Quick add error: ${error.message}`, error);
         ui.showToast('Failed to add to cart', 'error');
@@ -768,7 +768,7 @@ export async function clearWalkinCart({ confirm = true } = {}) {
     if (document.getElementById('walkinTableNo')) document.getElementById('walkinTableNo').value = "";
     if (document.getElementById('walkinCustNote')) document.getElementById('walkinCustNote').value = "";
     if (document.getElementById('walkinDiscountRow')) document.getElementById('walkinDiscountRow').classList.add('hidden');
-    if (document.getElementById('walkinDiscountVal')) document.getElementById('walkinDiscountVal').innerText = "-â‚¹0";
+    if (document.getElementById('walkinDiscountVal')) document.getElementById('walkinDiscountVal').innerText = "-₹0";
     if (document.getElementById('walkinDiscount')) document.getElementById('walkinDiscount').value = "0";
     if (document.getElementById('walkinCouponCode')) document.getElementById('walkinCouponCode').value = "";
     if (document.getElementById('walkinCouponHint'))  document.getElementById('walkinCouponHint').classList.add('hidden');
@@ -821,7 +821,7 @@ export async function renderWalkinCart() {
                     <div class="identity-info-v4 flex-1">
                         <span class="name font-700 fs-14">${escapeHtml(item.name)} <span class="text-muted font-normal fs-11">(${escapeHtml(item.size)})</span></span>
                         ${addonText}
-                        <div class="fs-12 color-primary font-700 mt-4">â‚¹${item.price.toLocaleString()} <span class="text-muted font-normal">per item</span></div>
+                        <div class="fs-12 color-primary font-700 mt-4">₹${item.price.toLocaleString()} <span class="text-muted font-normal">per item</span></div>
                     </div>
                     <div class="identity-info-v4 text-right ml-10">
                         <div class="qty-control-v4 mb-4" role="group" aria-label="Quantity for ${escapeHtml(item.name)}">
@@ -833,7 +833,7 @@ export async function renderWalkinCart() {
                                 <i data-lucide="plus"></i>
                             </button>
                         </div>
-                        <div class="font-800 fs-15 color-dark">â‚¹${itemTotal.toLocaleString()}</div>
+                        <div class="font-800 fs-15 color-dark">₹${itemTotal.toLocaleString()}</div>
                     </div>
                 </div>
                 <div class="flex-row mt-8 border-t-ghost pt-8">
@@ -912,7 +912,7 @@ export async function renderWalkinCart() {
     const sc = totals.serviceCharge;
     const finalTotal = totals.total;
 
-    document.getElementById("walkinSubtotal").innerText = `â‚¹${subtotal.toLocaleString()}`;
+    document.getElementById("walkinSubtotal").innerText = `₹${subtotal.toLocaleString()}`;
 
     const discRow = document.getElementById("walkinDiscountRow");
     const discVal = document.getElementById("walkinDiscountVal");
@@ -921,10 +921,10 @@ export async function renderWalkinCart() {
         // Show the offer name when we have one â€” a capped percentage would
         // otherwise print "10%"-style text next to an amount that isn't 10%.
         if (discVal) discVal.innerText = state.walkinDiscountPct > 0
-            ? `-â‚¹${roundedDiscount.toLocaleString()} (${state.walkinDiscountPct}%)`
+            ? `-₹${roundedDiscount.toLocaleString()} (${state.walkinDiscountPct}%)`
             : discountLabel
-            ? `-â‚¹${roundedDiscount.toLocaleString()} (${discountLabel})`
-            : `-â‚¹${roundedDiscount.toLocaleString()}`;
+            ? `-₹${roundedDiscount.toLocaleString()} (${discountLabel})`
+            : `-₹${roundedDiscount.toLocaleString()}`;
     } else {
         if (discRow) discRow.classList.add('hidden');
     }
@@ -932,17 +932,17 @@ export async function renderWalkinCart() {
     // Tax & Service Charge display
     const taxRows = document.getElementById("walkinTaxRows");
     if (taxRows) {
-        taxRows.innerHTML = taxItems.map(t => `<div class="flex-between mb-8"><span class="text-muted-small font-800">${escapeHtml(t.name)} (${t.rate}%)</span><span class="font-800">â‚¹${t.amount.toLocaleString()}</span></div>`).join('');
+        taxRows.innerHTML = taxItems.map(t => `<div class="flex-between mb-8"><span class="text-muted-small font-800">${escapeHtml(t.name)} (${t.rate}%)</span><span class="font-800">₹${t.amount.toLocaleString()}</span></div>`).join('');
         taxRows.classList.toggle('hidden', tax === 0);
     }
     const scRow = document.getElementById("walkinServiceChargeRow");
     const scVal = document.getElementById("walkinServiceChargeVal");
     const scLabel = document.getElementById("walkinServiceChargeLabel");
     if (scRow) scRow.classList.toggle('hidden', sc === 0);
-    if (scVal) scVal.innerText = `â‚¹${sc.toLocaleString()}`;
+    if (scVal) scVal.innerText = `₹${sc.toLocaleString()}`;
     if (scLabel && de.serviceChargeName) scLabel.innerText = de.serviceChargeName + (de.serviceChargeRate ? ` (${de.serviceChargeRate}%)` : '');
 
-    document.getElementById("walkinTotal").innerText = `â‚¹${finalTotal.toLocaleString()}`;
+    document.getElementById("walkinTotal").innerText = `₹${finalTotal.toLocaleString()}`;
 
     // Ensure manual discount input updates correctly
     const discountInput = document.getElementById('walkinDiscount');
@@ -994,7 +994,7 @@ export function updateMobileCartSummaryState(count, total) {
         const countElem = document.getElementById('mobileCartCount');
         const totalElem = document.getElementById('mobileCartTotal');
         if (countElem) countElem.innerText = `${count} Items`;
-        if (totalElem) totalElem.innerText = `â‚¹${total.toLocaleString()}`;
+        if (totalElem) totalElem.innerText = `₹${total.toLocaleString()}`;
     } else {
         summary.classList.add('hidden');
         summary.setAttribute('data-tab', 'walkin');
@@ -1125,7 +1125,7 @@ export async function applyWalkinCoupon() {
         state.walkinPinnedDiscountId = null; // coupon takes over from any pinned offer
         if (hint) {
             hint.classList.remove('hidden');
-            hint.innerText = `âœ… Applied: ${evalResult.label} (saved â‚¹${evalResult.amount.toLocaleString()})`;
+            hint.innerText = `âœ… Applied: ${evalResult.label} (saved ₹${evalResult.amount.toLocaleString()})`;
         }
         if (clear) clear.classList.remove('hidden');
         renderWalkinCart();
@@ -1208,9 +1208,9 @@ export async function _renderDiscountPresets() {
             const isPct = d.mode === 'percent';
             const label = isPct
                 ? `${Number(d.value).toFixed(d.value % 1 === 0 ? 0 : 1)}%`
-                : `â‚¹${Number(d.value).toLocaleString()}`;
-            const cap = d.maxCap ? ` (cap â‚¹${Number(d.maxCap).toLocaleString()})` : '';
-            const min = d.minSubtotal ? ` Â· min â‚¹${Number(d.minSubtotal).toLocaleString()}` : '';
+                : `₹${Number(d.value).toLocaleString()}`;
+            const cap = d.maxCap ? ` (cap ₹${Number(d.maxCap).toLocaleString()})` : '';
+            const min = d.minSubtotal ? ` Â· min ₹${Number(d.minSubtotal).toLocaleString()}` : '';
             const active = pinnedId === d.id;
             // An already-applied offer stays tappable (tap = remove) even if the
             // cart shrank below its minimum â€” otherwise it could never be undone.
@@ -1270,9 +1270,9 @@ async function _renderWalkinOffers() {
     panel.innerHTML = list.map(d => {
         const valueLabel = d.mode === 'percent'
             ? `${Number(d.value).toFixed(d.value % 1 === 0 ? 0 : 1)}% off`
-            : `â‚¹${Number(d.value).toFixed(0)} off`;
-        const capLabel = d.maxCap ? ` (cap â‚¹${Number(d.maxCap).toFixed(0)})` : '';
-        const minLabel = d.minSubtotal ? ` Â· min â‚¹${Number(d.minSubtotal).toFixed(0)}` : '';
+            : `₹${Number(d.value).toFixed(0)} off`;
+        const capLabel = d.maxCap ? ` (cap ₹${Number(d.maxCap).toFixed(0)})` : '';
+        const minLabel = d.minSubtotal ? ` Â· min ₹${Number(d.minSubtotal).toFixed(0)}` : '';
         const used = d.stats?.usedCount || 0;
         const usedLabel = used > 0 ? ` Â· used ${used}${d.globalLimit ? `/${d.globalLimit}` : ''}Ã—` : '';
 
@@ -1285,8 +1285,8 @@ async function _renderWalkinOffers() {
                         <div class="walkin-offer-name"><code>${escapeHtml(d.couponCode)}</code> â€” ${escapeHtml(d.name || '')}</div>
                         <div class="walkin-offer-meta">${valueLabel}${capLabel}${minLabel}${usedLabel}</div>
                     </div>
-                    <button type="button" class="chip walkin-offer-apply-btn" data-action="applyOfferFromPanel" data-code="${escapeHtml(d.couponCode)}" ${meetsMin ? '' : 'disabled'} title="${meetsMin ? 'Apply this code' : `Add â‚¹${shortfall} more to qualify`}">
-                        ${meetsMin ? 'Apply' : `+â‚¹${shortfall} to use`}
+                    <button type="button" class="chip walkin-offer-apply-btn" data-action="applyOfferFromPanel" data-code="${escapeHtml(d.couponCode)}" ${meetsMin ? '' : 'disabled'} title="${meetsMin ? 'Apply this code' : `Add ₹${shortfall} more to qualify`}">
+                        ${meetsMin ? 'Apply' : `+₹${shortfall} to use`}
                     </button>
                 </div>`;
         }
@@ -1694,8 +1694,8 @@ export async function submitWalkinSale() {
 
         playSuccessSound();
         ui.showToast(`Sale #${orderId} completed!`, "success");
-        logAudit("Sales", `POS Sale Recorded: #${orderId}`, `Total: â‚¹${total}`);
-        logger.success('POS', `Sale completed: #${orderId} (Total: â‚¹${total}, ${state.walkinPayMethod || 'Cash'})`);
+        logAudit("Sales", `POS Sale Recorded: #${orderId}`, `Total: ₹${total}`);
+        logger.success('POS', `Sale completed: #${orderId} (Total: ₹${total}, ${state.walkinPayMethod || 'Cash'})`);
 
         // 4. Print Receipt (best-effort â€” a printer failure must not fail the sale)
         printOrderReceipt(orderData).catch(e => console.warn('[POS] receipt print failed:', e?.message || e));
@@ -1782,7 +1782,7 @@ export async function openCartAddonPicker(cartKey) {
                     <div class="custom-checkbox ${isChecked ? 'checked' : ''}"></div>
                     <span class="addon-name">${escapeHtml(name)}</span>
                 </div>
-                <span class="addon-price">+â‚¹${Number(price).toLocaleString()}</span>
+                <span class="addon-price">+₹${Number(price).toLocaleString()}</span>
             `;
             addonsList.appendChild(item);
         });
@@ -1826,7 +1826,7 @@ function _comboTilesHtml() {
             const d = state.allWalkinDishes.find(x => x.id === it.dishId);
             return `${d ? d.name : it.dishId} x${it.qty || 1}`;
         }).join(', ');
-        const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `â‚¹${c.discountValue} OFF`;
+        const disc = c.discountType === 'percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`;
         const originalTotal = (c.items || []).reduce((s, it) => {
             const d = state.allWalkinDishes.find(x => x.id === it.dishId);
             return s + ((d ? (d.price ?? (d.sizes ? Object.values(d.sizes)[0] : 0)) : 0) * (it.qty || 1));
@@ -1839,8 +1839,8 @@ function _comboTilesHtml() {
                 <div style="font-weight:800;font-size:14px;">${escapeHtml(c.name)}</div>
                 <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(dishNames)}</div>
                 <div style="display:flex;align-items:center;gap:8px;margin-top:3px;">
-                    <span style="font-size:11px;color:var(--text-muted);text-decoration:line-through;">â‚¹${originalTotal}</span>
-                    <span style="font-size:15px;font-weight:800;color:var(--accent);">â‚¹${comboPrice}</span>
+                    <span style="font-size:11px;color:var(--text-muted);text-decoration:line-through;">₹${originalTotal}</span>
+                    <span style="font-size:15px;font-weight:800;color:var(--accent);">₹${comboPrice}</span>
                     <span style="font-size:10px;font-weight:700;background:#fff0e6;color:#b45309;border-radius:6px;padding:2px 6px;">${disc}</span>
                 </div>
             </div>
