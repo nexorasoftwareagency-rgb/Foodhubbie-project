@@ -177,17 +177,17 @@
     </script>
 
 
-    <link rel="stylesheet" href="style.css?v=5.4.20">
+    <link rel="stylesheet" href="style.css?v=5.4.20" fetchpriority="high">
 
-    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.25">
+    <link rel="stylesheet" href="mobile-overrides.css?v=5.4.25" fetchpriority="high">
 
-    <link rel="stylesheet" href="chat.css?v=5.3.35">
+    <link rel="stylesheet" href="chat.css?v=5.3.35" fetchpriority="high">
 
     <link rel="manifest" href="manifest.json?v=3">
 
-    <link rel="icon" type="image/png" href="icon-erp-logo.png?v=3">
+    <link rel="icon" type="image/png" href="icon-erp-logo.png?v=3" fetchpriority="high">
 
-    <link rel="apple-touch-icon" href="icon-erp-logo.png?v=3">
+    <link rel="apple-touch-icon" href="icon-erp-logo.png?v=3" fetchpriority="high">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
 
@@ -206,6 +206,12 @@
     <link rel="modulepreload" href="js/main.js?v=5.4.9">
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(r => console.log('[SW] registered')).catch(e => console.log('[SW] failed:', e));
+        }
+    </script>
 
 </head>
 
@@ -285,7 +291,7 @@
 
                     <div class="login-logo-v4">
 
-                        <img src="icon-erp-logo.png?v=3" alt="FoodHubbie" width="48" height="48" style="border-radius: 12px;">
+                        <img src="icon-erp-logo.png?v=3" alt="FoodHubbie" width="48" height="48" loading="eager" style="border-radius: 12px;">
 
                     </div>
 
@@ -935,7 +941,7 @@
                 <div class="kpi-strip mb-24">
 
                     <div class="kpi-stat kpi-stat--primary">
-                        <span class="kpi-stat__value" id="statRevenue">â‚¹0</span>
+                        <span class="kpi-stat__value" id="statRevenue">₹0</span>
                         <span class="kpi-stat__label">Today's Sales</span>
                         <span class="kpi-stat__delta" id="badgeRevenue">No orders yet</span>
                     </div>
@@ -1493,7 +1499,7 @@
 
                         <div class="info-wrap">
 
-                            <span class="val" id="rider-stat-earnings">â‚¹0</span>
+                            <span class="val" id="rider-stat-earnings">₹0</span>
 
                             <span class="lbl">Today's Earnings</span>
 
@@ -3207,7 +3213,7 @@
 
                                             <th>Up to (KM)</th>
 
-                                            <th>Charge (â‚¹)</th>
+                                            <th>Charge (₹)</th>
 
                                             <th>Action</th>
 
@@ -3438,7 +3444,7 @@
                     <div class="mob-section-head-row">
                         <h3 class="mob-card-title">Customer Database <span class="mob-table-count" id="custTableCount"></span></h3>
                         <div class="cust-toolbar">
-                            <input type="text" id="customerSearch" placeholder="Search name, phone, address, dishâ€¦" class="search-input-group" style="max-width:220px;" aria-label="Search customers">
+                            <input type="text" id="customerSearch" placeholder="Search name, phone, address, dish…" class="search-input-group" style="max-width:220px;" aria-label="Search customers">
                             <button type="button" id="custDensityBtn" class="cust-tool-btn" aria-pressed="false" title="Switch between comfortable and compact rows" aria-label="Switch between comfortable and compact rows"><i data-lucide="rows-3" class="icon-18"></i><span class="cust-phone-hide">Compact</span></button>
                             <div class="mob-export-row" style="display:flex; gap:8px;">
                                 <button type="button" class="mob-export-banner mob-export-excel" data-action="custExportExcel" title="Export to Excel" aria-label="Export the customer list to Excel">
@@ -3466,7 +3472,7 @@
                                     <th data-sort="address" class="cust-col-addr">Address</th>
                                     <th data-sort="lastVisit" class="cust-col-last">Last visit</th>
                                     <th data-sort="orderCount" class="cust-col-orders">Orders</th>
-                                    <th data-sort="ltv" class="mob-th-right cust-col-value">Value (â‚¹)</th>
+                                    <th data-sort="ltv" class="mob-th-right cust-col-value">Value (₹)</th>
                                     <th data-sort="loyaltyPoints" class="cust-col-loyalty">Loyalty</th>
                                     <th data-sort="segment" class="cust-col-segment">Segment</th>
                                     <th class="cust-col-action">Next step</th>
@@ -3659,7 +3665,7 @@
                 <span class="mob-kpi-label">Total Revenue</span>
                 <span class="mob-kpi-icon"><i data-lucide="indian-rupee" class="icon-16"></i></span>
             </div>
-            <div class="mob-kpi-val" id="mobKpiRevenueVal">â‚¹0</div>
+            <div class="mob-kpi-val" id="mobKpiRevenueVal">₹0</div>
             <div class="mob-kpi-trend" id="mobKpiRevenueTrend"></div>
             <div class="mob-spark-wrap"><canvas id="sparkRevenue"></canvas></div>
         </div>
@@ -3679,7 +3685,7 @@
                 <span class="mob-kpi-label">Avg. Order Value</span>
                 <span class="mob-kpi-icon"><i data-lucide="wallet" class="icon-16"></i></span>
             </div>
-            <div class="mob-kpi-val" id="mobKpiAvgOrderVal">â‚¹0</div>
+            <div class="mob-kpi-val" id="mobKpiAvgOrderVal">₹0</div>
             <div class="mob-kpi-trend" id="mobKpiAvgOrderTrend"></div>
             <div class="mob-spark-wrap"><canvas id="sparkAvgOrder"></canvas></div>
         </div>
@@ -3700,7 +3706,7 @@
         <div class="mob-overview-head">
             <div>
                 <h3>Sales Overview</h3>
-                <div class="mob-overview-total" id="mobOverviewTotal">â‚¹0</div>
+                <div class="mob-overview-total" id="mobOverviewTotal">₹0</div>
                 <div class="mob-overview-trend" id="mobOverviewTrend"></div>
             </div>
         </div>
@@ -3748,7 +3754,7 @@
             <div class="mob-donut-wrap">
                 <canvas id="mobPaymentDonut"></canvas>
                 <div class="mob-donut-center">
-                    <div class="mob-donut-total" id="mobDonutCenterTotal">â‚¹0</div>
+                    <div class="mob-donut-total" id="mobDonutCenterTotal">₹0</div>
                     <div class="mob-donut-label">Total Sales</div>
                 </div>
             </div>
@@ -4012,7 +4018,7 @@
 
                         <div class="info-wrap">
 
-                            <span class="val" id="riderStatEarnings">â‚¹0</span>
+                            <span class="val" id="riderStatEarnings">₹0</span>
 
                             <span class="lbl">Total Earnings</span>
 
@@ -4026,7 +4032,7 @@
 
                         <div class="info-wrap">
 
-                            <span class="val" id="riderStatPendingCash">â‚¹0</span>
+                            <span class="val" id="riderStatPendingCash">₹0</span>
 
                             <span class="lbl">Pending Cash</span>
 
@@ -4398,7 +4404,7 @@
 
                                     <th data-sort="outlet">Outlet</th>
 
-                                    <th data-sort="total" class="mob-th-right">Amount (â‚¹)</th>
+                                    <th data-sort="total" class="mob-th-right">Amount (₹)</th>
 
                                 </tr>
 
@@ -4555,7 +4561,7 @@
 
                                     <span class="text-muted-small font-800">Subtotal</span>
 
-                                    <span id="walkinSubtotal" class="font-800">â‚¹0</span>
+                                    <span id="walkinSubtotal" class="font-800">₹0</span>
 
                                 </div>
 
@@ -4563,7 +4569,7 @@
 
                                     <span class="text-danger font-800">Discount Allotted</span>
 
-                                    <span id="walkinDiscountVal" class="text-danger font-800">-â‚¹0</span>
+                                    <span id="walkinDiscountVal" class="text-danger font-800">-₹0</span>
 
                                 </div>
 
@@ -4573,7 +4579,7 @@
 
                                     <span id="walkinServiceChargeLabel" class="text-muted-small font-800">Service Charge</span>
 
-                                    <span id="walkinServiceChargeVal" class="font-800">â‚¹0</span>
+                                    <span id="walkinServiceChargeVal" class="font-800">₹0</span>
 
                                 </div>
 
@@ -4635,7 +4641,7 @@
 
                                     <span>Total</span>
 
-                                    <span id="walkinTotal">â‚¹0</span>
+                                    <span id="walkinTotal">₹0</span>
 
                                 </div>
 
@@ -4803,7 +4809,7 @@
                         <div id="promoMenuBox" class="form-group hidden">
                             <label for="promoMenuText" class="text-muted-small" data-i18n="promo.compose.menuText">Menu footer text</label>
                             <textarea id="promoMenuText" rows="4" class="search-input-group" maxlength="1200"
-                                placeholder="ðŸ• *Bestsellers* â€” Margherita â‚¹199, Farmhouse â‚¹299"
+                                placeholder="ðŸ• *Bestsellers* â€” Margherita ₹199, Farmhouse ₹299"
                                 aria-label="Menu footer text"></textarea>
                         </div>
 
@@ -5310,17 +5316,17 @@
                                             <label class="ca-field-label">Mode</label>
                                             <select id="qeMode" class="search-input-group">
                                                 <option value="percent">Percent (%)</option>
-                                                <option value="fixed">Fixed (â‚¹)</option>
+                                                <option value="fixed">Fixed (₹)</option>
                                             </select>
                                         </div>
                                     </div>
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                                         <div>
-                                            <label class="ca-field-label">Min Subtotal (â‚¹)</label>
+                                            <label class="ca-field-label">Min Subtotal (₹)</label>
                                             <input type="number" id="qeMinSubtotal" class="search-input-group" placeholder="0">
                                         </div>
                                         <div>
-                                            <label class="ca-field-label">Max Cap (â‚¹)</label>
+                                            <label class="ca-field-label">Max Cap (₹)</label>
                                             <input type="number" id="qeMaxCap" class="search-input-group" placeholder="0">
                                         </div>
                                     </div>
@@ -5953,7 +5959,7 @@
                     </div>
                     <div class="table-kpi-card">
                         <i data-lucide="indian-rupee" class="icon-20" style="color:var(--success)"></i>
-                        <div><span class="table-kpi-num" id="tblKpiRevenue">â‚¹0</span><span class="table-kpi-label">Revenue Today</span></div>
+                        <div><span class="table-kpi-num" id="tblKpiRevenue">₹0</span><span class="table-kpi-label">Revenue Today</span></div>
                     </div>
                 <div class="table-kpi-card">
                     <i data-lucide="clock" class="icon-20" style="color:var(--text-secondary)"></i>
@@ -6091,7 +6097,7 @@
 
                 </div>
 
-                <div class="mob-kpi-val" id="costKpiIndex">â‚¹0</div>
+                <div class="mob-kpi-val" id="costKpiIndex">₹0</div>
 
                 <div class="mob-kpi-trend" id="costKpiIndexTrend">updates on every new order</div>
 
@@ -6139,9 +6145,9 @@
 
                 </div>
 
-                <div class="mob-kpi-val" id="costKpiPromo">â‚¹0</div>
+                <div class="mob-kpi-val" id="costKpiPromo">₹0</div>
 
-                <div class="mob-kpi-trend" id="costKpiPromoTrend">0 tokens used Ã— â‚¹1</div>
+                <div class="mob-kpi-trend" id="costKpiPromoTrend">0 tokens used Ã— ₹1</div>
 
             </div>
 
@@ -6542,7 +6548,7 @@
                         <label class="form-label-small">Default Currency Display</label>
                         <select id="expenseCurrencyDisplay" class="form-input w-100">
                             <option value="Rs.">Rs.</option>
-                            <option value="â‚¹">â‚¹</option>
+                            <option value="₹">₹</option>
                         </select>
                     </div>
                     <hr style="margin:16px 0; border-color:var(--glass-border);">
@@ -6691,7 +6697,7 @@
 
                     <div class="mc-group-title">Price</div>
 
-                    <label class="form-label" for="dishPriceBase">Base Price (â‚¹)</label>
+                    <label class="form-label" for="dishPriceBase">Base Price (₹)</label>
 
                     <input id="dishPriceBase" type="number" placeholder="499" class="form-input w-full">
 
@@ -7100,7 +7106,7 @@
 
                     <div id="mobileCartCount" class="summary-count">0 Items</div>
 
-                    <div id="mobileCartTotal" class="summary-total">â‚¹0</div>
+                    <div id="mobileCartTotal" class="summary-total">₹0</div>
 
                 </div>
 
@@ -7283,7 +7289,7 @@
 
                         <div class="kpi-label">Total Savings Given</div>
 
-                        <div class="kpi-value" id="drKpiSavings">â‚¹0</div>
+                        <div class="kpi-value" id="drKpiSavings">₹0</div>
 
                     </div>
 
@@ -7299,7 +7305,7 @@
 
                         <div class="kpi-label">Average Discount</div>
 
-                        <div class="kpi-value" id="drKpiAverage">â‚¹0</div>
+                        <div class="kpi-value" id="drKpiAverage">₹0</div>
 
                     </div>
 
@@ -7452,7 +7458,7 @@
                     <!-- Total display -->
                     <div class="bill-total-display">
                         <span class="bill-total-label">Total</span>
-                        <span class="bill-total-amount" id="billTotalAmount">â‚¹0</span>
+                        <span class="bill-total-amount" id="billTotalAmount">₹0</span>
                     </div>
 
                     <!-- Payment method toggle -->
@@ -7509,7 +7515,7 @@
                         <div class="bill-discount-inputs">
                             <div class="bill-discount-field">
                                 <input type="number" id="tableBillDiscountAmt" value="0" min="0" class="bill-discount-input">
-                                <span class="bill-discount-unit">â‚¹</span>
+                                <span class="bill-discount-unit">₹</span>
                             </div>
                             <span class="bill-discount-sep">or</span>
                             <div class="bill-discount-field">
@@ -7521,12 +7527,12 @@
 
                     <!-- Summary -->
                     <div class="bill-summary">
-                        <div class="bill-summary-row"><span>Subtotal</span><span id="billSummarySubtotal">â‚¹0</span></div>
+                        <div class="bill-summary-row"><span>Subtotal</span><span id="billSummarySubtotal">₹0</span></div>
                         <div id="billSummaryTaxRows"></div>
-                        <div class="bill-summary-row hidden" id="billSummarySCRow"><span id="billSummarySCLabel">Service Charge</span><span id="billSummarySCVal">â‚¹0</span></div>
-                        <div class="bill-summary-row bill-summary-discount hidden" id="billSummaryOrderDiscRow"><span id="billSummaryOrderDiscLabel">Order Discounts</span><span id="billSummaryOrderDiscVal">-â‚¹0</span></div>
-                        <div class="bill-summary-row bill-summary-discount hidden" id="billSummaryDiscountRow"><span id="billSummaryDiscountLabel">Discount</span><span id="billSummaryDiscountVal" style="color:#059669;">-â‚¹0</span></div>
-                        <div class="bill-summary-row bill-summary-total"><strong>You Pay</strong><strong id="billSummaryTotal">â‚¹0</strong></div>
+                        <div class="bill-summary-row hidden" id="billSummarySCRow"><span id="billSummarySCLabel">Service Charge</span><span id="billSummarySCVal">₹0</span></div>
+                        <div class="bill-summary-row bill-summary-discount hidden" id="billSummaryOrderDiscRow"><span id="billSummaryOrderDiscLabel">Order Discounts</span><span id="billSummaryOrderDiscVal">-₹0</span></div>
+                        <div class="bill-summary-row bill-summary-discount hidden" id="billSummaryDiscountRow"><span id="billSummaryDiscountLabel">Discount</span><span id="billSummaryDiscountVal" style="color:#059669;">-₹0</span></div>
+                        <div class="bill-summary-row bill-summary-total"><strong>You Pay</strong><strong id="billSummaryTotal">₹0</strong></div>
                     </div>
 
                     <!-- Confirm -->
@@ -7601,7 +7607,7 @@
 
                             <option value="percent">% Percent</option>
 
-                            <option value="fixed">â‚¹ Fixed amount</option>
+                            <option value="fixed">₹ Fixed amount</option>
 
                         </select>
 
@@ -7625,7 +7631,7 @@
 
                     <div class="form-group">
 
-                        <label for="discMaxCap" data-i18n="discount.editor.maxCap">Max cap (â‚¹, optional)</label>
+                        <label for="discMaxCap" data-i18n="discount.editor.maxCap">Max cap (₹, optional)</label>
 
                         <input type="number" id="discMaxCap" min="0" step="1" placeholder="100" class="search-input-group">
 
@@ -7743,7 +7749,7 @@
 
                     <div class="form-group">
 
-                        <label for="discMinSubtotal" data-i18n="discount.editor.minSubtotal">Min subtotal (â‚¹, optional)</label>
+                        <label for="discMinSubtotal" data-i18n="discount.editor.minSubtotal">Min subtotal (₹, optional)</label>
 
                         <input type="number" id="discMinSubtotal" min="0" step="1" placeholder="0" class="search-input-group">
 
@@ -7964,7 +7970,7 @@
 
                     </div>
 
-                    <div id="posModalTotal" class="total-price-large">â‚¹0</div>
+                    <div id="posModalTotal" class="total-price-large">₹0</div>
 
                 </div>
 
@@ -8398,7 +8404,7 @@
 
                         <div class="exp-amount-box">
 
-                            <span class="exp-rupee" aria-hidden="true">â‚¹</span>
+                            <span class="exp-rupee" aria-hidden="true">₹</span>
 
                             <input type="number" id="expenseAmount" class="exp-amount-input" step="0.01" min="0.01" placeholder="0" inputmode="decimal" required>
 
@@ -8959,6 +8965,7 @@
 
 
 </html>
+
 
 
 

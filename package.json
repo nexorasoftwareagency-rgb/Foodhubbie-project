@@ -55,9 +55,10 @@
     "test:order-status-alert": "node tests/order-status-alert.check.cjs",
     "test:daily-reports": "node tests/daily-reports.check.cjs",
     "test:bot-commands": "node tests/bot-commands.check.cjs",
+    "test:promotions-cloud": "node tests/promotions-cloud.check.cjs",
     "test:coexistence-echo": "node tests/coexistence-echo.check.cjs",
     "test:egress-guard": "node tests/egress-guard.check.cjs",
-    "test:ec2-retirement": "npm run test:webhook-inbox && npm run test:process-inbound && npm run test:order-status-alert && npm run test:daily-reports && npm run test:bot-commands && npm run test:egress-guard"
+    "test:ec2-retirement": "npm run test:webhook-inbox && npm run test:process-inbound && npm run test:order-status-alert && npm run test:daily-reports && npm run test:bot-commands && npm run test:promotions-cloud && npm run test:egress-guard"
   },
   "dependencies": {
     "chart.js": "^4.4.1",
