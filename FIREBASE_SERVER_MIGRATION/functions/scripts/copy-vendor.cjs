@@ -78,6 +78,14 @@ const FILES = [
     'bot/whatsapp-send.js',
     'bot/meta-cost.js',
     'bot/chat-log-core.js',
+    // Batch 23q: the promotions engine. `promotions-rules.js` is EVERY decision
+    // (pause reasons, quiet hours, warm-up ladder, scheduling, pacing, consent
+    // copy) and `promotions-engine.js` is the slice runner, lease, token charge
+    // and 30-day expiry. The bot binds the same two files to its socket, so a
+    // stale copy here would let the cloud send through a stop, a quiet hour or a
+    // spent token that the Admin card says it is respecting.
+    'bot/promotions-rules.js',
+    'bot/promotions-engine.js',
 ];
 
 // Module-type markers. `functions/package.json` has no "type", so a .js file is
@@ -255,6 +263,36 @@ function verifyLoad() {
     if (typeof chatLog.customerIdFromJid === 'function'
         && chatLog.customerIdFromJid('919724649971@s.whatsapp.net') !== '9724649971') {
         problems.push('customerIdFromJid no longer keys the thread by last-10-digits');
+    }
+
+    // Batch 23q: the promotions engine. `PAUSE_REASONS.NO_NUMBER` is the copy the
+    // Admin card renders, `PROMO_DAILY_LIMIT` is the hard ceiling whatever array
+    // the Admin wrote, and the quiet-hours decision is the one thing that must
+    // never drift by an offset: sending a promo at 21:30 IST is the single most
+    // reported complaint (and a ban signal).
+    const promos = require(abs('bot/promotions-engine.js'));
+    const promoRules = require(abs('bot/promotions-rules.js'));
+    if (typeof promos.createPromotionsEngine !== 'function' || typeof promos.sendPromoWithFallback !== 'function') {
+        problems.push('bot/promotions-engine.js did not load (createPromotionsEngine/sendPromoWithFallback)');
+    }
+    if (!(Number(promos.LEASE_TTL_MS) >= 60000)) {
+        problems.push('the campaign lease TTL is missing or shorter than a slice');
+    }
+    if (!promoRules.PAUSE_REASONS || promoRules.PAUSE_REASONS.NO_NUMBER !== 'no-number') {
+        problems.push('PAUSE_REASONS.NO_NUMBER drifted from the Admin copy');
+    }
+    if (!Array.isArray(promoRules.TERMINAL_STATUSES) || !promoRules.TERMINAL_STATUSES.includes('done')) {
+        problems.push('TERMINAL_STATUSES no longer contains done');
+    }
+    if (promoRules.PROMO_DAILY_LIMIT !== 300) {
+        problems.push('PROMO_DAILY_LIMIT drifted: ' + promoRules.PROMO_DAILY_LIMIT);
+    }
+    {
+        const at = Date.UTC(2026, 0, 1, 16, 0); // 21:30 IST
+        const quiet = promoRules.quietHoursState({ start: 21, end: 9 }, promoRules.istNow(at), at);
+        if (!quiet || quiet.active !== true || !(Number(quiet.untilMs) > at)) {
+            problems.push('quietHoursState no longer defers a 21:30 IST send: ' + JSON.stringify(quiet));
+        }
     }
 
     return problems;

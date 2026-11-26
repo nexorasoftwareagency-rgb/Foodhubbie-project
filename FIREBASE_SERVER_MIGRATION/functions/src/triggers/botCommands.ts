@@ -6,21 +6,37 @@
  *   Admin Chat tab            SEND_GENERIC_MESSAGE
  *   Analytics (mobile)        SEND_GENERIC_MESSAGE
  *   Riders / rider analytics  SEND_GENERIC_MESSAGE
- *   Promotions                SEND_PROMOTION  (NOT handled here)
+ *   Promotions                SEND_PROMOTION  (batch 23q - see below)
  *
  * The bot's listener (`bot/index.js initCommandListener`) is socket-only, so a
  * reply an operator sends while the box is down sits in the queue for ever and
  * the Chat tab keeps showing it as "queued". This trigger ports the
- * `SEND_GENERIC_MESSAGE` branch and NOTHING else:
+ * `SEND_GENERIC_MESSAGE` branch and, since batch 23q, the `SEND_PROMOTION`
+ * hand-off.
  *
- *   - `SEND_PROMOTION` is left UNTOUCHED. The campaign engine (`bot/promotions.js`)
- *     is roughly 700 lines of pacing, opt-out, prepaid tokens, template shells
- *     and pause reasons; a stub that "sends to everyone" is the top ban trigger
- *     and ignores consent. The node waits for the promotions batch.
- *   - `SEND_DAILY_REPORT` / `SEND_WEEKLY_REPORT` / `SEND_MONTHLY_REPORT` are
- *     also left untouched: no client writes them (grep-verified) and the nightly
- *     `dailyReports` function already owns the daily report.
- *   - An unknown action is never consumed: whoever owns it later still finds it.
+ * TWO INDEPENDENT SWITCHES, on purpose:
+ *
+ *   `config/botCommands/enabled`   operator replies (the branch below).
+ *   `config/promotionsRelay`       campaigns (`runPromotionCommand`).
+ *
+ * An outlet can move its chat replies into the cloud while its campaigns stay
+ * on the box (or the reverse), so one flag can never imply the other.
+ *
+ * `SEND_PROMOTION` is a HAND-OFF, not a send loop. The campaign engine
+ * (`bot/promotions-engine.js`, vendored) owns pacing, opt-out, consent, prepaid
+ * tokens, template shells, the warm-up ladder and every pause reason; this
+ * branch deletes the command and runs the FIRST slice so a campaign the owner
+ * just launched starts in seconds instead of waiting for the next sweep tick.
+ * Deleting first is safe because the campaign document - not the command - is
+ * the source of truth, and `onPromotionStatus` has already indexed it: a crash
+ * after the delete is recovered by the next `promotionSweep` tick. Leaving the
+ * command in place would instead let the bot's own listener pick it up again if
+ * the box ever came back, sending the same campaign twice.
+ *
+ * `SEND_DAILY_REPORT` / `SEND_WEEKLY_REPORT` / `SEND_MONTHLY_REPORT` are left
+ * untouched: no client writes them (grep-verified) and the nightly
+ * `dailyReports` function already owns the daily report. An unknown action is
+ * never consumed: whoever owns it later still finds it.
  *
  * THREE DELIBERATE DIFFERENCES FROM THE BOT, each one fixing a defect:
  *
@@ -54,12 +70,15 @@
  * text. `retry` is deliberately off - a permanent Graph rejection (undeliverable
  * number) must not retry for 24 hours.
  *
- * Config flag: `config/botCommands/enabled === true` (absent = no-op, the bot
- * keeps the job). Demo tenant hard-skipped.
+ * Config flags: `config/botCommands/enabled === true` for the operator reply,
+ * `config/promotionsRelay/enabled === true` for the campaign hand-off (each
+ * absent = that half is a no-op and the bot keeps it). Demo tenant
+ * hard-skipped.
  */
 import { onValueCreated } from 'firebase-functions/v2/database';
 import * as path from 'path';
 import { getDB, initializeAdmin } from '../shared/firebase/admin';
+import { makePromotionEngine } from '../shared/promotions/factory';
 import { makeTenantChatLog, makeTenantTransport, tenantPathResolver } from '../shared/whatsapp/factory';
 
 /* eslint-disable @typescript-eslint/no-var-requires */
@@ -74,14 +93,102 @@ const { customerIdFromJid } = require(path.join(VENDOR, 'bot/chat-log-core.js'))
 
 const DEMO_BUSINESS_ID = 'foodhubbie-demo';
 const RELAY_FLAG = 'config/botCommands/enabled';
+/**
+ * The campaign switch, an OBJECT (`{enabled, sliceBudgetMs, batchSize}`) rather
+ * than a boolean, because `promotionSweep` reads its ops knobs from the same
+ * node. Deliberately NOT `config/botCommands`: chat replies and campaigns move
+ * to the cloud independently.
+ */
+const PROMO_RELAY_FLAG = 'config/promotionsRelay';
 /** Graph: the message would be sent outside the 24h customer-service window. */
 const RE_ENGAGEMENT = 131047;
+
+/** The engine clamps to these anyway; kept here so the flag cannot ask for more. */
+const PROMO_SLICE_BUDGET_MS = 480_000;
+const PROMO_BATCH_SIZE = 30;
 
 /** `919748509436` -> `91****9436`; never log a full customer number. */
 function maskPhone(v: any): string {
   const d = String(v || '').replace(/\D/g, '');
   if (d.length < 6) return '***';
   return `${d.slice(0, 2)}****${d.slice(-4)}`;
+}
+
+function clampInt(v: any, lo: number, hi: number, dflt: number): number {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n)) return dflt;
+  return Math.min(hi, Math.max(lo, n));
+}
+
+/**
+ * `SEND_PROMOTION` — the hand-off to the campaign engine.
+ *
+ * The engine owns everything: kill switch, prepaid tokens, opt-out, consent,
+ * freeze, quiet hours, the warm-up ladder, pacing and the circuit breaker. This
+ * function only resolves the flag, deletes the command and runs the FIRST slice
+ * so a campaign the owner just launched starts in seconds instead of waiting up
+ * to a minute for `promotionSweep`.
+ *
+ * DELETE FIRST, and only after the flag says this relay owns campaigns:
+ *  - the campaign document (indexed by `onPromotionStatus`) is the source of
+ *    truth, so a crash after the delete is recovered by the next sweep tick;
+ *  - leaving the command in place would let the bot's own listener send the same
+ *    campaign a second time if the box ever came back.
+ *
+ * A duplicate Eventarc delivery re-runs against the same campaign document: the
+ * lease refuses a concurrent slice and `currentIndex` has already advanced past
+ * every claimed recipient, so a retry can never re-send.
+ */
+async function runPromotionCommand(
+  bid: string,
+  oid: string,
+  commandId: string,
+  cmd: any,
+): Promise<void> {
+  await initializeAdmin();
+  const db = getDB();
+  const tag = `[PROMO-CMD] ${bid}/${oid}`;
+
+  // Unreadable means "stay off": the bot still owns campaigns and a failed read
+  // must never look like consent.
+  let flag: any = null;
+  try {
+    const flagSnap = await db.ref(PROMO_RELAY_FLAG).once('value');
+    flag = flagSnap && typeof (flagSnap as any).val === 'function' ? (flagSnap as any).val() : null;
+  } catch {
+    return;
+  }
+  const armed = !!flag && flag.enabled === true;
+  if (!armed) return;
+
+  const budgetMs = clampInt(flag.sliceBudgetMs, 30_000, PROMO_SLICE_BUDGET_MS, PROMO_SLICE_BUDGET_MS);
+  const batchSize = clampInt(flag.batchSize, 1, PROMO_BATCH_SIZE, PROMO_BATCH_SIZE);
+
+  const resolvePath = tenantPathResolver(bid, oid);
+  const commandPath = `${resolvePath('bot/commands')}/${commandId}`;
+  await db.ref(commandPath).remove().catch(() => {});
+
+  try {
+    const { engine, transportError } = await makePromotionEngine(bid, oid, {
+      log: (...a: any[]) => console.log(...a),
+    });
+    // A missing number is not an error: the engine pauses the campaign with
+    // `no-number` so the owner sees why on the card.
+    if (transportError) console.warn(`${tag} ${commandId}: ${transportError}`);
+
+    // `force`: a human just pressed Send, so an inter-slice pause left over from
+    // a paused-then-resumed campaign is irrelevant.
+    const result = await engine.runSlice(cmd, { budgetMs, batchSize, force: true });
+    console.log(
+      `${tag} ${(cmd && cmd.campaignId) || commandId} -> ${(result && result.status) || 'unknown'}` +
+        ` sent=${Number(result && result.sent) || 0} failed=${Number(result && result.failed) || 0}` +
+        (result && result.pauseReason ? ` pause=${result.pauseReason}` : ''),
+    );
+  } catch (e: any) {
+    // Never retried here: a permanent Graph rejection must not loop for 24 h.
+    // The campaign document is still in the index, so the sweep owns the retry.
+    console.error(`${tag} ${commandId} slice failed: ${(e && e.message) || e}`);
+  }
 }
 
 export const onBotCommand = onValueCreated(
@@ -98,8 +205,18 @@ export const onBotCommand = onValueCreated(
 
     const cmd = event.data && event.data.val();
     if (!cmd) return;
+
+    const action = String(cmd.action || '');
+
+    // Batch 23q: the campaign hand-off has its OWN switch and lifecycle, so it is
+    // routed before the operator-reply gate. An outlet can move one half into the
+    // cloud without the other.
+    if (action === 'SEND_PROMOTION') {
+      await runPromotionCommand(bid, oid, commandId, cmd);
+      return;
+    }
     // Leaf-first: only the operator reply is ported. Everything else waits.
-    if (String(cmd.action || '') !== 'SEND_GENERIC_MESSAGE') return;
+    if (action !== 'SEND_GENERIC_MESSAGE') return;
 
     await initializeAdmin();
 

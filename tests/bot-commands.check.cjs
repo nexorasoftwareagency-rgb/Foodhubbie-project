@@ -10,9 +10,12 @@
  * the queue for ever while the Chat tab showed it as "queued".
  *
  * Pins:
- *   - Only SEND_GENERIC_MESSAGE is handled. `SEND_PROMOTION` (the ~700-line
- *     campaign engine) and the report actions are left UNTOUCHED — not deleted,
- *     not claimed — so their own batch cannot lose them.
+ *   - `SEND_GENERIC_MESSAGE` is the 23o branch: text first, template only on
+ *     Graph 131047, RTDB freeze, claim + tombstone. Batch 23q ADDED the
+ *     `SEND_PROMOTION` hand-off beside it — behind its OWN switch
+ *     (`config/promotionsRelay`, an object) and delete-then-run, because the
+ *     campaign document is the source of truth and the sweep recovers a crash.
+ *     The report actions stay UNTOUCHED — not deleted, not claimed.
  *   - Text first; the approved template only on Graph 131047 (outside the 24h
  *     window). The bot's template-first order billed MARKETING for a free-form
  *     reply the customer was allowed to receive.
@@ -75,11 +78,31 @@ ok('Listens on the per-outlet bot/commands queue',
 ok('onValueCreated (a command is created, never re-written)',
   /onValueCreated\(/.test(stripped) && !/onValueWritten\(/.test(stripped));
 
-// 2. Only the generic branch
+// 2. The two branches
 ok('Handles SEND_GENERIC_MESSAGE',
   /'SEND_GENERIC_MESSAGE'/.test(stripped));
-ok('Does not implement SEND_PROMOTION',
-  !/SEND_PROMOTION/.test(stripped));
+{
+  // Batch 23q: the campaign hand-off is routed BEFORE the operator-reply gate,
+  // so one half of the queue can move to the cloud without the other.
+  const promoAt = stripped.indexOf("action === 'SEND_PROMOTION'");
+  const genericGateAt = stripped.indexOf("!== 'SEND_GENERIC_MESSAGE'");
+  ok('Routes SEND_PROMOTION to its own handler first',
+    promoAt > 0 && genericGateAt > promoAt, { promoAt, genericGateAt });
+  const promoFnAt = stripped.indexOf('async function runPromotionCommand');
+  ok('SEND_PROMOTION has its own handler (not the operator-reply path)',
+    promoFnAt > 0 && /runPromotionCommand\(bid, oid, commandId, cmd\)/.test(stripped));
+  {
+    // Delete-then-run: the campaign document is the source of truth, so the
+    // command is removed BEFORE the slice and a crash is recovered by the sweep.
+    const body = stripped.slice(promoFnAt, stripped.indexOf("!== 'SEND_GENERIC_MESSAGE'"));
+    const removeAt = body.indexOf("db.ref(commandPath).remove()");
+    const sliceAt = body.indexOf('engine.runSlice(');
+    ok('Promo command is deleted BEFORE the slice (sweep owns recovery)',
+      removeAt > 0 && sliceAt > removeAt, { removeAt, sliceAt });
+    ok('Promo slice runs with force:true (a human just pressed Send)',
+      /runSlice\(cmd, \{[^}]*force:\s*true/.test(body));
+  }
+}
 {
   const guardAt = stripped.indexOf("!== 'SEND_GENERIC_MESSAGE'");
   const claimAt = stripped.indexOf('.transaction(');
@@ -92,6 +115,10 @@ ok('An unsupported action is never removed',
 // 3. Gates + admin init order
 ok('Demo tenant hard-skipped', /foodhubbie-demo/.test(stripped));
 ok('Config flag gate: config/botCommands/enabled', /botCommands\/enabled/.test(stripped));
+ok('Promo flag is a SEPARATE object switch (config/promotionsRelay)',
+  /'config\/promotionsRelay'/.test(stripped) &&
+  /flag\.enabled === true/.test(stripped) &&
+  /flag\.sliceBudgetMs/.test(stripped));
 {
   const initAt = stripped.indexOf('await initializeAdmin()');
   const firstDbAt = stripped.indexOf('getDB()');
@@ -185,7 +212,7 @@ ok('Vendored: bot/utils, bot/chat-log-core, bot/whatsapp-send',
 ok('Trigger resolves the vendor dir from lib/triggers (../vendor)',
   /const VENDOR = path\.join\(__dirname, '\.\.\/vendor'\)/.test(stripped));
 
-// 10. One writer per path: the bot stands down for this branch only
+// 10. One writer per path: the bot stands down for these two branches only
 const botGenericAt = botSrc.indexOf('cmd.action === "SEND_GENERIC_MESSAGE"');
 const botPromoAt = botSrc.indexOf('cmd.action === "SEND_PROMOTION"');
 const botRemoveAt = botSrc.indexOf('await snap.ref.remove()', botGenericAt);
@@ -201,8 +228,22 @@ const botRemoveAt = botSrc.indexOf('await snap.ref.remove()', botGenericAt);
     const gateTail = botSrc.slice(gateAt, jidAt);
     ok('Bot RETURNS so the shared remove() is skipped', /return;/.test(gateTail), gateTail.slice(0, 120));
   }
-  ok('Bot still owns campaigns (SEND_PROMOTION not gated)',
-    botPromoAt > 0 && botGenericAt > botPromoAt && !/isBotCommandRelayEnabled/.test(botSrc.slice(botPromoAt, botGenericAt)));
+  // Batch 23q: campaigns are the cloud's while `config/promotionsRelay/enabled`
+  // is exactly true; every other state (absent/false/unreadable) keeps the bot.
+  ok('Bot reads the promo switch (config/promotionsRelay/enabled)',
+    /async function isPromotionsRelayEnabled/.test(botSrc) &&
+    /ref\('config\/promotionsRelay\/enabled'\)/.test(botSrc) &&
+    /catch\s*\{\s*[^}]*_promotionsRelayCache = \{ at: Date\.now\(\), on: false \}/s.test(botSrc));
+  {
+    const promoGateAt = botSrc.indexOf('isPromotionsRelayEnabled()', botPromoAt);
+    const promoRunAt = botSrc.indexOf('runPromotionCampaign', botPromoAt);
+    ok('Bot leaves SEND_PROMOTION for the cloud relay (gate before the run)',
+      botPromoAt > 0 && promoGateAt > botPromoAt && promoRunAt > promoGateAt,
+      { botPromoAt, promoGateAt, promoRunAt });
+    const promoGateTail = botSrc.slice(promoGateAt, promoRunAt);
+    ok('Bot RETURNS so the shared remove() is skipped for promos too',
+      /return;/.test(promoGateTail), promoGateTail.slice(0, 140));
+  }
   ok('Bot remove() still runs after the branch chain',
     botRemoveAt > botGenericAt && /^\s*\/\/ Remove the command after processing/m.test(botSrc.slice(botRemoveAt - 120, botRemoveAt)));
   ok('The bot branch this ports is still the record of behaviour',

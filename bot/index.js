@@ -508,6 +508,15 @@ function initCommandListener(sock) {
                 await sendMonthlyReport(sock, { OUTLET, OUTLET_NAME, OUTLET_EMOJI, getData, getCachedAdminJids });
                 console.log(`[Bot] Monthly Report sent successfully`);
             } else if (cmd.action === "SEND_PROMOTION") {
+                // Batch 23q: the cloud sweep owns campaigns while
+                // `config/promotionsRelay/enabled` is exactly `true`. Return so
+                // the command stays queued for the relay — the remove below is
+                // shared by every branch. A flag we could not read leaves the
+                // command to this worker.
+                if (await isPromotionsRelayEnabled()) {
+                    console.log(`[Bot] SEND_PROMOTION left for the cloud relay (${cmd.campaignId})`);
+                    return;
+                }
                 // Fire-and-forget — long-running, runs to completion or until paused
                 promo.runPromotionCampaign(sock, cmd, { OUTLET, db, getData, cryptoErrorCount }).catch(err => {
                     console.error("[Promo] Campaign error:", err);
@@ -515,8 +524,8 @@ function initCommandListener(sock) {
                 console.log(`[Promo] Campaign ${cmd.campaignId} dispatched`);
             } else if (cmd.action === "SEND_GENERIC_MESSAGE") {
                 // Batch 23o: the cloud trigger drains these while the flag is on.
-                // Return (not `snap.ref.remove()`) so the command stays queued for
-                // it — the remove below is shared by every branch.
+                // Return so the command stays queued for it — the remove below
+                // is shared by every branch.
                 if (await isBotCommandRelayEnabled()) {
                     console.log(`[Bot] SEND_GENERIC_MESSAGE left for the cloud relay`);
                     return;
@@ -1031,6 +1040,25 @@ async function isBotCommandRelayEnabled() {
     }
 }
 
+
+// Batch 23q: promotional campaigns are run by `promotionRelay` (per-message
+// slice) + `promotionSweep` (minute tick) while `config/promotionsRelay/enabled`
+// is exactly `true`. Every other state — absent, false, unreadable — leaves the
+// bot in charge, so a failed flag read can never double-send. Gates the
+// SEND_PROMOTION branch plus the pickup / resume / expiry sweeps; the reports
+// and the rest of the listener are unaffected.
+let _promotionsRelayCache = { at: 0, on: false };
+async function isPromotionsRelayEnabled() {
+    if (Date.now() - _promotionsRelayCache.at < 30000) return _promotionsRelayCache.on;
+    try {
+        const snap = await db.ref('config/promotionsRelay/enabled').once('value');
+        _promotionsRelayCache = { at: Date.now(), on: snap.val() === true };
+        return _promotionsRelayCache.on;
+    } catch {
+        _promotionsRelayCache = { at: Date.now(), on: false }; // unreadable = bot owns it
+        return false;
+    }
+}
 
 async function sendFCMToAdmins(orderId, order) {
     try {
@@ -2165,12 +2193,16 @@ async function sendDailyReportSafely(dateOverride = null) {
 
         // 4. Promotion heartbeat: pick up scheduled campaigns whose runAt is due.
         //    Indexed query on runAt — returns nothing when no campaign is due.
-        promo.pickupScheduledPromotions(currentSock, { OUTLET, db }).catch(err => console.error("[Promo] Scheduled pickup error:", err));
+        //    Batch 23q: the cloud sweep owns this while the relay flag is on.
+        if (!await isPromotionsRelayEnabled()) {
+            promo.pickupScheduledPromotions(currentSock, { OUTLET, db }).catch(err => console.error("[Promo] Scheduled pickup error:", err));
+        }
 
         // 5. Expire promotion logs/campaigns older than 30 days (best-effort).
         //    NOT every heartbeat: it walks campaign nodes, and inline base64
         //    media made that the single largest RTDB egress source we had.
-        if (Date.now() - lastPromoExpiryAt > PROMO_EXPIRY_INTERVAL_MS) {
+        //    Batch 23q: the cloud sweep runs this once a day behind the same flag.
+        if (!await isPromotionsRelayEnabled() && Date.now() - lastPromoExpiryAt > PROMO_EXPIRY_INTERVAL_MS) {
             lastPromoExpiryAt = Date.now();
             promo.expireOldPromoLogs(OUTLET, db).catch(err => console.error("[Promo] Log expiry error:", err));
         }
@@ -2401,7 +2433,10 @@ async function sendDailyReportSafely(dateOverride = null) {
     // Resume any campaigns that were running when the bot last lost connection.
     // Scans `bot/{outlet}/promotions/campaigns` for status==='running' and
     // rebuilds the command payload from the stored campaign doc.
-    promo.resumeStuckPromotions(currentSock, { OUTLET, db }).catch(err => console.error("[Promo] Resume sweep error:", err));
+    // Batch 23q: the cloud sweep owns this while the relay flag is on.
+    if (!await isPromotionsRelayEnabled()) {
+        promo.resumeStuckPromotions(currentSock, { OUTLET, db }).catch(err => console.error("[Promo] Resume sweep error:", err));
+    }
 
     // =============================
     // 5. MESSAGE HANDLER (INTERNAL)

@@ -25,6 +25,7 @@ const PROMO_MAX_PER_CAMPAIGN = 300;
 // owner nothing actionable). Short label on the card, full sentence in a toast.
 const PAUSE_REASON_SHORT = {
     'transport-blocked': 'legacy transport',
+    'no-number': 'no WhatsApp number',
     'meta-cost-guard': 'Meta spend cap / wallet low',
     'no-tokens': 'no promo tokens',
     'kill-switch': 'sending switched off',
@@ -32,11 +33,16 @@ const PAUSE_REASON_SHORT = {
     'daily-limit': 'daily limit reached',
     'balance-unreadable': 'wallet unreadable',
     'high-failure-rate': 'high failure rate',
+    'session-degraded': 'session degraded',
+    'lock-lost': 'lock lost',
 };
 const PAUSE_REASON_FULL = {
     'transport-blocked': 'Promos need the official WhatsApp API — this outlet is on the legacy transport.',
+    'no-number': 'Sending paused — this outlet has no WhatsApp number connected yet. Connect one in Settings, then resume.',
     'meta-cost-guard': 'Sending paused — the wallet balance is below the send threshold or a Meta spend cap was reached. Top up, then resume.',
     'no-tokens': 'Sending paused — no prepaid promo tokens left. Buy a token pack, then resume.',
+    'session-degraded': 'Sending paused — the WhatsApp session is degraded. Reconnect the number, then resume.',
+    'lock-lost': 'Sending paused — another worker took over this campaign. Resume it to continue.',
 };
 const PHONE_HINTS = ['whatsapp', 'phone', 'mobile', 'number', 'cell', 'contact', 'tel', 'msisdn'];
 
@@ -390,6 +396,7 @@ async function _renderActivePane() {
                     <strong>${escapeHtml(c.id)}</strong>
                     <span class="promo-badge-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span>
                     ${c.status === 'paused' && c.pauseReason ? `<span class="text-muted-small" title="${escapeHtml(PAUSE_REASON_FULL[c.pauseReason] || c.pauseReason)}">${escapeHtml(PAUSE_REASON_SHORT[c.pauseReason] || c.pauseReason)}</span>` : ''}
+                    ${Number(c.waitingUntil) > Date.now() ? `<span class="text-muted-small" title="Promotional messages are only sent outside quiet hours (21:00–09:00 IST)">• ⏸ waiting — resumes ${escapeHtml(formatDate(c.waitingUntil))}</span>` : ''}
                     ${c.runAt ? `<span class="text-muted-small">scheduled ${escapeHtml(formatDate(c.runAt))}</span>` : ''}
                     ${c.menuText ? `<span class="text-muted-small" title="Has menu footer">• 🍴 menu</span>` : ''}
                     ${c.waTemplateName && c.waTemplateName !== 'proactive_promo' ? `<span class="text-muted-small" title="WhatsApp shell">• ${escapeHtml(c.waTemplateName)}</span>` : ''}

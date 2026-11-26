@@ -64,16 +64,20 @@ export { walletGateReconcile } from './scheduled/walletGateReconcile';
 // "which campaigns are due" half of `bot/promotions.js` and handed every
 // recipient to the `sendOutboundMessage` task queue — which is the superseded
 // product on a taskQueue path that still falls back to the wrong
-// `foodhubbie-prod` project. The real engine (pacing, opt-out, prepaid tokens,
-// template shells, pause reasons) is ~700 lines and promotions are
-// `transport-blocked` on the live transport, so the campaign loop moves to the
-// cloud as its own batch once the Meta transport is the only path. Do not
-// re-add a stub here: a schedulable stub that silently sends nothing is worse
-// than an absent one.
+// `foodhubbie-prod` project. Batch 23q replaced that idea with the real engine:
+// `promotionSweep` below runs the SAME vendored `runSlice()` the bot runs, so
+// pacing, opt-out, consent, prepaid tokens, template shells and every pause
+// reason are byte-identical. Do not re-add a stub here.
 // Batch 23n: daily/weekly/monthly sales summary over the Cloud API (the bot's
 // `sendDailyReportSafely` was socket-only). Config flag:
 // config/dailyReports/enabled === true. Demo hard-skipped.
 export { dailyReports } from './scheduled/dailyReports';
+// Batch 23q: the promotions dispatcher. One tick per minute reads the tiny
+// `meta/promotionsActive` index (written by `onPromotionStatus`) and runs ONE
+// bounded slice per due campaign, so a 70-90 minute campaign fits inside
+// request-scoped runtimes. It also owns the daily 30-day log/campaign expiry.
+// Config flag: config/promotionsRelay/enabled === true. Demo hard-skipped.
+export { promotionSweep } from './scheduled/promotionSweep';
 
 // Callable Functions (Admin/Client)
 export { botControl } from './api/botControl';
@@ -98,12 +102,19 @@ export { onWebhookInboxMessage } from './triggers/webhookInbox';
 export { onOrderStatusAlert } from './triggers/orderStatusAlert';
 // Batch 23o: the dashboard's `bot/commands` queue — the Admin Chat tab (and the
 // Analytics/Riders service messages) write `SEND_GENERIC_MESSAGE` there and the
-// bot's socket-only listener drained it. This ports ONLY that branch: text
-// first, the approved template only on Graph 131047 (outside the 24h window),
-// RTDB-backed freeze, real chat row with the Graph message id. `SEND_PROMOTION`
-// and the report actions are deliberately left untouched for their own batches.
-// Config flag: config/botCommands/enabled === true. Demo hard-skipped.
+// bot's socket-only listener drained it. This ports that branch: text first, the
+// approved template only on Graph 131047 (outside the 24h window), RTDB-backed
+// freeze, real chat row with the Graph message id. Batch 23q added the
+// `SEND_PROMOTION` hand-off (own flag `config/promotionsRelay`, delete-then-run
+// so the campaign document stays the source of truth); the report actions stay
+// untouched. Config flags: config/botCommands/enabled + config/promotionsRelay.
+// Demo hard-skipped.
 export { onBotCommand } from './triggers/botCommands';
+// Batch 23q: keeps `meta/promotionsActive/{bid}/{oid}/{campaignId}` in step with
+// a campaign's status leaf, so the per-minute sweep never queries every outlet's
+// campaigns node. It never runs a slice — slice 1 is `onBotCommand`, every later
+// slice is `promotionSweep`. Config flag: config/promotionsRelay/enabled.
+export { onPromotionStatus } from './triggers/promotionRelay';
 // Batch 23c: runs the bot's own web/app order finalizer in DRY-RUN against live
 // orders and compares its verdict with what the bot actually produced. It never
 // writes to an order, a stock count, a reward or a billing row — only to

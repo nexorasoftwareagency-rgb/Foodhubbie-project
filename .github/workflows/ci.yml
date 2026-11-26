@@ -135,6 +135,9 @@ jobs:
       - name: Bot command queue guard (operator replies leave from Functions)
         run: node tests/bot-commands.check.cjs
 
+      - name: Promotions relay guard (sliced campaign engine, one lease, flag-off)
+        run: node tests/promotions-cloud.check.cjs
+
       - name: Coexistence echo guard (Business App replies reach the chat thread, never the inbox)
         run: node tests/coexistence-echo.check.cjs
 

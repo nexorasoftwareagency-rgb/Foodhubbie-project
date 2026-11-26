@@ -306,16 +306,19 @@ test('inbound text extractor understands quick-reply button taps', () => {
 // burned a prepaid promo token and billed ₹1 for a message nobody received.
 test('promo send never counts a cost-guard block as delivered', () => {
     const fs = require('fs');
-    const src = fs.readFileSync(path.join(__dirname, '../promotions.js'), 'utf8');
-    const send = src.slice(src.indexOf('async function sendPromotionalMessage'), src.indexOf('async function personalizeTemplate'));
-    assert.ok(/if \(r && r\.blocked\) throw new Error\('promo-blocked-cost-guard'\)/.test(send), 'template path must reject a blocked result');
-    assert.ok(/if \(sentMsg && sentMsg\.blocked\) throw new Error\('promo-blocked-cost-guard'\)/.test(send), 'text/image path must reject a blocked result');
-    const retry = src.slice(src.indexOf('async function sendWithRetry'), src.indexOf('async function acquirePromoLock'));
+    // Batch 23q: the send path moved into the shared, socket-free engine so the
+    // bot and the Functions sweep run the same bytes. The guard follows it.
+    const src = fs.readFileSync(path.join(__dirname, '../promotions-engine.js'), 'utf8');
+    assert.ok(/if \(r && r\.blocked\) throw new Error\('promo-blocked-cost-guard'\)/.test(src), 'template path must reject a blocked result');
+    assert.ok(/if \(sent && sent\.blocked\) throw new Error\('promo-blocked-cost-guard'\)/.test(src), 'text/image path must reject a blocked result');
+    const retry = src.slice(src.indexOf('async function sendWithRetry'), src.indexOf('async function expireOldPromoLogs'));
     assert.ok(retry.includes("'promo-blocked-cost-guard'"), 'cost-guard block must not be retried');
-    assert.ok(/pauseReason: 'meta-cost-guard'/.test(src), 'campaign must pause on a cost-guard block');
+    assert.ok(/META_COST_GUARD/.test(src), 'campaign must pause on a cost-guard block');
+    const rules = fs.readFileSync(path.join(__dirname, '../promotions-rules.js'), 'utf8');
+    assert.ok(/META_COST_GUARD: 'meta-cost-guard'/.test(rules), 'the pause reason the Admin renders');
     // A frozen chat is dropped inside the send function; the campaign must skip
     // it up front or it counts and bills a message that was never delivered.
-    assert.ok(/isJidFrozen\(jid\)\) \{ await logPromoSkip\(campaignId, phone, 'frozen'/.test(src), 'frozen recipient must be skipped, not billed');
+    assert.ok(/logSkip\(campaignId, phone, 'frozen'\)/.test(src), 'frozen recipient must be skipped, not billed');
 });
 
 // RTDB EGRESS: the Nov 2026 bill spike was the bot re-reading the whole promo
@@ -331,13 +334,19 @@ test('promo heartbeat never reads the whole campaigns node', () => {
     const pickup = src.slice(src.indexOf('async function pickupScheduledPromotions'), src.indexOf('async function expireOldPromoLogs'));
     assert.ok(pickup.includes(".orderByChild('runAt').startAt(1).endAt("), 'due query must bound runAt on both sides');
 
-    const expiry = src.slice(src.indexOf('async function expireOldPromoLogs'), src.indexOf('module.exports'));
-    assert.ok(!/resolvePath\(`bot\/promotions\/campaigns`[^)]*\)\s*\.once\('value'\)/.test(expiry),
+    // Batch 23q: the expiry sweep moved into the shared socket-free engine (the
+    // bot and the Functions sweep run the same bytes). The cheap shapes are the
+    // contract, so pin them where they now live.
+    const engine = fs.readFileSync(path.join(__dirname, '../promotions-engine.js'), 'utf8');
+    const expiry = engine.slice(engine.indexOf('async function expireOldPromoLogs'), engine.indexOf('module.exports'));
+    assert.ok(!/bot\/promotions\/campaigns`[^)]*\)\s*\.once\('value'\)/.test(expiry),
         'expiry sweep must not .once() the whole campaigns node');
     assert.ok(/orderByChild\('status'\)\.equalTo\(status\)/.test(expiry), 'expiry sweep queries terminal statuses');
     assert.ok(/stripCampaignMedia/.test(expiry), 'expiry sweep strips inline media');
-    assert.ok(/if \(typeof mediaUrl === 'string' && mediaUrl\.startsWith\(PROMO_INLINE_MEDIA_PREFIX\)\)/.test(src),
+    const rules = fs.readFileSync(path.join(__dirname, '../promotions-rules.js'), 'utf8');
+    assert.ok(/function isDataUri\(v\) \{\s*return typeof v === 'string' && v\.startsWith\(PROMO_INLINE_MEDIA_PREFIX\)/.test(rules),
         'a finished campaign must drop its inline media');
+    assert.ok(/stripCampaignMedia\(campaignId, 'done'\)/.test(engine), 'a done campaign strips its media');
 
     const index = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
     assert.ok(/Date\.now\(\) - lastPromoExpiryAt > PROMO_EXPIRY_INTERVAL_MS/.test(index),
