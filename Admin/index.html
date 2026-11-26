@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 
 <html lang="en">
 
@@ -25,7 +25,7 @@
     <meta name="msapplication-TileColor" content="#E84908">
 
     <title>FoodHubbie | Admin Dashboard</title>
-    <meta name="description" content="Restaurant management â€” manage orders, tables, menu, riders, and real-time operations.">
+    <meta name="description" content="Restaurant management — manage orders, tables, menu, riders, and real-time operations.">
 
 
 
@@ -61,7 +61,7 @@
 
         if (!_storedVersion) {
 
-            // Brand new install â€” just record the version
+            // Brand new install — just record the version
 
             localStorage.setItem('admin_app_version', ADMIN_VERSION);
 
@@ -87,7 +87,7 @@
 
                         refreshBtn.disabled = true;
 
-                        refreshBtn.textContent = 'Refreshingâ€¦';
+                        refreshBtn.textContent = 'Refreshing…';
 
                         try {
 
@@ -227,7 +227,7 @@
 
         <i data-lucide="wifi-off" class="icon-16"></i>
 
-        <span>No internet connection â€” changes may not save</span>
+        <span>No internet connection — changes may not save</span>
 
     </div>
 
@@ -239,7 +239,7 @@
 
         <span class="version-banner-icon"><i data-lucide="alert-triangle" class="icon-16"></i></span>
 
-        <span class="version-banner-text">A new version is available â€” click Refresh to update.</span>
+        <span class="version-banner-text">A new version is available — click Refresh to update.</span>
 
         <button id="versionBannerRefresh" class="version-banner-btn" type="button" title="Unregister service worker, clear caches, and reload">
 
@@ -247,7 +247,7 @@
 
         </button>
 
-        <button id="versionBannerDismiss" class="version-banner-dismiss" type="button" aria-label="Dismiss" title="Dismiss (use Danger Zone in Settings for a full refresh)">Ã—</button>
+        <button id="versionBannerDismiss" class="version-banner-dismiss" type="button" aria-label="Dismiss" title="Dismiss (use Danger Zone in Settings for a full refresh)">×</button>
 
     </div>
 
@@ -525,7 +525,7 @@
 
                 </li>
 
-                <li id="menu-customer-app" title="Configure the Customer App â€” notifications, offers, visibility & settings">
+                <li id="menu-customer-app" title="Configure the Customer App — notifications, offers, visibility & settings">
 
                     <button data-action="switchTab" data-tab="customer-app" class="nav-btn">
 
@@ -918,7 +918,7 @@
 
                             <div style="font-weight:600;" data-i18n="promo.widget.title">Promotional messages</div>
 
-                            <div id="promoKillWidgetStatus" class="text-muted-small" data-i18n="promo.widget.on">Sending is ON â€” all campaigns running normally.</div>
+                            <div id="promoKillWidgetStatus" class="text-muted-small" data-i18n="promo.widget.on">Sending is ON — all campaigns running normally.</div>
 
                             <div id="promoKillWidgetBotStatus" class="text-muted-small"></div>
 
@@ -1653,7 +1653,7 @@
 
                     <div id="trackerLastUpdated" class="tracker-last-updated">
 
-                        <i data-lucide="refresh-cw"></i> Live &#183; Last update <span id="trackerLastUpdateTime">â€”</span>
+                        <i data-lucide="refresh-cw"></i> Live &#183; Last update <span id="trackerLastUpdateTime">—</span>
 
                     </div>
 
@@ -1922,9 +1922,9 @@
 
                                             <option value="AUTO">Auto (Time Based)</option>
 
-                                            <option value="FORCE_OPEN">Force Open â€” Accept Orders</option>
+                                            <option value="FORCE_OPEN">Force Open — Accept Orders</option>
 
-                                            <option value="FORCE_CLOSED">Force Closed â€” Reject Orders</option>
+                                            <option value="FORCE_CLOSED">Force Closed — Reject Orders</option>
 
                                         </select>
 
@@ -2151,7 +2151,7 @@
 
                                 <div class="flex-between mb-16" style="flex-wrap:wrap;gap:10px;align-items:center;">
 
-                                    <span id="smStaffCount" class="text-muted-small">Loading staffâ€¦</span>
+                                    <span id="smStaffCount" class="text-muted-small">Loading staff…</span>
 
                                     <button id="btnAddStaff" class="btn-primary"><i data-lucide="plus" class="icon-14"></i> Add Staff</button>
 
@@ -2510,7 +2510,7 @@
 
                                 </ul>
 
-                                <small style="display:block;margin-top:12px;color:var(--text-muted);">Last checked: <span id="auditLastChecked">Never</span> â€” running in production mode</small>
+                                <small style="display:block;margin-top:12px;color:var(--text-muted);">Last checked: <span id="auditLastChecked">Never</span> — running in production mode</small>
 
                             </div>
 
@@ -2975,7 +2975,7 @@
 
                                     class="bot-img-upload-box flex-col flex-center bg-ghost p-10 br-10 border-t-ghost border-dashed">
 
-                                    <label class="form-label-small mb-4">ðŸ• Ready</label>
+                                    <label class="form-label-small mb-4">🍕 Ready</label>
 
                                     <img id="botImgReadyPreview"
 
@@ -3106,7 +3106,7 @@
                             <div class="divider-dashed mb-20"></div>
 
                             <h5 class="mb-12 text-muted-small text-upper ls-sm"><i data-lucide="shield-off" class="icon-14"></i> Blocked Numbers</h5>
-                            <p class="text-secondary-small mb-14">Numbers added here will be completely blocked from the WhatsApp bot â€” they cannot send messages and will not receive any notifications.</p>
+                            <p class="text-secondary-small mb-14">Numbers added here will be completely blocked from the WhatsApp bot — they cannot send messages and will not receive any notifications.</p>
 
                             <div class="flex-row flex-gap-8 mb-14">
                                 <input type="text" id="blockedNumberInput" class="form-input" placeholder="Enter 10-digit phone number" maxlength="12" style="flex:1">
@@ -3171,7 +3171,7 @@
                             <div class="settings-section-card mt-14" style="border: 1px solid var(--border-color); border-radius: 12px; padding: 16px;">
                                 <h5 class="section-card-heading"><i data-lucide="qr-code" class="icon-14"></i> QR Ordering Base URL</h5>
                                 <input type="text" id="settingQrBaseUrl" class="form-input" placeholder="https://menu.yourdomain.com/pizza/">
-                                <small class="fs-10 text-muted">Where the customer QR ordering app is deployed. Used to build every table's QR code link â€” leave blank to default to this device's origin.</small>
+                                <small class="fs-10 text-muted">Where the customer QR ordering app is deployed. Used to build every table's QR code link — leave blank to default to this device's origin.</small>
                             </div>
 
                         </div>
@@ -3241,7 +3241,7 @@
 
                             <h4 class="mb-8" style="color:var(--error-dark);display:flex;align-items:center;gap:8px;"><i data-lucide="alert-triangle" class="icon-16"></i> Danger Zone</h4>
 
-                            <p class="text-secondary-small mb-14">Destructive, app-wide actions. Not specific to this outlet's data â€” use with care.</p>
+                            <p class="text-secondary-small mb-14">Destructive, app-wide actions. Not specific to this outlet's data — use with care.</p>
 
                             <div class="flex-between flex-center" style="flex-wrap:wrap;gap:14px;">
 
@@ -3309,7 +3309,7 @@
 
                                 give away: above your chosen % of the bill a manager must enter a PIN before the payment goes
 
-                                through â€” and every payment void asks for the same PIN. <strong>Benefits:</strong> stops one-off
+                                through — and every payment void asks for the same PIN. <strong>Benefits:</strong> stops one-off
 
                                 discounts quietly eroding margin, names who approved it in the audit trail, and costs nothing
 
@@ -3412,7 +3412,7 @@
                                 earn rate, tiers and rewards, look up customer points, and run manual point adjustments.
                                 Points are awarded server-side on paid orders and redeemed as payment tender at app checkout.
                                 <strong>Benefits:</strong> repeat-customer incentives, tier-based earning, clawback on
-                                cancellation â€” costs nothing while off.</p>
+                                cancellation — costs nothing while off.</p>
 
                                 <a href="manual.html#loyalty-module-user-manual" target="_blank" rel="noopener"><i data-lucide="book-open" class="icon-14"></i>
                                 Read the loyalty manual</a>
@@ -3420,7 +3420,7 @@
                             </div>
 
 
-                            <p class="text-secondary-small note-small">Turn a feature on, then <strong>Save Settings</strong> â€”
+                            <p class="text-secondary-small note-small">Turn a feature on, then <strong>Save Settings</strong> —
 
                             a hard refresh prompt appears to activate it.</p>
 
@@ -3630,7 +3630,7 @@
         <div class="mob-toolbar-label"><i data-lucide="calendar" class="icon-14"></i> Date Range</div>
         <button type="button" class="mob-date-display" id="mobDateDisplay" data-action="mobToggleCustomDates">
             <i data-lucide="calendar" class="icon-16"></i>
-            <span id="mobDateRangeText">Loadingâ€¦</span>
+            <span id="mobDateRangeText">Loading…</span>
             <i data-lucide="chevron-down" class="icon-14"></i>
         </button>
 
@@ -3815,7 +3815,7 @@
             <div class="mob-hero-title-row">
                 <h2><i data-lucide="table" class="icon-20"></i> Reports</h2>
             </div>
-            <p class="mob-hero-sub">Pick a report and a date range â€” exported tables use the same data you see.</p>
+            <p class="mob-hero-sub">Pick a report and a date range — exported tables use the same data you see.</p>
         </div>
 
         <div class="mob-toolbar-card">
@@ -3915,7 +3915,7 @@
 
         <!-- Message Breakdown -->
         <div class="glass-card" style="margin:16px 12px;padding:16px;border-radius:14px">
-            <h4 style="margin:0 0 12px;font-size:14px"><i data-lucide="pie-chart" class="icon-16"></i> Message Breakdown â€” Today</h4>
+            <h4 style="margin:0 0 12px;font-size:14px"><i data-lucide="pie-chart" class="icon-16"></i> Message Breakdown — Today</h4>
             <div class="wa-breakdown-grid" id="waBreakdownGrid">
                 <div class="wa-breakdown-item">
                     <div class="wa-breakdown-ring" style="--ring-color:#2563eb" id="waRingOrders">
@@ -4098,11 +4098,11 @@
 
                                 <div class="flex-row flex-gap-10">
 
-                                    <button id="btnRiderReportWhatsApp" class="btn-secondary btn-small" title="Send report to admin via WhatsApp bot">ðŸ¤– Send to Admin</button>
+                                    <button id="btnRiderReportWhatsApp" class="btn-secondary btn-small" title="Send report to admin via WhatsApp bot">📱– Send to Admin</button>
 
-                                    <button id="btnRiderExportExcel" class="btn-secondary btn-small">ðŸ“¥ Excel</button>
+                                    <button id="btnRiderExportExcel" class="btn-secondary btn-small">📥 Excel</button>
 
-                                    <button id="btnRiderExportPDF" class="btn-secondary btn-small">ðŸ“¥ PDF</button>
+                                    <button id="btnRiderExportPDF" class="btn-secondary btn-small">📥 PDF</button>
 
                                 </div>
 
@@ -4162,7 +4162,7 @@
 
                         <div class="flex-col">
 
-                            <h3 class="panel-title">ðŸ“¦ Inventory Management</h3>
+                            <h3 class="panel-title">📦 Inventory Management</h3>
 
                             <p class="panel-subtitle">High-speed product stock tracking & alerts</p>
 
@@ -4531,7 +4531,7 @@
 
                                 <div class="flex-row flex-gap-6">
 
-                                    <button id="btnEndShift" data-action="endShift" class="btn-text-warning small-btn" title="End shift â€” clears cart + attribution until the POS tab is re-opened"><i data-lucide="log-out" class="icon-12"></i> End Shift</button>
+                                    <button id="btnEndShift" data-action="endShift" class="btn-text-warning small-btn" title="End shift — clears cart + attribution until the POS tab is re-opened"><i data-lucide="log-out" class="icon-12"></i> End Shift</button>
 
                                     <button id="btnClearWalkinCart" data-action="clearWalkinCart" class="btn-text-danger small-btn">Clear All</button>
 
@@ -4587,7 +4587,7 @@
 
                                     <button type="button" id="walkinOffersBtn" class="btn-walkin-offers" data-action="toggleWalkinOffersPanel" aria-expanded="false" aria-controls="walkinOffersPanel" title="See every currently-active discount and coupon">
 
-                                        ðŸ·ï¸ Active offers
+                                        🏷️ Active offers
 
                                     </button>
 
@@ -4714,7 +4714,7 @@
 
                                 class="btn-primary w-full btn-checkout">
 
-                                âœ… Record Sale
+                                ✅ Record Sale
 
                             </button>
 
@@ -4733,7 +4733,7 @@
 
                 <div id="promotionsOfflineBanner" class="offline-banner hidden" role="alert" aria-live="polite">
                     <i data-lucide="wifi-off" class="icon-16"></i>
-                    <span data-i18n="promo.offlineBanner">Bot is offline â€” campaigns cannot start. Messages already queued will resume automatically once the bot reconnects.</span>
+                    <span data-i18n="promo.offlineBanner">Bot is offline — campaigns cannot start. Messages already queued will resume automatically once the bot reconnects.</span>
                 </div>
 
                 <!-- STATUS BAR -->
@@ -4757,7 +4757,7 @@
                     </div>
                 </div>
 
-                <!-- COMPOSE SECTION â€” two-column on desktop -->
+                <!-- COMPOSE SECTION — two-column on desktop -->
                 <div class="promo-compose-section">
 
                     <!-- LEFT: Message -->
@@ -4782,11 +4782,11 @@
                         <div class="form-group">
                             <label for="promoWaTemplate" class="text-muted-small">WhatsApp delivery template</label>
                             <select id="promoWaTemplate" class="search-input-group" aria-label="WhatsApp delivery template">
-                                <option value="proactive_promo">Special Offer â€” English</option>
-                                <option value="promo_hinglish_offer">Khaas Offer â€” Hinglish</option>
-                                <option value="promo_hinglish_discount">Sirf Aapke Liye â€” Hinglish</option>
-                                <option value="promo_hinglish_festive">Tyohaar Special â€” Hinglish</option>
-                                <option value="promo_hinglish_winback">Miss You â€” Hinglish</option>
+                                <option value="proactive_promo">Special Offer — English</option>
+                                <option value="promo_hinglish_offer">Khaas Offer — Hinglish</option>
+                                <option value="promo_hinglish_discount">Sirf Aapke Liye — Hinglish</option>
+                                <option value="promo_hinglish_festive">Tyohaar Special — Hinglish</option>
+                                <option value="promo_hinglish_winback">Miss You — Hinglish</option>
                             </select>
                             <div class="text-muted-small mt-4">Only shells Meta has <strong>approved</strong> for this outlet are listed. Without an approved shell a campaign falls back to plain text, which only delivers inside the 24h customer window.</div>
                         </div>
@@ -4797,7 +4797,7 @@
                                 <button type="button" class="btn-secondary btn-sm" data-action="pickPromoTemplate"><i data-lucide="layout-template"></i> Templates</button>
                             </div>
                             <textarea id="promoTemplate" rows="7" class="search-input-group" maxlength="1500"
-                                placeholder="Hey {name}! ðŸŽ‰ Enjoy 20% off on your first order! ðŸ•âœ¨"
+                                placeholder="Hey {name}! 🎉 Enjoy 20% off on your first order! 🍕✨"
                                 data-i18n-placeholder="promo.compose.templatePlaceholder"
                                 aria-label="Message template"></textarea>
                             <div class="flex-between mt-4">
@@ -4809,7 +4809,7 @@
                         <div id="promoMenuBox" class="form-group hidden">
                             <label for="promoMenuText" class="text-muted-small" data-i18n="promo.compose.menuText">Menu footer text</label>
                             <textarea id="promoMenuText" rows="4" class="search-input-group" maxlength="1200"
-                                placeholder="ðŸ• *Bestsellers* â€” Margherita ₹199, Farmhouse ₹299"
+                                placeholder="🍕 *Bestsellers* — Margherita ₹199, Farmhouse ₹299"
                                 aria-label="Menu footer text"></textarea>
                         </div>
 
@@ -4861,7 +4861,7 @@
                                 <button class="btn-text btn-sm" data-action="downloadPromoXlsx" title="Sample XLSX">XLSX</button>
                             </div>
                             <div class="flex-between mt-8">
-                                <span id="promoCsvName" class="text-muted-small">â€”</span>
+                                <span id="promoCsvName" class="text-muted-small">—</span>
                                 <span id="promoCsvCount" class="text-muted-small"></span>
                             </div>
                         </div>
@@ -4900,7 +4900,7 @@
                                 <label class="text-muted-small">Quiet hours (no sends)</label>
                                 <div class="flex-row flex-gap-10 flex-center">
                                     <input type="number" id="promoQuietStart" min="0" max="23" placeholder="Start" class="search-input-group" aria-label="Quiet start">
-                                    <span>â€”</span>
+                                    <span>—</span>
                                     <input type="number" id="promoQuietEnd" min="0" max="23" placeholder="End" class="search-input-group" aria-label="Quiet end">
                                 </div>
                             </div>
@@ -4975,7 +4975,7 @@
                     <div class="panel-header">
                         <div>
                             <h2 class="panel-title mb-0">Customer APP</h2>
-                            <p class="panel-subtitle mt-4">Control everything your customers see and do in the app â€” push notifications, promo offers, menu visibility, and app settings.</p>
+                            <p class="panel-subtitle mt-4">Control everything your customers see and do in the app — push notifications, promo offers, menu visibility, and app settings.</p>
                         </div>
                         <div class="flex-row flex-gap-8">
                             <button class="btn-text" id="caRefreshSubs" type="button" title="Reload subscriber data">
@@ -5020,7 +5020,7 @@
                                 <a class="btn-secondary" id="caOvOpenLink" href="#" target="_blank" rel="noopener"><i data-lucide="external-link"></i> <span>Open app</span></a>
                             </div>
                         </div>
-                        <div class="ca-ov-grid" id="caOvGrid" aria-live="polite"><div class="ca-ov-card skeleton-card">Loadingâ€¦</div></div>
+                        <div class="ca-ov-grid" id="caOvGrid" aria-live="polite"><div class="ca-ov-card skeleton-card">Loading…</div></div>
 
                         <!-- QUICK CONTROLS: the one-click actions come first, then the checks -->
                         <div class="qa-section">
@@ -5087,7 +5087,7 @@
                         <!-- Subscriber search & filter -->
                         <div class="push-subs-section mt-12" id="pushSubsSection">
                             <div class="flex-row flex-gap-8 items-center">
-                                <input type="text" id="pushSubSearch" class="search-input-group" placeholder="Search subscribers by name or numberâ€¦" aria-label="Search subscribers">
+                                <input type="text" id="pushSubSearch" class="search-input-group" placeholder="Search subscribers by name or number…" aria-label="Search subscribers">
                                 <div class="flex-row flex-gap-6">
                                     <label class="chip chip--radio push-sub-filter" data-filter="all"><input type="radio" name="pushSubFilter" value="all" checked> <span>All</span></label>
                                     <label class="chip chip--radio push-sub-filter" data-filter="offers"><input type="radio" name="pushSubFilter" value="offers"> <span>Offers On</span></label>
@@ -5115,7 +5115,7 @@
                                 <datalist id="pushSubPhones"></datalist>
                                 <p class="text-muted-small mt-2" id="pushPhoneHint">Start typing to pick a subscriber.</p>
                             </div>
-                            <p class="push-reach" id="pushReachLine" aria-live="polite"><span id="pushReachText">Checking subscribersâ€¦</span></p>
+                            <p class="push-reach" id="pushReachLine" aria-live="polite"><span id="pushReachText">Checking subscribers…</span></p>
                             <p class="push-reach__note" id="pushReachNote"></p>
                         </div>
 
@@ -5157,7 +5157,7 @@
                             <label class="checkbox-label">
                                 <input type="checkbox" id="pushNotifTestMode"> <span>Test mode - send only to my registered device</span>
                             </label>
-                            <p class="text-muted-small mt-2" id="pushTestHint">Checking your admin accountâ€¦</p>
+                            <p class="text-muted-small mt-2" id="pushTestHint">Checking your admin account…</p>
                         </div>
 
                         <div class="mt-12">
@@ -5240,7 +5240,7 @@
                         <!-- P2: Search & Filter -->
                         <div class="promo-offers-search-filter" style="margin:12px 0; display:flex; flex-direction:column; gap:8px; padding:12px 16px; background:var(--bg-secondary,#f8fafc); border:1px solid var(--border,#eef0f3); border-radius:10px;">
                             <div class="flex-row flex-gap-8 items-center">
-                                <input type="text" id="promoOffersSearch" class="search-input-group" placeholder="Search by code, name, or valueâ€¦" aria-label="Search offers">
+                                <input type="text" id="promoOffersSearch" class="search-input-group" placeholder="Search by code, name, or value…" aria-label="Search offers">
                                 <div class="flex-row flex-gap-6">
                                     <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="all" checked> <span>All</span></label>
                                     <label class="chip chip--radio"><input type="radio" name="promoOffersFilter" value="on-page"> <span>On Page</span></label>
@@ -5402,7 +5402,7 @@
                         <div class="ca-banner" id="caVisBanner" role="note">
                             <i data-lucide="info"></i>
                             <div><strong>What customers see today</strong>
-                                <span>The app hides a dish when it is marked <b>Out of stock</b> in Menu â€” and when you switch it off here. <b>Featured</b> is saved, but the app does not highlight those dishes yet.</span></div>
+                                <span>The app hides a dish when it is marked <b>Out of stock</b> in Menu — and when you switch it off here. <b>Featured</b> is saved, but the app does not highlight those dishes yet.</span></div>
                             <button class="btn-secondary btn-sm" type="button" data-ca-open-menu>Open Menu</button>
                         </div>
                         <div class="ca-visibility-stats" style="margin:12px 0; display:flex; gap:12px; flex-wrap:wrap;">
@@ -5439,7 +5439,7 @@
                         <!-- P3: Search & Filter -->
                         <div class="vis-search-filter" style="margin:12px 0; display:flex; flex-direction:column; gap:8px; padding:12px 16px; background:var(--bg-secondary,#f8fafc); border:1px solid var(--border,#eef0f3); border-radius:10px;">
                             <div class="flex-row flex-gap-8 items-center">
-                                <input type="text" id="visSearch" class="search-input-group" placeholder="Search dishes & categoriesâ€¦" aria-label="Search visibility items">
+                                <input type="text" id="visSearch" class="search-input-group" placeholder="Search dishes & categories…" aria-label="Search visibility items">
                                 <div class="flex-row flex-gap-6">
                                     <label class="chip chip--radio"><input type="radio" name="visFilterType" value="all" checked> <span>All</span></label>
                                     <label class="chip chip--radio"><input type="radio" name="visFilterType" value="dish"> <span>Dishes</span></label>
@@ -5543,7 +5543,7 @@
                                 <h3 class="vis-prev-modal__title" id="visPreviewTitle">App preview</h3>
                                 <button class="vis-prev-modal__close" id="btnVisPreviewClose" type="button" aria-label="Close preview">&times;</button>
                             </div>
-                            <p class="vis-prev-modal__hint">What customers see in the app right now â€” hidden items and out-of-stock dishes are excluded, exactly like the live app.</p>
+                            <p class="vis-prev-modal__hint">What customers see in the app right now — hidden items and out-of-stock dishes are excluded, exactly like the live app.</p>
                             <div id="visPreviewList" class="vis-prev-modal__list"></div>
                             <div class="vis-prev-modal__foot">
                                 <button class="btn-secondary" id="btnVisPreviewClose2" type="button">Close</button>
@@ -5985,7 +5985,7 @@
                         </div>
                     </div>
                     <div id="tableManagementGrid" class="table-grid">
-                        <div class="empty-state"><i data-lucide="loader" class="icon-32 text-muted"></i><p>Loading tablesâ€¦</p></div>
+                        <div class="empty-state"><i data-lucide="loader" class="icon-32 text-muted"></i><p>Loading tables…</p></div>
                     </div>
                 </div>
 
@@ -5996,7 +5996,7 @@
                             <span class="nav-badge count" id="tableLiveOrdersCount">0</span>
                         </div>
                         <div id="tableLiveOrdersList" class="table-live-orders-list">
-                            <p class="text-muted-small">Loadingâ€¦</p>
+                            <p class="text-muted-small">Loading…</p>
                         </div>
                     </div>
 
@@ -6129,7 +6129,7 @@
 
                 </div>
 
-                <div class="mob-kpi-val" id="costKpiTokens">â€”</div>
+                <div class="mob-kpi-val" id="costKpiTokens">—</div>
 
                 <div class="mob-kpi-trend" id="costKpiTokensTrend">prepaid WhatsApp Official promo credits</div>
 
@@ -6147,7 +6147,7 @@
 
                 <div class="mob-kpi-val" id="costKpiPromo">₹0</div>
 
-                <div class="mob-kpi-trend" id="costKpiPromoTrend">0 tokens used Ã— ₹1</div>
+                <div class="mob-kpi-trend" id="costKpiPromoTrend">0 tokens used × ₹1</div>
 
             </div>
 
@@ -6175,7 +6175,7 @@
 
                 </thead>
 
-                <tbody id="costBreakdownBody"><tr><td colspan="4">Loadingâ€¦</td></tr></tbody>
+                <tbody id="costBreakdownBody"><tr><td colspan="4">Loading…</td></tr></tbody>
 
             </table>
 
@@ -6197,7 +6197,7 @@
 
                 </thead>
 
-                <tbody id="costDayBody"><tr><td colspan="3">Loadingâ€¦</td></tr></tbody>
+                <tbody id="costDayBody"><tr><td colspan="3">Loading…</td></tr></tbody>
 
             </table>
 
@@ -6209,7 +6209,7 @@
 
         <div class="mob-card mob-table-card" style="margin-top:12px;" data-cost-section="feed">
 
-            <h4 class="section-card-heading"><i data-lucide="list" class="icon-14"></i> Recent orders â€” live cost feed</h4>
+            <h4 class="section-card-heading"><i data-lucide="list" class="icon-14"></i> Recent orders — live cost feed</h4>
 
             <table>
 
@@ -6229,7 +6229,7 @@
 
                 </thead>
 
-                <tbody id="costFeedBody"><tr><td colspan="4">Loadingâ€¦</td></tr></tbody>
+                <tbody id="costFeedBody"><tr><td colspan="4">Loading…</td></tr></tbody>
 
             </table>
 
@@ -6379,7 +6379,7 @@
                 </div>
             </div>
 
-            <!-- CATEGORIES SUB-TAB (list â‡„ in-page form flow) -->
+            <!-- CATEGORIES SUB-TAB (list ⇄ in-page form flow) -->
             <div id="expense-subtab-categories" class="expense-subtab-content hidden">
                 <div id="expenseCategoriesContainer">
                     <div id="ecatListView">
@@ -6419,15 +6419,15 @@
                                 <div class="form-group-mini">
                                     <label class="form-label-small" for="expCatIcon">Icon</label>
                                     <select id="expCatIcon" class="form-input w-100">
-                                        <option value="zap">âš¡ Zap</option>
-                                        <option value="home">ðŸ  Home</option>
-                                        <option value="truck">ðŸšš Truck</option>
-                                        <option value="wrench">ðŸ”§ Wrench</option>
-                                        <option value="credit-card">ðŸ’³ Credit Card</option>
-                                        <option value="utensils">ðŸ´ Utensils</option>
-                                        <option value="wifi">ðŸ“¶ WiFi</option>
-                                        <option value="megaphone">ðŸ“£ Megaphone</option>
-                                        <option value="dollar-sign">ðŸ’° Dollar Sign</option>
+                                        <option value="zap">⚡ Zap</option>
+                                        <option value="home">🏠 Home</option>
+                                        <option value="truck">🚚 Truck</option>
+                                        <option value="wrench">🔧 Wrench</option>
+                                        <option value="credit-card">💳 Credit Card</option>
+                                        <option value="utensils">🍴 Utensils</option>
+                                        <option value="wifi">📶 WiFi</option>
+                                        <option value="megaphone">📣 Megaphone</option>
+                                        <option value="dollar-sign">💰 Dollar Sign</option>
                                     </select>
                                 </div>
                                 <div class="form-group-mini">
@@ -6537,7 +6537,7 @@
                     <div class="form-group-mini">
                         <label class="form-label-small">Auto-approve Threshold (Rs.)</label>
                         <input type="number" id="expenseAutoApproveThreshold" class="form-input w-100" placeholder="5000" min="0" step="100">
-                        <small class="text-muted-small">Expenses â‰¤ this amount auto-approve (default: 5000)</small>
+                        <small class="text-muted-small">Expenses ≤ this amount auto-approve (default: 5000)</small>
                     </div>
                     <div class="form-group-mini">
                         <label class="form-label-small">Expense Ceiling (% of Projected Revenue)</label>
@@ -7421,14 +7421,14 @@
 
 
 
-    <!-- Table Bill Payment â€” merged invoice + payment center modal.
+    <!-- Table Bill Payment — merged invoice + payment center modal.
          Left: full item breakdown invoice. Right: payment method, discount/promo, confirm.
          Replaces the old two-step bill-review + split-payment-picker flow. -->
     <div id="tableBillReviewModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tableBillReviewTitle">
         <div class="modal-content bill-payment-modal" style="max-width:820px;">
 
             <div class="modal-header" style="padding:14px 20px; border-bottom:1px solid #e5e7eb;">
-                <h3 id="tableBillReviewTitle" style="font-size:16px; font-weight:700;">Table â€” Bill</h3>
+                <h3 id="tableBillReviewTitle" style="font-size:16px; font-weight:700;">Table — Bill</h3>
                 <button class="btn-text" data-action="closeTableBillReview" aria-label="Close" style="font-size:20px; padding:4px 8px;">
                     <i data-lucide="x"></i>
                 </button>
@@ -7436,7 +7436,7 @@
 
             <!-- Offline banner -->
             <div id="tableBillOfflineBanner" class="offline-banner hidden" role="alert" aria-live="polite" style="margin:0 16px 12px; padding:8px 12px; border-radius:8px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; font-weight:600;">
-                <span>No internet â€” payment cannot be processed</span>
+                <span>No internet — payment cannot be processed</span>
                 <button id="tableBillRetryConnection" type="button" class="btn-text" style="font-size:12px; padding:4px 8px;">Retry</button>
             </div>
 
@@ -7445,7 +7445,7 @@
                 <!-- LEFT: Invoice -->
                 <div class="bill-invoice-panel" id="billInvoicePanel">
                     <div class="bill-invoice-header">
-                        <span class="bill-invoice-title" id="billInvoiceTableLabel">Table â€”</span>
+                        <span class="bill-invoice-title" id="billInvoiceTableLabel">Table —</span>
                         <span class="bill-invoice-date" id="billInvoiceDate"></span>
                     </div>
                     <div class="bill-invoice-items" id="billInvoiceItems"></div>
@@ -7472,7 +7472,7 @@
                         <div class="bill-split-row">
                             <label class="bill-split-label" id="billSplitPrimaryLabel">Cash</label>
                             <div class="bill-split-input-group">
-                                <button type="button" class="bill-split-qty-btn" data-action="billSplitMinus" data-target="primary" aria-label="Decrease Cash amount">âˆ’</button>
+                                <button type="button" class="bill-split-qty-btn" data-action="billSplitMinus" data-target="primary" aria-label="Decrease Cash amount">→’</button>
                                 <input type="number" id="billSplitPrimaryAmt" class="bill-split-input" value="0" min="0" aria-valuenow="0" aria-valuemin="0" aria-label="Cash amount">
                                 <button type="button" class="bill-split-qty-btn" data-action="billSplitPlus" data-target="primary" aria-label="Increase Cash amount">+</button>
                             </div>
@@ -7480,7 +7480,7 @@
                         <div class="bill-split-row">
                             <label class="bill-split-label" id="billSplitSecondaryLabel">UPI</label>
                             <div class="bill-split-input-group">
-                                <button type="button" class="bill-split-qty-btn" data-action="billSplitMinus" data-target="secondary" aria-label="Decrease UPI amount">âˆ’</button>
+                                <button type="button" class="bill-split-qty-btn" data-action="billSplitMinus" data-target="secondary" aria-label="Decrease UPI amount">→’</button>
                                 <input type="number" id="billSplitSecondaryAmt" class="bill-split-input" value="0" min="0" readonly aria-valuenow="0" aria-valuemin="0" aria-label="UPI amount">
                                 <button type="button" class="bill-split-qty-btn" data-action="billSplitPlus" data-target="secondary" aria-label="Increase UPI amount">+</button>
                             </div>
@@ -7505,7 +7505,7 @@
                     <div class="bill-coupon-row">
                         <input type="text" id="tableBillCouponCode" placeholder="Coupon code" class="bill-coupon-input">
                         <button type="button" class="bill-coupon-apply" data-action="applyTableBillCoupon">Apply</button>
-                        <button type="button" id="tableBillCouponClearBtn" class="bill-coupon-clear hidden" data-action="clearTableBillCoupon" title="Clear">Ã—</button>
+                        <button type="button" id="tableBillCouponClearBtn" class="bill-coupon-clear hidden" data-action="clearTableBillCoupon" title="Clear">×</button>
                     </div>
                     <div id="tableBillCouponHint" class="text-muted-small fs-11 mb-8 hidden bill-coupon-hint"></div>
 
@@ -7546,7 +7546,7 @@
         </div>
     </div>
 
-    <!-- Discount Editor Modal body (form content) â€” stays inside #discountEditorModal -->
+    <!-- Discount Editor Modal body (form content) — stays inside #discountEditorModal -->
     <div id="discountEditorModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="discountEditorTitle" aria-hidden="true">
         <div class="modal-content glass-card" style="max-width:640px;">
             <div class="modal-header">
@@ -7729,13 +7729,13 @@
 
                         <input type="time" id="discSchedStart" aria-label="Happy-hour start time (HH:MM)" class="search-input-group" style="max-width:130px;">
 
-                        <span>â†’</span>
+                        <span>→</span>
 
                         <input type="time" id="discSchedEnd" aria-label="Happy-hour end time (HH:MM)" class="search-input-group" style="max-width:130px;">
 
                     </div>
 
-                    <small class="text-muted-small">Leave empty for discounts valid at any time. The window is end-exclusive: 18:00â€“20:00 ends at 20:00.</small>
+                    <small class="text-muted-small">Leave empty for discounts valid at any time. The window is end-exclusive: 18:00–20:00 ends at 20:00.</small>
 
                 </div>
 
@@ -8336,7 +8336,7 @@
 
                         <!-- Rendered by _openQrModal() using the SAME
                              _qrCardMarkup()/QR_CARD_CSS the print flow uses.
-                             This is now the single source of truth â€” print
+                             This is now the single source of truth — print
                              clones this node's live HTML, it never rebuilds
                              its own copy. -->
 
@@ -8508,7 +8508,7 @@
         </div>
     </div>
 
-    <!-- CATEGORY CREATE DRAWER (Phase 2 â€” lives outside the hidden tab-content) -->
+    <!-- CATEGORY CREATE DRAWER (Phase 2 — lives outside the hidden tab-content) -->
 
     <div id="categoryCreateDrawer" class="modal modal-sheet-right" role="dialog" aria-modal="true" aria-label="Create Category">
 
@@ -8546,7 +8546,7 @@
 
                             <div class="cat-order-stepper flex-1" title="Sorting Order (Lower numbers appear first)">
 
-                                <button type="button" id="catOrderMinus" class="btn-secondary btn-small" aria-label="Decrease serial number">âˆ’</button>
+                                <button type="button" id="catOrderMinus" class="btn-secondary btn-small" aria-label="Decrease serial number">→’</button>
 
                                 <input id="newCatOrder" type="number" placeholder="Serial" class="form-input mb-0"
 
@@ -8558,7 +8558,7 @@
 
                         </div>
 
-                        <small id="catNameDupHint" style="display:none;color:#dc2626;font-size:10px;font-weight:700;margin-top:4px;">âš  A category with this name already exists</small>
+                        <small id="catNameDupHint" style="display:none;color:#dc2626;font-size:10px;font-weight:700;margin-top:4px;">⚠ A category with this name already exists</small>
 
                     </div>
 
@@ -8588,7 +8588,7 @@
 
                     class="btn-primary w-full mt-20 p-12 br-12 font-weight-700"
 
-                    title="Save new category">ðŸš€ Add Category</button>
+                    title="Save new category">🚀 Add Category</button>
 
             </div>
 
@@ -8732,7 +8732,7 @@
 
                     <input type="number" id="roleLevel" class="form-input w-100" min="-1" max="4" value="0">
 
-                    <small class="text-muted-small">supreme 4 Â· super 3 Â· owner 2 Â· manager 1 Â· cashier 0 Â· waiter -1</small>
+                    <small class="text-muted-small">supreme 4 · super 3 · owner 2 · manager 1 · cashier 0 · waiter -1</small>
 
                 </div>
 
@@ -8913,7 +8913,7 @@
 
 <!-- ============== CHAT TAB MODALS ==============
      These live OUTSIDE every tab pane on purpose: a modal nested inside a
-     hidden tab (#tab-settings) can never be seen â€” `display:none` on the
+     hidden tab (#tab-settings) can never be seen — `display:none` on the
      ancestor hides it no matter how the modal itself is styled. Both are
      opened from the Chat tab. -->
 <div id="blockedContactsModal" class="modal" role="dialog" aria-modal="true" aria-label="Blocked Contacts" aria-hidden="true">
@@ -8943,7 +8943,7 @@
                 <div id="chatLabelAssignList" class="chat-label-list"></div>
                 <hr style="border:none;border-top:1px solid var(--border-color);margin:16px 0">
             </div>
-            <p style="font-size:13px;color:var(--text-muted);margin:0 0 10px">Labels group your customers â€” VIP, complaints, festival orders. WhatsApp allows up to 20.</p>
+            <p style="font-size:13px;color:var(--text-muted);margin:0 0 10px">Labels group your customers — VIP, complaints, festival orders. WhatsApp allows up to 20.</p>
             <div id="chatLabelManageList" class="chat-label-list"></div>
             <div class="chat-label-create">
                 <input type="text" id="chatNewLabelInput" class="form-input" placeholder="New label name" maxlength="24" autocomplete="off" aria-label="New label name">
